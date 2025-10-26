@@ -1,0 +1,22 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# Examples
+examples/
+
+# IDEs
+.idea/
+.vs/
+.vscode/
+.claude/
+
+# User-specific files
+*.user
+*.suo
+*.userprefs
+
+# OS files
+.DS_Store
+Thumbs.db
