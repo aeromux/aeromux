@@ -2,6 +2,7 @@ using Serilog;
 using RtlSdrManager;
 using RtlSdrManager.Modes;
 using Aeromux.Core.Configuration;
+using Aeromux.Core.SignalProcessing;
 
 namespace Aeromux.Infrastructure.Sdr;
 
@@ -14,6 +15,7 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
 {
     private readonly DeviceConfig _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
+    private readonly IQDemodulator _demodulator = new IQDemodulator();
     private RtlSdrManagedDevice? _device;
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
@@ -168,13 +170,14 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
 
     /// <summary>
     /// Event handler called when IQ samples are available from the RTL-SDR device.
-    /// Retrieves samples from the device buffer and updates statistics.
+    /// Retrieves samples from the device buffer and converts them to magnitude values.
     /// </summary>
     /// <param name="sender">Event source (RtlSdrManagedDevice).</param>
     /// <param name="args">Event arguments containing sample count available.</param>
     /// <remarks>
     /// This method runs on a background thread managed by RtlSdrManager.
-    /// Currently only counts samples; Phase 2 will pass them to the demodulator.
+    /// Passes samples to IQDemodulator for magnitude conversion (Phase 2).
+    /// No pulse detection here - Phase 3 will use local noise estimation around preambles (readsb approach).
     /// </remarks>
     private void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs args)
     {
@@ -191,9 +194,12 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
 
             _totalSamplesReceived += samples.Count;
 
-            // TODO: Phase 2 (Demodulation) - Pass samples to IQDemodulator
-            // Current behavior: Count samples only (validates device is working)
-            // Future: Call demodulator.ProcessSamples(samples) here
+            // Convert samples to magnitude (Phase 2: IQ → Magnitude)
+            // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
+            // (ADR-009: Coordinator Pattern - zero overhead in hot path)
+            _demodulator.ProcessSamples(samples);
+
+            // TODO: Phase 3 will scan magnitude buffer for preambles with local noise estimation
         }
         catch (Exception ex)
         {
@@ -202,13 +208,14 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
     }
 
     /// <summary>
-    /// Background task that periodically logs statistics about sample reception.
-    /// Logs every 10 seconds: total samples, samples/sec, and uptime.
+    /// Background task that periodically logs statistics about sample reception and magnitude conversion.
+    /// Logs every 10 seconds: total samples, samples/sec, uptime, and demodulator buffer status.
     /// </summary>
     /// <param name="cancellationToken">Token to signal task shutdown.</param>
     /// <remarks>
     /// Runs until cancellation is requested. OperationCanceledException is expected on shutdown.
     /// Calculates sample rate from start time to verify device is receiving at expected rate.
+    /// Uses Coordinator Pattern (ADR-009) to log demodulator statistics without overhead in hot path.
     /// </remarks>
     private async Task StatisticsLoop(CancellationToken cancellationToken)
     {
@@ -218,22 +225,35 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
             {
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
 
-                // Calculate statistics
+                // Calculate statistics for this interval
                 long currentTotal = _totalSamplesReceived;
                 long delta = currentTotal - _lastLoggedSampleCount;
                 TimeSpan elapsed = DateTime.UtcNow - _startTime;
                 double samplesPerSecond = currentTotal / elapsed.TotalSeconds;
 
-                // Format samples in millions with 3 decimal places for readability
+                // Convert all statistics to millions for readability (3 decimal places)
+                // Format: 19.923M samples, 19.923M increase, 1.992M samples/sec
                 double totalInMillions = currentTotal / 1_000_000.0;
+                double deltaInMillions = delta / 1_000_000.0;
+                double samplesPerSecondInMillions = samplesPerSecond / 1_000_000.0;
 
-                Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) stats: {TotalSamples:F3}M samples ({Delta} increase), {SamplesPerSec:F0} samples/sec, running {Elapsed}",
+                // Log device statistics (Phase 1: sample reception + Phase 2: magnitude conversion)
+                Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) stats: {TotalSamples:F3}M samples ({Delta:F3}M increase), {SamplesPerSec:F3}M samples/sec, running {Elapsed}",
                     _config.Name,
                     _config.DeviceIndex,
                     totalInMillions,
-                    delta,
-                    samplesPerSecond,
+                    deltaInMillions,
+                    samplesPerSecondInMillions,
                     elapsed.ToString(@"hh\:mm\:ss"));
+
+                // Log demodulator buffer status (Phase 2) at Debug level
+                // Note: Uses Coordinator Pattern (ADR-009) - DeviceWorker logs IQDemodulator's statistics
+                // Buffer position format: comma-separated thousands (e.g., 1,922,944)
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) demodulator: {SamplesProcessed:F3}M samples converted to magnitude, buffer position: {BufferPos:N0}",
+                    _config.Name,
+                    _config.DeviceIndex,
+                    _demodulator.TotalSamplesProcessed / 1_000_000.0,
+                    _demodulator.BufferPosition);
 
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;
@@ -254,5 +274,9 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
     /// Releases all resources used by the DeviceWorker.
     /// Stops sample reception, closes the device, and cancels background tasks.
     /// </summary>
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        Stop();
+        _demodulator.Dispose();
+    }
 }
