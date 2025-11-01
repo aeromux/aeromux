@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using Aeromux.Core.Configuration.Enums;
+using RtlSdrManager.Modes;
 
 namespace Aeromux.Core.Configuration;
 
@@ -56,17 +56,18 @@ public class DeviceConfig
     /// Gets or sets the tuner gain in dB.
     /// Valid range depends on tuner hardware (typically 0-50 dB).
     /// Higher gain increases sensitivity but may cause overload in strong signal environments.
+    /// Note: Only used when GainMode is Manual. Ignored in AGC mode.
     /// Default: 40.0 dB
     /// </summary>
     public double TunerGain { get; set; } = 40.0;
 
     /// <summary>
-    /// Gets or sets the gain control mode.
-    /// Manual: Use fixed TunerGain value
-    /// Auto: Let the tuner automatically adjust gain
+    /// Gets or sets the gain control mode (ADR-008: uses RtlSdrManager.Modes enum directly).
+    /// Manual: Use fixed TunerGain value specified above
+    /// AGC: Let the tuner hardware automatically adjust gain (TunerGain ignored)
     /// Default: Manual
     /// </summary>
-    public GainMode GainMode { get; set; } = GainMode.Manual;
+    public TunerGainModes GainMode { get; set; } = TunerGainModes.Manual;
 
     /// <summary>
     /// Gets or sets the frequency correction in parts per million (PPM).

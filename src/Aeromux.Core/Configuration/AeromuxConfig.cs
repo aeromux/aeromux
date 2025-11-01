@@ -29,9 +29,11 @@ public class AeromuxConfig
     public LoggingConfig? Logging { get; set; }
 
     /// <summary>
-    /// Gets or sets the SDR device configuration.
+    /// Gets or sets the list of SDR devices to use.
+    /// Multiple devices can be configured for diversity reception.
+    /// Phase 1: Simplified from Sdr.Devices to top-level Devices (removed SdrConfig wrapper).
     /// </summary>
-    public SdrConfig? Sdr { get; set; }
+    public List<DeviceConfig>? Devices { get; set; }
 
     /// <summary>
     /// Gets or sets the network server configuration.

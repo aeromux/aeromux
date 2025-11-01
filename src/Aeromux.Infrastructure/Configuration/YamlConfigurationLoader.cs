@@ -59,8 +59,8 @@ public class YamlConfigurationLoader : IYamlConfigurationLoader
         // Enums are automatically converted from lowercase strings (e.g., "debug" -> LogEventLevel.Debug)
         AeromuxConfig config = deserializer.Deserialize<AeromuxConfig>(yaml);
 
-        // Log successful load with device count if SDR section was specified
-        int deviceCount = config.Sdr?.Devices.Count ?? 0;
+        // Log successful load with device count if devices were specified
+        int deviceCount = config.Devices?.Count ?? 0;
         Log.Information("Configuration loaded successfully: {DeviceCount} device(s)", deviceCount);
 
         return config;

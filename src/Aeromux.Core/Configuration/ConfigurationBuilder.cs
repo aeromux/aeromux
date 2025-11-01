@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.Configuration.Enums;
+using RtlSdrManager.Modes;
 using Serilog.Events;
 
 namespace Aeromux.Core.Configuration;
@@ -98,23 +99,20 @@ public class ConfigurationBuilder
                     FileSizeLimitMb = 100
                 }
             },
-            Sdr = new SdrConfig
-            {
-                Devices = new List<DeviceConfig>
+            Devices =
+            [
+                new DeviceConfig
                 {
-                    new()
-                    {
-                        Name = "default",
-                        DeviceIndex = 0,
-                        CenterFrequency = 1090,
-                        SampleRate = 2,
-                        TunerGain = 40.0,
-                        GainMode = GainMode.Manual,
-                        PpmCorrection = 0,
-                        Enabled = false // Disabled by default - user must configure
-                    }
+                    Name = "default",
+                    DeviceIndex = 0,
+                    CenterFrequency = 1090,
+                    SampleRate = 2,
+                    TunerGain = 40.0,
+                    GainMode = TunerGainModes.Manual,
+                    PpmCorrection = 0,
+                    Enabled = false // Disabled by default - daemon won't start without explicit device config
                 }
-            },
+            ],
             Network = new NetworkConfig
             {
                 BeastPort = 30002,
@@ -140,7 +138,7 @@ public class ConfigurationBuilder
         return new AeromuxConfig
         {
             Logging = yamlConfig.Logging ?? baseConfig.Logging,
-            Sdr = yamlConfig.Sdr ?? baseConfig.Sdr,
+            Devices = yamlConfig.Devices ?? baseConfig.Devices,  // Phase 1: Simplified from Sdr.Devices
             Network = yamlConfig.Network ?? baseConfig.Network,
             Tracking = yamlConfig.Tracking ?? baseConfig.Tracking
         };
@@ -156,16 +154,24 @@ public class ConfigurationBuilder
         // Apply CLI overrides (highest priority)
         // All sections are non-null after merge, so use null-forgiving operator
         if (settings.BeastPort.HasValue)
+        {
             config.Network!.BeastPort = settings.BeastPort.Value;
+        }
 
         if (settings.SbsPort.HasValue)
+        {
             config.Network!.SbsPort = settings.SbsPort.Value;
+        }
 
         if (settings.HttpPort.HasValue)
+        {
             config.Network!.HttpPort = settings.HttpPort.Value;
+        }
 
         if (settings.LogLevel.HasValue)
+        {
             config.Logging!.Level = settings.LogLevel.Value;
+        }
 
         return config;
     }

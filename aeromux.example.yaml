@@ -14,16 +14,15 @@ logging:                                  # Structured logging configuration
     fileSizeLimitMb: 100                  # Maximum size per log file in megabytes
 
 # SDR device configuration
-sdr:                                      # RTL-SDR device configuration
-  devices:                                # List of SDR devices to use
-    - name: primary                       # Friendly name for this device
-      deviceIndex: 0                      # RTL-SDR device index (0 for first device)
-      centerFrequency: 1090               # Center frequency in MHz (1090 MHz for ADS-B)
-      sampleRate: 2                       # Sample rate in MHz (2 MHz = 2 MSPS)
-      tunerGain: 40.0                     # Tuner gain in dB (0-50 typical range)
-      gainMode: manual                    # Gain mode: manual | auto
-      ppmCorrection: 0                    # Frequency correction in parts per million
-      enabled: true                       # Enable/disable this device
+devices:                                  # List of SDR devices to use (multiple devices supported)
+  - name: primary                         # Friendly name for this device
+    deviceIndex: 0                        # RTL-SDR device index (0 for first device)
+    centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
+    sampleRate: 2                         # Sample rate in MHz (2 MHz = 2 MSPS)
+    tunerGain: 40.0                       # Tuner gain in dB (0-50 typical range, only used in manual mode)
+    gainMode: manual                      # Gain mode: manual (use tunerGain) | agc (automatic gain control)
+    ppmCorrection: 0                      # Frequency correction in parts per million
+    enabled: true                         # Enable/disable this device
 
 # Network ports and binding
 network:                                  # Network server configuration
