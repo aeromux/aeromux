@@ -1,0 +1,85 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
+using Aeromux.Core.Configuration.Enums;
+
+namespace Aeromux.Core.Configuration;
+
+/// <summary>
+/// RTL-SDR device configuration for ADS-B/Mode S reception.
+/// </summary>
+public class DeviceConfig
+{
+    /// <summary>
+    /// Gets or sets a friendly name for this device.
+    /// Used in logs and statistics.
+    /// Default: "default"
+    /// </summary>
+    public string Name { get; set; } = "default";
+
+    /// <summary>
+    /// Gets or sets the RTL-SDR device index.
+    /// 0 = first device, 1 = second device, etc.
+    /// Default: 0
+    /// </summary>
+    public int DeviceIndex { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the center frequency in MHz.
+    /// ADS-B operates at 1090 MHz.
+    /// Default: 1090 MHz
+    /// </summary>
+    public long CenterFrequency { get; set; } = 1090;
+
+    /// <summary>
+    /// Gets or sets the sample rate in MHz.
+    /// Higher sample rates provide better signal quality but require more CPU.
+    /// Typical: 2 MHz (2 MSPS)
+    /// Default: 2 MHz
+    /// </summary>
+    public int SampleRate { get; set; } = 2;
+
+    /// <summary>
+    /// Gets or sets the tuner gain in dB.
+    /// Valid range depends on tuner hardware (typically 0-50 dB).
+    /// Higher gain increases sensitivity but may cause overload in strong signal environments.
+    /// Default: 40.0 dB
+    /// </summary>
+    public double TunerGain { get; set; } = 40.0;
+
+    /// <summary>
+    /// Gets or sets the gain control mode.
+    /// Manual: Use fixed TunerGain value
+    /// Auto: Let the tuner automatically adjust gain
+    /// Default: Manual
+    /// </summary>
+    public GainMode GainMode { get; set; } = GainMode.Manual;
+
+    /// <summary>
+    /// Gets or sets the frequency correction in parts per million (PPM).
+    /// Compensates for crystal oscillator inaccuracies in the RTL-SDR.
+    /// Typical range: -50 to +50 PPM
+    /// Default: 0 PPM
+    /// </summary>
+    public int PpmCorrection { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets whether this device is enabled.
+    /// Disabled devices are ignored during startup.
+    /// Default: true
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+}

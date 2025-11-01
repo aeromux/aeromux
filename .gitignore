@@ -3,8 +3,14 @@
 [Oo]bj/
 artifacts/
 
-# Examples
-examples/
+# Research
+research/
+
+# Logs
+logs/
+
+# Documentation
+docs/
 
 # IDEs
 .idea/

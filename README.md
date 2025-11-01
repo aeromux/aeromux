@@ -1,1 +1,1 @@
-# Aeromux Multi-SDR Mode S demodulator for .NET
+# Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
