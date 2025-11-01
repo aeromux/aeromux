@@ -24,37 +24,111 @@ clear
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
-BINARIES_DIR="$ARTIFACTS_DIR/binaries"
 CONFIGURATION="Release"
 
-# Detect runtime identifier based on platform
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "arm64" ]]; then
-        RUNTIME_ID="osx-arm64"
-    else
-        RUNTIME_ID="osx-x64"
-    fi
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "aarch64" ]]; then
-        RUNTIME_ID="linux-arm64"
-    else
+# Parse target architecture parameter
+TARGET="${1:-auto}"
+
+# Determine runtime identifier
+case "$TARGET" in
+    auto)
+        # Auto-detect based on current platform
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "arm64" ]]; then
+                RUNTIME_ID="osx-arm64"
+            else
+                RUNTIME_ID="osx-x64"
+            fi
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "aarch64" ]]; then
+                RUNTIME_ID="linux-arm64"
+            else
+                RUNTIME_ID="linux-x64"
+            fi
+        else
+            echo "ERROR: Unsupported platform: $OSTYPE"
+            echo "Please specify target explicitly: ./build.sh [linux|macos|linux-x64|linux-arm64|macos-x64|macos-arm64]"
+            exit 1
+        fi
+        ;;
+    linux)
+        # Auto-detect Linux architecture if on Linux, otherwise error
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "aarch64" ]]; then
+                RUNTIME_ID="linux-arm64"
+            else
+                RUNTIME_ID="linux-x64"
+            fi
+        else
+            echo "ERROR: Cannot auto-detect Linux architecture on non-Linux system"
+            echo "Please specify explicit target: ./build.sh linux-x64 or ./build.sh linux-arm64"
+            exit 1
+        fi
+        ;;
+    macos)
+        # Auto-detect macOS architecture if on macOS, otherwise error
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "arm64" ]]; then
+                RUNTIME_ID="osx-arm64"
+            else
+                RUNTIME_ID="osx-x64"
+            fi
+        else
+            echo "ERROR: Cannot auto-detect macOS architecture on non-macOS system"
+            echo "Please specify explicit target: ./build.sh macos-x64 or ./build.sh macos-arm64"
+            exit 1
+        fi
+        ;;
+    linux-x64)
         RUNTIME_ID="linux-x64"
-    fi
-else
-    echo "Unsupported platform: $OSTYPE"
-    exit 1
-fi
+        ;;
+    linux-arm64)
+        RUNTIME_ID="linux-arm64"
+        ;;
+    macos-x64)
+        RUNTIME_ID="osx-x64"
+        ;;
+    macos-arm64)
+        RUNTIME_ID="osx-arm64"
+        ;;
+    *)
+        echo "ERROR: Unknown target: $TARGET"
+        echo ""
+        echo "Usage: ./build.sh [TARGET]"
+        echo ""
+        echo "Supported targets:"
+        echo "  auto           - Auto-detect current platform and architecture (default)"
+        echo "  linux          - Auto-detect Linux architecture (x64 or arm64)"
+        echo "  macos          - Auto-detect macOS architecture (x64 or arm64)"
+        echo "  linux-x64      - Linux x64 (explicit, for cross-compilation)"
+        echo "  linux-arm64    - Linux ARM64 (Raspberry Pi 4/5, explicit)"
+        echo "  macos-x64      - macOS Intel (explicit, for cross-compilation)"
+        echo "  macos-arm64    - macOS Apple Silicon (explicit, for cross-compilation)"
+        echo ""
+        echo "Examples:"
+        echo "  ./build.sh                  # Auto-detect current platform"
+        echo "  ./build.sh linux            # Auto-detect Linux architecture"
+        echo "  ./build.sh macos            # Auto-detect macOS architecture"
+        echo "  ./build.sh linux-arm64      # Build for Raspberry Pi (cross-compile)"
+        exit 1
+        ;;
+esac
+
+# Set binaries directory with architecture subdirectory
+BINARIES_DIR="$ARTIFACTS_DIR/binaries/$RUNTIME_ID"
 
 echo "================================================"
 echo "Aeromux Build Script"
 echo "================================================"
 echo ""
 
-# Detect platform
-echo "Detecting platform..."
-echo "✓ Platform detected: $RUNTIME_ID"
+# Show target determination
+echo "Determining target architecture..."
+echo "✓ Target architecture: $RUNTIME_ID"
 echo ""
 
 # Clean artifacts directory
@@ -106,13 +180,14 @@ if [ -f "$BINARIES_DIR/aeromux" ]; then
     TOTAL_FILES=$(find "$ARTIFACTS_DIR" -type f | wc -l | tr -d ' ')
 
     echo "Build completed successfully!"
+    echo "Architecture: $RUNTIME_ID"
     echo "Total files created: $TOTAL_FILES"
     echo "All artifacts are in: $ARTIFACTS_DIR"
     echo ""
     echo "Executable:"
-    echo "  - binaries/aeromux ($FILESIZE)"
+    echo "  - binaries/$RUNTIME_ID/aeromux ($FILESIZE)"
     echo ""
-    echo "Run with: ./artifacts/binaries/aeromux"
+    echo "Run with: ./artifacts/binaries/$RUNTIME_ID/aeromux"
 else
     echo "ERROR: Binary not found!"
     exit 1
