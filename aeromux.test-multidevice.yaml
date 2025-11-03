@@ -1,0 +1,43 @@
+# Aeromux Configuration Example
+
+# Logging configuration
+logging:                                  # Structured logging configuration
+  level: debug                            # Minimum log level: verbose | debug | information | warning | error | fatal
+  console:                                # Console output configuration
+    enabled: false                        # Enable for: development, Docker containers, or systemd services
+    colored: true                         # Use ANSI color codes (disable if piping to log aggregators)
+  file:                                   # File output configuration
+    enabled: true                         # Enable/disable file logging
+    path: "logs/aeromux-.log"             # Log file path with date placeholder
+    rollingInterval: day                  # File rotation interval: day | hour | month
+    retainedFileCount: 7                  # Number of old log files to keep
+    fileSizeLimitMb: 100                  # Maximum size per log file in megabytes
+
+# SDR device configuration
+devices:                                  # List of SDR devices to use (multiple devices supported)
+  - name: primary                         # Friendly name for this device
+    deviceIndex: 0                        # RTL-SDR device index (0 for first device)
+    centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
+    sampleRate: 2                         # Sample rate in MHz (2 MHz = 2 MSPS)
+    gainMode: agc                         # Gain mode: manual (use tunerGain) | agc (automatic gain control)
+    ppmCorrection: 0                      # Frequency correction in parts per million
+    enabled: true                         # Enable/disable this device
+  - name: secondary                       # Friendly name for this device
+    deviceIndex: 1                        # RTL-SDR device index (0 for first device)
+    centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
+    sampleRate: 2                         # Sample rate in MHz (2 MHz = 2 MSPS)
+    gainMode: agc                         # Gain mode: manual (use tunerGain) | agc (automatic gain control)
+    ppmCorrection: 0                      # Frequency correction in parts per million
+    enabled: true                         # Enable/disable this device
+
+# Network ports and binding
+network:                                  # Network server configuration
+  beastPort: 30002                        # Beast binary protocol port (for feeding other software)
+  sbsPort: 30003                          # SBS BaseStation text protocol port
+  httpPort: 8080                          # HTTP API and web interface port
+  bindAddress: "0.0.0.0"                  # Network interface to bind (0.0.0.0 = all interfaces)
+
+# Aircraft tracking settings
+tracking:                                 # Aircraft state tracking configuration
+  aircraftTimeoutMinutes: 60              # Remove aircraft after this many minutes of no messages
+  positionHistorySize: 1000               # Maximum number of position reports to keep per aircraft
