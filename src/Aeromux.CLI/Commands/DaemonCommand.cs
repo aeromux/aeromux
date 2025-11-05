@@ -78,7 +78,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
             foreach (DeviceConfig deviceConfig in config.Devices!.Where(d => d.Enabled))
             {
-                var worker = new DeviceWorker(deviceConfig);
+                var worker = new DeviceWorker(deviceConfig, config.Tracking!);
 
                 try
                 {
@@ -208,9 +208,9 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
     }
 
     /// <summary>
-    /// Checks daemon-specific preconditions (business logic validation).
+    /// Checks daemon-specific preconditions (high-level business logic validation).
     /// Verifies that the daemon can operate with the loaded configuration.
-    /// This is separate from technical config validation (format, syntax) done by ConfigurationBuilder.
+    /// Device-specific validation (frequencies, gains, etc.) is done in DeviceWorker.OpenDevice().
     /// </summary>
     /// <param name="config">The configuration to check.</param>
     /// <exception cref="InvalidOperationException">Thrown when daemon preconditions are not met.</exception>
@@ -223,62 +223,6 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 "Cannot start daemon: At least one SDR device must be enabled in configuration");
         }
 
-        // Validate each enabled device configuration
-        foreach (DeviceConfig device in config.Devices!.Where(d => d.Enabled))
-        {
-            // Validate center frequency range
-            // RTL-SDR devices typically support 24-1766 MHz (R820T/R820T2 tuners)
-            if (device.CenterFrequency <= 0)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot start daemon: Device '{device.Name}' has invalid centerFrequency: {device.CenterFrequency} MHz (must be > 0)");
-            }
-
-            if (device.CenterFrequency < 24)
-            {
-                Log.Warning(
-                    "Device {DeviceName}: centerFrequency {Frequency} MHz is below typical minimum (24 MHz)",
-                    device.Name, device.CenterFrequency);
-            }
-
-            if (device.CenterFrequency > 1766)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot start daemon: Device '{device.Name}' has invalid centerFrequency: {device.CenterFrequency} MHz (must be <= 1766 MHz for R820T/R820T2 tuners)");
-            }
-
-            // Validate sample rate range
-            // RTL-SDR maximum is ~3.2 MSPS, but practical maximum is 2.4 MSPS
-            if (device.SampleRate <= 0)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot start daemon: Device '{device.Name}' has invalid sampleRate: {device.SampleRate} MHz (must be > 0)");
-            }
-
-            if (device.SampleRate > 3.2)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot start daemon: Device '{device.Name}' has invalid sampleRate: {device.SampleRate} MHz (maximum is 3.2 MHz)");
-            }
-
-            if (device.SampleRate > 2.4)
-            {
-                Log.Warning(
-                    "Device {DeviceName}: sampleRate {SampleRate} MHz exceeds recommended maximum (2.4 MHz) - sample drops may occur",
-                    device.Name, device.SampleRate);
-            }
-
-            // Warn about unusual tuner gain values
-            if (device.TunerGain < 0 || device.TunerGain > 50)
-            {
-                Log.Warning(
-                    "Device {DeviceName}: tunerGain {Gain} dB is outside typical range (0-50 dB)",
-                    device.Name, device.TunerGain);
-            }
-
-            // Note: GainMode enum validation happens during YAML deserialization (technical validation)
-        }
-
         // Check network ports - Beast port must be in valid range
         // Ports below 1024 require root/admin privileges, and 65535 is the maximum port number
         if (config.Network?.BeastPort is < 1024 or > 65535)
@@ -289,6 +233,11 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
         // TODO: Phase 6+ - Add validation for SBS port (30003) and HTTP port (8080)
         // Validate range 1024-65535, check no port conflicts between services
+
+        // Note: Device-specific validation (centerFrequency, sampleRate, tunerGain, etc.)
+        // is performed in DeviceWorker.OpenDevice() where the values are actually used.
+        // This ensures single source of truth and proper error messages with device names.
+
         Log.Debug("Daemon preconditions check passed");
     }
 }

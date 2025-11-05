@@ -17,7 +17,6 @@
 using Aeromux.CLI.Commands;
 using Aeromux.CLI.Configuration;
 using Aeromux.Core.Configuration;
-using Aeromux.Infrastructure.Configuration;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
@@ -122,7 +121,7 @@ internal abstract class Program
             {
                 // Colored output with ANSI codes for better readability during development
                 logConfig.WriteTo.Console(
-                    outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}",
+                    outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
                     theme: AnsiConsoleTheme.Code);
             }
             else
@@ -151,8 +150,8 @@ internal abstract class Program
                 rollingInterval: rollingInterval,
                 retainedFileCountLimit: loggingConfig.File.RetainedFileCount,
                 fileSizeLimitBytes: loggingConfig.File.FileSizeLimitMb * 1024 * 1024,
-                // File output includes full timestamps and structured properties for analysis
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
+                // File output includes full timestamps for analysis
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}");
         }
 
         // Replace the bootstrap logger with the fully configured logger

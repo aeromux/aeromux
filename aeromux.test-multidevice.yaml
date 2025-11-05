@@ -1,4 +1,6 @@
-# Aeromux Configuration Example
+# Aeromux Test Configuration (Multi-Device)
+# This is the primary test configuration file for development.
+# Use this configuration for testing Phase 3+ features with dual RTL-SDR devices.
 
 # Logging configuration
 logging:                                  # Structured logging configuration
@@ -18,14 +20,14 @@ devices:                                  # List of SDR devices to use (multiple
   - name: primary                         # Friendly name for this device
     deviceIndex: 0                        # RTL-SDR device index (0 for first device)
     centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
-    sampleRate: 2                         # Sample rate in MHz (2 MHz = 2 MSPS)
+    sampleRate: 2.0                       # Sample rate in MHz (currently only 2.0 supported, 2.4 planned for Phase 6+)
     gainMode: agc                         # Gain mode: manual (use tunerGain) | agc (automatic gain control)
     ppmCorrection: 0                      # Frequency correction in parts per million
     enabled: true                         # Enable/disable this device
   - name: secondary                       # Friendly name for this device
     deviceIndex: 1                        # RTL-SDR device index (0 for first device)
     centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
-    sampleRate: 2                         # Sample rate in MHz (2 MHz = 2 MSPS)
+    sampleRate: 2.0                       # Sample rate in MHz (currently only 2.0 supported, 2.4 planned for Phase 6+)
     gainMode: agc                         # Gain mode: manual (use tunerGain) | agc (automatic gain control)
     ppmCorrection: 0                      # Frequency correction in parts per million
     enabled: true                         # Enable/disable this device
@@ -39,5 +41,7 @@ network:                                  # Network server configuration
 
 # Aircraft tracking settings
 tracking:                                 # Aircraft state tracking configuration
-  aircraftTimeoutMinutes: 60              # Remove aircraft after this many minutes of no messages
-  positionHistorySize: 1000               # Maximum number of position reports to keep per aircraft
+  confidenceLevel: medium                 # ICAO confidence filter: low (5), medium (10), high (15) detections required
+  icaoTimeoutSeconds: 30                  # Remove ICAOs not seen within this many seconds (prevents memory growth)
+  # aircraftTimeoutMinutes: 60            # TODO: Phase 5+ - Remove aircraft after this many minutes of no messages
+  # positionHistorySize: 1000             # TODO: Phase 5+ - Maximum number of position reports to keep per aircraft

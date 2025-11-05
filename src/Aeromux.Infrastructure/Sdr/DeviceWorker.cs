@@ -12,12 +12,17 @@ namespace Aeromux.Infrastructure.Sdr;
 /// Each DeviceWorker runs in its own task and processes samples from one device.
 /// Uses Serilog for structured logging (ADR-007).
 /// </summary>
-public sealed class DeviceWorker(DeviceConfig config) : IDisposable
+public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig trackingConfig) : IDisposable
 {
-    private readonly DeviceConfig _config = config ?? throw new ArgumentNullException(nameof(config));
+    private readonly DeviceConfig _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
+    private readonly TrackingConfig _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
-    private readonly IQDemodulator _demodulator = new IQDemodulator();
-    private readonly PreambleDetector _preambleDetector = new PreambleDetector(config.PreambleThreshold);
+    private readonly IQDemodulator _demodulator = new();
+    private readonly PreambleDetector _preambleDetector = new(deviceConfig.PreambleThreshold);
+    private readonly CrcValidator _crcValidator = new();
+    private readonly IcaoConfidenceTracker _confidenceTracker = new(
+        trackingConfig.ConfidenceLevel,
+        trackingConfig.IcaoTimeoutSeconds);
     private RtlSdrManagedDevice? _device;
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
@@ -39,6 +44,90 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
     {
         Log.Information("Opening RTL-SDR device: {DeviceName} (index={DeviceIndex})",
             _config.Name, _config.DeviceIndex);
+
+        // Validate device index
+        if (_config.DeviceIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.DeviceIndex),
+                $"Device '{_config.Name}': Device index must be non-negative (got {_config.DeviceIndex})");
+        }
+
+        // Validate center frequency (RTL-SDR with R820T/R820T2 tuner: 24-1766 MHz)
+        if (_config.CenterFrequency <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.CenterFrequency),
+                $"Device '{_config.Name}': Center frequency must be positive (got {_config.CenterFrequency})");
+        }
+
+        if (_config.CenterFrequency < 24)
+        {
+            Log.Warning(
+                "Device {DeviceName}: Center frequency {Frequency} MHz is below typical minimum (24 MHz for R820T/R820T2)",
+                _config.Name, _config.CenterFrequency);
+        }
+
+        if (_config.CenterFrequency > 1766)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.CenterFrequency),
+                $"Device '{_config.Name}': Center frequency {_config.CenterFrequency} MHz exceeds maximum (1766 MHz for R820T/R820T2 tuners)");
+        }
+
+        // Validate sample rate hardware limits (RTL-SDR maximum ~3.2 MSPS)
+        if (_config.SampleRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.SampleRate),
+                $"Device '{_config.Name}': Sample rate must be positive (got {_config.SampleRate})");
+        }
+
+        if (_config.SampleRate > 3.2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.SampleRate),
+                $"Device '{_config.Name}': Sample rate {_config.SampleRate} MHz exceeds hardware maximum (3.2 MHz)");
+        }
+
+        if (_config.SampleRate > 2.4)
+        {
+            Log.Warning(
+                "Device {DeviceName}: Sample rate {SampleRate} MHz exceeds recommended maximum (2.4 MHz) - sample drops may occur",
+                _config.Name, _config.SampleRate);
+        }
+
+        // Validate sample rate software requirement (Phase 3 currently only supports 2.0 MSPS)
+        // TODO: Phase 6+ - Add support for 2.4 MSPS using phase tracking + correlation (readsb approach)
+        const double supportedSampleRate = 2.0;
+        const double tolerance = 0.01;  // Allow ±0.01 MHz for floating point comparison
+        if (Math.Abs(_config.SampleRate - supportedSampleRate) > tolerance)
+        {
+            throw new InvalidOperationException(
+                $"Device '{_config.Name}': Sample rate {_config.SampleRate} MHz is not supported. " +
+                $"Phase 3 frame detection currently only supports 2.0 MSPS (Mode S symbol timing assumes integer sample counts). " +
+                $"Support for 2.4 MSPS will be added in Phase 6+ using readsb's phase tracking + correlation approach. " +
+                $"Please set sampleRate to 2.0 in your configuration file.");
+        }
+
+        // Validate gain mode enum
+        if (!Enum.IsDefined(_config.GainMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.GainMode),
+                $"Device '{_config.Name}': Invalid gain mode: {_config.GainMode}");
+        }
+
+        // Validate tuner gain (only if in Manual mode)
+        if (_config.GainMode == TunerGainModes.Manual)
+        {
+            if (_config.TunerGain is < 0 or > 50)
+            {
+                throw new ArgumentOutOfRangeException(nameof(_config.TunerGain),
+                    $"Device '{_config.Name}': Tuner gain must be between 0 and 50 dB (got {_config.TunerGain})");
+            }
+        }
+
+        // Validate PPM correction (typical range)
+        if (_config.PpmCorrection is < -1000 or > 1000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_config.PpmCorrection),
+                $"Device '{_config.Name}': PPM correction must be between -1000 and +1000 (got {_config.PpmCorrection})");
+        }
 
         try
         {
@@ -211,8 +300,41 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
             int scanStart = (currentPos - samples.Count + magnitudes.Length) % magnitudes.Length;
             List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudes, scanStart, samples.Count);
 
-            // TODO: Phase 4 will validate frames with CRC and extract ICAO addresses
-            // For now, frames are detected but not yet validated or processed
+            // Phase 4: Validate frames with CRC and extract ICAO addresses
+            foreach (RawFrame rawFrame in frames)
+            {
+                // Use peak magnitude from preamble as signal strength indicator
+                // For now, use a placeholder value (will be improved in future phases)
+                byte signalStrength = 128;  // TODO: Extract actual signal strength from preamble
+
+                // Phase 4a: CRC validation
+                ValidatedFrame? validatedFrame = _crcValidator.ValidateFrame(rawFrame, signalStrength);
+
+                if (validatedFrame != null)
+                {
+                    // Phase 4b: Confidence tracking (filter noise from real aircraft)
+                    bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool isNewConfirmedIcao);
+
+                    // Log when ICAO reaches confidence threshold
+                    if (isNewConfirmedIcao)
+                    {
+                        Log.Information("Device '{DeviceName}' confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
+                            _config.Name,
+                            validatedFrame.IcaoAddress,
+                            _trackingConfig.ConfidenceLevel,
+                            (int)_trackingConfig.ConfidenceLevel,
+                            (int)validatedFrame.DownlinkFormat,
+                            validatedFrame.UsesPIMode ? "PI" : "AP");
+                    }
+
+                    // Only pass confident frames to Phase 5
+                    if (isConfident)
+                    {
+                        // TODO: Phase 5 will parse these confident frames into messages
+                        // Noise and unconfident ICAOs are filtered out here
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -281,6 +403,44 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
                     valid,
                     validRate,
                     _preambleDetector.FramesExtracted);
+
+                // Log CRC validation statistics (Phase 4) at Debug level
+                // Shows validation and correction rates to monitor frame quality
+                long crcChecked = _crcValidator.FramesChecked;
+                long crcValid = _crcValidator.FramesValid;
+                long crcCorrected = _crcValidator.FramesCorrected;
+                long crcInvalid = _crcValidator.FramesInvalid;
+                double crcValidRate = crcChecked > 0 ? (crcValid * 100.0) / crcChecked : 0.0;
+                double crcCorrectedRate = crcChecked > 0 ? (crcCorrected * 100.0) / crcChecked : 0.0;
+
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) CRC: {Checked:N0} checked, {Valid:N0} valid ({ValidRate:F1}%), {Corrected:N0} corrected ({CorrectedRate:F1}%), {Invalid:N0} invalid",
+                    _config.Name,
+                    _config.DeviceIndex,
+                    crcChecked,
+                    crcValid,
+                    crcValidRate,
+                    crcCorrected,
+                    crcCorrectedRate,
+                    crcInvalid);
+
+                // Log confidence tracking statistics (Phase 4b) at Debug level
+                // Shows how many frames pass confidence filter, active ICAOs, and cleanup stats
+                long confTotal = _confidenceTracker.TotalFrames;
+                long confConfident = _confidenceTracker.ConfidentFrames;
+                double confConfidentRate = confTotal > 0 ? (confConfident * 100.0) / confTotal : 0.0;
+                int confTracked = _confidenceTracker.TrackedIcaos;
+                int confConfirmed = _confidenceTracker.ConfirmedIcaos;
+                long confExpired = _confidenceTracker.ExpiredIcaos;
+
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) confidence: {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} active ICAOs, {Confirmed:N0} confirmed, {Expired:N0} expired total",
+                    _config.Name,
+                    _config.DeviceIndex,
+                    confTotal,
+                    confConfident,
+                    confConfidentRate,
+                    confTracked,
+                    confConfirmed,
+                    confExpired);
 
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;

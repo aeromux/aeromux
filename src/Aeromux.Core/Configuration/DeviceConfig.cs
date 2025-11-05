@@ -35,22 +35,24 @@ public class DeviceConfig
     /// 0 = first device, 1 = second device, etc.
     /// Default: 0
     /// </summary>
-    public int DeviceIndex { get; set; } = 0;
+    public int DeviceIndex { get; set; }
 
     /// <summary>
     /// Gets or sets the center frequency in MHz.
     /// ADS-B operates at 1090 MHz.
     /// Default: 1090 MHz
     /// </summary>
-    public long CenterFrequency { get; set; } = 1090;
+    public double CenterFrequency { get; set; } = 1090.0;
 
     /// <summary>
     /// Gets or sets the sample rate in MHz.
     /// Higher sample rates provide better signal quality but require more CPU.
-    /// Typical: 2 MHz (2 MSPS)
-    /// Default: 2 MHz
+    /// Currently only 2.0 MHz (2 MSPS) is supported due to Phase 3 integer sample alignment requirement.
+    /// Support for 2.4 MHz (readsb default) is planned for Phase 6+ using phase tracking.
+    /// Validated at device open - non-2.0 values will throw InvalidOperationException.
+    /// Default: 2.0 MHz
     /// </summary>
-    public int SampleRate { get; set; } = 2;
+    public double SampleRate { get; set; } = 2.0;
 
     /// <summary>
     /// Gets or sets the tuner gain in dB.
@@ -75,7 +77,7 @@ public class DeviceConfig
     /// Typical range: -50 to +50 PPM
     /// Default: 0 PPM
     /// </summary>
-    public int PpmCorrection { get; set; } = 0;
+    public int PpmCorrection { get; set; }
 
     /// <summary>
     /// Gets or sets the preamble detection threshold (amplitude ratio for SNR).

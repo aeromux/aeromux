@@ -5,10 +5,14 @@ namespace Aeromux.Core.ModeS;
 /// Uses local noise estimation following readsb's architecture.
 /// </summary>
 /// <remarks>
-/// Mode S preamble structure (at 2 MSPS):
+/// IMPORTANT: Currently only supports 2.0 MSPS sample rate (validated in DeviceWorker).
+/// Support for 2.4 MSPS will be added in Phase 6+ using phase tracking + correlation approach.
+///
+/// Mode S preamble structure (at 2.0 MSPS):
 /// - 4 pulses at: 0.0µs (samples 0-1), 1.0µs (samples 2-3), 3.5µs (samples 7-8), 4.5µs (samples 9-10)
 /// - Total duration: 8µs = 16 samples
 /// - Data starts at sample 16
+/// - Integer sample alignment: Each symbol = 1 sample, each bit = 2 samples
 ///
 /// Local noise estimation (readsb approach):
 /// - Uses 5 samples from LOW regions: 5, 8 (preamble valleys), 16-18 (early data PPM valleys)
@@ -16,6 +20,7 @@ namespace Aeromux.Core.ModeS;
 /// - Threshold squared because Phase 2 stores I²+Q² (power), not amplitude
 ///
 /// Reference: readsb/demod_2400.c
+/// TODO: Phase 6+ - Add 2.4 MSPS support using phase tracking (6 samples per 5 symbols)
 /// </remarks>
 public sealed class PreambleDetector
 {
@@ -129,28 +134,33 @@ public sealed class PreambleDetector
 
     /// <summary>
     /// Checks if a preamble pattern exists at the given position using local noise estimation.
-    /// Follows readsb's algorithm with 5 noise samples and configurable threshold.
+    /// Uses ONLY preamble valley samples (not data bits) for accurate noise measurement.
     /// </summary>
     /// <remarks>
     /// CRITICAL: Uses squared threshold because Phase 2 stores I²+Q² (power), not amplitude.
-    /// Averages 5 noise samples to get per-sample noise for correct peak comparison.
+    /// Averages noise samples to get per-sample noise for correct peak comparison.
+    ///
+    /// FIX: Previous implementation used samples 16-18 (first data bits), but these can be HIGH
+    /// (pulse) if bit 0 is encoded as a pulse, inflating noise estimate and rejecting real signals.
+    /// Now uses only preamble valleys which are guaranteed to be LOW.
     /// </remarks>
     private bool CheckPreamble(ReadOnlySpan<ushort> m, int pos, int bufferLength)
     {
-        // Local noise estimation using 5 samples from LOW regions:
-        // - Sample 5: Preamble valley (between pulse 2 and pulse 3)
-        // - Sample 8: Preamble valley (after pulse 3, before pulse 4)
-        // - Samples 16-18: Early data samples (PPM valleys at noise level)
-        // PPM encoding ensures ~2-3 of data samples are LOW (noise level)
-        // This gives robust noise estimate from actual signal environment
-        uint baseNoise = (uint)(m[(pos + 5) % bufferLength] + m[(pos + 8) % bufferLength] +
-                                m[(pos + 16) % bufferLength] + m[(pos + 17) % bufferLength] + m[(pos + 18) % bufferLength]);
+        // Local noise estimation using 5 samples from preamble valleys ONLY:
+        // - Sample 1: Valley between pulse 1 and pulse 2
+        // - Sample 3: Valley after pulse 2
+        // - Sample 5: Valley in silence period (between pulse 2 and pulse 3)
+        // - Sample 6: Valley in silence period (between pulse 2 and pulse 3)
+        // - Sample 8: Valley after pulse 3, before pulse 4
+        // These are ALL guaranteed to be LOW (valleys), unlike data bits which can be HIGH
+        uint baseNoise = (uint)(m[(pos + 1) % bufferLength] + m[(pos + 3) % bufferLength] +
+                                m[(pos + 5) % bufferLength] + m[(pos + 6) % bufferLength] + m[(pos + 8) % bufferLength]);
 
-        // CRITICAL FIX 1: Average the 5 noise samples to get per-sample noise level
+        // CRITICAL: Average the 5 noise samples to get per-sample noise level
         // We compare individual peak samples to threshold, not sum-of-peaks to sum-of-noise
         uint averageNoise = baseNoise / 5;
 
-        // CRITICAL FIX 2: Use squared threshold for power-to-power comparison
+        // CRITICAL: Use squared threshold for power-to-power comparison
         // Phase 2 stores I²+Q² (power), not sqrt(I²+Q²) (amplitude)
         // User specifies 3.16 (amplitude), we squared it to ~10 (power) in constructor
         uint threshold = (uint)(averageNoise * _preambleThresholdSquared);

@@ -22,6 +22,22 @@ namespace Aeromux.Core.Configuration;
 public class TrackingConfig
 {
     /// <summary>
+    /// Gets or sets the ICAO confidence level (global setting for all devices).
+    /// Determines how many detections required before frames are passed to Phase 5 parsing.
+    /// Low=5, Medium=10, High=15 detections required.
+    /// Default: Medium (10 detections)
+    /// </summary>
+    public ConfidenceLevel ConfidenceLevel { get; set; } = ConfidenceLevel.Medium;
+
+    /// <summary>
+    /// Gets or sets the ICAO timeout in seconds (global setting for all devices).
+    /// ICAOs not seen within this time are removed from confidence tracking.
+    /// Prevents memory growth and removes departed aircraft/noise.
+    /// Default: 30 seconds
+    /// </summary>
+    public int IcaoTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
     /// Gets or sets the aircraft timeout in minutes.
     /// Aircraft that haven't sent messages within this time are removed from tracking.
     /// Default: 60 minutes
@@ -34,4 +50,36 @@ public class TrackingConfig
     /// Default: 1000 positions
     /// </summary>
     public int PositionHistorySize { get; set; } = 1000;
+}
+
+/// <summary>
+/// ICAO confidence levels (global setting for all devices).
+/// Determines how many detections required before passing frames to Phase 5 parsing.
+/// Higher levels reduce false positives but require stronger signals.
+/// Real aircraft transmit 5-10 messages/second, so thresholds are reached quickly (~2-8 seconds).
+/// </summary>
+public enum ConfidenceLevel
+{
+    /// <summary>
+    /// Low confidence: 5+ detections required.
+    /// Use for indoor reception, weak signals, or high sensitivity.
+    /// Confirmation time: ~2-3 seconds for real aircraft.
+    /// </summary>
+    Low = 5,
+
+    /// <summary>
+    /// Medium confidence: 10+ detections required (default).
+    /// Balanced setting for normal conditions.
+    /// Good trade-off between sensitivity and false positive rejection.
+    /// Confirmation time: ~5 seconds for real aircraft.
+    /// </summary>
+    Medium = 10,
+
+    /// <summary>
+    /// High confidence: 15+ detections required.
+    /// Use for outdoor reception, strong signals, or high-noise environments.
+    /// Minimal false positives from noise.
+    /// Confirmation time: ~7-8 seconds for real aircraft.
+    /// </summary>
+    High = 15
 }
