@@ -3,6 +3,7 @@ using RtlSdrManager;
 using RtlSdrManager.Modes;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.SignalProcessing;
+using Aeromux.Core.ModeS;
 
 namespace Aeromux.Infrastructure.Sdr;
 
@@ -16,6 +17,7 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
     private readonly DeviceConfig _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
     private readonly IQDemodulator _demodulator = new IQDemodulator();
+    private readonly PreambleDetector _preambleDetector = new PreambleDetector(config.PreambleThreshold);
     private RtlSdrManagedDevice? _device;
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
@@ -170,14 +172,15 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
 
     /// <summary>
     /// Event handler called when IQ samples are available from the RTL-SDR device.
-    /// Retrieves samples from the device buffer and converts them to magnitude values.
+    /// Retrieves samples from the device buffer, converts to magnitude, and detects Mode S frames.
     /// </summary>
     /// <param name="sender">Event source (RtlSdrManagedDevice).</param>
     /// <param name="args">Event arguments containing sample count available.</param>
     /// <remarks>
     /// This method runs on a background thread managed by RtlSdrManager.
-    /// Passes samples to IQDemodulator for magnitude conversion (Phase 2).
-    /// No pulse detection here - Phase 3 will use local noise estimation around preambles (readsb approach).
+    /// Phase 2: Converts IQ samples to magnitude using pre-computed lookup table.
+    /// Phase 3: Detects Mode S preambles with local noise estimation (readsb approach) and extracts raw frames.
+    /// Frames are ready for CRC validation in Phase 4.
     /// </remarks>
     private void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs args)
     {
@@ -199,7 +202,17 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
             // (ADR-009: Coordinator Pattern - zero overhead in hot path)
             _demodulator.ProcessSamples(samples);
 
-            // TODO: Phase 3 will scan magnitude buffer for preambles with local noise estimation
+            // Phase 3: Detect preambles and extract frames
+            ReadOnlySpan<ushort> magnitudes = _demodulator.GetMagnitudeBuffer();
+            int currentPos = _demodulator.BufferPosition;
+
+            // Calculate start position for scanning (avoid re-scanning old data)
+            // Scan only the newly added samples in the circular buffer
+            int scanStart = (currentPos - samples.Count + magnitudes.Length) % magnitudes.Length;
+            List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudes, scanStart, samples.Count);
+
+            // TODO: Phase 4 will validate frames with CRC and extract ICAO addresses
+            // For now, frames are detected but not yet validated or processed
         }
         catch (Exception ex)
         {
@@ -254,6 +267,20 @@ public sealed class DeviceWorker(DeviceConfig config) : IDisposable
                     _config.DeviceIndex,
                     _demodulator.TotalSamplesProcessed / 1_000_000.0,
                     _demodulator.BufferPosition);
+
+                // Log preamble detection statistics (Phase 3) at Debug level
+                // Shows detection rate to monitor threshold effectiveness
+                long candidates = _preambleDetector.PreambleCandidates;
+                long valid = _preambleDetector.ValidPreambles;
+                double validRate = candidates > 0 ? (valid * 100.0) / candidates : 0.0;
+
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) preambles: {Candidates:N0} candidates, {Valid:N0} valid ({ValidRate:F1}%), {Frames:N0} frames extracted",
+                    _config.Name,
+                    _config.DeviceIndex,
+                    candidates,
+                    valid,
+                    validRate,
+                    _preambleDetector.FramesExtracted);
 
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;
