@@ -1,4 +1,4 @@
-using System;
+using Aeromux.Core.ModeS.Enums;
 
 namespace Aeromux.Core.ModeS.ValueObjects;
 
@@ -19,7 +19,7 @@ namespace Aeromux.Core.ModeS.ValueObjects;
 /// var fastAircraft = velocities.Where(v => v.Knots > 300);
 /// </code>
 /// </remarks>
-public record Velocity : IEquatable<Velocity>, IComparable<Velocity>, IComparable
+public record Velocity : IComparable<Velocity>, IComparable
 {
     private readonly int _knots;
 
@@ -98,11 +98,7 @@ public record Velocity : IEquatable<Velocity>, IComparable<Velocity>, IComparabl
     /// zero if equal,
     /// positive if this velocity is faster.
     /// </returns>
-    public int CompareTo(Velocity? other)
-    {
-        if (other is null) return 1;
-        return _knots.CompareTo(other._knots);
-    }
+    public int CompareTo(Velocity? other) => other is null ? 1 : _knots.CompareTo(other._knots);
 
     /// <summary>
     /// Compares this velocity to another object.
@@ -116,7 +112,11 @@ public record Velocity : IEquatable<Velocity>, IComparable<Velocity>, IComparabl
     /// <exception cref="ArgumentException">If obj is not a Velocity.</exception>
     public int CompareTo(object? obj)
     {
-        if (obj is null) return 1;
+        if (obj is null)
+        {
+            return 1;
+        }
+
         if (obj is not Velocity other)
         {
             throw new ArgumentException($"Object must be of type {nameof(Velocity)}");
@@ -128,25 +128,41 @@ public record Velocity : IEquatable<Velocity>, IComparable<Velocity>, IComparabl
     /// Determines if this velocity is less than another.
     /// </summary>
     public static bool operator <(Velocity left, Velocity right)
-        => left.CompareTo(right) < 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) < 0;
+    }
 
     /// <summary>
     /// Determines if this velocity is greater than another.
     /// </summary>
     public static bool operator >(Velocity left, Velocity right)
-        => left.CompareTo(right) > 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) > 0;
+    }
 
     /// <summary>
     /// Determines if this velocity is less than or equal to another.
     /// </summary>
     public static bool operator <=(Velocity left, Velocity right)
-        => left.CompareTo(right) <= 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) <= 0;
+    }
 
     /// <summary>
     /// Determines if this velocity is greater than or equal to another.
     /// </summary>
     public static bool operator >=(Velocity left, Velocity right)
-        => left.CompareTo(right) >= 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) >= 0;
+    }
 
     /// <summary>
     /// Returns a string representation of the velocity.

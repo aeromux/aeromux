@@ -1,3 +1,4 @@
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
 
 namespace Aeromux.Core.ModeS.Messages;
@@ -16,7 +17,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Altitude">Decoded altitude (null if not available).</param>
-/// <param name="FlightStatus">Flight status (0-7, see ICAO Annex 10).</param>
+/// <param name="FlightStatus">Flight status (airborne/ground and alert conditions).</param>
 public sealed record SurveillanceReply(
     string IcaoAddress,
     DateTime Timestamp,
@@ -24,4 +25,4 @@ public sealed record SurveillanceReply(
     byte SignalStrength,
     bool WasCorrected,
     Altitude? Altitude,
-    int FlightStatus) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    FlightStatus FlightStatus) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

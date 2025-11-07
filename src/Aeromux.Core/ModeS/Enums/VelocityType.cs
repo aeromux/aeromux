@@ -1,4 +1,4 @@
-namespace Aeromux.Core.ModeS.ValueObjects;
+namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
 /// Specifies the type of velocity measurement.

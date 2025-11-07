@@ -1,3 +1,4 @@
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
 
 namespace Aeromux.Core.ModeS.Messages;
@@ -8,7 +9,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// </summary>
 /// <remarks>
 /// Velocity, Heading, and VerticalRate may be null if not available in the message.
-/// Subtype indicates Ground Speed (1-2), True Airspeed (3-4), or IAS (reserved).
+/// Subtype indicates Ground Speed (1-2) or Airspeed (3-4), with supersonic variants.
 /// </remarks>
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
@@ -18,7 +19,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="Velocity">Velocity (null if not available).</param>
 /// <param name="Heading">Heading in degrees (0-360, null if not available).</param>
 /// <param name="VerticalRate">Vertical rate in feet/minute (null if not available, negative = descending).</param>
-/// <param name="VelocitySubtype">Velocity subtype (1-4).</param>
+/// <param name="Subtype">Velocity subtype (ground speed vs airspeed, subsonic vs supersonic).</param>
 public sealed record AirborneVelocity(
     string IcaoAddress,
     DateTime Timestamp,
@@ -28,4 +29,4 @@ public sealed record AirborneVelocity(
     Velocity? Velocity,
     double? Heading,
     int? VerticalRate,
-    int VelocitySubtype) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    VelocitySubtype Subtype) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

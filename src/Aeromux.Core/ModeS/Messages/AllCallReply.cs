@@ -1,3 +1,5 @@
+using Aeromux.Core.ModeS.Enums;
+
 namespace Aeromux.Core.ModeS.Messages;
 
 /// <summary>
@@ -14,11 +16,11 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="DownlinkFormat">Downlink format (DF 11).</param>
 /// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
-/// <param name="Capability">Transponder capability level (0-7, see ICAO Annex 10).</param>
+/// <param name="Capability">Transponder capability level (Mode S support level and status).</param>
 public sealed record AllCallReply(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
     byte SignalStrength,
     bool WasCorrected,
-    int Capability) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    TransponderCapability Capability) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

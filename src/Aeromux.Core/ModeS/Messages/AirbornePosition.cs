@@ -1,3 +1,4 @@
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
 
 namespace Aeromux.Core.ModeS.Messages;
@@ -20,8 +21,8 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="Altitude">Decoded altitude (null if not available).</param>
 /// <param name="CprLat">CPR-encoded latitude (17 bits, 0-131071).</param>
 /// <param name="CprLon">CPR-encoded longitude (17 bits, 0-131071).</param>
-/// <param name="CprFormat">CPR format (0 = even, 1 = odd).</param>
-/// <param name="SurveillanceStatus">Surveillance status (0-3).</param>
+/// <param name="CprFormat">CPR format (even or odd frame for position decoding).</param>
+/// <param name="SurveillanceStatus">Surveillance status (alert and SPI conditions).</param>
 public sealed record AirbornePosition(
     string IcaoAddress,
     DateTime Timestamp,
@@ -32,5 +33,5 @@ public sealed record AirbornePosition(
     Altitude? Altitude,
     int CprLat,
     int CprLon,
-    int CprFormat,
-    int SurveillanceStatus) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    CprFormat CprFormat,
+    SurveillanceStatus SurveillanceStatus) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

@@ -1,5 +1,3 @@
-using System;
-
 namespace Aeromux.Core.ModeS.ValueObjects;
 
 /// <summary>
@@ -60,6 +58,8 @@ public record GeographicCoordinate(double Latitude, double Longitude)
     /// <returns>Distance in nautical miles.</returns>
     public double DistanceToNauticalMiles(GeographicCoordinate other)
     {
+        ArgumentNullException.ThrowIfNull(other);
+
         const double earthRadiusNM = 3440.065; // Earth's radius in nautical miles
 
         double lat1Rad = Latitude * Math.PI / 180.0;
@@ -67,9 +67,9 @@ public record GeographicCoordinate(double Latitude, double Longitude)
         double deltaLatRad = (other.Latitude - Latitude) * Math.PI / 180.0;
         double deltaLonRad = (other.Longitude - Longitude) * Math.PI / 180.0;
 
-        double a = Math.Sin(deltaLatRad / 2.0) * Math.Sin(deltaLatRad / 2.0) +
-                   Math.Cos(lat1Rad) * Math.Cos(lat2Rad) *
-                   Math.Sin(deltaLonRad / 2.0) * Math.Sin(deltaLonRad / 2.0);
+        double a = (Math.Sin(deltaLatRad / 2.0) * Math.Sin(deltaLatRad / 2.0)) +
+                   (Math.Cos(lat1Rad) * Math.Cos(lat2Rad) *
+                    Math.Sin(deltaLonRad / 2.0) * Math.Sin(deltaLonRad / 2.0));
         double c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a));
 
         return earthRadiusNM * c;
@@ -98,13 +98,15 @@ public record GeographicCoordinate(double Latitude, double Longitude)
     /// <returns>Bearing in degrees (0-360, where 0 is North, 90 is East).</returns>
     public double BearingTo(GeographicCoordinate other)
     {
+        ArgumentNullException.ThrowIfNull(other);
+
         double lat1Rad = Latitude * Math.PI / 180.0;
         double lat2Rad = other.Latitude * Math.PI / 180.0;
         double deltaLonRad = (other.Longitude - Longitude) * Math.PI / 180.0;
 
         double y = Math.Sin(deltaLonRad) * Math.Cos(lat2Rad);
-        double x = Math.Cos(lat1Rad) * Math.Sin(lat2Rad) -
-                   Math.Sin(lat1Rad) * Math.Cos(lat2Rad) * Math.Cos(deltaLonRad);
+        double x = (Math.Cos(lat1Rad) * Math.Sin(lat2Rad)) -
+                   (Math.Sin(lat1Rad) * Math.Cos(lat2Rad) * Math.Cos(deltaLonRad));
         double bearing = Math.Atan2(y, x) * 180.0 / Math.PI;
 
         return (bearing + 360.0) % 360.0;

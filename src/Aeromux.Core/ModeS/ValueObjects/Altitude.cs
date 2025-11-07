@@ -1,4 +1,5 @@
 using System;
+using Aeromux.Core.ModeS.Enums;
 
 namespace Aeromux.Core.ModeS.ValueObjects;
 
@@ -87,7 +88,11 @@ public record Altitude : IEquatable<Altitude>, IComparable<Altitude>, IComparabl
     /// </returns>
     public int CompareTo(Altitude? other)
     {
-        if (other is null) return 1;
+        if (other is null)
+        {
+            return 1;
+        }
+
         return _feet.CompareTo(other._feet);
     }
 
@@ -103,7 +108,11 @@ public record Altitude : IEquatable<Altitude>, IComparable<Altitude>, IComparabl
     /// <exception cref="ArgumentException">If obj is not an Altitude.</exception>
     public int CompareTo(object? obj)
     {
-        if (obj is null) return 1;
+        if (obj is null)
+        {
+            return 1;
+        }
+
         if (obj is not Altitude other)
         {
             throw new ArgumentException($"Object must be of type {nameof(Altitude)}");
@@ -115,25 +124,41 @@ public record Altitude : IEquatable<Altitude>, IComparable<Altitude>, IComparabl
     /// Determines if this altitude is less than another.
     /// </summary>
     public static bool operator <(Altitude left, Altitude right)
-        => left.CompareTo(right) < 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) < 0;
+    }
 
     /// <summary>
     /// Determines if this altitude is greater than another.
     /// </summary>
     public static bool operator >(Altitude left, Altitude right)
-        => left.CompareTo(right) > 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) > 0;
+    }
 
     /// <summary>
     /// Determines if this altitude is less than or equal to another.
     /// </summary>
     public static bool operator <=(Altitude left, Altitude right)
-        => left.CompareTo(right) <= 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) <= 0;
+    }
 
     /// <summary>
     /// Determines if this altitude is greater than or equal to another.
     /// </summary>
     public static bool operator >=(Altitude left, Altitude right)
-        => left.CompareTo(right) >= 0;
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return left.CompareTo(right) >= 0;
+    }
 
     /// <summary>
     /// Returns a string representation of the altitude.

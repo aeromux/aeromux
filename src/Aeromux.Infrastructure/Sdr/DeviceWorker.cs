@@ -460,17 +460,53 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                     confExpired);
 
                 // Log message parsing statistics (Phase 5) at Debug level
-                // Shows how many frames were parsed, errors, and breakdown by DF/TC
+                // Shows how many frames were parsed, errors, unsupported, and breakdown by DF/TC
                 long msgParsed = _messageParser.MessagesParsed;
                 long msgErrors = _messageParser.ParseErrors;
+                long msgUnsupported = _messageParser.UnsupportedMessages;
                 double msgErrorRate = msgParsed > 0 ? msgErrors * 100.0 / msgParsed : 0.0;
+                double msgUnsupportedRate = msgParsed > 0 ? msgUnsupported * 100.0 / msgParsed : 0.0;
 
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) parser: {Parsed:N0} messages parsed, {Errors:N0} errors ({ErrorRate:F1}%)",
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) parser: {Parsed:N0} messages parsed, {Errors:N0} errors ({ErrorRate:F1}%), {Unsupported:N0} unsupported ({UnsupportedRate:F1}%)",
                     _config.Name,
                     _config.DeviceIndex,
                     msgParsed,
                     msgErrors,
-                    msgErrorRate);
+                    msgErrorRate,
+                    msgUnsupported,
+                    msgUnsupportedRate);
+
+                // Log DF (Downlink Format) breakdown
+                var dfBreakdown = _messageParser.MessagesByDF
+                    .Where(kvp => kvp.Value > 0)
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Take(5)  // Top 5 DFs
+                    .Select(kvp => $"DF {(int)kvp.Key}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
+                    .ToList();
+
+                if (dfBreakdown.Any())
+                {
+                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) DF breakdown: {DFBreakdown}",
+                        _config.Name,
+                        _config.DeviceIndex,
+                        string.Join(", ", dfBreakdown));
+                }
+
+                // Log TC (Type Code) breakdown for Extended Squitter (DF 17/18)
+                var tcBreakdown = _messageParser.MessagesByTC
+                    .Where(kvp => kvp.Value > 0)
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Take(5)  // Top 5 TCs
+                    .Select(kvp => $"TC {kvp.Key}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
+                    .ToList();
+
+                if (tcBreakdown.Any())
+                {
+                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) TC breakdown: {TCBreakdown}",
+                        _config.Name,
+                        _config.DeviceIndex,
+                        string.Join(", ", tcBreakdown));
+                }
 
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;
