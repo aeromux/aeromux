@@ -4,6 +4,7 @@ using RtlSdrManager.Modes;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.SignalProcessing;
 using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Messages;
 
 namespace Aeromux.Infrastructure.Sdr;
 
@@ -23,6 +24,7 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
     private readonly IcaoConfidenceTracker _confidenceTracker = new(
         trackingConfig.ConfidenceLevel,
         trackingConfig.IcaoTimeoutSeconds);
+    private readonly MessageParser _messageParser = new();
     private RtlSdrManagedDevice? _device;
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
@@ -310,29 +312,44 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                 // Phase 4a: CRC validation
                 ValidatedFrame? validatedFrame = _crcValidator.ValidateFrame(rawFrame, signalStrength);
 
-                if (validatedFrame != null)
+                if (validatedFrame == null)
                 {
-                    // Phase 4b: Confidence tracking (filter noise from real aircraft)
-                    bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool isNewConfirmedIcao);
+                    continue;
+                }
 
-                    // Log when ICAO reaches confidence threshold
-                    if (isNewConfirmedIcao)
-                    {
-                        Log.Information("Device '{DeviceName}' confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
-                            _config.Name,
-                            validatedFrame.IcaoAddress,
-                            _trackingConfig.ConfidenceLevel,
-                            (int)_trackingConfig.ConfidenceLevel,
-                            (int)validatedFrame.DownlinkFormat,
-                            validatedFrame.UsesPIMode ? "PI" : "AP");
-                    }
+                // Phase 4b: Confidence tracking (filter noise from real aircraft)
+                bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool isNewConfirmedIcao);
 
-                    // Only pass confident frames to Phase 5
-                    if (isConfident)
-                    {
-                        // TODO: Phase 5 will parse these confident frames into messages
-                        // Noise and unconfident ICAOs are filtered out here
-                    }
+                // Log when ICAO reaches confidence threshold
+                if (isNewConfirmedIcao)
+                {
+                    Log.Information("Device '{DeviceName}' confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
+                        _config.Name,
+                        validatedFrame.IcaoAddress,
+                        _trackingConfig.ConfidenceLevel,
+                        (int)_trackingConfig.ConfidenceLevel,
+                        (int)validatedFrame.DownlinkFormat,
+                        validatedFrame.UsesPIMode ? "PI" : "AP");
+                }
+
+                // Only pass confident frames to Phase 5+
+                if (!isConfident)
+                {
+                    continue;
+                }
+
+                // Phase 5: Parse validated frame into structured message
+                // Noise and unconfident ICAOs are filtered out above
+                ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
+
+                // Message may be null if:
+                // - Message type not yet implemented (returns null from parser)
+                // - Parse error occurred (logged by MessageParser)
+                // This is expected during Phase 5 Foundation - most parsers are stubs
+                if (message != null)
+                {
+                    // TODO Phase 6: Broadcast message via TCP
+                    // TODO Phase 7: Feed message to AircraftTracker
                 }
             }
         }
@@ -394,7 +411,7 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                 // Shows detection rate to monitor threshold effectiveness
                 long candidates = _preambleDetector.PreambleCandidates;
                 long valid = _preambleDetector.ValidPreambles;
-                double validRate = candidates > 0 ? (valid * 100.0) / candidates : 0.0;
+                double validRate = candidates > 0 ? valid * 100.0 / candidates : 0.0;
 
                 Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) preambles: {Candidates:N0} candidates, {Valid:N0} valid ({ValidRate:F1}%), {Frames:N0} frames extracted",
                     _config.Name,
@@ -410,8 +427,8 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                 long crcValid = _crcValidator.FramesValid;
                 long crcCorrected = _crcValidator.FramesCorrected;
                 long crcInvalid = _crcValidator.FramesInvalid;
-                double crcValidRate = crcChecked > 0 ? (crcValid * 100.0) / crcChecked : 0.0;
-                double crcCorrectedRate = crcChecked > 0 ? (crcCorrected * 100.0) / crcChecked : 0.0;
+                double crcValidRate = crcChecked > 0 ? crcValid * 100.0 / crcChecked : 0.0;
+                double crcCorrectedRate = crcChecked > 0 ? crcCorrected * 100.0 / crcChecked : 0.0;
 
                 Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) CRC: {Checked:N0} checked, {Valid:N0} valid ({ValidRate:F1}%), {Corrected:N0} corrected ({CorrectedRate:F1}%), {Invalid:N0} invalid",
                     _config.Name,
@@ -427,7 +444,7 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                 // Shows how many frames pass confidence filter, active ICAOs, and cleanup stats
                 long confTotal = _confidenceTracker.TotalFrames;
                 long confConfident = _confidenceTracker.ConfidentFrames;
-                double confConfidentRate = confTotal > 0 ? (confConfident * 100.0) / confTotal : 0.0;
+                double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
                 int confTracked = _confidenceTracker.TrackedIcaos;
                 int confConfirmed = _confidenceTracker.ConfirmedIcaos;
                 long confExpired = _confidenceTracker.ExpiredIcaos;
@@ -441,6 +458,19 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                     confTracked,
                     confConfirmed,
                     confExpired);
+
+                // Log message parsing statistics (Phase 5) at Debug level
+                // Shows how many frames were parsed, errors, and breakdown by DF/TC
+                long msgParsed = _messageParser.MessagesParsed;
+                long msgErrors = _messageParser.ParseErrors;
+                double msgErrorRate = msgParsed > 0 ? msgErrors * 100.0 / msgParsed : 0.0;
+
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) parser: {Parsed:N0} messages parsed, {Errors:N0} errors ({ErrorRate:F1}%)",
+                    _config.Name,
+                    _config.DeviceIndex,
+                    msgParsed,
+                    msgErrors,
+                    msgErrorRate);
 
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;
