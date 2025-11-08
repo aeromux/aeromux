@@ -64,13 +64,13 @@ public sealed class MessageParser
                 DownlinkFormat.ExtendedSquitterNonTransponder => ParseExtendedSquitter(frame),
 
                 // Priority 2: Basic surveillance
-                DownlinkFormat.ShortAirAirSurveillance => ParseSurveillanceAltitude(frame),
+                DownlinkFormat.ShortAirAirSurveillance => ParseShortAirAirSurveillance(frame),
+                DownlinkFormat.SurveillanceAltitudeReply => ParseSurveillanceAltitudeReply(frame),
+                DownlinkFormat.SurveillanceIdentityReply => ParseSurveillanceIdentityReply(frame),
                 DownlinkFormat.AllCallReply => ParseAllCallReply(frame),
 
                 // Priority 3: Additional surveillance formats
                 DownlinkFormat.LongAirAirSurveillance => ParseLongAirAirSurveillance(frame),
-                DownlinkFormat.SurveillanceAltitudeReply => ParseSurveillanceAltitude(frame),
-                DownlinkFormat.SurveillanceIdentityReply => ParseSurveillanceIdentity(frame),
 
                 // Priority 4: Less common formats
                 DownlinkFormat.MilitaryExtendedSquitter => ParseExtendedSquitter(frame),
@@ -383,25 +383,366 @@ public sealed class MessageParser
     // ========================================
 
     /// <summary>
-    /// Parses surveillance altitude reply from Downlink Format 0 or 4.
+    /// Parses Short Air-Air Surveillance message (DF 0).
+    /// Extracts flight status and altitude for ACAS coordination.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>SurveillanceReply message, or null (currently unimplemented).</returns>
-    private ModeSMessage? ParseSurveillanceAltitude(ValidatedFrame frame)
+    /// <returns>Short air-air surveillance message with altitude and flight status.</returns>
+    /// <remarks>
+    /// DF 0 is used for ACAS (Airborne Collision Avoidance System) coordination between aircraft.
+    /// Structure identical to DF 4, but semantic purpose is aircraft-to-aircraft coordination.
+    /// </remarks>
+    private ModeSMessage? ParseShortAirAirSurveillance(ValidatedFrame frame)
     {
-        // TODO Priority 2: Implement altitude decoding from DF 0/4 (Gillham code)
-        return null;
+        // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
+        int flightStatusRaw = frame.Data[0] & 0x07;
+        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        {
+            Log.Debug("Invalid flight status {FS} in DF 0 from {Icao}",
+                flightStatusRaw, frame.IcaoAddress);
+            return null;
+        }
+
+        var flightStatus = (FlightStatus)flightStatusRaw;
+
+        // Extract Altitude Code (AC) field from bits 20-32
+        int altitudeCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
+
+        // Decode altitude (null if invalid or unavailable)
+        Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
+
+        return new ShortAirAirSurveillance(
+            frame.IcaoAddress,
+            frame.Timestamp,
+            frame.DownlinkFormat,
+            frame.SignalStrength,
+            frame.WasCorrected,
+            altitude,
+            flightStatus);
     }
 
     /// <summary>
-    /// Parses all-call reply from Downlink Format 11.
+    /// Parses Surveillance Altitude Reply message (DF 4).
+    /// Extracts flight status and altitude (Gillham or Q-bit encoding).
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>AllCallReply message, or null (currently unimplemented).</returns>
+    /// <returns>Surveillance altitude reply message with altitude and flight status.</returns>
+    /// <remarks>
+    /// DF 4 messages contain barometric altitude encoded in 13 bits (AC field).
+    /// Four encoding modes: all-zeros (invalid), M=1 (meters), Q=1 (25-ft), Q=0 (Gillham code).
+    /// Flight status indicates airborne/ground and alert/SPI conditions.
+    /// </remarks>
+    private ModeSMessage? ParseSurveillanceAltitudeReply(ValidatedFrame frame)
+    {
+        // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
+        int flightStatusRaw = frame.Data[0] & 0x07;
+        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        {
+            Log.Debug("Invalid flight status {FS} in DF 4 from {Icao}",
+                flightStatusRaw, frame.IcaoAddress);
+            return null;
+        }
+
+        var flightStatus = (FlightStatus)flightStatusRaw;
+
+        // Extract Altitude Code (AC) field from bits 20-32
+        int altitudeCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
+
+        // Decode altitude (null if invalid or unavailable)
+        Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
+
+        return new SurveillanceAltitudeReply(
+            frame.IcaoAddress,
+            frame.Timestamp,
+            frame.DownlinkFormat,
+            frame.SignalStrength,
+            frame.WasCorrected,
+            altitude,
+            flightStatus);
+    }
+
+    /// <summary>
+    /// Parses All-Call Reply message (DF 11).
+    /// Extracts transponder capability field from bits 6-8.
+    /// </summary>
+    /// <param name="frame">Validated frame to parse.</param>
+    /// <returns>All-call reply message with capability, or null if invalid.</returns>
+    /// <remarks>
+    /// All-call replies are transmitted in response to Mode S all-call interrogations.
+    /// They announce the aircraft's presence and ICAO address with basic capability information.
+    /// Capability values: 0=Level 1, 4=Level 2+ on-ground, 5=Level 2+ airborne, 6=uncertain, 7=special condition.
+    /// Reserved values (1-3) are logged and rejected.
+    /// </remarks>
     private ModeSMessage? ParseAllCallReply(ValidatedFrame frame)
     {
-        // TODO Priority 2: Implement DF 11 all-call reply (capability extraction)
-        return null;
+        // Extract Capability (CA) field from bits 6-8 (byte 0, bits 0-2)
+        int capabilityRaw = frame.Data[0] & 0x07;
+
+        // Validate capability value (0-7 are defined in TransponderCapability enum)
+        if (!Enum.IsDefined(typeof(TransponderCapability), capabilityRaw))
+        {
+            Log.Debug("Invalid capability value {Capability} in DF 11 from {Icao}",
+                capabilityRaw, frame.IcaoAddress);
+            return null;
+        }
+
+        var capability = (TransponderCapability)capabilityRaw;
+
+        return new AllCallReply(
+            frame.IcaoAddress,
+            frame.Timestamp,
+            frame.DownlinkFormat,
+            frame.SignalStrength,
+            frame.WasCorrected,
+            capability);
+    }
+
+    // ========================================
+    // Altitude Decoding Helpers (DF 4, 20)
+    // ========================================
+
+    /// <summary>
+    /// Decodes 13-bit AC altitude code (DF 4, 20).
+    /// Supports four encoding modes:
+    /// - Mode 1: All-zeros (altitude unavailable)
+    /// - Mode 2: M=1 (metric altitude, 12-bit value)
+    /// - Mode 3: Q=1 (25-foot increments, 11-bit value)
+    /// - Mode 4: Q=0 (Gillham/Gray code, 100-foot increments)
+    /// </summary>
+    /// <param name="ac13">13-bit altitude code field</param>
+    /// <returns>Decoded altitude, or null if invalid or unavailable</returns>
+    /// <remarks>
+    /// Algorithm verified against readsb mode_s.c decodeAC13Field function.
+    /// Gillham decoding matches readsb mode_ac.c bit-perfect.
+    /// </remarks>
+    private static Altitude? DecodeAltitudeAC13(int ac13)
+    {
+        // Mode 1: All zeros = altitude unavailable
+        if (ac13 == 0)
+        {
+            return null;
+        }
+
+        int mBit = (ac13 >> 6) & 0x01;  // Bit 26 (position 7 in 13-bit field)
+        int qBit = (ac13 >> 4) & 0x01;  // Bit 28 (position 9 in 13-bit field)
+
+        // Mode 2: M=1 (metric altitude)
+        if (mBit == 1)
+        {
+            int altitudeMeters = ac13 & 0x0FFF;  // Lower 12 bits
+            return Altitude.FromMeters(altitudeMeters, AltitudeType.Barometric);
+        }
+
+        // Mode 3: Q=1 (25-foot increments)
+        if (qBit == 1)
+        {
+            // Remove Q and M bits, reconstruct 11-bit value
+            int n = ((ac13 & 0x1F80) >> 2) |   // Bits above Q (5 bits)
+                    ((ac13 & 0x0020) >> 1) |   // Bits between Q and M
+                    (ac13 & 0x000F);           // Bits below M (4 bits)
+
+            int altitudeFeet = (n * 25) - 1000;
+            return Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
+        }
+
+        // Mode 4: Q=0 (Gillham code - full implementation)
+        int gillhamResult = DecodeGillham(ac13);
+        if (gillhamResult < -12)
+        {
+            Log.Debug("Invalid Gillham altitude code, AC={AC:X3}", ac13);
+            return null;  // Invalid Gillham code
+        }
+
+        int gillhamAltitudeFeet = gillhamResult * 100;
+        return Altitude.FromFeet(gillhamAltitudeFeet, AltitudeType.Barometric);
+    }
+
+    /// <summary>
+    /// Decodes Gillham-coded altitude (Gray code).
+    /// Used for all altitudes when Q=0 (most commonly for extreme altitudes > 50,187 feet).
+    /// Algorithm from readsb mode_ac.c internalModeAToModeC function.
+    /// </summary>
+    /// <param name="ac13Field">13-bit altitude code field</param>
+    /// <returns>Altitude in 100-foot increments, or -9999 if invalid</returns>
+    /// <remarks>
+    /// Gillham code uses Gray code (reflected binary) encoding where adjacent values
+    /// differ by only one bit. This reduces errors during altitude changes.
+    /// Bit rearrangement: AC field → Gillham format → Gray code conversion → altitude
+    /// </remarks>
+    private static int DecodeGillham(int ac13Field)
+    {
+        // Rearrange bits from AC field to Gillham format
+        // AC field: C1 A1 C2 A2 C4 A4 M B1 Q B2 D2 B4 D4
+        // Gillham:  C1 A1 C2 A2 C4 A4 0 B1 0 B2 D2 B4 D4
+        //           Bit positions in output (hex notation)
+
+        int gillham = 0;
+
+        if ((ac13Field & 0x1000) != 0)
+        {
+            gillham |= 0x0010;  // C1 → bit 4
+        }
+
+        if ((ac13Field & 0x0800) != 0)
+        {
+            gillham |= 0x1000;  // A1 → bit 12
+        }
+
+        if ((ac13Field & 0x0400) != 0)
+        {
+            gillham |= 0x0020;  // C2 → bit 5
+        }
+
+        if ((ac13Field & 0x0200) != 0)
+        {
+            gillham |= 0x2000;  // A2 → bit 13
+        }
+
+        if ((ac13Field & 0x0100) != 0)
+        {
+            gillham |= 0x0040;  // C4 → bit 6
+        }
+
+        if ((ac13Field & 0x0080) != 0)
+        {
+            gillham |= 0x4000;  // A4 → bit 14
+        }
+
+        // Skip M bit (0x0040) - not used in Gillham
+        if ((ac13Field & 0x0020) != 0)
+        {
+            gillham |= 0x0100;  // B1 → bit 8
+        }
+
+        // Skip Q bit (0x0010) - not used in Gillham
+        if ((ac13Field & 0x0008) != 0)
+        {
+            gillham |= 0x0200;  // B2 → bit 9
+        }
+
+        if ((ac13Field & 0x0004) != 0)
+        {
+            gillham |= 0x0002;  // D2 → bit 1
+        }
+
+        if ((ac13Field & 0x0002) != 0)
+        {
+            gillham |= 0x0400;  // B4 → bit 10
+        }
+
+        if ((ac13Field & 0x0001) != 0)
+        {
+            gillham |= 0x0004;  // D4 → bit 2
+        }
+
+        // Convert Gillham (Gray code) to binary altitude
+        return GillhamToBinary(gillham);
+    }
+
+    /// <summary>
+    /// Converts Gillham-encoded value to binary altitude (100-foot increments).
+    /// Reference: readsb mode_ac.c internalModeAToModeC function.
+    /// </summary>
+    /// <param name="modeA">Gillham-encoded value (hex format)</param>
+    /// <returns>Altitude in 100-foot increments (signed), or -9999 if invalid</returns>
+    /// <remarks>
+    /// Gray code decoding: XOR operations convert reflected binary to standard binary.
+    /// Formula: ((fiveHundreds * 5) + oneHundreds - 13) gives altitude in 100-foot units.
+    /// Valid range: -1200 to 126700 feet (-12 to 1267 in 100-foot units).
+    /// </remarks>
+    private static int GillhamToBinary(int modeA)
+    {
+        // Check for invalid patterns
+        // Zero bits must be zero, D1 set is illegal, C1-C4 cannot be all zero
+        if ((modeA & 0xFFFF8889) != 0 ||  // Check zero bits are zero, D1 set is illegal
+            (modeA & 0x000000F0) == 0)     // C1-C4 cannot be zero
+        {
+            return -9999;  // INVALID_ALTITUDE
+        }
+
+        // Decode C bits (100s) using Gray code
+        int oneHundreds = 0;
+
+        if ((modeA & 0x0010) != 0)
+        {
+            oneHundreds ^= 0x007;  // C1
+        }
+
+        if ((modeA & 0x0020) != 0)
+        {
+            oneHundreds ^= 0x003;  // C2
+        }
+
+        if ((modeA & 0x0040) != 0)
+        {
+            oneHundreds ^= 0x001;  // C4
+        }
+
+        // Remove 7s from oneHundreds (make 7→5 and 5→7)
+        if ((oneHundreds & 5) == 5)
+        {
+            oneHundreds ^= 2;
+        }
+
+        // Check for invalid codes, only 1 to 5 are valid
+        if (oneHundreds > 5)
+        {
+            return -9999;  // INVALID_ALTITUDE
+        }
+
+        // Decode D and A/B bits (500s) using Gray code
+        int fiveHundreds = 0;
+
+        // D1 is never used for altitude (bit 0x0001)
+        if ((modeA & 0x0002) != 0)
+        {
+            fiveHundreds ^= 0x0FF;  // D2
+        }
+
+        if ((modeA & 0x0004) != 0)
+        {
+            fiveHundreds ^= 0x07F;  // D4
+        }
+
+        if ((modeA & 0x1000) != 0)
+        {
+            fiveHundreds ^= 0x03F;  // A1
+        }
+
+        if ((modeA & 0x2000) != 0)
+        {
+            fiveHundreds ^= 0x01F;  // A2
+        }
+
+        if ((modeA & 0x4000) != 0)
+        {
+            fiveHundreds ^= 0x00F;  // A4
+        }
+
+        if ((modeA & 0x0100) != 0)
+        {
+            fiveHundreds ^= 0x007;  // B1
+        }
+
+        if ((modeA & 0x0200) != 0)
+        {
+            fiveHundreds ^= 0x003;  // B2
+        }
+
+        if ((modeA & 0x0400) != 0)
+        {
+            fiveHundreds ^= 0x001;  // B4
+        }
+
+        // Correct order of oneHundreds
+        if ((fiveHundreds & 1) != 0)
+        {
+            oneHundreds = 6 - oneHundreds;
+        }
+
+        // Final altitude calculation
+        // Formula: ((fiveHundreds * 5) + oneHundreds - 13) * 100 feet
+        return (fiveHundreds * 5) + oneHundreds - 13;
     }
 
     // ========================================
@@ -455,13 +796,84 @@ public sealed class MessageParser
 
     /// <summary>
     /// Parses surveillance identity reply from Downlink Format 5.
+    /// Extracts flight status and squawk code (identity code).
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Surveillance identity message, or null (currently unimplemented).</returns>
-    private ModeSMessage? ParseSurveillanceIdentity(ValidatedFrame frame)
+    /// <returns>Surveillance identity reply message with squawk code.</returns>
+    /// <remarks>
+    /// DF 5 messages contain a 13-bit identity code (squawk code) that requires
+    /// bit rearrangement to extract the 4-digit octal code.
+    /// </remarks>
+    private ModeSMessage? ParseSurveillanceIdentityReply(ValidatedFrame frame)
     {
-        // TODO Priority 3: Implement DF 5 identity reply (squawk code)
-        return null;
+        // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
+        int flightStatusRaw = frame.Data[0] & 0x07;
+        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        {
+            Log.Debug("Invalid flight status {FS} in DF 5 from {Icao}",
+                flightStatusRaw, frame.IcaoAddress);
+            return null;
+        }
+
+        var flightStatus = (FlightStatus)flightStatusRaw;
+
+        // Extract Identity Code (ID) field from bits 20-32
+        int identityCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
+
+        // Decode squawk code (4-digit octal string)
+        string squawkCode = DecodeSquawkCode(identityCode);
+
+        return new SurveillanceIdentityReply(
+            frame.IcaoAddress,
+            frame.Timestamp,
+            frame.DownlinkFormat,
+            frame.SignalStrength,
+            frame.WasCorrected,
+            squawkCode,
+            flightStatus);
+    }
+
+    /// <summary>
+    /// Decodes 13-bit identity code (squawk code) from DF 5 messages.
+    /// Returns 4-digit octal string (e.g., "7700" for emergency).
+    /// </summary>
+    /// <param name="id13">13-bit identity code field</param>
+    /// <returns>4-digit octal squawk code (e.g., "7700")</returns>
+    /// <remarks>
+    /// The 13-bit field contains interleaved C/A/B/D bits that must be rearranged:
+    /// ID field: C1 A1 C2 A2 C4 A4 X B1 D1 B2 D2 B4 D4
+    /// Squawk:   A4 A2 A1 | B4 B2 B1 | C4 C2 C1 | D4 D2 D1
+    /// Each group forms one octal digit (0-7).
+    /// Algorithm verified against pyModeS common.idcode and common.squawk functions.
+    /// </remarks>
+    private static string DecodeSquawkCode(int id13)
+    {
+        // Extract individual bits from 13-bit field
+        // ID field: C1 A1 C2 A2 C4 A4 X B1 D1 B2 D2 B4 D4
+        //           12 11 10  9  8  7 6  5  4  3  2  1  0
+
+        int c1 = (id13 >> 12) & 0x01;
+        int a1 = (id13 >> 11) & 0x01;
+        int c2 = (id13 >> 10) & 0x01;
+        int a2 = (id13 >>  9) & 0x01;
+        int c4 = (id13 >>  8) & 0x01;
+        int a4 = (id13 >>  7) & 0x01;
+        // Skip X bit (bit 6) - not used
+        int b1 = (id13 >>  5) & 0x01;
+        int d1 = (id13 >>  4) & 0x01;
+        int b2 = (id13 >>  3) & 0x01;
+        int d2 = (id13 >>  2) & 0x01;
+        int b4 = (id13 >>  1) & 0x01;
+        int d4 = (id13 >>  0) & 0x01;
+
+        // Rearrange into 4 octal digits (3 bits each)
+        int digitA = (a4 << 2) | (a2 << 1) | a1;  // A4 A2 A1
+        int digitB = (b4 << 2) | (b2 << 1) | b1;  // B4 B2 B1
+        int digitC = (c4 << 2) | (c2 << 1) | c1;  // C4 C2 C1
+        int digitD = (d4 << 2) | (d2 << 1) | d1;  // D4 D2 D1
+
+        // Format as 4-digit octal string
+        return $"{digitA}{digitB}{digitC}{digitD}";
     }
 
     // ========================================
