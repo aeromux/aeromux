@@ -140,7 +140,8 @@ public class ConfigurationBuilder
             Logging = yamlConfig.Logging ?? baseConfig.Logging,
             Devices = yamlConfig.Devices ?? baseConfig.Devices,  // Phase 1: Simplified from Sdr.Devices
             Network = yamlConfig.Network ?? baseConfig.Network,
-            Tracking = yamlConfig.Tracking ?? baseConfig.Tracking
+            Tracking = yamlConfig.Tracking ?? baseConfig.Tracking,
+            Receiver = yamlConfig.Receiver ?? baseConfig.Receiver  // Phase 5: Receiver location for TC 5-8
         };
     }
 

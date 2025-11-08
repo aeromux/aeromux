@@ -44,4 +44,10 @@ public class AeromuxConfig
     /// Gets or sets the aircraft tracking configuration.
     /// </summary>
     public TrackingConfig? Tracking { get; set; }
+
+    /// <summary>
+    /// Gets or sets the receiver station location configuration (optional).
+    /// Required for TC 5-8 surface position decoding.
+    /// </summary>
+    public ReceiverConfig? Receiver { get; set; }
 }

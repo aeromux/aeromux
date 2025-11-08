@@ -38,3 +38,10 @@ tracking:                                 # Aircraft state tracking configuratio
   icaoTimeoutSeconds: 30                  # Remove ICAOs not seen within this many seconds (prevents memory growth)
   # aircraftTimeoutMinutes: 60            # TODO: Phase 5+ - Remove aircraft after this many minutes of no messages
   # positionHistorySize: 1000             # TODO: Phase 5+ - Maximum number of position reports to keep per aircraft
+
+# Receiver station location (optional, required for TC 5-8 surface position decoding)
+receiver:
+  latitude: 46.907982                     # Receiver latitude in decimal degrees (-90 to +90)
+  longitude: 19.693172                    # Receiver longitude in decimal degrees (-180 to +180)
+  altitude: 120                           # Receiver altitude in meters above sea level (optional)
+  name: "Kecskemét"                       # Friendly name for this receiver station (optional)

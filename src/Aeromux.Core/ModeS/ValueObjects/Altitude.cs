@@ -20,7 +20,7 @@ namespace Aeromux.Core.ModeS.ValueObjects;
 /// var altitudes = new[] { cruiseAlt, approachAlt }.OrderBy(a => a);
 /// </code>
 /// </remarks>
-public record Altitude : IEquatable<Altitude>, IComparable<Altitude>, IComparable
+public record Altitude : IComparable<Altitude>, IComparable
 {
     private readonly int _feet;
 
@@ -31,12 +31,12 @@ public record Altitude : IEquatable<Altitude>, IComparable<Altitude>, IComparabl
 
     private Altitude(int feet, AltitudeType type)
     {
-        if (feet is < -2000 or > 60000)
+        if (feet is < -2000 or > 126700)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(feet),
                 feet,
-                "Altitude must be between -2000 and 60000 feet (-2000 allows Dead Sea, 60000 allows FL600)");
+                "Altitude must be between -2000 and 126700 feet (-2000 allows Dead Sea, 126700 is Gillham maximum)");
         }
 
         _feet = feet;
@@ -46,7 +46,7 @@ public record Altitude : IEquatable<Altitude>, IComparable<Altitude>, IComparabl
     /// <summary>
     /// Creates an altitude from feet.
     /// </summary>
-    /// <param name="feet">Altitude in feet (-2000 to 60000).</param>
+    /// <param name="feet">Altitude in feet (-2000 to 126700).</param>
     /// <param name="type">Type of altitude measurement.</param>
     /// <returns>An Altitude instance.</returns>
     public static Altitude FromFeet(int feet, AltitudeType type) => new(feet, type);

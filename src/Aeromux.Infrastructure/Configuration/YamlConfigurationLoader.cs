@@ -63,6 +63,18 @@ public class YamlConfigurationLoader : IYamlConfigurationLoader
         int deviceCount = config.Devices?.Count ?? 0;
         Log.Information("Configuration loaded successfully: {DeviceCount} device(s)", deviceCount);
 
+        // Debug: Log receiver config status
+        if (config.Receiver != null)
+        {
+            Log.Debug("Receiver config loaded: Lat={Lat}, Lon={Lon}, Alt={Alt}, Name={Name}",
+                config.Receiver.Latitude, config.Receiver.Longitude,
+                config.Receiver.Altitude, config.Receiver.Name);
+        }
+        else
+        {
+            Log.Debug("Receiver config is null after YAML deserialization");
+        }
+
         return config;
     }
 }

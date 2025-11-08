@@ -78,7 +78,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
             foreach (DeviceConfig deviceConfig in config.Devices!.Where(d => d.Enabled))
             {
-                var worker = new DeviceWorker(deviceConfig, config.Tracking!);
+                var worker = new DeviceWorker(deviceConfig, config.Tracking!, config.Receiver);
 
                 try
                 {
@@ -86,11 +86,13 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     worker.StartReceiving(cancellationToken);
                     deviceWorkers.Add(worker);
 
-                    Log.Information("Started SDR device worker: {DeviceName}", deviceConfig.Name);
+                    Log.Information("Started SDR device worker: '{DeviceName}' (index: {DeviceIndex})",
+                        deviceConfig.Name, deviceConfig.DeviceIndex);
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "Failed to start device worker: {DeviceName}", deviceConfig.Name);
+                    Log.Error(ex, "Failed to start device worker: '{DeviceName}' (index: {DeviceIndex})",
+                        deviceConfig.Name, deviceConfig.DeviceIndex);
                     // Clean up partially initialized worker before re-throwing
                     worker.Dispose();
                     throw;
@@ -233,6 +235,57 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
         // TODO: Phase 6+ - Add validation for SBS port (30003) and HTTP port (8080)
         // Validate range 1024-65535, check no port conflicts between services
+
+        // Validate receiver location (optional, but validate if configured)
+        Log.Debug("Checking receiver configuration: IsNull={IsNull}", config.Receiver == null);
+        if (config.Receiver != null)
+        {
+            Log.Debug("Receiver config present: Lat={Lat}, Lon={Lon}, Alt={Alt}, Name={Name}",
+                config.Receiver.Latitude, config.Receiver.Longitude,
+                config.Receiver.Altitude, config.Receiver.Name);
+        }
+
+        if (config.Receiver != null)
+        {
+            if (config.Receiver.Latitude.HasValue)
+            {
+                if (config.Receiver.Latitude < -90 || config.Receiver.Latitude > 90)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot start daemon: Receiver latitude must be between -90 and +90 degrees, but was {config.Receiver.Latitude}");
+                }
+            }
+
+            if (config.Receiver.Longitude.HasValue)
+            {
+                if (config.Receiver.Longitude < -180 || config.Receiver.Longitude > 180)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot start daemon: Receiver longitude must be between -180 and +180 degrees, but was {config.Receiver.Longitude}");
+                }
+            }
+
+            // Both lat/lon must be provided together
+            if (config.Receiver.Latitude.HasValue != config.Receiver.Longitude.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "Cannot start daemon: Receiver latitude and longitude must both be provided or both omitted");
+            }
+
+            // Log if configured
+            if (config.Receiver.Latitude.HasValue && config.Receiver.Longitude.HasValue)
+            {
+                Log.Information("Receiver location configured: {Lat:F4}° {LatDir}, {Lon:F4}° {LonDir}",
+                    Math.Abs(config.Receiver.Latitude.Value),
+                    config.Receiver.Latitude.Value >= 0 ? "N" : "S",
+                    Math.Abs(config.Receiver.Longitude.Value),
+                    config.Receiver.Longitude.Value >= 0 ? "E" : "W");
+            }
+        }
+        else
+        {
+            Log.Warning("Receiver location not configured - TC 5-8 surface position decoding will be disabled");
+        }
 
         // Note: Device-specific validation (centerFrequency, sampleRate, tunerGain, etc.)
         // is performed in DeviceWorker.OpenDevice() where the values are actually used.

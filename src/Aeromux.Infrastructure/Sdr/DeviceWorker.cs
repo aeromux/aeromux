@@ -13,21 +13,43 @@ namespace Aeromux.Infrastructure.Sdr;
 /// Each DeviceWorker runs in its own task and processes samples from one device.
 /// Uses Serilog for structured logging (ADR-007).
 /// </summary>
-public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig trackingConfig) : IDisposable
+public sealed class DeviceWorker : IDisposable
 {
-    private readonly DeviceConfig _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
-    private readonly TrackingConfig _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
+    private readonly DeviceConfig _config;
+    private readonly TrackingConfig _trackingConfig;
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
     private readonly IQDemodulator _demodulator = new();
-    private readonly PreambleDetector _preambleDetector = new(deviceConfig.PreambleThreshold);
+    private readonly PreambleDetector _preambleDetector;
     private readonly CrcValidator _crcValidator = new();
-    private readonly IcaoConfidenceTracker _confidenceTracker = new(
-        trackingConfig.ConfidenceLevel,
-        trackingConfig.IcaoTimeoutSeconds);
-    private readonly MessageParser _messageParser = new();
+    private readonly IcaoConfidenceTracker _confidenceTracker;
+    private readonly MessageParser _messageParser;
     private RtlSdrManagedDevice? _device;
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
+
+    public DeviceWorker(DeviceConfig deviceConfig, TrackingConfig trackingConfig, ReceiverConfig? receiverConfig)
+    {
+        _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
+        _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
+        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold);
+        _confidenceTracker = new IcaoConfidenceTracker(
+            trackingConfig.ConfidenceLevel,
+            trackingConfig.IcaoTimeoutSeconds);
+
+        // Initialize MessageParser with device context for logging
+        _messageParser = new MessageParser(deviceConfig.Name, deviceConfig.DeviceIndex);
+
+        // Configure MessageParser with receiver location if available (for TC 5-8 surface position)
+        if (receiverConfig?.Latitude.HasValue == true && receiverConfig?.Longitude.HasValue == true)
+        {
+            var receiverLocation = new Core.ModeS.ValueObjects.GeographicCoordinate(
+                receiverConfig.Latitude.Value,
+                receiverConfig.Longitude.Value);
+            _messageParser.SetReceiverLocation(receiverLocation);
+            Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}): MessageParser configured with receiver location",
+                deviceConfig.Name, deviceConfig.DeviceIndex);
+        }
+    }
 
     // Statistics tracking
     private long _totalSamplesReceived;        // Total IQ samples received since StartReceiving()
@@ -170,8 +192,9 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
             _device.DropSamplesOnFullBuffer = true;     // Prevent blocking if processing falls behind
             _device.ResetDeviceBuffer();                // Clear any stale data from previous operations
 
-            Log.Information("Device {DeviceName} configured: Freq={Frequency}MHz, SR={SampleRate}MHz, Gain={Gain}, Mode={GainMode}",
+            Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) configured: Freq={Frequency}MHz, SR={SampleRate}MHz, Gain={Gain}, Mode={GainMode}",
                 _config.Name,
+                _config.DeviceIndex,
                 _config.CenterFrequency,
                 _config.SampleRate,
                 gainInfo,
@@ -203,7 +226,7 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
             throw new InvalidOperationException($"Device {_config.Name} not opened. Call OpenDevice() first.");
         }
 
-        Log.Information("Starting sample reception for device {DeviceName}", _config.Name);
+        Log.Information("Starting sample reception for device '{DeviceName}' (index: {DeviceIndex})", _config.Name, _config.DeviceIndex);
 
         // Create linked token source so we can cancel independently if needed
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -219,7 +242,7 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
         // Start background task for periodic statistics logging (every 10 seconds)
         _workerTask = Task.Run(() => StatisticsLoop(_cts.Token), _cts.Token);
 
-        Log.Information("Device {DeviceName} receiving samples", _config.Name);
+        Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) receiving samples", _config.Name, _config.DeviceIndex);
     }
 
     /// <summary>
@@ -323,8 +346,9 @@ public sealed class DeviceWorker(DeviceConfig deviceConfig, TrackingConfig track
                 // Log when ICAO reaches confidence threshold
                 if (isNewConfirmedIcao)
                 {
-                    Log.Information("Device '{DeviceName}' confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
+                    Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
                         _config.Name,
+                        _config.DeviceIndex,
                         validatedFrame.IcaoAddress,
                         _trackingConfig.ConfidenceLevel,
                         (int)_trackingConfig.ConfidenceLevel,
