@@ -257,6 +257,9 @@ public sealed class DeviceWorker : IDisposable
     {
         Log.Information("Stopping device '{DeviceName}' (index: {DeviceIndex})", _config.Name, _config.DeviceIndex);
 
+        // Log final statistics summary
+        LogFinalStatistics();
+
         if (_cts != null)
         {
             _cts.Cancel();
@@ -484,19 +487,23 @@ public sealed class DeviceWorker : IDisposable
                     confExpired);
 
                 // Log message parsing statistics (Phase 5) at Debug level
-                // Shows how many frames were parsed, errors, unsupported, and breakdown by DF/TC
+                // Shows how many frames were parsed, validation failures, unexpected errors, unsupported
                 long msgParsed = _messageParser.MessagesParsed;
-                long msgErrors = _messageParser.ParseErrors;
+                long msgValidationFailures = _messageParser.ValidationFailures;
+                long msgUnexpectedErrors = _messageParser.UnexpectedErrors;
                 long msgUnsupported = _messageParser.UnsupportedMessages;
-                double msgErrorRate = msgParsed > 0 ? msgErrors * 100.0 / msgParsed : 0.0;
+                double msgValidationRate = msgParsed > 0 ? msgValidationFailures * 100.0 / msgParsed : 0.0;
+                double msgUnexpectedRate = msgParsed > 0 ? msgUnexpectedErrors * 100.0 / msgParsed : 0.0;
                 double msgUnsupportedRate = msgParsed > 0 ? msgUnsupported * 100.0 / msgParsed : 0.0;
 
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) parser: {Parsed:N0} messages parsed, {Errors:N0} errors ({ErrorRate:F1}%), {Unsupported:N0} unsupported ({UnsupportedRate:F1}%)",
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) parser: {Parsed:N0} parsed, {ValidationFailures:N0} validation failures ({ValidationRate:F1}%), {UnexpectedErrors:N0} unexpected errors ({UnexpectedRate:F1}%), {Unsupported:N0} unsupported ({UnsupportedRate:F1}%)",
                     _config.Name,
                     _config.DeviceIndex,
                     msgParsed,
-                    msgErrors,
-                    msgErrorRate,
+                    msgValidationFailures,
+                    msgValidationRate,
+                    msgUnexpectedErrors,
+                    msgUnexpectedRate,
                     msgUnsupported,
                     msgUnsupportedRate);
 
@@ -504,7 +511,6 @@ public sealed class DeviceWorker : IDisposable
                 var dfBreakdown = _messageParser.MessagesByDF
                     .Where(kvp => kvp.Value > 0)
                     .OrderByDescending(kvp => kvp.Value)
-                    .Take(5)  // Top 5 DFs
                     .Select(kvp => $"DF {(int)kvp.Key}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
                     .ToList();
 
@@ -520,7 +526,6 @@ public sealed class DeviceWorker : IDisposable
                 var tcBreakdown = _messageParser.MessagesByTC
                     .Where(kvp => kvp.Value > 0)
                     .OrderByDescending(kvp => kvp.Value)
-                    .Take(5)  // Top 5 TCs
                     .Select(kvp => $"TC {kvp.Key}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
                     .ToList();
 
@@ -545,6 +550,107 @@ public sealed class DeviceWorker : IDisposable
                 Log.Error(ex, "Error in statistics loop for device {DeviceName}", _config.Name);
             }
         }
+    }
+
+    /// <summary>
+    /// Logs comprehensive final statistics when the device is stopped.
+    /// Includes message parsing breakdown by DF/TC with counts and percentages.
+    /// </summary>
+    private void LogFinalStatistics()
+    {
+        Log.Information("═══════════════════════════════════════════════════════════════");
+        Log.Information("Final Statistics for Device '{DeviceName}' (index: {DeviceIndex})",
+            _config.Name, _config.DeviceIndex);
+        Log.Information("═══════════════════════════════════════════════════════════════");
+
+        // CRC Validation statistics
+        long crcChecked = _crcValidator.FramesChecked;
+        long crcValid = _crcValidator.FramesValid;
+        long crcCorrected = _crcValidator.FramesCorrected;
+        long crcInvalid = _crcValidator.FramesInvalid;
+        double crcValidRate = crcChecked > 0 ? crcValid * 100.0 / crcChecked : 0.0;
+        double crcCorrectedRate = crcChecked > 0 ? crcCorrected * 100.0 / crcChecked : 0.0;
+
+        Log.Information("CRC Validation: {Checked:N0} frames checked",
+            crcChecked);
+        Log.Information("  - Valid: {Valid:N0} ({ValidRate:F1}%)",
+            crcValid, crcValidRate);
+        Log.Information("  - Corrected: {Corrected:N0} ({CorrectedRate:F1}%)",
+            crcCorrected, crcCorrectedRate);
+        Log.Information("  - Invalid: {Invalid:N0}",
+            crcInvalid);
+
+        // Confidence tracking statistics
+        long confTotal = _confidenceTracker.TotalFrames;
+        long confConfident = _confidenceTracker.ConfidentFrames;
+        double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
+        int confTracked = _confidenceTracker.TrackedIcaos;
+        int confConfirmed = _confidenceTracker.ConfirmedIcaos;
+        long confExpired = _confidenceTracker.ExpiredIcaos;
+
+        Log.Information("Confidence Tracking: {Total:N0} frames processed",
+            confTotal);
+        Log.Information("  - Confident: {Confident:N0} ({ConfidentRate:F1}%)",
+            confConfident, confConfidentRate);
+        Log.Information("  - Active ICAOs: {Tracked:N0} tracked, {Confirmed:N0} confirmed",
+            confTracked, confConfirmed);
+        Log.Information("  - Expired ICAOs: {Expired:N0} (lifetime total)",
+            confExpired);
+
+        // Message parser statistics
+        long msgParsed = _messageParser.MessagesParsed;
+        long msgValidationFailures = _messageParser.ValidationFailures;
+        long msgUnexpectedErrors = _messageParser.UnexpectedErrors;
+        long msgUnsupported = _messageParser.UnsupportedMessages;
+        double msgValidationRate = msgParsed > 0 ? msgValidationFailures * 100.0 / msgParsed : 0.0;
+        double msgUnexpectedRate = msgParsed > 0 ? msgUnexpectedErrors * 100.0 / msgParsed : 0.0;
+        double msgUnsupportedRate = msgParsed > 0 ? msgUnsupported * 100.0 / msgParsed : 0.0;
+
+        Log.Information("Message Parser: {Parsed:N0} messages parsed",
+            msgParsed);
+        Log.Information("  - Validation failures: {ValidationFailures:N0} ({ValidationRate:F1}%) [expected in noisy RF]",
+            msgValidationFailures, msgValidationRate);
+        Log.Information("  - Unexpected errors: {UnexpectedErrors:N0} ({UnexpectedRate:F1}%) [bugs if >0]",
+            msgUnexpectedErrors, msgUnexpectedRate);
+        Log.Information("  - Unsupported: {Unsupported:N0} ({UnsupportedRate:F1}%)",
+            msgUnsupported, msgUnsupportedRate);
+
+        // DF (Downlink Format) breakdown
+        var dfBreakdown = _messageParser.MessagesByDF
+            .Where(kvp => kvp.Value > 0)
+            .OrderByDescending(kvp => kvp.Value)
+            .ToList();
+
+        if (dfBreakdown.Any())
+        {
+            Log.Information("Downlink Format (DF) Breakdown:");
+            foreach (var kvp in dfBreakdown)
+            {
+                double percentage = msgParsed > 0 ? kvp.Value * 100.0 / msgParsed : 0.0;
+                Log.Information("  - DF {DF,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                    (int)kvp.Key, kvp.Value, percentage);
+            }
+        }
+
+        // TC (Type Code) breakdown for Extended Squitter (DF 17/18)
+        var tcBreakdown = _messageParser.MessagesByTC
+            .Where(kvp => kvp.Value > 0)
+            .OrderByDescending(kvp => kvp.Value)
+            .ToList();
+
+        if (tcBreakdown.Any())
+        {
+            long totalTcMessages = tcBreakdown.Sum(kvp => kvp.Value);
+            Log.Information("Type Code (TC) Breakdown (DF 17/18 only):");
+            foreach (var kvp in tcBreakdown)
+            {
+                double percentage = totalTcMessages > 0 ? kvp.Value * 100.0 / totalTcMessages : 0.0;
+                Log.Information("  - TC {TC,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                    kvp.Key, kvp.Value, percentage);
+            }
+        }
+
+        Log.Information("═══════════════════════════════════════════════════════════════");
     }
 
     /// <summary>
