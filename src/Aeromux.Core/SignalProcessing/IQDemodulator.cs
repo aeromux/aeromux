@@ -24,11 +24,10 @@ public sealed class IQDemodulator : IDisposable
     private static readonly ushort[,] MagnitudeLookup = InitializeMagnitudeLookup();
 
     // Magnitude buffer (circular buffer for efficient processing)
-    private readonly ushort[] _magnitudeBuffer = new ushort[2_000_000];
+    // At 2.4 MSPS: ~1 second = 2,400,000 samples (rounded to power of 2: 2,097,152 = 2^21)
+    private readonly ushort[] _magnitudeBuffer = new ushort[2_097_152];
 
     // Statistics (exposed as properties for DeviceWorker to log)
-
-    // Allocate magnitude buffer (size should hold ~1 second of samples at 2 MSPS)
 
     /// <summary>
     /// Initializes the magnitude lookup table (called once at static initialization).

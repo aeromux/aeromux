@@ -20,14 +20,14 @@ devices:                                  # List of SDR devices to use (multiple
   - name: primary                         # Friendly name for this device
     deviceIndex: 0                        # RTL-SDR device index (0 for first device)
     centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
-    sampleRate: 2.0                       # Sample rate in MHz (currently only 2.0 supported, 2.4 planned for Phase 6+)
+    sampleRate: 2.4                       # Sample rate in MHz (2.4 MHz standard, aligns with readsb)
     gainMode: agc                         # Gain mode: manual (use tunerGain) | agc (automatic gain control)
     ppmCorrection: 0                      # Frequency correction in parts per million
     enabled: true                         # Enable/disable this device
   - name: secondary                       # Friendly name for this device
     deviceIndex: 1                        # RTL-SDR device index (0 for first device)
     centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
-    sampleRate: 2.0                       # Sample rate in MHz (currently only 2.0 supported, 2.4 planned for Phase 6+)
+    sampleRate: 2.4                       # Sample rate in MHz (2.4 MHz standard, aligns with readsb)
     gainMode: agc                         # Gain mode: manual (use tunerGain) | agc (automatic gain control)
     ppmCorrection: 0                      # Frequency correction in parts per million
     enabled: true                         # Enable/disable this device

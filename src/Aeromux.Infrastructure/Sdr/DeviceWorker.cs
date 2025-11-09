@@ -31,10 +31,14 @@ public sealed class DeviceWorker : IDisposable
     {
         _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
-        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold);
+
+        // Initialize confidence tracker first (needed by PreambleDetector for ICAO filtering)
         _confidenceTracker = new IcaoConfidenceTracker(
             trackingConfig.ConfidenceLevel,
             trackingConfig.IcaoTimeoutSeconds);
+
+        // Pass confidence tracker to PreambleDetector for AP mode ICAO filtering
+        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold, _confidenceTracker);
 
         // Initialize MessageParser with device context for logging
         _messageParser = new MessageParser(deviceConfig.Name, deviceConfig.DeviceIndex);
@@ -116,17 +120,16 @@ public sealed class DeviceWorker : IDisposable
                 _config.Name, _config.SampleRate);
         }
 
-        // Validate sample rate software requirement (Phase 3 currently only supports 2.0 MSPS)
-        // TODO: Phase 6+ - Add support for 2.4 MSPS using phase tracking + correlation (readsb approach)
-        const double supportedSampleRate = 2.0;
+        // Validate sample rate software requirement
+        // Now supports 2.4 MSPS using readsb's phase tracking + correlation approach
+        const double supportedSampleRate = 2.4;
         const double tolerance = 0.01;  // Allow ±0.01 MHz for floating point comparison
         if (Math.Abs(_config.SampleRate - supportedSampleRate) > tolerance)
         {
             throw new InvalidOperationException(
                 $"Device '{_config.Name}': Sample rate {_config.SampleRate} MHz is not supported. " +
-                $"Phase 3 frame detection currently only supports 2.0 MSPS (Mode S symbol timing assumes integer sample counts). " +
-                $"Support for 2.4 MSPS will be added in Phase 6+ using readsb's phase tracking + correlation approach. " +
-                $"Please set sampleRate to 2.0 in your configuration file.");
+                $"Only 2.4 MSPS is supported (industry standard, aligns with readsb). " +
+                $"Please set sampleRate to 2.4 in your configuration file.");
         }
 
         // Validate gain mode enum
@@ -435,18 +438,17 @@ public sealed class DeviceWorker : IDisposable
                     _demodulator.BufferPosition);
 
                 // Log preamble detection statistics (Phase 3) at Debug level
-                // Shows detection rate to monitor threshold effectiveness
+                // Shows extraction rate to monitor threshold effectiveness
                 long candidates = _preambleDetector.PreambleCandidates;
-                long valid = _preambleDetector.ValidPreambles;
-                double validRate = candidates > 0 ? valid * 100.0 / candidates : 0.0;
+                long extracted = _preambleDetector.FramesExtracted;
+                double extractedRate = candidates > 0 ? extracted * 100.0 / candidates : 0.0;
 
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) preambles: {Candidates:N0} candidates, {Valid:N0} valid ({ValidRate:F1}%), {Frames:N0} frames extracted",
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) preambles: {Candidates:N0} candidates, {Extracted:N0} frames extracted ({ExtractedRate:F1}%)",
                     _config.Name,
                     _config.DeviceIndex,
                     candidates,
-                    valid,
-                    validRate,
-                    _preambleDetector.FramesExtracted);
+                    extracted,
+                    extractedRate);
 
                 // Log CRC validation statistics (Phase 4) at Debug level
                 // Shows validation and correction rates to monitor frame quality
@@ -662,4 +664,13 @@ public sealed class DeviceWorker : IDisposable
         Stop();
         _demodulator.Dispose();
     }
+
+    // Public properties for session summary (exposed to DaemonCommand for aggregation)
+    public string DeviceName => _config.Name;
+    public long TotalSamplesReceived => _totalSamplesReceived;
+    public IQDemodulator Demodulator => _demodulator;
+    public PreambleDetector PreambleDetector => _preambleDetector;
+    public CrcValidator CrcValidator => _crcValidator;
+    public IcaoConfidenceTracker ConfidenceTracker => _confidenceTracker;
+    public MessageParser MessageParser => _messageParser;
 }

@@ -2,57 +2,38 @@ namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// Detects Mode S preambles in magnitude data and extracts raw frames.
-/// Uses local noise estimation following readsb's architecture.
+/// Implements 2.4 MSPS sampling with readsb's phase correlation approach.
 /// </summary>
 /// <remarks>
-/// IMPORTANT: Currently only supports 2.0 MSPS sample rate (validated in DeviceWorker).
-/// Support for 2.4 MSPS will be added in Phase 6+ using phase tracking + correlation approach.
+/// 2.4 MSPS Sampling (readsb approach):
+/// - 6 samples per 5 symbols creates phase ambiguity
+/// - Mode S preamble: 4 pulses at 0.0, 1.0, 3.5, 4.5 µs
+/// - At 2.4 MHz: sample positions 0, 2.4, 8.4, 10.8 (fractional)
+/// - Phase tracking: 5 possible phases (0-4) for bit alignment
+/// - Uses weighted correlation functions to extract bits from 3-4 adjacent samples
 ///
-/// Mode S preamble structure (at 2.0 MSPS):
-/// - 4 pulses at: 0.0µs (samples 0-1), 1.0µs (samples 2-3), 3.5µs (samples 7-8), 4.5µs (samples 9-10)
-/// - Total duration: 8µs = 16 samples
-/// - Data starts at sample 16
-/// - Integer sample alignment: Each symbol = 1 sample, each bit = 2 samples
-///
-/// Local noise estimation (readsb approach):
-/// - Uses 5 samples from LOW regions: 5, 8 (preamble valleys), 16-18 (early data PPM valleys)
-/// - Threshold validation: peaks must exceed (average noise × threshold²)
-/// - Threshold squared because Phase 2 stores I²+Q² (power), not amplitude
+/// Direct port of readsb's demod_2400.c:
+/// - Pre-check filter for fast rejection (lines 333-344)
+/// - Phase-specific preamble magnitude calculation (lines 366-400)
+/// - 5 correlation functions slice_phase0-4 (lines 74-93)
+/// - slice_byte with phase-specific sample offsets (lines 133-213)
+/// - score_phase to find best phase alignment (lines 215-254)
 ///
 /// Reference: readsb/demod_2400.c
-/// TODO: Phase 6+ - Add 2.4 MSPS support using phase tracking (6 samples per 5 symbols)
 /// </remarks>
 public sealed class PreambleDetector
 {
-    /// <summary>
-    /// Maximum samples needed to read a complete frame (for documentation/reference).
-    /// Preamble (16) + Long frame data (112 bits × 2 samples/bit) = 240 samples
-    /// Note: Not used for bounds checking with circular buffer (modulo handles wrap-around).
-    /// </summary>
-    private const int MaxFrameReadAhead = 16 + (ModeSFrameLength.Long * 2);
+    private readonly double _preambleThreshold;
+    private readonly List<RawFrame> _frameBuffer = new();
+    private readonly CrcValidator _crcValidator = new(); // For validating extracted messages
+    private readonly IcaoConfidenceTracker? _confidenceTracker; // Optional: for filtering AP mode from unknown aircraft
 
-    private readonly double _preambleThresholdSquared;  // Squared for power comparison
-    private readonly List<RawFrame> _frameBuffer = new();  // Reusable buffer
-
-    // Statistics (exposed as properties for DeviceWorker to log)
+    // Statistics
     private long _preambleCandidates;
-    private long _validPreambles;
     private long _framesExtracted;
+    private long _framesRejectedDuringExtraction;  // Would have extracted but rejected due to unknown ICAO
 
-    /// <summary>
-    /// Initializes a new preamble detector with configurable threshold.
-    /// </summary>
-    /// <param name="preambleThreshold">
-    /// Signal-to-noise ratio threshold for preamble validation (amplitude ratio).
-    /// Default 3.16 ≈ √10 = 10 dB SNR (user-friendly amplitude ratio).
-    /// Valid range: 1.5 (3.5 dB, sensitive) to 10.0 (20 dB, restrictive).
-    /// Lower values = more sensitive (more false positives).
-    /// Higher values = less sensitive (may miss weak signals).
-    ///
-    /// Note: Internally squared (3.16² ≈ 10) because Phase 2 stores I²+Q² (power),
-    /// not sqrt(I²+Q²) (amplitude). This allows correct power-to-power comparison.
-    /// </param>
-    public PreambleDetector(double preambleThreshold = 3.16)
+    public PreambleDetector(double preambleThreshold = 3.16, IcaoConfidenceTracker? confidenceTracker = null)
     {
         if (preambleThreshold < 1.5 || preambleThreshold > 10.0)
         {
@@ -60,72 +41,75 @@ public sealed class PreambleDetector
                 $"Preamble threshold must be between 1.5 and 10.0 (got {preambleThreshold})");
         }
 
-        // Square the amplitude threshold for power comparison
-        // User specifies 3.16 (amplitude ratio), we store 10 (power ratio)
-        _preambleThresholdSquared = preambleThreshold * preambleThreshold;
+        _preambleThreshold = preambleThreshold;
+        _confidenceTracker = confidenceTracker;
     }
 
     /// <summary>
-    /// Scans magnitude buffer for Mode S preambles and extracts frames.
+    /// Scans magnitude buffer for Mode S preambles using readsb's 2.4 MHz approach.
     /// </summary>
-    /// <param name="magnitudes">Magnitude buffer from IQDemodulator (circular)</param>
-    /// <param name="startPosition">Starting position in circular buffer (0 to bufferLength-1)</param>
-    /// <param name="count">Number of samples to scan</param>
-    /// <returns>List of raw frames ready for CRC validation (Phase 4)</returns>
-    /// <remarks>
-    /// Performance: Reuses internal buffer to avoid allocations on hot path.
-    /// Frame skipping: After detecting a frame, skips ahead to avoid re-detection.
-    ///   Note: Frame skip may exceed count boundary (e.g., detect frame at position 19,950
-    ///   in 20,000 sample scan, skip 240 samples = 20,190). The excess samples remain
-    ///   in the circular buffer for the next scan batch - no data loss occurs.
-    /// Circular buffer: Correctly handles wrap-around using modulo arithmetic.
-    /// </remarks>
     public List<RawFrame> DetectAndExtract(ReadOnlySpan<ushort> magnitudes, int startPosition, int count)
     {
-        _frameBuffer.Clear();  // Reuse existing list
+        _frameBuffer.Clear();
         int bufferLength = magnitudes.Length;
 
-        // Scan specified number of samples (handles circular buffer wrap-around)
         int samplesScanned = 0;
         while (samplesScanned < count)
         {
-            // Calculate circular buffer position
             int idx = (startPosition + samplesScanned) % bufferLength;
 
-            // Quick check: must be local maximum
-            if (magnitudes[idx] < magnitudes[(idx + 1) % bufferLength])
+            // readsb's pre-check pattern (lines 333-344) - test 10 consecutive positions
+            bool foundPattern = false;
+            for (int offset = 0; offset < 10 && !foundPattern; offset++)
             {
-                samplesScanned++;
-                continue;
+                int testPos = (idx + offset) % bufferLength;
+
+                // Pre-check: pa[1] > pa[7] && pa[12] > pa[14] && pa[12] > pa[15]
+                if (magnitudes[(testPos + 1) % bufferLength] > magnitudes[(testPos + 7) % bufferLength] &&
+                    magnitudes[(testPos + 12) % bufferLength] > magnitudes[(testPos + 14) % bufferLength] &&
+                    magnitudes[(testPos + 12) % bufferLength] > magnitudes[(testPos + 15) % bufferLength])
+                {
+                    // Try phase correlation and frame extraction
+                    RawFrame? frame = DetectAndExtractWithPhases(magnitudes, testPos, bufferLength, out bool hadPreamble);
+
+                    // Count as preamble if at least one phase exceeded threshold (matches readsb line 461: bestscore != -42)
+                    // This counts based on signal magnitude threshold passage, NOT CRC validity
+                    if (hadPreamble)
+                    {
+                        _preambleCandidates++;
+
+                        if (frame != null)
+                        {
+                            _frameBuffer.Add(frame);
+                            _framesExtracted++;
+
+                            // Skip past most of frame - matches readsb line 511: pa += msglen * 8 / 4
+                            // msglen is in bits, formula simplifies to: msglen * 2 samples
+                            // This skips ~83% of the message, allowing overlapping preamble detection
+                            int skipAmount = offset + (frame.LengthBits * 2);
+                            samplesScanned += skipAmount;
+                        }
+                        else
+                        {
+                            // Preamble detected but rejected - advance by 1 sample only (matches readsb behavior)
+                            samplesScanned += offset + 1;
+                        }
+                        foundPattern = true;
+                    }
+                    else
+                    {
+                        // Pre-check passed but no phase exceeded threshold (bestscore = -42 in readsb)
+                        // Advance by 1 sample to match readsb's continue behavior
+                        samplesScanned += offset + 1;
+                        foundPattern = true;
+                    }
+                }
             }
 
-            _preambleCandidates++;
-
-            // Check preamble pattern and validate with local noise
-            if (CheckPreamble(magnitudes, idx, bufferLength))
+            if (!foundPattern)
             {
-                _validPreambles++;
-
-                // Extract frame
-                RawFrame? frame = ExtractFrame(magnitudes, idx, bufferLength);
-                if (frame != null)
-                {
-                    _frameBuffer.Add(frame);
-                    _framesExtracted++;
-
-                    // Skip ahead to avoid re-detecting the same frame
-                    // Preamble (16 samples) + frame data (bits × 2 samples/bit)
-                    int skipAmount = 16 + (frame.LengthBits * 2);
-                    samplesScanned += skipAmount;
-                }
-                else
-                {
-                    samplesScanned++;
-                }
-            }
-            else
-            {
-                samplesScanned++;
+                // No pattern in 10 positions - skip forward
+                samplesScanned += 10;
             }
         }
 
@@ -133,200 +117,329 @@ public sealed class PreambleDetector
     }
 
     /// <summary>
-    /// Checks if a preamble pattern exists at the given position using local noise estimation.
-    /// Uses ONLY preamble valley samples (not data bits) for accurate noise measurement.
+    /// Detects preamble using phase-specific magnitude calculation and extracts frame with best phase.
+    /// Implements readsb's approach (lines 346-428).
     /// </summary>
-    /// <remarks>
-    /// CRITICAL: Uses squared threshold because Phase 2 stores I²+Q² (power), not amplitude.
-    /// Averages noise samples to get per-sample noise for correct peak comparison.
-    ///
-    /// FIX: Previous implementation used samples 16-18 (first data bits), but these can be HIGH
-    /// (pulse) if bit 0 is encoded as a pulse, inflating noise estimate and rejecting real signals.
-    /// Now uses only preamble valleys which are guaranteed to be LOW.
-    /// </remarks>
-    private bool CheckPreamble(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    /// <param name="hadPreamble">True if at least one phase exceeded the magnitude threshold (bestscore != -42 in readsb)</param>
+    private RawFrame? DetectAndExtractWithPhases(ReadOnlySpan<ushort> m, int pos, int bufferLength, out bool hadPreamble)
     {
-        // Local noise estimation using 5 samples from preamble valleys ONLY:
-        // - Sample 1: Valley between pulse 1 and pulse 2
-        // - Sample 3: Valley after pulse 2
-        // - Sample 5: Valley in silence period (between pulse 2 and pulse 3)
-        // - Sample 6: Valley in silence period (between pulse 2 and pulse 3)
-        // - Sample 8: Valley after pulse 3, before pulse 4
-        // These are ALL guaranteed to be LOW (valleys), unlike data bits which can be HIGH
-        uint baseNoise = (uint)(m[(pos + 1) % bufferLength] + m[(pos + 3) % bufferLength] +
-                                m[(pos + 5) % bufferLength] + m[(pos + 6) % bufferLength] + m[(pos + 8) % bufferLength]);
+        // Noise estimation using 5 samples from valleys (readsb line 352)
+        int baseNoise = m[(pos + 5) % bufferLength] +
+                        m[(pos + 8) % bufferLength] +
+                        m[(pos + 16) % bufferLength] +
+                        m[(pos + 17) % bufferLength] +
+                        m[(pos + 18) % bufferLength];
 
-        // CRITICAL: Average the 5 noise samples to get per-sample noise level
-        // We compare individual peak samples to threshold, not sum-of-peaks to sum-of-noise
-        uint averageNoise = baseNoise / 5;
+        // Reference level: base_noise * threshold / 32 (readsb lines 358-362)
+        // NOTE: _preambleThreshold is a ratio (e.g., 3.16), but readsb expects it pre-multiplied by 32
+        // So we need: refLevel = baseNoise * (threshold * 32) / 32 = baseNoise * threshold
+        int refLevel = (int)(baseNoise * _preambleThreshold);
 
-        // CRITICAL: Use squared threshold for power-to-power comparison
-        // Phase 2 stores I²+Q² (power), not sqrt(I²+Q²) (amplitude)
-        // User specifies 3.16 (amplitude), we squared it to ~10 (power) in constructor
-        uint threshold = (uint)(averageNoise * _preambleThresholdSquared);
+        // Phase-specific preamble magnitude calculation (readsb lines 366-400)
+        int diff_2_3 = m[(pos + 2) % bufferLength] - m[(pos + 3) % bufferLength];
+        int sum_1_4 = m[(pos + 1) % bufferLength] + m[(pos + 4) % bufferLength];
+        int diff_10_11 = m[(pos + 10) % bufferLength] - m[(pos + 11) % bufferLength];
+        int common3456 = sum_1_4 - diff_2_3 + m[(pos + 9) % bufferLength] + m[(pos + 12) % bufferLength];
 
-        // Validate peaks (4 samples that should be HIGH)
-        // Pattern: HI LO HI LO (silence) HI LO HI
-        if (m[(pos + 0) % bufferLength] < threshold)
+        int bestScore = -42;
+        byte[]? bestMessage = null;
+
+        // Try phases based on preamble magnitude thresholds
+        int paMag1 = common3456 - diff_10_11;
+        if (paMag1 >= refLevel)
         {
-            return false;  // First peak
+            TryPhase(m, pos, 4, bufferLength, ref bestScore, ref bestMessage);
+            TryPhase(m, pos, 5, bufferLength, ref bestScore, ref bestMessage);
         }
 
-        if (m[(pos + 2) % bufferLength] < threshold)
+        int paMag2 = common3456 + diff_10_11;
+        if (paMag2 >= refLevel)
         {
-            return false;  // Second peak
+            TryPhase(m, pos, 6, bufferLength, ref bestScore, ref bestMessage);
+            TryPhase(m, pos, 7, bufferLength, ref bestScore, ref bestMessage);
         }
 
-        if (m[(pos + 7) % bufferLength] < threshold)
+        int paMag3 = sum_1_4 + (2 * diff_2_3) + diff_10_11 + m[(pos + 12) % bufferLength];
+        if (paMag3 >= refLevel)
         {
-            return false;  // Third peak
+            TryPhase(m, pos, 8, bufferLength, ref bestScore, ref bestMessage);
         }
 
-        if (m[(pos + 9) % bufferLength] < threshold)
+        // Determine if we had a preamble: at least one phase exceeded the magnitude threshold
+        // This matches readsb line 461: count when bestscore != -42
+        // bestScore != -42 means at least one phase was scored (positive or negative)
+        hadPreamble = bestScore != -42;
+
+        // Return best message if we found a valid one
+        if (bestMessage != null && bestScore > 0)
         {
-            return false;  // Fourth peak
+            return new RawFrame(bestMessage, DateTime.UtcNow);
         }
 
-        // Validate valleys are lower than peaks (pattern check)
-        ushort m0 = m[(pos + 0) % bufferLength];
-        ushort m2 = m[(pos + 2) % bufferLength];
-        ushort m7 = m[(pos + 7) % bufferLength];
-        ushort m9 = m[(pos + 9) % bufferLength];
-
-        if (m[(pos + 1) % bufferLength] >= m0)
+        // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)
+        // This matches readsb's "unrecognized ICAO address" rejection
+        if (bestScore == -1)
         {
-            return false;  // Valley 1
+            _framesRejectedDuringExtraction++;
         }
 
-        if (m[(pos + 3) % bufferLength] >= m2)
-        {
-            return false;  // Valley 2
-        }
-
-        if (m[(pos + 8) % bufferLength] >= m7)
-        {
-            return false;  // Valley 3
-        }
-
-        if (m[(pos + 10) % bufferLength] >= m9)
-        {
-            return false; // Valley 4
-        }
-
-        // Check silence period (samples 4-6 should be low)
-        if (m[(pos + 4) % bufferLength] > threshold / 2)
-        {
-            return false;
-        }
-
-        if (m[(pos + 5) % bufferLength] > threshold / 2)
-        {
-            return false;
-        }
-
-        if (m[(pos + 6) % bufferLength] > threshold / 2)
-        {
-            return false;
-        }
-
-        return true;
+        return null;
     }
 
     /// <summary>
-    /// Extracts frame bits using Pulse Position Modulation (PPM) decoding.
-    /// Compares magnitudes at pulse positions to determine bit values.
+    /// Tries to extract a message at a specific phase (readsb lines 215-254).
+    /// Uses CrcValidator to verify the extracted message is valid.
+    /// Updates bestScore/bestMessage if this phase produces a better result.
+    /// Score meanings (matching readsb):
+    ///   > 0: Valid message with known/accepted ICAO
+    ///   -1: Valid CRC but unknown/rejected ICAO
+    ///   -2: Bad message or invalid CRC
     /// </summary>
-    /// <remarks>
-    /// Uses circular buffer arithmetic (modulo) to handle wrap-around.
-    /// Data starts at position (pos + 16) in the circular buffer.
-    /// </remarks>
-    private RawFrame? ExtractFrame(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    private void TryPhase(ReadOnlySpan<ushort> m, int pos, int tryPhase, int bufferLength,
+                          ref int bestScore, ref byte[]? bestMessage)
     {
-        // Preamble is 16 samples (8 µs), data starts 16 samples after preamble start
-        // Use modulo arithmetic for all buffer accesses to handle circular wrap-around
+        // Calculate data start position and initial phase (readsb lines 220-221)
+        int pPtr = (pos + 19 + (tryPhase / 5)) % bufferLength;
+        int phase = tryPhase % 5;
 
-        // Read first byte to determine message length from DF field
-        byte[] firstByte = new byte[1];
-        for (int bit = 0; bit < 8; bit++)
-        {
-            // Calculate position: preamble (16) + bit offset (bit * 2 samples per bit)
-            int sampleIdx = (pos + 16 + bit * 2) % bufferLength;
-            int nextIdx = (sampleIdx + 1) % bufferLength;
+        // Extract first byte to determine message length
+        byte firstByte = SliceByte(m, ref pPtr, ref phase, bufferLength);
 
-            // PPM: compare first half vs second half of bit period
-            if (m[sampleIdx] > m[nextIdx])
-            {
-                firstByte[0] |= (byte)(1 << (7 - bit));  // Bit 0 (pulse in first half)
-            }
-            // else: Bit 1 (pulse in second half), already 0
-        }
-
-        // Determine message length from DF (first 5 bits)
-        var df = (DownlinkFormat)(firstByte[0] >> 3);
+        // Validate DF early (readsb lines 227-239)
+        var df = (DownlinkFormat)(firstByte >> 3);
         int messageLengthBits = GetMessageLength(df);
         if (messageLengthBits == 0)
         {
-            return null;  // Invalid DF
+            // Invalid DF - score -2 and update best (matching readsb behavior)
+            if (-2 > bestScore)
+            {
+                bestScore = -2;
+            }
+            return;
         }
 
         // Extract full message
         int messageLengthBytes = messageLengthBits / 8;
         byte[] message = new byte[messageLengthBytes];
-        message[0] = firstByte[0];
+        message[0] = firstByte;
 
-        // Extract remaining bytes
-        for (int byteIdx = 1; byteIdx < messageLengthBytes; byteIdx++)
+        for (int i = 1; i < messageLengthBytes; i++)
         {
-            for (int bit = 0; bit < 8; bit++)
-            {
-                int totalBit = byteIdx * 8 + bit;
-                // Calculate position with modulo for circular buffer
-                int sampleIdx = (pos + 16 + totalBit * 2) % bufferLength;
-                int nextIdx = (sampleIdx + 1) % bufferLength;
+            message[i] = SliceByte(m, ref pPtr, ref phase, bufferLength);
+        }
 
-                if (m[sampleIdx] > m[nextIdx])
+        // Validate message with CRC (like readsb's scoreModesMessage)
+        var rawFrame = new RawFrame(message, DateTime.UtcNow);
+        ValidatedFrame? validated = _crcValidator.ValidateFrame(rawFrame, 128);
+
+        int score;
+        if (validated == null)
+        {
+            // Invalid CRC - score -2 (bad message)
+            score = -2;
+        }
+        else
+        {
+            // Valid CRC! Check ICAO filter for AP mode messages
+            // PI mode messages (DF 11,17,18,19) establish ICAO addresses with real CRC validation
+            // AP mode messages (DF 0,4,5,16,20,21) only accepted if ICAO already confident
+            if (!validated.UsesPIMode && _confidenceTracker != null)
+            {
+                if (!_confidenceTracker.IsConfident(validated.IcaoAddress))
                 {
-                    message[byteIdx] |= (byte)(1 << (7 - bit));
+                    // AP mode with unknown ICAO - score -1 (valid CRC, unknown ICAO)
+                    score = -1;
                 }
+                else
+                {
+                    // AP mode with known ICAO - assign positive score
+                    score = 1000;
+                }
+            }
+            else
+            {
+                // PI mode or no confidence tracker - assign positive score based on DF type
+                score = df switch
+                {
+                    DownlinkFormat.ExtendedSquitter => 1800,
+                    DownlinkFormat.ExtendedSquitterNonTransponder => 1400,
+                    DownlinkFormat.AllCallReply => 700,
+                    _ => 1000 // Other PI mode messages
+                };
             }
         }
 
-        return new RawFrame(message, DateTime.UtcNow);
+        // Update best score if this is better (higher score wins, including negative scores)
+        if (score > bestScore)
+        {
+            bestScore = score;
+            // Only save message if score is positive (accepted)
+            if (score > 0)
+            {
+                bestMessage = message;
+            }
+            else
+            {
+                bestMessage = null;
+            }
+        }
     }
 
     /// <summary>
-    /// Returns message length in bits based on Downlink Format (DF).
+    /// Extracts one byte using phase-specific correlation functions (readsb lines 133-213).
     /// </summary>
+    private byte SliceByte(ReadOnlySpan<ushort> m, ref int pPtr, ref int phase, int bufferLength)
+    {
+        byte theByte = 0;
+
+        switch (phase)
+        {
+            case 0:
+                theByte = (byte)(
+                    (SlicePhase0(m, pPtr, bufferLength) > 0 ? 0x80 : 0) |
+                    (SlicePhase2(m, (pPtr + 2) % bufferLength, bufferLength) > 0 ? 0x40 : 0) |
+                    (SlicePhase4(m, (pPtr + 4) % bufferLength, bufferLength) > 0 ? 0x20 : 0) |
+                    (SlicePhase1(m, (pPtr + 7) % bufferLength, bufferLength) > 0 ? 0x10 : 0) |
+                    (SlicePhase3(m, (pPtr + 9) % bufferLength, bufferLength) > 0 ? 0x08 : 0) |
+                    (SlicePhase0(m, (pPtr + 12) % bufferLength, bufferLength) > 0 ? 0x04 : 0) |
+                    (SlicePhase2(m, (pPtr + 14) % bufferLength, bufferLength) > 0 ? 0x02 : 0) |
+                    (SlicePhase4(m, (pPtr + 16) % bufferLength, bufferLength) > 0 ? 0x01 : 0));
+                phase = 1;
+                pPtr = (pPtr + 19) % bufferLength;
+                break;
+
+            case 1:
+                theByte = (byte)(
+                    (SlicePhase1(m, pPtr, bufferLength) > 0 ? 0x80 : 0) |
+                    (SlicePhase3(m, (pPtr + 2) % bufferLength, bufferLength) > 0 ? 0x40 : 0) |
+                    (SlicePhase0(m, (pPtr + 5) % bufferLength, bufferLength) > 0 ? 0x20 : 0) |
+                    (SlicePhase2(m, (pPtr + 7) % bufferLength, bufferLength) > 0 ? 0x10 : 0) |
+                    (SlicePhase4(m, (pPtr + 9) % bufferLength, bufferLength) > 0 ? 0x08 : 0) |
+                    (SlicePhase1(m, (pPtr + 12) % bufferLength, bufferLength) > 0 ? 0x04 : 0) |
+                    (SlicePhase3(m, (pPtr + 14) % bufferLength, bufferLength) > 0 ? 0x02 : 0) |
+                    (SlicePhase0(m, (pPtr + 17) % bufferLength, bufferLength) > 0 ? 0x01 : 0));
+                phase = 2;
+                pPtr = (pPtr + 19) % bufferLength;
+                break;
+
+            case 2:
+                theByte = (byte)(
+                    (SlicePhase2(m, pPtr, bufferLength) > 0 ? 0x80 : 0) |
+                    (SlicePhase4(m, (pPtr + 2) % bufferLength, bufferLength) > 0 ? 0x40 : 0) |
+                    (SlicePhase1(m, (pPtr + 5) % bufferLength, bufferLength) > 0 ? 0x20 : 0) |
+                    (SlicePhase3(m, (pPtr + 7) % bufferLength, bufferLength) > 0 ? 0x10 : 0) |
+                    (SlicePhase0(m, (pPtr + 10) % bufferLength, bufferLength) > 0 ? 0x08 : 0) |
+                    (SlicePhase2(m, (pPtr + 12) % bufferLength, bufferLength) > 0 ? 0x04 : 0) |
+                    (SlicePhase4(m, (pPtr + 14) % bufferLength, bufferLength) > 0 ? 0x02 : 0) |
+                    (SlicePhase1(m, (pPtr + 17) % bufferLength, bufferLength) > 0 ? 0x01 : 0));
+                phase = 3;
+                pPtr = (pPtr + 19) % bufferLength;
+                break;
+
+            case 3:
+                theByte = (byte)(
+                    (SlicePhase3(m, pPtr, bufferLength) > 0 ? 0x80 : 0) |
+                    (SlicePhase0(m, (pPtr + 3) % bufferLength, bufferLength) > 0 ? 0x40 : 0) |
+                    (SlicePhase2(m, (pPtr + 5) % bufferLength, bufferLength) > 0 ? 0x20 : 0) |
+                    (SlicePhase4(m, (pPtr + 7) % bufferLength, bufferLength) > 0 ? 0x10 : 0) |
+                    (SlicePhase1(m, (pPtr + 10) % bufferLength, bufferLength) > 0 ? 0x08 : 0) |
+                    (SlicePhase3(m, (pPtr + 12) % bufferLength, bufferLength) > 0 ? 0x04 : 0) |
+                    (SlicePhase0(m, (pPtr + 15) % bufferLength, bufferLength) > 0 ? 0x02 : 0) |
+                    (SlicePhase2(m, (pPtr + 17) % bufferLength, bufferLength) > 0 ? 0x01 : 0));
+                phase = 4;
+                pPtr = (pPtr + 19) % bufferLength;
+                break;
+
+            case 4:
+                theByte = (byte)(
+                    (SlicePhase4(m, pPtr, bufferLength) > 0 ? 0x80 : 0) |
+                    (SlicePhase1(m, (pPtr + 3) % bufferLength, bufferLength) > 0 ? 0x40 : 0) |
+                    (SlicePhase3(m, (pPtr + 5) % bufferLength, bufferLength) > 0 ? 0x20 : 0) |
+                    (SlicePhase0(m, (pPtr + 8) % bufferLength, bufferLength) > 0 ? 0x10 : 0) |
+                    (SlicePhase2(m, (pPtr + 10) % bufferLength, bufferLength) > 0 ? 0x08 : 0) |
+                    (SlicePhase4(m, (pPtr + 12) % bufferLength, bufferLength) > 0 ? 0x04 : 0) |
+                    (SlicePhase1(m, (pPtr + 15) % bufferLength, bufferLength) > 0 ? 0x02 : 0) |
+                    (SlicePhase3(m, (pPtr + 17) % bufferLength, bufferLength) > 0 ? 0x01 : 0));
+                phase = 0;
+                pPtr = (pPtr + 20) % bufferLength;
+                break;
+        }
+
+        return theByte;
+    }
+
+    // ============================================================================
+    // Correlation functions (readsb lines 74-93)
+    // Hand-tuned coefficients - do NOT modify!
+    // ============================================================================
+
+    /// <summary>Phase 0: 18*m[0] - 15*m[1] - 3*m[2]</summary>
+    private int SlicePhase0(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    {
+        return (18 * m[pos % bufferLength]) -
+               (15 * m[(pos + 1) % bufferLength]) -
+               (3 * m[(pos + 2) % bufferLength]);
+    }
+
+    /// <summary>Phase 1: 14*m[0] - 5*m[1] - 9*m[2]</summary>
+    private int SlicePhase1(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    {
+        return (14 * m[pos % bufferLength]) -
+               (5 * m[(pos + 1) % bufferLength]) -
+               (9 * m[(pos + 2) % bufferLength]);
+    }
+
+    /// <summary>Phase 2: 16*m[0] + 5*m[1] - 20*m[2] (slightly DC unbalanced but better results)</summary>
+    private int SlicePhase2(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    {
+        return (16 * m[pos % bufferLength]) +
+               (5 * m[(pos + 1) % bufferLength]) -
+               (20 * m[(pos + 2) % bufferLength]);
+    }
+
+    /// <summary>Phase 3: 7*m[0] + 11*m[1] - 18*m[2]</summary>
+    private int SlicePhase3(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    {
+        return (7 * m[pos % bufferLength]) +
+               (11 * m[(pos + 1) % bufferLength]) -
+               (18 * m[(pos + 2) % bufferLength]);
+    }
+
+    /// <summary>Phase 4: 4*m[0] + 15*m[1] - 20*m[2] + 1*m[3]</summary>
+    private int SlicePhase4(ReadOnlySpan<ushort> m, int pos, int bufferLength)
+    {
+        return (4 * m[pos % bufferLength]) +
+               (15 * m[(pos + 1) % bufferLength]) -
+               (20 * m[(pos + 2) % bufferLength]) +
+               (1 * m[(pos + 3) % bufferLength]);
+    }
+
+    /// <summary>Returns message length in bits based on Downlink Format.</summary>
     private static int GetMessageLength(DownlinkFormat df)
     {
         return df switch
         {
-            // Short frames (56 bits = 7 bytes)
-            DownlinkFormat.ShortAirAirSurveillance or      // DF 0
-            DownlinkFormat.SurveillanceAltitudeReply or    // DF 4
-            DownlinkFormat.SurveillanceIdentityReply or    // DF 5
-            DownlinkFormat.AllCallReply or                 // DF 11
-            DownlinkFormat.LongAirAirSurveillance or       // DF 16
-            DownlinkFormat.CommDExtendedLength             // DF 24
+            DownlinkFormat.ShortAirAirSurveillance or
+            DownlinkFormat.SurveillanceAltitudeReply or
+            DownlinkFormat.SurveillanceIdentityReply or
+            DownlinkFormat.AllCallReply or
+            DownlinkFormat.LongAirAirSurveillance or
+            DownlinkFormat.CommDExtendedLength
                 => ModeSFrameLength.Short,
 
-            // Long frames (112 bits = 14 bytes)
-            // ADS-B Extended Squitter messages
-            DownlinkFormat.ExtendedSquitter or                     // DF 17
-            DownlinkFormat.ExtendedSquitterNonTransponder or       // DF 18
-            DownlinkFormat.MilitaryExtendedSquitter or             // DF 19
-            // Comm-B messages (NOT short frames)
-            DownlinkFormat.CommBAltitudeReply or                   // DF 20
-            DownlinkFormat.CommBIdentityReply                      // DF 21
+            DownlinkFormat.ExtendedSquitter or
+            DownlinkFormat.ExtendedSquitterNonTransponder or
+            DownlinkFormat.MilitaryExtendedSquitter or
+            DownlinkFormat.CommBAltitudeReply or
+            DownlinkFormat.CommBIdentityReply
                 => ModeSFrameLength.Long,
 
-            // Unknown/invalid DF
             _ => 0
         };
     }
 
-    // Statistics properties for Coordinator Pattern (ADR-009)
+    // Statistics properties
     public long PreambleCandidates => _preambleCandidates;
-    public long ValidPreambles => _validPreambles;
     public long FramesExtracted => _framesExtracted;
+    public long FramesRejectedDuringExtraction => _framesRejectedDuringExtraction;
 }

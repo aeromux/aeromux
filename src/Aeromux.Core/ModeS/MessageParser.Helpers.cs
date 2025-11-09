@@ -56,21 +56,6 @@ public sealed partial class MessageParser
 
             int altitudeFeet = (n * 25) - 1000;
 
-            // Log unusual high-altitude traffic (military/research aircraft)
-            // Commercial aircraft typically don't exceed 50,000 feet
-            if (altitudeFeet > 60000)
-            {
-                if (_deviceName != null && _deviceIndex.HasValue)
-                {
-                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}): High altitude detected: {Altitude} feet (above typical commercial ceiling of 60,000 feet)",
-                        _deviceName, _deviceIndex.Value, altitudeFeet);
-                }
-                else
-                {
-                    Log.Debug("High altitude detected: {Altitude} feet (above typical commercial ceiling of 60,000 feet)", altitudeFeet);
-                }
-            }
-
             return Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
         }
 
@@ -78,34 +63,10 @@ public sealed partial class MessageParser
         int gillhamResult = DecodeGillham(ac13);
         if (gillhamResult == -9999)
         {
-            if (_deviceName != null && _deviceIndex.HasValue)
-            {
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}): Invalid Gillham altitude code, AC={AC:X3}",
-                    _deviceName, _deviceIndex.Value, ac13);
-            }
-            else
-            {
-                Log.Debug("Invalid Gillham altitude code, AC={AC:X3}", ac13);
-            }
             return null;  // Invalid Gillham code
         }
 
         int gillhamAltitudeFeet = gillhamResult * 100;
-
-        // Log unusual high-altitude traffic (military/research aircraft)
-        // Commercial aircraft typically don't exceed 50,000 feet
-        if (gillhamAltitudeFeet > 60000)
-        {
-            if (_deviceName != null && _deviceIndex.HasValue)
-            {
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}): High altitude detected: {Altitude} feet (above typical commercial ceiling of 60,000 feet)",
-                    _deviceName, _deviceIndex.Value, gillhamAltitudeFeet);
-            }
-            else
-            {
-                Log.Debug("High altitude detected: {Altitude} feet (above typical commercial ceiling of 60,000 feet)", gillhamAltitudeFeet);
-            }
-        }
 
         return Altitude.FromFeet(gillhamAltitudeFeet, AltitudeType.Barometric);
     }

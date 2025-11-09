@@ -56,6 +56,7 @@ public sealed class IcaoConfidenceTracker
     // Statistics (exposed as properties for DeviceWorker to log)
     private long _totalFrames;
     private long _confidentFrames;
+    private long _unconfidentFrames;  // Frames that didn't meet confidence threshold
     private long _newConfirmedIcaos;
     private long _expiredIcaos;
 
@@ -80,6 +81,17 @@ public sealed class IcaoConfidenceTracker
 
         _requiredConfidence = requiredConfidence;
         _timeout = TimeSpan.FromSeconds(timeoutSeconds);
+    }
+
+    /// <summary>
+    /// Checks if an ICAO address is already confident (reached detection threshold).
+    /// Used by PreambleDetector to filter AP mode messages from unknown aircraft.
+    /// </summary>
+    /// <param name="icaoAddress">ICAO address to check (e.g., "4BC889")</param>
+    /// <returns>True if ICAO has reached confidence threshold</returns>
+    public bool IsConfident(string icaoAddress)
+    {
+        return _icaoRecords.TryGetValue(icaoAddress, out IcaoRecord? record) && record.IsConfident;
     }
 
     /// <summary>
@@ -130,6 +142,8 @@ public sealed class IcaoConfidenceTracker
             return true;
         }
 
+        // Track frames that didn't meet confidence threshold
+        _unconfidentFrames++;
         return false;
     }
 
@@ -164,6 +178,9 @@ public sealed class IcaoConfidenceTracker
     /// <summary>Frames meeting confidence threshold (passed to Phase 5)</summary>
     public long ConfidentFrames => _confidentFrames;
 
+    /// <summary>Frames that didn't meet confidence threshold (rejected after extraction)</summary>
+    public long UnconfidentFrames => _unconfidentFrames;
+
     /// <summary>Number of ICAOs that reached confidence threshold</summary>
     public long NewConfirmedIcaos => _newConfirmedIcaos;
 
@@ -174,7 +191,14 @@ public sealed class IcaoConfidenceTracker
     public int TrackedIcaos => _icaoRecords.Count;
 
     /// <summary>ICAOs meeting confidence threshold (subset of TrackedIcaos)</summary>
-    public int ConfirmedIcaos => _icaoRecords.Values.Count(r => r.IsConfident);
+    public int ConfirmedIcaos => _icaoRecords.Values.ToList().Count(r => r.IsConfident);
+
+    /// <summary>Gets the set of confirmed ICAO addresses for deduplication across devices</summary>
+    public IEnumerable<string> GetConfirmedIcaoAddresses() =>
+        _icaoRecords.Where(kvp => kvp.Value.IsConfident).Select(kvp => kvp.Key);
+
+    /// <summary>Gets the set of all tracked ICAO addresses for deduplication across devices</summary>
+    public IEnumerable<string> GetTrackedIcaoAddresses() => _icaoRecords.Keys;
 }
 
 /// <summary>

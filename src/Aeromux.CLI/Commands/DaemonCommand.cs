@@ -16,6 +16,7 @@
 
 using Aeromux.CLI.Configuration;
 using Aeromux.Core.Configuration;
+using Aeromux.Core.ModeS;
 using Aeromux.Infrastructure.Sdr;
 using Serilog;
 using Spectre.Console.Cli;
@@ -56,12 +57,15 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         ArgumentNullException.ThrowIfNull(settings);
 
         // Log session separator for easy identification of new instances in log files
-        Log.Information("========================================");
+        Log.Information("═══════════════════════════════════════════════════════════════");
         Log.Information("Aeromux Daemon Starting");
         Log.Information("Session: {SessionStart:yyyy-MM-dd HH:mm:ss zzz}", DateTime.Now);
-        Log.Information("========================================");
+        Log.Information("═══════════════════════════════════════════════════════════════");
 
         Console.WriteLine("Aeromux daemon starting...");
+
+        // Track session start time for summary statistics
+        DateTime sessionStart = DateTime.UtcNow;
 
         try
         {
@@ -158,11 +162,15 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 Console.WriteLine("All device workers stopped.");
                 Log.Information("All device workers stopped");
 
+                // Log session summary
+                TimeSpan sessionDuration = DateTime.UtcNow - sessionStart;
+                LogSessionSummary(deviceWorkers, sessionDuration);
+
                 // Log session end separator
-                Log.Information("========================================");
+                Log.Information("═══════════════════════════════════════════════════════════════");
                 Log.Information("Aeromux Daemon Stopped");
                 Log.Information("Session End: {SessionEnd:yyyy-MM-dd HH:mm:ss zzz}", DateTime.Now);
-                Log.Information("========================================");
+                Log.Information("═══════════════════════════════════════════════════════════════");
             }
             finally
             {
@@ -292,5 +300,146 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         // This ensures single source of truth and proper error messages with device names.
 
         Log.Debug("Daemon preconditions check passed");
+    }
+
+    /// <summary>
+    /// Logs comprehensive session summary aggregating statistics from all devices.
+    /// Format matches readsb's output for easy comparison.
+    /// </summary>
+    private static void LogSessionSummary(List<DeviceWorker> workers, TimeSpan duration)
+    {
+        // Aggregate statistics from all devices
+        long totalSamples = 0;
+        long totalPreambleCandidates = 0;
+        long totalFramesExtracted = 0;
+        long totalRejectedDuringExtraction = 0;  // AP mode from unknown ICAO (rejected in PreambleDetector)
+        long totalRejectedAfterExtraction = 0;   // Didn't meet confidence threshold (rejected in DeviceWorker)
+        long totalConfidentFrames = 0;
+        long totalMessagesParsed = 0;
+        int totalActiveIcaos = 0;
+        int totalConfirmedAircraft = 0;
+
+        var aggregatedDfBreakdown = new Dictionary<Aeromux.Core.ModeS.DownlinkFormat, long>();
+        var aggregatedTcBreakdown = new Dictionary<int, long>();
+        var uniqueTrackedIcaos = new HashSet<string>();
+        var uniqueConfirmedIcaos = new HashSet<string>();
+
+        foreach (DeviceWorker worker in workers)
+        {
+            totalSamples += worker.TotalSamplesReceived;
+            totalPreambleCandidates += worker.PreambleDetector.PreambleCandidates;
+            totalFramesExtracted += worker.PreambleDetector.FramesExtracted;
+            totalRejectedDuringExtraction += worker.PreambleDetector.FramesRejectedDuringExtraction;
+            totalRejectedAfterExtraction += worker.ConfidenceTracker.UnconfidentFrames;
+            totalConfidentFrames += worker.ConfidenceTracker.ConfidentFrames;
+            totalMessagesParsed += worker.MessageParser.MessagesParsed;
+
+            // Collect unique ICAOs across all devices (deduplication)
+            foreach (string icao in worker.ConfidenceTracker.GetTrackedIcaoAddresses())
+            {
+                uniqueTrackedIcaos.Add(icao);
+            }
+            foreach (string icao in worker.ConfidenceTracker.GetConfirmedIcaoAddresses())
+            {
+                uniqueConfirmedIcaos.Add(icao);
+            }
+
+            // Aggregate DF breakdown
+            foreach (KeyValuePair<DownlinkFormat, long> kvp in worker.MessageParser.MessagesByDF)
+            {
+                aggregatedDfBreakdown.TryAdd(kvp.Key, 0);
+                aggregatedDfBreakdown[kvp.Key] += kvp.Value;
+            }
+
+            // Aggregate TC breakdown
+            foreach (KeyValuePair<int, long> kvp in worker.MessageParser.MessagesByTC)
+            {
+                aggregatedTcBreakdown.TryAdd(kvp.Key, 0);
+                aggregatedTcBreakdown[kvp.Key] += kvp.Value;
+            }
+        }
+
+        // Use deduplicated counts for unique aircraft across all devices
+        totalActiveIcaos = uniqueTrackedIcaos.Count;
+        totalConfirmedAircraft = uniqueConfirmedIcaos.Count;
+
+        // Calculate rejection and acceptance counts/rates
+        // Note: _preambleCandidates counts AFTER pre-check passes, not total attempts
+        long badCrcOrFormat = totalPreambleCandidates - totalFramesExtracted - totalRejectedDuringExtraction;
+        double badCrcRate = totalPreambleCandidates > 0 ? badCrcOrFormat * 100.0 / totalPreambleCandidates : 0.0;
+        double rejectedDuringExtractionRate = totalPreambleCandidates > 0 ? totalRejectedDuringExtraction * 100.0 / totalPreambleCandidates : 0.0;
+        double extractedRate = totalPreambleCandidates > 0 ? totalFramesExtracted * 100.0 / totalPreambleCandidates : 0.0;
+        double rejectedAfterExtractionRate = totalFramesExtracted > 0 ? totalRejectedAfterExtraction * 100.0 / totalFramesExtracted : 0.0;
+        double confidentRate = totalFramesExtracted > 0 ? totalConfidentFrames * 100.0 / totalFramesExtracted : 0.0;
+
+        // Calculate message rate
+        double messagesPerSecond = duration.TotalSeconds > 0 ? totalMessagesParsed / duration.TotalSeconds : 0;
+        double samplesPerSecond = duration.TotalSeconds > 0 ? totalSamples / duration.TotalSeconds : 0;
+
+        // Log summary in readsb-style format
+        Log.Information("═══════════════════════════════════════════════════════════════");
+        Log.Information("Aeromux Session Summary");
+        Log.Information("═══════════════════════════════════════════════════════════════");
+        Log.Information("Local receiver:");
+        Log.Information("  {Samples:N0} samples processed ({DeviceCount} device(s))", totalSamples, workers.Count);
+        Log.Information("  0 samples dropped");
+        Log.Information("");
+        Log.Information("Mode-S message reception:");
+        Log.Information("  {Candidates:N0} Mode-S preambles received", totalPreambleCandidates);
+        Log.Information("    {BadCrc:N0} with bad message format or invalid CRC ({BadCrcRate:F2}%)", badCrcOrFormat, badCrcRate);
+        Log.Information("    {Rejected:N0} with unrecognized ICAO address ({RejectedRate:F2}%)", totalRejectedDuringExtraction, rejectedDuringExtractionRate);
+        Log.Information("    {Extracted:N0} frames extracted ({ExtractedRate:F2}%)", totalFramesExtracted, extractedRate);
+        Log.Information("      {AfterExtraction:N0} rejected after extraction - low confidence ({AfterRate:F2}%)",
+            totalRejectedAfterExtraction, rejectedAfterExtractionRate);
+        Log.Information("      {Confident:N0} accepted with correct CRC ({ConfidentRate:F1}%)", totalConfidentFrames, confidentRate);
+        Log.Information("");
+        Log.Information("Aircraft tracking:");
+        Log.Information("  {Active:N0} active ICAOs tracked", totalActiveIcaos);
+        Log.Information("  {Confirmed:N0} confirmed aircraft (≥{ConfidenceLevel} detections)",
+            totalConfirmedAircraft, (int)workers[0].ConfidenceTracker.TotalFrames > 0 ? 10 : 0);
+        Log.Information("");
+        Log.Information("Message parsing:");
+        Log.Information("  {Parsed:N0} messages parsed successfully", totalMessagesParsed);
+        Log.Information("");
+
+        // Log DF breakdown
+        if (aggregatedDfBreakdown.Any())
+        {
+            Log.Information("Downlink Format breakdown:");
+            foreach (KeyValuePair<DownlinkFormat, long> kvp in aggregatedDfBreakdown.OrderByDescending(x => x.Value))
+            {
+                double percentage = totalMessagesParsed > 0 ? kvp.Value * 100.0 / totalMessagesParsed : 0.0;
+                Log.Information("  DF {DF,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                    (int)kvp.Key, kvp.Value, percentage);
+            }
+            Log.Information("");
+        }
+
+        // Log TC breakdown
+        if (aggregatedTcBreakdown.Any())
+        {
+            long totalTcMessages = aggregatedTcBreakdown.Sum(x => x.Value);
+            Log.Information("Type Code breakdown (DF 17/18 only):");
+            foreach (KeyValuePair<int, long> kvp in aggregatedTcBreakdown.OrderByDescending(x => x.Value))
+            {
+                double percentage = totalTcMessages > 0 ? kvp.Value * 100.0 / totalTcMessages : 0.0;
+                Log.Information("  TC {TC,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                    kvp.Key, kvp.Value, percentage);
+            }
+            Log.Information("");
+        }
+
+        // Performance summary
+        Log.Information("Performance:");
+        Log.Information("  Session duration: {Duration}", duration.ToString(@"hh\:mm\:ss"));
+        Log.Information("  {SamplesPerSec:F2}M samples/sec (per device)", samplesPerSecond / 1_000_000.0 / workers.Count);
+        Log.Information("  {MessagesPerSec:F1} messages/sec (combined)", messagesPerSecond);
+        Log.Information("");
+
+        // Future features
+        Log.Information("Position decoding: N/A - CPR decoding not yet implemented (Phase 6+)");
+        Log.Information("Signal quality: N/A - dBFS measurements not yet implemented");
+        Log.Information("Network clients: N/A - TCP servers not yet implemented (Phase 6+)");
+        Log.Information("═══════════════════════════════════════════════════════════════");
     }
 }
