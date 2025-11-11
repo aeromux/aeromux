@@ -12,7 +12,7 @@ namespace Aeromux.Core.ModeS;
 public sealed partial class MessageParser
 {
     // ========================================
-    // Priority 2: Basic Surveillance (TO IMPLEMENT)
+    // Priority 2: Basic Surveillance (IMPLEMENTED)
     // ========================================
 
     /// <summary>

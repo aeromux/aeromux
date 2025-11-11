@@ -47,12 +47,11 @@ public class DeviceConfig
     /// <summary>
     /// Gets or sets the sample rate in MHz.
     /// Higher sample rates provide better signal quality but require more CPU.
-    /// Currently only 2.0 MHz (2 MSPS) is supported due to Phase 3 integer sample alignment requirement.
-    /// Support for 2.4 MHz (readsb default) is planned for Phase 6+ using phase tracking.
-    /// Validated at device open - non-2.0 values will throw InvalidOperationException.
-    /// Default: 2.0 MHz
+    /// Industry standard for ADS-B is 2.4 MHz (2.4 MSPS), aligned with readsb.
+    /// Validated at device open - only 2.4 MSPS is supported (±0.01 MHz tolerance).
+    /// Default: 2.4 MHz
     /// </summary>
-    public double SampleRate { get; set; } = 2.0;
+    public double SampleRate { get; set; } = 2.4;
 
     /// <summary>
     /// Gets or sets the tuner gain in dB.

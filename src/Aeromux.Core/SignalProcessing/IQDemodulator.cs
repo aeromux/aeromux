@@ -8,7 +8,7 @@ namespace Aeromux.Core.SignalProcessing;
 /// </summary>
 /// <remarks>
 /// Mode S uses Pulse Position Modulation (PPM) at 1090 MHz with 1 Mbit/s data rate.
-/// At 2 MSPS sample rate, we get 2 samples per bit.
+/// At 2.4 MSPS sample rate (industry standard), we get 2.4 samples per bit.
 ///
 /// Phase 2 Process (following readsb architecture):
 /// - Convert IQ samples to squared magnitude: I² + Q²
@@ -37,7 +37,7 @@ public sealed class IQDemodulator : IDisposable
     /// <remarks>
     /// Memory usage: 256×256×2 bytes = 128 KB
     /// One-time cost: 65,536 calculations at startup
-    /// Per-sample benefit: Eliminates 2 multiplications per sample (4M multiplications/sec at 2 MSPS)
+    /// Per-sample benefit: Eliminates 2 multiplications per sample (~4.8M multiplications/sec at 2.4 MSPS)
     /// </remarks>
     private static ushort[,] InitializeMagnitudeLookup()
     {

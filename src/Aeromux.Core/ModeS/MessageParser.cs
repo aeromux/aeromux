@@ -41,7 +41,7 @@ public sealed partial class MessageParser
     private long _messagesParsed;
     private long _validationFailures;   // Expected failures: invalid data, returns null
     private long _unexpectedErrors;     // Unexpected exceptions: bugs, should be 0
-    private long _unsupportedMessages;  // Unsupported DF/TC (not implemented yet)
+    private long _unsupportedMessages;  // Unsupported DF/TC (DF 24 Comm-D, rare formats)
     private readonly Dictionary<DownlinkFormat, long> _messagesByDF = new();
     private readonly Dictionary<int, long> _messagesByTC = new();
 
@@ -69,7 +69,7 @@ public sealed partial class MessageParser
     /// Parses a validated frame into a structured message.
     /// </summary>
     /// <param name="frame">Validated frame from CrcValidator.</param>
-    /// <returns>Parsed message, or null if parsing failed or message type is not yet implemented.</returns>
+    /// <returns>Parsed message, or null if parsing failed or message type is unsupported (DF 24).</returns>
     public ModeSMessage? ParseMessage(ValidatedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
@@ -167,7 +167,7 @@ public sealed partial class MessageParser
     public long UnexpectedErrors => _unexpectedErrors;
 
     /// <summary>
-    /// Total number of unsupported messages (DF/TC not yet implemented).
+    /// Total number of unsupported messages (DF 24 Comm-D, rare formats).
     /// These are valid messages that are logged but not parsed.
     /// </summary>
     public long UnsupportedMessages => _unsupportedMessages;

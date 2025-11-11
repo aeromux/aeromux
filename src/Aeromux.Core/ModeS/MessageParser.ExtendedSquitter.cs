@@ -48,7 +48,7 @@ public sealed partial class MessageParser
     }
 
     // ========================================
-    // Priority 1: Essential ADS-B (TO IMPLEMENT)
+    // Priority 1: Essential ADS-B (IMPLEMENTED)
     // ========================================
 
     /// <summary>
@@ -301,7 +301,7 @@ public sealed partial class MessageParser
     }
 
     // ========================================
-    // Priority 3: Additional Formats (TO IMPLEMENT)
+    // Priority 3: Additional Formats (IMPLEMENTED)
     // ========================================
 
     /// <summary>
@@ -527,7 +527,7 @@ public sealed partial class MessageParser
     }
 
     // ========================================
-    // Priority 4: Less Common Formats (TO IMPLEMENT)
+    // Priority 4: Less Common Formats (IMPLEMENTED)
     // ========================================
 
     /// <summary>

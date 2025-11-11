@@ -436,10 +436,10 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         Log.Information("  {MessagesPerSec:F1} messages/sec (combined)", messagesPerSecond);
         Log.Information("");
 
-        // Future features
-        Log.Information("Position decoding: N/A - CPR decoding not yet implemented (Phase 6+)");
+        // Future features (Phase 6+)
+        Log.Information("Position decoding: Implemented (CPR airborne + surface with receiver location)");
         Log.Information("Signal quality: N/A - dBFS measurements not yet implemented");
-        Log.Information("Network clients: N/A - TCP servers not yet implemented (Phase 6+)");
+        Log.Information("Network clients: N/A - TCP servers not yet implemented (Phase 6)");
         Log.Information("═══════════════════════════════════════════════════════════════");
     }
 }

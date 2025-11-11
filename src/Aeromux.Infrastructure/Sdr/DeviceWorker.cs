@@ -373,9 +373,9 @@ public sealed class DeviceWorker : IDisposable
                 ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
 
                 // Message may be null if:
-                // - Message type not yet implemented (returns null from parser)
+                // - Unsupported message type (DF 24 Comm-D, rare formats)
                 // - Parse error occurred (logged by MessageParser)
-                // This is expected during Phase 5 Foundation - most parsers are stubs
+                // - Validation failure (invalid data in message fields)
                 if (message != null)
                 {
                     // TODO Phase 6: Broadcast message via TCP
