@@ -79,15 +79,15 @@ public class DeviceConfig
     public int PpmCorrection { get; set; }
 
     /// <summary>
-    /// Gets or sets the preamble detection threshold (amplitude ratio for SNR).
+    /// Gets or sets the preamble detection threshold ratio.
     /// Controls sensitivity of Mode S preamble detection (Phase 3).
     /// Lower values = more sensitive (more frames detected, more false positives)
     /// Higher values = less sensitive (only strong signals detected)
-    /// Valid range: 1.5 (3.5 dB SNR) to 10.0 (20 dB SNR)
-    /// Default: 3.16 ≈ √10 = 10 dB SNR (balanced sensitivity)
-    /// Note: Value is internally squared for power comparison (Phase 2 stores I²+Q²)
+    /// Valid range: 1.5 to 10.0
+    /// Default: 1.8125 (readsb's 58/32) - industry standard, balanced sensitivity
+    /// Threshold is applied as: baseNoise * threshold (matches readsb exactly)
     /// </summary>
-    public double PreambleThreshold { get; set; } = 3.16;
+    public double PreambleThreshold { get; set; } = 1.8125;
 
     /// <summary>
     /// Gets or sets whether this device is enabled.

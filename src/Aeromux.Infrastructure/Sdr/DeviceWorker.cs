@@ -318,18 +318,22 @@ public sealed class DeviceWorker : IDisposable
             _totalSamplesReceived += samples.Count;
 
             // Convert samples to magnitude (Phase 2: IQ → Magnitude)
+            // Matches readsb: fills a linear buffer with prefix from previous buffer
             // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
             // (ADR-009: Coordinator Pattern - zero overhead in hot path)
-            _demodulator.ProcessSamples(samples);
+            IQDemodulator.MagnitudeBuffer? magnitudeBuffer = _demodulator.ProcessSamples(samples);
+
+            if (magnitudeBuffer == null)
+            {
+                // Buffer unavailable or invalid sample count
+                return;
+            }
 
             // Phase 3: Detect preambles and extract frames
-            ReadOnlySpan<ushort> magnitudes = _demodulator.GetMagnitudeBuffer();
-            int currentPos = _demodulator.BufferPosition;
-
-            // Calculate start position for scanning (avoid re-scanning old data)
-            // Scan only the newly added samples in the circular buffer
-            int scanStart = (currentPos - samples.Count + magnitudes.Length) % magnitudes.Length;
-            List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudes, scanStart, samples.Count);
+            // Matches readsb exactly: scan linear buffer from start (index 0) for mag->length samples
+            // The buffer layout is: [326 prefix samples][new data]
+            // Scanning starts at index 0, so detector can read backwards into prefix if needed
+            List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer);
 
             // Phase 4: Validate frames with CRC and extract ICAO addresses
             foreach (RawFrame rawFrame in frames)
@@ -430,12 +434,10 @@ public sealed class DeviceWorker : IDisposable
 
                 // Log demodulator buffer status (Phase 2) at Debug level
                 // Note: Uses Coordinator Pattern (ADR-009) - DeviceWorker logs IQDemodulator's statistics
-                // Buffer position format: comma-separated thousands (e.g., 1,922,944)
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) demodulator: {SamplesProcessed:F3}M samples converted to magnitude, buffer position: {BufferPos:N0}",
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) demodulator: {SamplesProcessed:F3}M samples converted to magnitude",
                     _config.Name,
                     _config.DeviceIndex,
-                    _demodulator.TotalSamplesProcessed / 1_000_000.0,
-                    _demodulator.BufferPosition);
+                    _demodulator.TotalSamplesProcessed / 1_000_000.0);
 
                 // Log preamble detection statistics (Phase 3) at Debug level
                 // Shows extraction rate to monitor threshold effectiveness
@@ -626,7 +628,7 @@ public sealed class DeviceWorker : IDisposable
         if (dfBreakdown.Any())
         {
             Log.Information("Downlink Format (DF) Breakdown:");
-            foreach (var kvp in dfBreakdown)
+            foreach (KeyValuePair<DownlinkFormat, long> kvp in dfBreakdown)
             {
                 double percentage = msgParsed > 0 ? kvp.Value * 100.0 / msgParsed : 0.0;
                 Log.Information("  - DF {DF,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
@@ -644,7 +646,7 @@ public sealed class DeviceWorker : IDisposable
         {
             long totalTcMessages = tcBreakdown.Sum(kvp => kvp.Value);
             Log.Information("Type Code (TC) Breakdown (DF 17/18 only):");
-            foreach (var kvp in tcBreakdown)
+            foreach (KeyValuePair<int, long> kvp in tcBreakdown)
             {
                 double percentage = totalTcMessages > 0 ? kvp.Value * 100.0 / totalTcMessages : 0.0;
                 Log.Information("  - TC {TC,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
