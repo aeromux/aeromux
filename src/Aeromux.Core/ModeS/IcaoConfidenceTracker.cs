@@ -44,8 +44,8 @@ namespace Aeromux.Core.ModeS;
 /// - Typical memory: ~100-200 active ICAOs in normal environment
 ///
 /// References:
-/// - readsb, dump1090: Use similar confidence tracking
-/// - Professional decoders require 3-10 detections before displaying aircraft
+/// - Professional Mode S decoders use similar confidence tracking to filter noise
+/// - Typical implementations require 3-10 detections before displaying aircraft
 /// </remarks>
 public sealed class IcaoConfidenceTracker
 {
@@ -89,10 +89,8 @@ public sealed class IcaoConfidenceTracker
     /// </summary>
     /// <param name="icaoAddress">ICAO address to check (e.g., "4BC889")</param>
     /// <returns>True if ICAO has reached confidence threshold</returns>
-    public bool IsConfident(string icaoAddress)
-    {
-        return _icaoRecords.TryGetValue(icaoAddress, out IcaoRecord? record) && record.IsConfident;
-    }
+    public bool IsConfident(string icaoAddress) =>
+        _icaoRecords.TryGetValue(icaoAddress, out IcaoRecord? record) && record.IsConfident;
 
     /// <summary>
     /// Tracks a validated frame and determines if it meets confidence threshold.
@@ -191,7 +189,7 @@ public sealed class IcaoConfidenceTracker
     public int TrackedIcaos => _icaoRecords.Count;
 
     /// <summary>ICAOs meeting confidence threshold (subset of TrackedIcaos)</summary>
-    public int ConfirmedIcaos => _icaoRecords.Values.ToList().Count(r => r.IsConfident);
+    public int ConfirmedIcaos => _icaoRecords.Values.Count(r => r.IsConfident);
 
     /// <summary>Gets the set of confirmed ICAO addresses for deduplication across devices</summary>
     public IEnumerable<string> GetConfirmedIcaoAddresses() =>

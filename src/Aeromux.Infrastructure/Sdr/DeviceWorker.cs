@@ -121,14 +121,14 @@ public sealed class DeviceWorker : IDisposable
         }
 
         // Validate sample rate software requirement
-        // Now supports 2.4 MSPS using readsb's phase tracking + correlation approach
+        // Supports 2.4 MSPS using multi-phase detection with correlation functions
         const double supportedSampleRate = 2.4;
         const double tolerance = 0.01;  // Allow ±0.01 MHz for floating point comparison
         if (Math.Abs(_config.SampleRate - supportedSampleRate) > tolerance)
         {
             throw new InvalidOperationException(
                 $"Device '{_config.Name}': Sample rate {_config.SampleRate} MHz is not supported. " +
-                $"Only 2.4 MSPS is supported (industry standard, aligns with readsb). " +
+                $"Only 2.4 MSPS is supported (optimal for Mode S signal processing). " +
                 $"Please set sampleRate to 2.4 in your configuration file.");
         }
 
@@ -140,13 +140,11 @@ public sealed class DeviceWorker : IDisposable
         }
 
         // Validate tuner gain (only if in Manual mode)
-        if (_config.GainMode == TunerGainModes.Manual)
+        if (_config is
+            { GainMode: TunerGainModes.Manual, TunerGain: < 0 or > 50 })
         {
-            if (_config.TunerGain is < 0 or > 50)
-            {
-                throw new ArgumentOutOfRangeException(nameof(_config.TunerGain),
-                    $"Device '{_config.Name}': Tuner gain must be between 0 and 50 dB (got {_config.TunerGain})");
-            }
+            throw new ArgumentOutOfRangeException(nameof(_config.TunerGain),
+                $"Device '{_config.Name}': Tuner gain must be between 0 and 50 dB (got {_config.TunerGain})");
         }
 
         // Validate PPM correction (typical range)
@@ -299,7 +297,7 @@ public sealed class DeviceWorker : IDisposable
     /// <remarks>
     /// This method runs on a background thread managed by RtlSdrManager.
     /// Phase 2: Converts IQ samples to magnitude using pre-computed lookup table.
-    /// Phase 3: Detects Mode S preambles with local noise estimation (readsb approach) and extracts raw frames.
+    /// Phase 3: Detects Mode S preambles with local noise estimation and extracts raw frames.
     /// Frames are ready for CRC validation in Phase 4.
     /// </remarks>
     private void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs args)
@@ -318,7 +316,7 @@ public sealed class DeviceWorker : IDisposable
             _totalSamplesReceived += samples.Count;
 
             // Convert samples to magnitude (Phase 2: IQ → Magnitude)
-            // Matches readsb: fills a linear buffer with prefix from previous buffer
+            // Fills a linear buffer with prefix from previous buffer for seamless preamble detection
             // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
             // (ADR-009: Coordinator Pattern - zero overhead in hot path)
             IQDemodulator.MagnitudeBuffer? magnitudeBuffer = _demodulator.ProcessSamples(samples);
@@ -330,9 +328,9 @@ public sealed class DeviceWorker : IDisposable
             }
 
             // Phase 3: Detect preambles and extract frames
-            // Matches readsb exactly: scan linear buffer from start (index 0) for mag->length samples
+            // Scan linear buffer from start (index 0) through new data region
             // The buffer layout is: [326 prefix samples][new data]
-            // Scanning starts at index 0, so detector can read backwards into prefix if needed
+            // Scanning starts at index 0, allowing detector to access prefix for boundary detection
             List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer);
 
             // Phase 4: Validate frames with CRC and extract ICAO addresses

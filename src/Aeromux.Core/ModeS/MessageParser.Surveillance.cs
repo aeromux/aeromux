@@ -103,8 +103,13 @@ public sealed partial class MessageParser
     /// <remarks>
     /// All-call replies are transmitted in response to Mode S all-call interrogations.
     /// They announce the aircraft's presence and ICAO address with basic capability information.
-    /// Capability values: 0=Level 1, 4=Level 2+ on-ground, 5=Level 2+ airborne, 6=uncertain, 7=special condition.
-    /// Reserved values (1-3) are logged and rejected.
+    /// Capability values:
+    ///   0 = Level 1 transponder (basic Mode S)
+    ///   1-3 = Reserved (not assigned, rejected if encountered)
+    ///   4 = Level 2+ transponder, on-ground
+    ///   5 = Level 2+ transponder, airborne
+    ///   6 = Level 2+ transponder, on-ground or airborne status uncertain
+    ///   7 = Downlink Request value is 0, or Flight Status is 2, 3, 4, or 5 (alert/SPI/emergency condition)
     /// </remarks>
     private ModeSMessage? ParseAllCallReply(ValidatedFrame frame)
     {

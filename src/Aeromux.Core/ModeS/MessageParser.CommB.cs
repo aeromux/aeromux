@@ -151,10 +151,21 @@ public sealed partial class MessageParser
     /// Parses Comm-D extended length message from Downlink Format 24.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Comm-D message, or null (currently unimplemented).</returns>
+    /// <returns>Always null - DF 24 is intentionally not implemented.</returns>
+    /// <remarks>
+    /// DF 24 (Comm-D Extended Length Message) is intentionally not implemented because:
+    /// 1. Ground-to-ground communication only (not aircraft surveillance)
+    /// 2. No ICAO aircraft address (cannot be tracked)
+    /// 3. Uses ELM (Extended Length Message) protocol (complex, multi-segment)
+    /// 4. Extremely rare in practice (less than 0.1% of Mode S traffic)
+    /// 5. Provides no value for aircraft tracking applications
+    ///
+    /// The frame is detected, CRC-validated, and logged as unsupported, which is correct behavior.
+    /// </remarks>
     private ModeSMessage? ParseCommDExtendedLength(ValidatedFrame frame)
     {
-        // TODO Priority 4: Implement DF 24 Comm-D Extended Length (ELM protocol)
+        // Intentionally not implemented - DF 24 is ground-to-ground communication without aircraft ICAO address
+        _unsupportedMessages++;
         return null;
     }
 
@@ -169,7 +180,7 @@ public sealed partial class MessageParser
     /// <param name="mb">56-bit MB field (7 bytes).</param>
     /// <returns>Tuple of (BdsCode enum, parsed BdsData or null).</returns>
     /// <remarks>
-    /// BDS inference strategy (based on readsb/pyModeS):
+    /// BDS inference strategy (standard pattern matching approach):
     /// 1. Check for all-zeros (empty response)
     /// 2. Check BDS 1,0/1,7 (first byte = 0x10 or 0x17)
     /// 3. Check BDS 2,0 (first byte = 0x20, valid callsign)

@@ -43,26 +43,22 @@ public sealed class IQDemodulator : IDisposable
     /// </summary>
     public class MagnitudeBuffer
     {
-        /// <summary>Buffer data: [prefix region | new data region]</summary>
-        public ushort[] Data;
+        /// <summary>
+        /// Buffer data: [prefix region | new data region]
+        /// Allocate total buffer: prefix region (326) + maximum new data region (262,144)
+        /// </summary>
+        ///
+        public ushort[] Data = new ushort[PrefixSamples + MaxBufferSamples];
 
         /// <summary>Length of new data region only (excludes the 326-sample prefix)</summary>
         public int Length;
 
         /// <summary>Number of samples dropped due to buffer overflow (for gap detection)</summary>
         public int Dropped;
-
-        public MagnitudeBuffer()
-        {
-            // Allocate total buffer: prefix region (326) + maximum new data region (262,144)
-            Data = new ushort[PrefixSamples + MaxBufferSamples];
-            Length = 0;
-            Dropped = 0;
-        }
     }
 
     private readonly MagnitudeBuffer[] _buffers = new MagnitudeBuffer[NumBuffers];
-    private int _currentBufferIndex = 0;  // Which buffer we're filling next
+    private int _currentBufferIndex;  // Which buffer we're filling next
 
     // Statistics (exposed as properties for DeviceWorker to log)
 
@@ -122,7 +118,7 @@ public sealed class IQDemodulator : IDisposable
                 double mag = Math.Sqrt(magSquared);
 
                 // Step 5: Scale to uint16 range [0, 65535] with banker's rounding (+ 0.5 for rounding)
-                lookup[i, q] = (ushort)(mag * 65535.0 + 0.5);
+                lookup[i, q] = (ushort)((mag * 65535.0) + 0.5);
             }
         }
 
@@ -159,8 +155,8 @@ public sealed class IQDemodulator : IDisposable
         }
 
         // Select current buffer to fill and identify previous buffer for prefix source
-        var currentBuffer = _buffers[_currentBufferIndex];
-        var previousBuffer = _buffers[(_currentBufferIndex + NumBuffers - 1) % NumBuffers];
+        MagnitudeBuffer currentBuffer = _buffers[_currentBufferIndex];
+        MagnitudeBuffer previousBuffer = _buffers[(_currentBufferIndex + NumBuffers - 1) % NumBuffers];
 
         // Copy trailing samples from previous buffer to current buffer's prefix region
         // This creates overlapping coverage: last 326 samples of previous buffer become
@@ -171,14 +167,16 @@ public sealed class IQDemodulator : IDisposable
         //   Previous: [326 prefix | ... | last 326 samples of new data]
         //   Current:  [326 prefix (copied from previous trailing) | new data]
         //
-        // Source calculation:
-        //   previousBuffer.Data[0] points to start of prefix region
-        //   previousBuffer.Length is the count of NEW data samples (excludes prefix)
-        //   Source index: PrefixSamples + previousBuffer.Length - PrefixSamples = previousBuffer.Length
-        //   This points to the start of the last 326 samples in previous buffer's new data
+        // Source location calculation:
+        //   previousBuffer.Data[0..325] = prefix region (326 samples)
+        //   previousBuffer.Data[326..326+Length-1] = new data region (Length samples)
+        //   We want the last 326 samples of the new data region
+        //   Start of last 326: (326 + Length) - 326 = Length
+        //   Therefore sourceStart = previousBuffer.Length points to the beginning of
+        //   the last 326 samples in the previous buffer's total data array
         if (previousBuffer.Length >= PrefixSamples)
         {
-            int sourceStart = previousBuffer.Length;  // Arithmetic simplification of: PrefixSamples + Length - PrefixSamples
+            int sourceStart = previousBuffer.Length;  // Start of trailing 326 samples in previous buffer
             Array.Copy(
                 sourceArray: previousBuffer.Data,
                 sourceIndex: sourceStart,

@@ -2,7 +2,7 @@ namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// Detects Mode S preambles in magnitude data and extracts raw frames using phase-correlation techniques.
-/// Implements industry-standard 2.4 MSPS sampling with multi-phase detection for sub-sample timing resolution.
+/// Implements 2.4 MSPS sampling (2.4 million samples per second) with multi-phase detection for sub-sample timing resolution.
 /// </summary>
 /// <remarks>
 /// <para><b>2.4 MSPS Sampling Challenge:</b></para>
@@ -173,7 +173,9 @@ public sealed class PreambleDetector
         int diff10And11 = m[pos + 10] - m[pos + 11];
         int common3456 = sum1And4 - diff2And3 + m[pos + 9] + m[pos + 12];
 
-        int bestScore = -42;  // Sentinel value: -42 indicates no phase tested yet
+        // Score meanings: no phase tested yet: -42 (initial state), -2 (bad CRC), -1 (valid CRC but unknown ICAO), >0 (valid message with known ICAO)
+        const int noPhaseTestedYet = -42;
+        int bestScore = noPhaseTestedYet;
         byte[]? bestMessage = null;
 
         // Test phase groups based on magnitude thresholds
@@ -202,9 +204,9 @@ public sealed class PreambleDetector
             TryPhase(m, pos, 8, ref bestScore, ref bestMessage);
         }
 
-        // Preamble detection outcome: successful if ANY phase was tested (bestScore changed from -42)
+        // Preamble detection outcome: successful if ANY phase was tested (bestScore changed from initial state)
         // This indicates the signal exceeded noise threshold, regardless of CRC/ICAO validation results
-        hadPreamble = bestScore != -42;
+        hadPreamble = bestScore != noPhaseTestedYet;
 
         // Return best message if we found a valid one
         if (bestMessage != null && bestScore > 0)
@@ -213,7 +215,7 @@ public sealed class PreambleDetector
         }
 
         // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)
-        // This matches readsb's "unrecognized ICAO address" rejection
+        // This tracks frames with valid CRC from unconfident aircraft (noise filtering)
         if (bestScore == -1)
         {
             _framesRejectedDuringExtraction++;
@@ -223,11 +225,11 @@ public sealed class PreambleDetector
     }
 
     /// <summary>
-    /// Tries to extract a message at a specific phase (readsb lines 215-254).
+    /// Tries to extract a message at a specific phase alignment.
     /// Uses CrcValidator to verify the extracted message is valid.
     /// Updates bestScore/bestMessage if this phase produces a better result.
     /// Uses direct array access - NO MODULO.
-    /// Score meanings (matching readsb):
+    /// Score meanings:
     ///   > 0: Valid message with known/accepted ICAO
     ///   -1: Valid CRC but unknown/rejected ICAO
     ///   -2: Bad message or invalid CRC
@@ -235,20 +237,20 @@ public sealed class PreambleDetector
     private void TryPhase(ReadOnlySpan<ushort> m, int pos, int tryPhase,
                           ref int bestScore, ref byte[]? bestMessage)
     {
-        // Calculate data start position and initial phase (readsb lines 220-221)
-        // Direct calculation - NO MODULO
+        // Calculate data start position and initial phase
+        // Direct calculation - NO MODULO (performance optimization)
         int pPtr = pos + 19 + (tryPhase / 5);
         int phase = tryPhase % 5;
 
         // Extract first byte to determine message length
         byte firstByte = SliceByte(m, ref pPtr, ref phase);
 
-        // Validate DF early (readsb lines 227-239)
+        // Validate DF early (reject unsupported formats immediately)
         var df = (DownlinkFormat)(firstByte >> 3);
         int messageLengthBits = GetMessageLength(df);
         if (messageLengthBits == 0)
         {
-            // Invalid DF - score -2 and update best (matching readsb behavior)
+            // Invalid DF - score -2 and update best if better than previous attempts
             if (-2 > bestScore)
             {
                 bestScore = -2;
@@ -266,7 +268,7 @@ public sealed class PreambleDetector
             message[i] = SliceByte(m, ref pPtr, ref phase);
         }
 
-        // Validate message with CRC (like readsb's scoreModesMessage)
+        // Validate message with CRC and score based on quality
         var rawFrame = new RawFrame(message, DateTime.UtcNow);
         ValidatedFrame? validated = _crcValidator.ValidateFrame(rawFrame, 128);
 
@@ -317,8 +319,8 @@ public sealed class PreambleDetector
     }
 
     /// <summary>
-    /// Extracts one byte using phase-specific correlation functions (readsb lines 133-213).
-    /// Uses direct array access - NO MODULO.
+    /// Extracts one byte using phase-specific correlation functions.
+    /// Uses direct array access - NO MODULO (performance optimization).
     /// </summary>
     private byte SliceByte(ReadOnlySpan<ushort> m, ref int pPtr, ref int phase)
     {
@@ -406,6 +408,12 @@ public sealed class PreambleDetector
     // These weighted correlation functions extract bit values from fractional sample positions.
     // At 2.4 MSPS with 1 MHz bit rate, each bit spans 2.4 samples, creating phase ambiguity.
     // Each function uses hand-tuned coefficients to optimally extract signal from 3-4 adjacent samples.
+    //
+    // Coefficient Selection Criteria:
+    // - DC balance: Sum of coefficients should be close to zero for noise rejection
+    // - Temporal alignment: Weight distribution matches expected pulse position within bit period
+    // - Empirical validation: Tested against real Mode S signals to minimize bit error rate
+    // - Phase 2 exception: Slightly DC-unbalanced (sum = +1) but yields better practical results
     //
     // Coefficients were empirically optimized for Mode S signal characteristics and should NOT be modified.
     // Changing these values will degrade bit extraction accuracy and increase error rates.

@@ -304,7 +304,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
     /// <summary>
     /// Logs comprehensive session summary aggregating statistics from all devices.
-    /// Format matches readsb's output for easy comparison.
+    /// Provides detailed breakdown of signal processing pipeline performance.
     /// </summary>
     private static void LogSessionSummary(List<DeviceWorker> workers, TimeSpan duration)
     {
@@ -376,7 +376,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         double messagesPerSecond = duration.TotalSeconds > 0 ? totalMessagesParsed / duration.TotalSeconds : 0;
         double samplesPerSecond = duration.TotalSeconds > 0 ? totalSamples / duration.TotalSeconds : 0;
 
-        // Log summary in readsb-style format
+        // Log detailed session summary
         Log.Information("═══════════════════════════════════════════════════════════════");
         Log.Information("Aeromux Session Summary");
         Log.Information("═══════════════════════════════════════════════════════════════");

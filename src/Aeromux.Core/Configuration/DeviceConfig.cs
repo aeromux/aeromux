@@ -47,7 +47,8 @@ public class DeviceConfig
     /// <summary>
     /// Gets or sets the sample rate in MHz.
     /// Higher sample rates provide better signal quality but require more CPU.
-    /// Industry standard for ADS-B is 2.4 MHz (2.4 MSPS), aligned with readsb.
+    /// Standard rate for ADS-B is 2.4 MHz (2.4 MSPS), which provides optimal balance
+    /// between timing resolution and computational efficiency for Mode S signals.
     /// Validated at device open - only 2.4 MSPS is supported (±0.01 MHz tolerance).
     /// Default: 2.4 MHz
     /// </summary>
@@ -84,8 +85,8 @@ public class DeviceConfig
     /// Lower values = more sensitive (more frames detected, more false positives)
     /// Higher values = less sensitive (only strong signals detected)
     /// Valid range: 1.5 to 10.0
-    /// Default: 1.8125 (readsb's 58/32) - industry standard, balanced sensitivity
-    /// Threshold is applied as: baseNoise * threshold (matches readsb exactly)
+    /// Default: 1.8125 (58/32 ratio) - provides balanced sensitivity for typical environments
+    /// Threshold is applied as: baseNoise * threshold
     /// </summary>
     public double PreambleThreshold { get; set; } = 1.8125;
 

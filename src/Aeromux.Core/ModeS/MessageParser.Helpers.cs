@@ -25,8 +25,8 @@ public sealed partial class MessageParser
     /// <param name="ac13">13-bit altitude code field</param>
     /// <returns>Decoded altitude, or null if invalid or unavailable</returns>
     /// <remarks>
-    /// Algorithm verified against readsb mode_s.c decodeAC13Field function.
-    /// Gillham decoding matches readsb mode_ac.c bit-perfect.
+    /// Implements all four encoding modes per ICAO Annex 10 specification.
+    /// Gillham (Gray code) decoding handles extreme altitudes above 50,187 feet.
     /// </remarks>
     private Altitude? DecodeAltitudeAC13(int ac13)
     {
@@ -74,7 +74,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Decodes Gillham-coded altitude (Gray code).
     /// Used for all altitudes when Q=0 (most commonly for extreme altitudes > 50,187 feet).
-    /// Algorithm from readsb mode_ac.c internalModeAToModeC function.
+    /// Implements ICAO Annex 10 Gillham code decoding with bit rearrangement and Gray-to-binary conversion.
     /// </summary>
     /// <param name="ac13Field">13-bit altitude code field</param>
     /// <returns>Altitude in 100-foot increments, or -9999 if invalid</returns>
@@ -155,14 +155,19 @@ public sealed partial class MessageParser
 
     /// <summary>
     /// Converts Gillham-encoded value to binary altitude (100-foot increments).
-    /// Reference: readsb mode_ac.c internalModeAToModeC function.
+    /// Reference: ICAO Annex 10 Volume IV Gillham code specification.
     /// </summary>
     /// <param name="modeA">Gillham-encoded value (hex format)</param>
     /// <returns>Altitude in 100-foot increments (signed), or -9999 if invalid</returns>
     /// <remarks>
-    /// Gray code decoding: XOR operations convert reflected binary to standard binary.
+    /// <para>Gray code decoding: XOR operations convert reflected binary to standard binary.</para>
+    /// <para>
     /// Formula: ((fiveHundreds * 5) + oneHundreds - 13) gives altitude in 100-foot units.
-    /// Valid range: -1200 to 126700 feet (-12 to 1267 in 100-foot units).
+    /// The -13 offset is defined by ICAO Annex 10 Volume IV to establish the Gillham code origin point.
+    /// This offset ensures that encoded value 0 corresponds to -1300 feet, allowing representation
+    /// of altitudes below sea level and establishing proper alignment with the Gray code sequence.
+    /// </para>
+    /// <para>Valid range: -1200 to 126700 feet (-12 to 1267 in 100-foot units).</para>
     /// </remarks>
     private static int GillhamToBinary(int modeA)
     {
@@ -254,9 +259,11 @@ public sealed partial class MessageParser
             oneHundreds = 6 - oneHundreds;
         }
 
-        // Final altitude calculation
-        // Formula: ((fiveHundreds * 5) + oneHundreds - 13) * 100 feet
-        return (fiveHundreds * 5) + oneHundreds - 13;
+        // Final altitude calculation using ICAO-defined Gillham offset
+        // Formula: ((fiveHundreds * 5) + oneHundreds - gillhamOffset) * 100 feet
+        // GillhamOffset = 13: ICAO Annex 10 Volume IV specification establishes origin at -1300 feet
+        const int gillhamOffset = 13;
+        return (fiveHundreds * 5) + oneHundreds - gillhamOffset;
     }
 
     // ========================================

@@ -63,8 +63,7 @@ public sealed partial class MessageParser
         // Extract Category (CA) field - bits 38-40 (byte 4, bits 0-2)
         int category = frame.Data[4] & 0x07;
 
-        // Extract 8 characters (48 bits = 6 bytes, starting at bit 41)
-        // Each character is 6 bits, packed across bytes 5-10
+        // Extract 8 characters (48 bits, starting at bit 41), each encoded as 6 bits
         char[] callsign = new char[8];
         int bitIndex = 41;  // Start at bit 41 (first callsign bit in ME field)
 
