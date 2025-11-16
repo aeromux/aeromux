@@ -36,14 +36,20 @@ public sealed class DeviceWorker : IDisposable
     private readonly CrcValidator _crcValidator = new();
     private readonly IcaoConfidenceTracker _confidenceTracker;
     private readonly MessageParser _messageParser;
+    private readonly Action<ValidatedFrame, ModeSMessage?>? _onDataParsed;
     private RtlSdrManagedDevice? _device;
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
 
-    public DeviceWorker(DeviceConfig deviceConfig, TrackingConfig trackingConfig, ReceiverConfig? receiverConfig)
+    public DeviceWorker(
+        DeviceConfig deviceConfig,
+        TrackingConfig trackingConfig,
+        ReceiverConfig? receiverConfig,
+        Action<ValidatedFrame, ModeSMessage?>? onDataParsed = null)
     {
         _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
+        _onDataParsed = onDataParsed;
 
         // Initialize confidence tracker first (needed by PreambleDetector for ICAO filtering)
         _confidenceTracker = new IcaoConfidenceTracker(
@@ -335,14 +341,17 @@ public sealed class DeviceWorker : IDisposable
                 // Noise and unconfident ICAOs are filtered out above
                 ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
 
+                // Phase 6: Invoke callback with frame and message (even if message is null)
+                // Beast format needs ALL frames, JSON/SBS will skip nulls
+                _onDataParsed?.Invoke(validatedFrame, message);
+
                 // Message may be null if:
                 // - Unsupported message type (DF 24 Comm-D, rare formats)
                 // - Parse error occurred (logged by MessageParser)
                 // - Validation failure (invalid data in message fields)
                 if (message != null)
                 {
-                    // TODO Phase 6: Broadcast message via TCP
-                    // TODO Phase 7: Feed message to AircraftTracker
+                    // TODO Phase 7: Feed message to AircraftTracker for state tracking
                 }
             }
         }
@@ -629,6 +638,7 @@ public sealed class DeviceWorker : IDisposable
     // Public properties for session summary (exposed to DaemonCommand for aggregation)
     public string DeviceName => _config.Name;
     public long TotalSamplesReceived => _totalSamplesReceived;
+    public DateTime StartTime => _startTime;
     public IQDemodulator Demodulator => _demodulator;
     public PreambleDetector PreambleDetector => _preambleDetector;
     public CrcValidator CrcValidator => _crcValidator;
