@@ -38,36 +38,18 @@ public class DeviceConfig
     public int DeviceIndex { get; set; }
 
     /// <summary>
-    /// Gets or sets the center frequency in MHz.
-    /// ADS-B operates at 1090 MHz.
-    /// Default: 1090 MHz
+    /// Gets or sets the tuner gain in dB. Only used when GainMode is Manual.
+    /// Default: 49.6 dB (maximum safe gain for R820T/R820T2, industry standard)
+    /// Reduce if near airport and experiencing strong signal overload (artifacts, low message rate).
+    /// Typical range: 0.0 to 49.6 dB in 0.1 dB steps.
     /// </summary>
-    public double CenterFrequency { get; set; } = 1090.0;
-
-    /// <summary>
-    /// Gets or sets the sample rate in MHz.
-    /// Higher sample rates provide better signal quality but require more CPU.
-    /// Standard rate for ADS-B is 2.4 MHz (2.4 MSPS), which provides optimal balance
-    /// between timing resolution and computational efficiency for Mode S signals.
-    /// Validated at device open - only 2.4 MSPS is supported (±0.01 MHz tolerance).
-    /// Default: 2.4 MHz
-    /// </summary>
-    public double SampleRate { get; set; } = 2.4;
-
-    /// <summary>
-    /// Gets or sets the tuner gain in dB.
-    /// Valid range depends on tuner hardware (typically 0-50 dB).
-    /// Higher gain increases sensitivity but may cause overload in strong signal environments.
-    /// Note: Only used when GainMode is Manual. Ignored in AGC mode.
-    /// Default: 40.0 dB
-    /// </summary>
-    public double TunerGain { get; set; } = 40.0;
+    public double TunerGain { get; set; } = 49.6;
 
     /// <summary>
     /// Gets or sets the gain control mode (ADR-008: uses RtlSdrManager.Modes enum directly).
-    /// Manual: Use fixed TunerGain value specified above
-    /// AGC: Let the tuner hardware automatically adjust gain (TunerGain ignored)
-    /// Default: Manual
+    /// Default: Manual (industry standard, maximum sensitivity with 49.6 dB)
+    /// Set to AGC only if near airport and manual gain causes strong signal overload.
+    /// Note: AGC is almost never optimal (dump1090-fa documentation).
     /// </summary>
     public TunerGainModes GainMode { get; set; } = TunerGainModes.Manual;
 

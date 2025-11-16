@@ -105,12 +105,10 @@ public class ConfigurationBuilder
                 {
                     Name = "default",
                     DeviceIndex = 0,
-                    CenterFrequency = 1090,
-                    SampleRate = 2,
-                    TunerGain = 40.0,
+                    TunerGain = 49.6,
                     GainMode = TunerGainModes.Manual,
                     PpmCorrection = 0,
-                    Enabled = false // Disabled by default - daemon won't start without explicit device config
+                    Enabled = true
                 }
             ],
             Network = new NetworkConfig

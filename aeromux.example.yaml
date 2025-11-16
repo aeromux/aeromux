@@ -19,10 +19,8 @@ logging:                                  # Structured logging configuration
 devices:                                  # List of SDR devices to use (multiple devices supported)
   - name: primary                         # Friendly name for this device
     deviceIndex: 0                        # RTL-SDR device index (0 for first device)
-    centerFrequency: 1090                 # Center frequency in MHz (1090 MHz for ADS-B)
-    sampleRate: 2.4                       # Sample rate in MHz (2.4 MHz standard, aligns with readsb)
-    tunerGain: 40.0                       # Tuner gain in dB (0-50 typical range, only used in manual mode)
     gainMode: manual                      # Gain mode: manual (use tunerGain) | agc (automatic gain control)
+    tunerGain: 49.6                       # Tuner gain in dB (default: 49.6 dB max sensitivity, reduce if near airport)
     ppmCorrection: 0                      # Frequency correction in parts per million
     enabled: true                         # Enable/disable this device
 

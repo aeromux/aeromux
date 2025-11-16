@@ -15,6 +15,19 @@ namespace Aeromux.Infrastructure.Sdr;
 /// </summary>
 public sealed class DeviceWorker : IDisposable
 {
+    /// <summary>
+    /// Mode S / ADS-B center frequency in MHz (industry standard).
+    /// This frequency is hardcoded as Aeromux is a specialized Mode S/ADS-B decoder.
+    /// </summary>
+    private const double CenterFrequency = 1090.0;
+
+    /// <summary>
+    /// Sample rate in MSPS (industry standard for Mode S/ADS-B).
+    /// This sample rate is hardcoded as signal processing algorithms (phase correlation)
+    /// are specifically tuned for 2.4 MSPS.
+    /// </summary>
+    private const double SampleRate = 2.4;
+
     private readonly DeviceConfig _config;
     private readonly TrackingConfig _trackingConfig;
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
@@ -80,58 +93,6 @@ public sealed class DeviceWorker : IDisposable
                 $"Device '{_config.Name}': Device index must be non-negative (got {_config.DeviceIndex})");
         }
 
-        // Validate center frequency (RTL-SDR with R820T/R820T2 tuner: 24-1766 MHz)
-        if (_config.CenterFrequency <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(_config.CenterFrequency),
-                $"Device '{_config.Name}': Center frequency must be positive (got {_config.CenterFrequency})");
-        }
-
-        if (_config.CenterFrequency < 24)
-        {
-            Log.Warning(
-                "Device {DeviceName}: Center frequency {Frequency} MHz is below typical minimum (24 MHz for R820T/R820T2)",
-                _config.Name, _config.CenterFrequency);
-        }
-
-        if (_config.CenterFrequency > 1766)
-        {
-            throw new ArgumentOutOfRangeException(nameof(_config.CenterFrequency),
-                $"Device '{_config.Name}': Center frequency {_config.CenterFrequency} MHz exceeds maximum (1766 MHz for R820T/R820T2 tuners)");
-        }
-
-        // Validate sample rate hardware limits (RTL-SDR maximum ~3.2 MSPS)
-        if (_config.SampleRate <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(_config.SampleRate),
-                $"Device '{_config.Name}': Sample rate must be positive (got {_config.SampleRate})");
-        }
-
-        if (_config.SampleRate > 3.2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(_config.SampleRate),
-                $"Device '{_config.Name}': Sample rate {_config.SampleRate} MHz exceeds hardware maximum (3.2 MHz)");
-        }
-
-        if (_config.SampleRate > 2.4)
-        {
-            Log.Warning(
-                "Device {DeviceName}: Sample rate {SampleRate} MHz exceeds recommended maximum (2.4 MHz) - sample drops may occur",
-                _config.Name, _config.SampleRate);
-        }
-
-        // Validate sample rate software requirement
-        // Supports 2.4 MSPS using multi-phase detection with correlation functions
-        const double supportedSampleRate = 2.4;
-        const double tolerance = 0.01;  // Allow ±0.01 MHz for floating point comparison
-        if (Math.Abs(_config.SampleRate - supportedSampleRate) > tolerance)
-        {
-            throw new InvalidOperationException(
-                $"Device '{_config.Name}': Sample rate {_config.SampleRate} MHz is not supported. " +
-                $"Only 2.4 MSPS is supported (optimal for Mode S signal processing). " +
-                $"Please set sampleRate to 2.4 in your configuration file.");
-        }
-
         // Validate gain mode enum
         if (!Enum.IsDefined(_config.GainMode))
         {
@@ -160,9 +121,9 @@ public sealed class DeviceWorker : IDisposable
             _deviceManager.OpenManagedDevice((uint)_config.DeviceIndex, _config.Name);
             _device = _deviceManager[_config.Name];
 
-            // Configure device - frequencies and sample rates
-            _device.CenterFrequency = Frequency.FromMHz(_config.CenterFrequency);
-            _device.SampleRate = Frequency.FromMHz(_config.SampleRate);
+            // Configure device - frequencies and sample rates (hardcoded for Mode S/ADS-B)
+            _device.CenterFrequency = Frequency.FromMHz(CenterFrequency);
+            _device.SampleRate = Frequency.FromMHz(SampleRate);
             _device.TunerGainMode = _config.GainMode;
 
             // Gain configuration - conditional based on gain mode
@@ -196,8 +157,8 @@ public sealed class DeviceWorker : IDisposable
             Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) configured: Freq={Frequency}MHz, SR={SampleRate}MHz, Gain={Gain}, Mode={GainMode}",
                 _config.Name,
                 _config.DeviceIndex,
-                _config.CenterFrequency,
-                _config.SampleRate,
+                CenterFrequency,
+                SampleRate,
                 gainInfo,
                 _config.GainMode);
         }
