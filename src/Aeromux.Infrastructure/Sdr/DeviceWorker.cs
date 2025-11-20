@@ -33,7 +33,7 @@ public sealed class DeviceWorker : IDisposable
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
     private readonly IQDemodulator _demodulator = new();
     private readonly PreambleDetector _preambleDetector;
-    private readonly CrcValidator _crcValidator = new();
+    private readonly ValidatedFrameFactory _validatedFrameFactory = new();
     private readonly IcaoConfidenceTracker _confidenceTracker;
     private readonly MessageParser _messageParser;
     private readonly Action<ValidatedFrame, ModeSMessage?>? _onDataParsed;
@@ -308,7 +308,7 @@ public sealed class DeviceWorker : IDisposable
                 byte signalStrength = 128;  // TODO: Extract actual signal strength from preamble
 
                 // Phase 4a: CRC validation
-                ValidatedFrame? validatedFrame = _crcValidator.ValidateFrame(rawFrame, signalStrength);
+                ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
 
                 if (validatedFrame == null)
                 {
@@ -422,10 +422,10 @@ public sealed class DeviceWorker : IDisposable
 
                 // Log CRC validation statistics (Phase 4) at Debug level
                 // Shows validation and correction rates to monitor frame quality
-                long crcChecked = _crcValidator.FramesChecked;
-                long crcValid = _crcValidator.FramesValid;
-                long crcCorrected = _crcValidator.FramesCorrected;
-                long crcInvalid = _crcValidator.FramesInvalid;
+                long crcChecked = _validatedFrameFactory.FramesChecked;
+                long crcValid = _validatedFrameFactory.FramesValid;
+                long crcCorrected = _validatedFrameFactory.FramesCorrected;
+                long crcInvalid = _validatedFrameFactory.FramesInvalid;
                 double crcValidRate = crcChecked > 0 ? crcValid * 100.0 / crcChecked : 0.0;
                 double crcCorrectedRate = crcChecked > 0 ? crcCorrected * 100.0 / crcChecked : 0.0;
 
@@ -536,10 +536,10 @@ public sealed class DeviceWorker : IDisposable
         Log.Information("═══════════════════════════════════════════════════════════════");
 
         // CRC Validation statistics
-        long crcChecked = _crcValidator.FramesChecked;
-        long crcValid = _crcValidator.FramesValid;
-        long crcCorrected = _crcValidator.FramesCorrected;
-        long crcInvalid = _crcValidator.FramesInvalid;
+        long crcChecked = _validatedFrameFactory.FramesChecked;
+        long crcValid = _validatedFrameFactory.FramesValid;
+        long crcCorrected = _validatedFrameFactory.FramesCorrected;
+        long crcInvalid = _validatedFrameFactory.FramesInvalid;
         double crcValidRate = crcChecked > 0 ? crcValid * 100.0 / crcChecked : 0.0;
         double crcCorrectedRate = crcChecked > 0 ? crcCorrected * 100.0 / crcChecked : 0.0;
 
@@ -641,7 +641,7 @@ public sealed class DeviceWorker : IDisposable
     public DateTime StartTime => _startTime;
     public IQDemodulator Demodulator => _demodulator;
     public PreambleDetector PreambleDetector => _preambleDetector;
-    public CrcValidator CrcValidator => _crcValidator;
+    public ValidatedFrameFactory ValidatedFrameFactory => _validatedFrameFactory;
     public IcaoConfidenceTracker ConfidenceTracker => _confidenceTracker;
     public MessageParser MessageParser => _messageParser;
 }

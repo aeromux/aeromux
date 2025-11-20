@@ -26,7 +26,7 @@ public sealed class PreambleDetector
 {
     private readonly double _preambleThreshold;
     private readonly List<RawFrame> _frameBuffer = [];
-    private readonly CrcValidator _crcValidator = new(); // For validating extracted messages
+    private readonly ValidatedFrameFactory _validatedFrameFactory = new(); // For validating extracted messages
     private readonly IcaoConfidenceTracker? _confidenceTracker; // Optional: for filtering AP mode from unknown aircraft
 
     // Statistics
@@ -226,7 +226,7 @@ public sealed class PreambleDetector
 
     /// <summary>
     /// Tries to extract a message at a specific phase alignment.
-    /// Uses CrcValidator to verify the extracted message is valid.
+    /// Uses ValidatedFrameFactory to verify the extracted message is valid.
     /// Updates bestScore/bestMessage if this phase produces a better result.
     /// Uses direct array access - NO MODULO.
     /// Score meanings:
@@ -270,7 +270,7 @@ public sealed class PreambleDetector
 
         // Validate message with CRC and score based on quality
         var rawFrame = new RawFrame(message, DateTime.UtcNow);
-        ValidatedFrame? validated = _crcValidator.ValidateFrame(rawFrame, 128);
+        ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, 128);
 
         int score;
         if (validated == null)

@@ -1,10 +1,16 @@
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
-/// Validates Mode S frames using CRC-24 and extracts ICAO addresses.
-/// Implements ICAO Annex 10 Volume IV CRC standard with single-bit error correction.
+/// Factory for creating ValidatedFrame instances from RawFrame data.
+/// Validates Mode S frames using CRC-24, extracts ICAO addresses, and attempts error correction.
 /// </summary>
 /// <remarks>
+/// Factory Responsibilities:
+/// 1. CRC Validation - Verifies frame integrity using ICAO Annex 10 Volume IV CRC-24 standard
+/// 2. ICAO Extraction - Extracts aircraft addresses from validated frames (PI and AP modes)
+/// 3. Error Correction - Attempts single-bit error correction for corrupted frames
+/// 4. Frame Transformation - Converts RawFrame → ValidatedFrame (or null if irreparably corrupted)
+///
 /// CRC Polynomial: 0xFFF409 (G(x) = x²⁴ + x²³ + ... + x³ + 1)
 ///
 /// Two validation modes:
@@ -12,11 +18,9 @@ namespace Aeromux.Core.ModeS;
 /// - AP (Address/Parity): ICAO encoded in CRC (DF 0, 4, 5, 16, 20, 21) - ICAO = CRC XOR transmitted
 ///
 /// Performance: Uses lookup table for fast CRC calculation (~7-14 table lookups per frame)
-/// Error correction: Single-bit errors corrected by trying each bit flip
-///
-/// Reference: Implements standard ICAO Annex 10 CRC-24 algorithm with lookup table optimization
+/// Error correction: Single-bit errors corrected by trying each bit flip (PI mode only)
 /// </remarks>
-public sealed class CrcValidator
+public sealed class ValidatedFrameFactory
 {
     private const uint CrcPolynomial = 0xFFF409;  // ICAO CRC-24 polynomial
     private readonly uint[] _crcTable = new uint[256];  // Lookup table for fast CRC
@@ -28,9 +32,9 @@ public sealed class CrcValidator
     private long _framesInvalid;
 
     /// <summary>
-    /// Initializes CRC validator and pre-computes lookup table.
+    /// Initializes the factory and pre-computes CRC lookup table.
     /// </summary>
-    public CrcValidator()
+    public ValidatedFrameFactory()
     {
         InitializeCrcTable();
     }

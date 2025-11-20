@@ -59,7 +59,7 @@ public sealed class DeviceStream : IFrameStream
         DeviceConfig deviceConfig,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig)
-        : this(new List<DeviceConfig> { deviceConfig }, trackingConfig, receiverConfig)
+        : this([deviceConfig], trackingConfig, receiverConfig)
     {
     }
 
@@ -140,7 +140,7 @@ public sealed class DeviceStream : IFrameStream
         return new StreamStatistics(
             _workers.Sum(w => w.PreambleDetector.FramesExtracted),
             _workers.Sum(w => w.ConfidenceTracker.ConfidentFrames),
-            _workers.Sum(w => w.CrcValidator.FramesCorrected),
+            _workers.Sum(w => w.ValidatedFrameFactory.FramesCorrected),
             _workers.Sum(w => w.MessageParser.MessagesParsed),
             DateTime.UtcNow - _workers.Min(w => w.StartTime));
     }

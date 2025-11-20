@@ -68,7 +68,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Parses a validated frame into a structured message.
     /// </summary>
-    /// <param name="frame">Validated frame from CrcValidator.</param>
+    /// <param name="frame">Validated frame from ValidatedFrameFactory.</param>
     /// <returns>Parsed message, or null if parsing failed or message type is unsupported (DF 24).</returns>
     public ModeSMessage? ParseMessage(ValidatedFrame frame)
     {
@@ -118,7 +118,7 @@ public sealed partial class MessageParser
             // Track unexpected exceptions (bugs - should never happen in production)
             // Examples: IndexOutOfRangeException, NullReferenceException, ArgumentException
             _unexpectedErrors++;
-            Log.Error(ex, "Unexpected exception parsing DF {DownlinkFormat} from ICAO {Icao24}",
+            Log.Error(ex, "Unexpected exception parsing DF {DownlinkFormat} from ICAO {IcaoAddress}",
                 frame.DownlinkFormat, frame.IcaoAddress);
             return null;
         }
@@ -131,7 +131,7 @@ public sealed partial class MessageParser
     private ModeSMessage? LogUnsupportedDF(ValidatedFrame frame)
     {
         _unsupportedMessages++;
-        Log.Debug("Unsupported DF {DownlinkFormat} from ICAO {Icao24}",
+        Log.Debug("Unsupported DF {DownlinkFormat} from ICAO {IcaoAddress}",
             frame.DownlinkFormat, frame.IcaoAddress);
         return null;
     }
@@ -139,7 +139,7 @@ public sealed partial class MessageParser
     private ModeSMessage? LogUnsupportedTC(ValidatedFrame frame, int tc)
     {
         _unsupportedMessages++;
-        Log.Debug("Unsupported TC {TypeCode} in DF {DownlinkFormat} from ICAO {Icao24}",
+        Log.Debug("Unsupported TC {TypeCode} in DF {DownlinkFormat} from ICAO {IcaoAddress}",
             tc, frame.DownlinkFormat, frame.IcaoAddress);
         return null;
     }
