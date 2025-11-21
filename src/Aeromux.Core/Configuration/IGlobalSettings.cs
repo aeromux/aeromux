@@ -32,24 +32,6 @@ public interface IGlobalSettings
     string? ConfigPath { get; }
 
     /// <summary>
-    /// Gets the Beast protocol TCP port override.
-    /// Null means use value from YAML or defaults.
-    /// </summary>
-    int? BeastPort { get; }
-
-    /// <summary>
-    /// Gets the SBS BaseStation protocol TCP port override.
-    /// Null means use value from YAML or defaults.
-    /// </summary>
-    int? SbsPort { get; }
-
-    /// <summary>
-    /// Gets the HTTP API and web interface port override.
-    /// Null means use value from YAML or defaults.
-    /// </summary>
-    int? HttpPort { get; }
-
-    /// <summary>
     /// Gets the logging level override.
     /// Null means use value from YAML or defaults.
     /// </summary>

@@ -124,6 +124,7 @@ public sealed class DeviceWorker : IDisposable
         try
         {
             // Open device with friendly name
+            // Console output suppression is enabled by default in RtlSdrManager v0.5.0+
             _deviceManager.OpenManagedDevice((uint)_config.DeviceIndex, _config.Name);
             _device = _deviceManager[_config.Name];
 

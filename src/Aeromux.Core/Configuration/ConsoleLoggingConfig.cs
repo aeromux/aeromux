@@ -27,7 +27,7 @@ public class ConsoleLoggingConfig
     /// Enable for development, Docker containers, or systemd services.
     /// Default: false (file logging only for production)
     /// </summary>
-    public bool Enabled { get; set; } = false;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Gets or sets whether to use ANSI color codes for log levels.

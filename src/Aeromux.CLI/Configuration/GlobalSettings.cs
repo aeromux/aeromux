@@ -38,30 +38,6 @@ public class GlobalSettings : CommandSettings, IGlobalSettings
     public string? ConfigPath { get; init; }
 
     /// <summary>
-    /// Override for Beast protocol TCP port.
-    /// If specified, overrides the value from YAML and defaults.
-    /// </summary>
-    [CommandOption("--beast-port")]
-    [Description("Beast protocol TCP port (default: 30002)")]
-    public int? BeastPort { get; init; }
-
-    /// <summary>
-    /// Override for SBS BaseStation protocol TCP port.
-    /// If specified, overrides the value from YAML and defaults.
-    /// </summary>
-    [CommandOption("--sbs-port")]
-    [Description("SBS BaseStation protocol TCP port (default: 30003)")]
-    public int? SbsPort { get; init; }
-
-    /// <summary>
-    /// Override for HTTP API and web interface port.
-    /// If specified, overrides the value from YAML and defaults.
-    /// </summary>
-    [CommandOption("--http-port")]
-    [Description("HTTP API and web interface port (default: 8080)")]
-    public int? HttpPort { get; init; }
-
-    /// <summary>
     /// Override for logging level.
     /// If specified, overrides the value from YAML and defaults.
     /// Valid values: Verbose, Debug, Information, Warning, Error, Fatal.

@@ -14,36 +14,58 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Threading.Channels;
 using Aeromux.Core.ModeS;
-using Aeromux.Core.ModeS.Messages;
 
 namespace Aeromux.Infrastructure.Streaming;
 
 /// <summary>
-/// Aggregated data containing both raw frame and parsed message.
-/// Enables multiple output formats: Beast (raw), JSON/SBS (parsed), Rich TUI (parsed).
-/// Parse once in daemon, use everywhere.
-/// </summary>
-public record AggregatedData(
-    ValidatedFrame Frame,           // Raw frame for Beast format broadcasting
-    ModeSMessage? ParsedMessage,    // Parsed message for JSON/SBS/TUI (null if unparseable)
-    DateTime Timestamp
-);
-
-/// <summary>
-/// Abstraction for streaming aggregated Mode S data from any source.
-/// Implementations: DeviceStream (local device), DaemonStream (TCP), FileStream (future replay).
+/// Abstraction for streaming processed Mode S frames from any source.
+/// Implementations: DeviceStream (local RTL-SDR devices), DaemonStream (TCP client), FileStream (future replay).
+///
+/// LIFECYCLE PATTERN:
+/// 1. StartAsync() - Initializes resources and begins internal data production
+/// 2. Subscribe() - Creates independent channel for each consumer (call multiple times for multiple consumers)
+/// 3. DisposeAsync() - Stops production and cleans up resources
+///
+/// BROADCAST PATTERN:
+/// Multiple subscribers can receive the same data stream concurrently.
+/// Each subscriber gets their own channel and reads independently.
+/// Internal implementation handles fan-out from single source to multiple channels.
+/// This enables multiple output formats (Beast/JSON/SBS) from single device stream.
+///
+/// DATA FORMAT:
+/// All frames are delivered as ProcessedFrame records containing both raw and parsed representations.
+/// See ProcessedFrame.cs for details on the parse-once architecture.
 /// </summary>
 public interface IFrameStream : IAsyncDisposable
 {
     /// <summary>
-    /// Streams aggregated data containing both raw frame and parsed message.
-    /// Null messages are included (for Beast broadcasting), parseable messages have ParsedMessage set.
+    /// Starts the stream and initializes resources.
+    /// MUST be called once before any Subscribe() calls.
+    /// Idempotent: Safe to call multiple times, only initializes once.
     /// </summary>
-    IAsyncEnumerable<AggregatedData> GetDataAsync(CancellationToken cancellationToken = default);
+    Task StartAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets current statistics (if available). Returns null if stream doesn't provide statistics.
+    /// Subscribes to the data stream and returns a dedicated channel for this subscriber.
+    /// Multiple subscribers can call this to receive the same data stream concurrently.
+    /// Each subscriber receives ALL data independently via their own channel.
+    /// StartAsync() must be called first, otherwise throws InvalidOperationException.
+    /// </summary>
+    ChannelReader<ProcessedFrame> Subscribe();
+
+    /// <summary>
+    /// Unsubscribes a channel from the data stream.
+    /// Called by consumers when they no longer need data (typically in dispose).
+    /// Safe to call multiple times with same reader (idempotent).
+    /// </summary>
+    void Unsubscribe(ChannelReader<ProcessedFrame> reader);
+
+    /// <summary>
+    /// Gets current statistics snapshot (if available).
+    /// Returns null if stream doesn't provide statistics (e.g., remote streams).
+    /// Statistics are aggregated from all underlying devices.
     /// </summary>
     StreamStatistics? GetStatistics();
 }

@@ -14,37 +14,54 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Net;
+
 namespace Aeromux.Core.Configuration;
 
 /// <summary>
 /// Network server configuration for output protocols.
+/// Phase 6: Beast, JSON, SBS TCP broadcasting on separate ports.
+/// Phase 7: HTTP API and web interface.
 /// </summary>
 public class NetworkConfig
 {
     /// <summary>
     /// Gets or sets the Beast binary protocol port number.
-    /// Used for feeding other ADS-B software (e.g., tar1090, VRS).
-    /// Default: 30002
+    /// Beast format: Raw binary Mode S frames with timestamps.
+    /// Used for feeding other ADS-B software (e.g., tar1090, Virtual Radar Server).
+    /// Default: 30005 (dump1090-compatible standard port, changed from 30002 in Phase 6).
     /// </summary>
-    public int BeastPort { get; set; } = 30002;
+    public int BeastPort { get; set; } = 30005;
+
+    /// <summary>
+    /// Gets or sets the JSON streaming port number.
+    /// JSON format: Line-delimited JSON objects with decoded aircraft data.
+    /// Used for web applications and real-time streaming (introduced in Phase 6).
+    /// Default: 30006 (web-friendly, non-standard port).
+    /// </summary>
+    public int JsonPort { get; set; } = 30006;
 
     /// <summary>
     /// Gets or sets the SBS BaseStation text protocol port number.
+    /// SBS format: CSV text format compatible with Kinetic's BaseStation application.
     /// Used for compatibility with legacy ADS-B applications.
-    /// Default: 30003
+    /// Default: 30104 (Virtual Radar Server compatible, changed from 30003 in Phase 6).
     /// </summary>
-    public int SbsPort { get; set; } = 30003;
+    public int SbsPort { get; set; } = 30104;
 
     /// <summary>
     /// Gets or sets the HTTP API and web interface port number.
-    /// Default: 8080
+    /// Used for REST API endpoints and serving the web interface.
+    /// Default: 8080 (standard non-privileged HTTP port, implemented in Phase 7).
     /// </summary>
     public int HttpPort { get; set; } = 8080;
 
     /// <summary>
-    /// Gets or sets the network interface IP address to bind to.
-    /// "0.0.0.0" = all interfaces, "127.0.0.1" = localhost only.
-    /// Default: "0.0.0.0"
+    /// Gets or sets the network interface IP address to bind all servers to.
+    /// IPAddress.Any (0.0.0.0): Bind to all network interfaces (accessible remotely).
+    /// IPAddress.Loopback (127.0.0.1): Bind to localhost only (local access only).
+    /// Specific IP (e.g., 192.168.1.100): Bind to specific network interface.
+    /// Default: IPAddress.Any (0.0.0.0 - all interfaces).
     /// </summary>
-    public string BindAddress { get; set; } = "0.0.0.0";
+    public IPAddress BindAddress { get; set; } = IPAddress.Any;
 }

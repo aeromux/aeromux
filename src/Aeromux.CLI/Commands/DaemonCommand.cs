@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.ComponentModel;
+using System.Net;
 using Aeromux.CLI.Configuration;
 using Aeromux.Core.Configuration;
-using Aeromux.Core.ModeS;
-using Aeromux.Infrastructure.Sdr;
+using Aeromux.Infrastructure.Streaming;
 using Serilog;
 using Spectre.Console.Cli;
 
@@ -29,17 +30,32 @@ namespace Aeromux.CLI.Commands;
 /// </summary>
 public class DaemonSettings : GlobalSettings
 {
-    // No additional settings for daemon command yet
-    // Global --config option is inherited from GlobalSettings
+    [CommandOption("--beast-port")]
+    [Description("Beast protocol port (default: 30005, dump1090-compatible)")]
+    public int? BeastPort { get; set; }
+
+    [CommandOption("--json-port")]
+    [Description("JSON streaming port (default: 30006, web-friendly)")]
+    public int? JsonPort { get; set; }
+
+    [CommandOption("--sbs-port")]
+    [Description("SBS protocol port (default: 30104, VRS-compatible)")]
+    public int? SbsPort { get; set; }
+
+    [CommandOption("--bind-address")]
+    [Description("IP address to bind to (default: 0.0.0.0 for all interfaces, examples: 127.0.0.1, 192.168.1.100, 10.2.25.1)")]
+    public string? BindAddress { get; set; }  // CLI uses string, parsed to IPAddress in validation
 }
 
 /// <summary>
 /// Main daemon command for running Aeromux as a continuous service.
-/// Manages SDR device workers, receives IQ samples, and will eventually demodulate/decode Mode S messages.
+/// Manages RTL-SDR devices, demodulates Mode S signals, decodes ADS-B messages,
+/// and broadcasts data to multiple clients via TCP (Beast/JSON/SBS formats).
 /// </summary>
 /// <remarks>
-/// Phase 1 (Complete): Opens RTL-SDR devices and receives IQ samples.
-/// Future phases: Demodulation, decoding, TCP broadcasting, HTTP API.
+/// Phase 1-5 (Complete): Device management, demodulation, decoding, tracking.
+/// Phase 6 (Complete): TCP broadcasting (Beast/JSON/SBS), multi-device support, network configuration.
+/// Phase 7 (Planned): HTTP API and web interface.
 /// </remarks>
 public class DaemonCommand : AsyncCommand<DaemonSettings>
 {
@@ -75,35 +91,60 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // Check daemon-specific preconditions (business logic validation)
             CheckDaemonPreconditions(config);
 
-            Log.Information("Starting SDR device workers");
+            Log.Information("Starting device stream for all enabled devices");
 
-            // Initialize and start SDR device workers for all enabled devices
-            var deviceWorkers = new List<DeviceWorker>();
+            // Validate and resolve network configuration (priority: CLI > YAML > Default)
+            int beastPort = ValidatePort(settings.BeastPort, config.Network!.BeastPort, "BeastPort");
+            int jsonPort = ValidatePort(settings.JsonPort, config.Network.JsonPort, "JsonPort");
+            int sbsPort = ValidatePort(settings.SbsPort, config.Network.SbsPort, "SbsPort");
+            IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
 
-            foreach (DeviceConfig deviceConfig in config.Devices!.Where(d => d.Enabled))
-            {
-                var worker = new DeviceWorker(deviceConfig, config.Tracking!, config.Receiver);
+            Log.Information("Network configuration: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
+                beastPort, jsonPort, sbsPort, bindAddress);
 
-                try
-                {
-                    worker.OpenDevice();
-                    worker.StartReceiving(cancellationToken);
-                    deviceWorkers.Add(worker);
+            // Create DeviceStream (uninitialized - devices not opened yet)
+            var enabledDevices = config.Devices!.Where(d => d.Enabled).ToList();
 
-                    Log.Information("Started SDR device worker: '{DeviceName}' (index: {DeviceIndex})",
-                        deviceConfig.Name, deviceConfig.DeviceIndex);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Failed to start device worker: '{DeviceName}' (index: {DeviceIndex})",
-                        deviceConfig.Name, deviceConfig.DeviceIndex);
-                    // Clean up partially initialized worker before re-throwing
-                    worker.Dispose();
-                    throw;
-                }
-            }
+            var deviceStream = new DeviceStream(
+                enabledDevices,
+                config.Tracking!,
+                config.Receiver);
 
-            Log.Information("All SDR device workers started. Count={DeviceCount}", deviceWorkers.Count);
+            Log.Information("Device stream created. Devices={DeviceCount}", enabledDevices.Count);
+
+            // CRITICAL STARTUP ORDER:
+            // Start DeviceStream FIRST (opens RTL-SDR devices and begins internal broadcasting)
+            // This MUST complete before TcpBroadcasters call Subscribe()
+            // DeviceStream.StartAsync() initializes the internal broadcaster task and makes Subscribe() available
+            await deviceStream.StartAsync(cancellationToken);
+            Log.Information("Device stream started");
+
+            // Now create and start TCP broadcasters
+            // Each TcpBroadcaster.StartAsync() will call Subscribe() on the device stream
+            // This gives each broadcaster its own channel reader for independent consumption
+            var beastBroadcaster = new Infrastructure.Network.TcpBroadcaster(
+                beastPort,
+                bindAddress,
+                deviceStream,
+                Infrastructure.Network.Enums.BroadcastFormat.Beast);
+            await beastBroadcaster.StartAsync(cancellationToken);
+
+            var jsonBroadcaster = new Infrastructure.Network.TcpBroadcaster(
+                jsonPort,
+                bindAddress,
+                deviceStream,
+                Infrastructure.Network.Enums.BroadcastFormat.Json);
+            await jsonBroadcaster.StartAsync(cancellationToken);
+
+            var sbsBroadcaster = new Infrastructure.Network.TcpBroadcaster(
+                sbsPort,
+                bindAddress,
+                deviceStream,
+                Infrastructure.Network.Enums.BroadcastFormat.Sbs);
+            await sbsBroadcaster.StartAsync(cancellationToken);
+
+            Log.Information("TCP broadcasters started: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
+                beastPort, jsonPort, sbsPort, bindAddress);
 
             // Create linked CTS to handle both interactive (CTRL+C) and service (SIGTERM) shutdown
             using var shutdownCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -135,7 +176,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
             try
             {
-                Console.WriteLine($"Aeromux daemon running with {deviceWorkers.Count} device(s). Press Ctrl+C to stop.");
+                Console.WriteLine($"Aeromux daemon running with {enabledDevices.Count} device(s). Press Ctrl+C to stop.");
                 Log.Debug("Entering wait loop for cancellation");
 
                 try
@@ -149,22 +190,42 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     Log.Information("Shutdown signal received");
                 }
 
-                // Cleanup on shutdown
+                // GRACEFUL SHUTDOWN ORDER:
+                // Dispose in correct order to ensure clean resource cleanup
                 Console.WriteLine();
-                Console.WriteLine("Shutting down device workers...");
-                Log.Information("Shutting down device workers...");
+                Console.WriteLine("Shutting down TCP broadcasters and device stream...");
+                Log.Information("Shutting down TCP broadcasters and device stream...");
 
-                foreach (DeviceWorker worker in deviceWorkers)
-                {
-                    worker.Dispose();
-                }
+                // Step 1: Stop TCP broadcasters first
+                // Each DisposeAsync waits for background tasks then disposes clients
+                // This unsubscribes from device stream and stops consuming data
+                await beastBroadcaster.DisposeAsync();
+                await jsonBroadcaster.DisposeAsync();
+                await sbsBroadcaster.DisposeAsync();
 
-                Console.WriteLine("All device workers stopped.");
-                Log.Information("All device workers stopped");
+                // Step 2: Stop device stream last
+                // Closes RTL-SDR devices and completes internal broadcast channel
+                // Safe to do after broadcasters are stopped (no more consumers)
+                await deviceStream.DisposeAsync();
 
-                // Log session summary
+                Console.WriteLine("All device workers and TCP broadcasters stopped.");
+                Log.Information("All device workers and TCP broadcasters stopped");
+
+                // Display session summary with aggregated statistics from all devices
                 TimeSpan sessionDuration = DateTime.UtcNow - sessionStart;
-                LogSessionSummary(deviceWorkers, sessionDuration);
+                StreamStatistics? stats = deviceStream.GetStatistics();
+                if (stats != null)
+                {
+                    Log.Information("═══════════════════════════════════════════════════════════════");
+                    Log.Information("Aeromux Session Summary");
+                    Log.Information("═══════════════════════════════════════════════════════════════");
+                    Log.Information("Session duration: {Duration}", sessionDuration.ToString(@"hh\:mm\:ss"));
+                    Log.Information("Total frames: {TotalFrames:N0}", stats.TotalFrames);
+                    Log.Information("Valid frames: {ValidFrames:N0}", stats.ValidFrames);
+                    Log.Information("Corrected frames: {CorrectedFrames:N0}", stats.CorrectedFrames);
+                    Log.Information("Messages parsed: {ParsedMessages:N0}", stats.ParsedMessages);
+                    Log.Information("═══════════════════════════════════════════════════════════════");
+                }
 
                 // Log session end separator
                 Log.Information("═══════════════════════════════════════════════════════════════");
@@ -218,9 +279,74 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
     }
 
     /// <summary>
+    /// Validates and resolves port number from CLI parameter or config value.
+    /// Priority order: CLI parameter > YAML config > Default value.
+    ///
+    /// TWO-TIER VALIDATION:
+    /// This method validates 1-65535 (full TCP port range).
+    /// CheckDaemonPreconditions enforces 1024-65535 (non-privileged ports).
+    /// This allows flexibility while preventing accidental privileged port usage.
+    /// </summary>
+    /// <param name="cliPort">Optional port from CLI parameter.</param>
+    /// <param name="configPort">Port from configuration file.</param>
+    /// <param name="portName">Name of the port for error messages.</param>
+    /// <returns>Validated port number.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when port is out of valid range.</exception>
+    private static int ValidatePort(int? cliPort, int configPort, string portName)
+    {
+        int port = cliPort ?? configPort;
+
+        if (port is < 1 or > 65535)
+        {
+            throw new InvalidOperationException(
+                $"{portName} must be between 1 and 65535 (got {port})");
+        }
+
+        return port;
+    }
+
+    /// <summary>
+    /// Validates and resolves bind address from CLI parameter or config value.
+    /// Priority order: CLI parameter > YAML config > Default value.
+    ///
+    /// BIND ADDRESS SEMANTICS:
+    /// - IPAddress.Any (0.0.0.0): Binds to all network interfaces (accessible remotely)
+    /// - IPAddress.Loopback (127.0.0.1): Binds to localhost only (local access only)
+    /// - Specific IP (e.g., 192.168.1.100): Binds to specific network interface
+    /// CLI accepts string format, config uses IPAddress type for type safety.
+    /// </summary>
+    /// <param name="cliBindAddress">Optional bind address from CLI parameter (string format).</param>
+    /// <param name="configBindAddress">Bind address from configuration file (IPAddress type).</param>
+    /// <returns>Validated IPAddress instance.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when bind address is invalid.</exception>
+    private static IPAddress ValidateBindAddress(string? cliBindAddress, IPAddress configBindAddress)
+    {
+        // If CLI provided, parse and validate
+        if (!string.IsNullOrEmpty(cliBindAddress))
+        {
+            if (!IPAddress.TryParse(cliBindAddress, out IPAddress? parsed))
+            {
+                throw new InvalidOperationException(
+                    $"BindAddress '{cliBindAddress}' is not a valid IP address. " +
+                    $"Examples: 0.0.0.0 (all interfaces), 127.0.0.1 (localhost), 192.168.1.100 (specific interface)");
+            }
+            return parsed;
+        }
+
+        // Use config value (already IPAddress from YAML deserialization)
+        return configBindAddress;
+    }
+
+    /// <summary>
     /// Checks daemon-specific preconditions (high-level business logic validation).
     /// Verifies that the daemon can operate with the loaded configuration.
     /// Device-specific validation (frequencies, gains, etc.) is done in DeviceWorker.OpenDevice().
+    ///
+    /// VALIDATION STRATEGY:
+    /// - Devices: At least one must be enabled
+    /// - Ports: Must be 1024-65535 (non-privileged, OS will detect conflicts on bind)
+    /// - Receiver location: Optional, but if provided, lat/lon must both be specified
+    /// Port conflict detection is deferred to OS (bind will fail if port is in use).
     /// </summary>
     /// <param name="config">The configuration to check.</param>
     /// <exception cref="InvalidOperationException">Thrown when daemon preconditions are not met.</exception>
@@ -233,26 +359,34 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 "Cannot start daemon: At least one SDR device must be enabled in configuration");
         }
 
-        // Check network ports - Beast port must be in valid range
+        // Check network ports - All TCP ports must be in valid range
         // Ports below 1024 require root/admin privileges, and 65535 is the maximum port number
+        // Note: Port conflict validation is deferred to the OS (bind will fail if port is in use)
         if (config.Network?.BeastPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
                 $"Cannot start daemon: Beast port must be between 1024 and 65535, but was {config.Network?.BeastPort}");
         }
 
-        // TODO: Phase 6+ - Add validation for SBS port (30003) and HTTP port (8080)
-        // Validate range 1024-65535, check no port conflicts between services
-
-        // Validate receiver location (optional, but validate if configured)
-        Log.Debug("Checking receiver configuration: IsNull={IsNull}", config.Receiver == null);
-        if (config.Receiver != null)
+        if (config.Network?.JsonPort is < 1024 or > 65535)
         {
-            Log.Debug("Receiver config present: Lat={Lat}, Lon={Lon}, Alt={Alt}, Name={Name}",
-                config.Receiver.Latitude, config.Receiver.Longitude,
-                config.Receiver.Altitude, config.Receiver.Name);
+            throw new InvalidOperationException(
+                $"Cannot start daemon: JSON port must be between 1024 and 65535, but was {config.Network?.JsonPort}");
         }
 
+        if (config.Network?.SbsPort is < 1024 or > 65535)
+        {
+            throw new InvalidOperationException(
+                $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {config.Network?.SbsPort}");
+        }
+
+        if (config.Network?.HttpPort is < 1024 or > 65535)
+        {
+            throw new InvalidOperationException(
+                $"Cannot start daemon: HTTP port must be between 1024 and 65535, but was {config.Network?.HttpPort}");
+        }
+
+        // Validate receiver location (optional, but validate if configured)
         if (config.Receiver != null)
         {
             if (config.Receiver.Latitude.HasValue)
@@ -300,146 +434,5 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         // This ensures single source of truth and proper error messages with device names.
 
         Log.Debug("Daemon preconditions check passed");
-    }
-
-    /// <summary>
-    /// Logs comprehensive session summary aggregating statistics from all devices.
-    /// Provides detailed breakdown of signal processing pipeline performance.
-    /// </summary>
-    private static void LogSessionSummary(List<DeviceWorker> workers, TimeSpan duration)
-    {
-        // Aggregate statistics from all devices
-        long totalSamples = 0;
-        long totalPreambleCandidates = 0;
-        long totalFramesExtracted = 0;
-        long totalRejectedDuringExtraction = 0;  // AP mode from unknown ICAO (rejected in PreambleDetector)
-        long totalRejectedAfterExtraction = 0;   // Didn't meet confidence threshold (rejected in DeviceWorker)
-        long totalConfidentFrames = 0;
-        long totalMessagesParsed = 0;
-        int totalActiveIcaos = 0;
-        int totalConfirmedAircraft = 0;
-
-        var aggregatedDfBreakdown = new Dictionary<Aeromux.Core.ModeS.DownlinkFormat, long>();
-        var aggregatedTcBreakdown = new Dictionary<int, long>();
-        var uniqueTrackedIcaos = new HashSet<string>();
-        var uniqueConfirmedIcaos = new HashSet<string>();
-
-        foreach (DeviceWorker worker in workers)
-        {
-            totalSamples += worker.TotalSamplesReceived;
-            totalPreambleCandidates += worker.PreambleDetector.PreambleCandidates;
-            totalFramesExtracted += worker.PreambleDetector.FramesExtracted;
-            totalRejectedDuringExtraction += worker.PreambleDetector.FramesRejectedDuringExtraction;
-            totalRejectedAfterExtraction += worker.ConfidenceTracker.UnconfidentFrames;
-            totalConfidentFrames += worker.ConfidenceTracker.ConfidentFrames;
-            totalMessagesParsed += worker.MessageParser.MessagesParsed;
-
-            // Collect unique ICAOs across all devices (deduplication)
-            foreach (string icao in worker.ConfidenceTracker.GetTrackedIcaoAddresses())
-            {
-                uniqueTrackedIcaos.Add(icao);
-            }
-            foreach (string icao in worker.ConfidenceTracker.GetConfirmedIcaoAddresses())
-            {
-                uniqueConfirmedIcaos.Add(icao);
-            }
-
-            // Aggregate DF breakdown
-            foreach (KeyValuePair<DownlinkFormat, long> kvp in worker.MessageParser.MessagesByDF)
-            {
-                aggregatedDfBreakdown.TryAdd(kvp.Key, 0);
-                aggregatedDfBreakdown[kvp.Key] += kvp.Value;
-            }
-
-            // Aggregate TC breakdown
-            foreach (KeyValuePair<int, long> kvp in worker.MessageParser.MessagesByTC)
-            {
-                aggregatedTcBreakdown.TryAdd(kvp.Key, 0);
-                aggregatedTcBreakdown[kvp.Key] += kvp.Value;
-            }
-        }
-
-        // Use deduplicated counts for unique aircraft across all devices
-        totalActiveIcaos = uniqueTrackedIcaos.Count;
-        totalConfirmedAircraft = uniqueConfirmedIcaos.Count;
-
-        // Calculate rejection and acceptance counts/rates
-        // Note: _preambleCandidates counts AFTER pre-check passes, not total attempts
-        long badCrcOrFormat = totalPreambleCandidates - totalFramesExtracted - totalRejectedDuringExtraction;
-        double badCrcRate = totalPreambleCandidates > 0 ? badCrcOrFormat * 100.0 / totalPreambleCandidates : 0.0;
-        double rejectedDuringExtractionRate = totalPreambleCandidates > 0 ? totalRejectedDuringExtraction * 100.0 / totalPreambleCandidates : 0.0;
-        double extractedRate = totalPreambleCandidates > 0 ? totalFramesExtracted * 100.0 / totalPreambleCandidates : 0.0;
-        double rejectedAfterExtractionRate = totalFramesExtracted > 0 ? totalRejectedAfterExtraction * 100.0 / totalFramesExtracted : 0.0;
-        double confidentRate = totalFramesExtracted > 0 ? totalConfidentFrames * 100.0 / totalFramesExtracted : 0.0;
-
-        // Calculate message rate
-        double messagesPerSecond = duration.TotalSeconds > 0 ? totalMessagesParsed / duration.TotalSeconds : 0;
-        double samplesPerSecond = duration.TotalSeconds > 0 ? totalSamples / duration.TotalSeconds : 0;
-
-        // Log detailed session summary
-        Log.Information("═══════════════════════════════════════════════════════════════");
-        Log.Information("Aeromux Session Summary");
-        Log.Information("═══════════════════════════════════════════════════════════════");
-        Log.Information("Local receiver:");
-        Log.Information("  {Samples:N0} samples processed ({DeviceCount} device(s))", totalSamples, workers.Count);
-        Log.Information("  0 samples dropped");
-        Log.Information("");
-        Log.Information("Mode-S message reception:");
-        Log.Information("  {Candidates:N0} Mode-S preambles received", totalPreambleCandidates);
-        Log.Information("    {BadCrc:N0} with bad message format or invalid CRC ({BadCrcRate:F2}%)", badCrcOrFormat, badCrcRate);
-        Log.Information("    {Rejected:N0} with unrecognized ICAO address ({RejectedRate:F2}%)", totalRejectedDuringExtraction, rejectedDuringExtractionRate);
-        Log.Information("    {Extracted:N0} frames extracted ({ExtractedRate:F2}%)", totalFramesExtracted, extractedRate);
-        Log.Information("      {AfterExtraction:N0} rejected after extraction - low confidence ({AfterRate:F2}%)",
-            totalRejectedAfterExtraction, rejectedAfterExtractionRate);
-        Log.Information("      {Confident:N0} accepted with correct CRC ({ConfidentRate:F1}%)", totalConfidentFrames, confidentRate);
-        Log.Information("");
-        Log.Information("Aircraft tracking:");
-        Log.Information("  {Active:N0} active ICAOs tracked", totalActiveIcaos);
-        Log.Information("  {Confirmed:N0} confirmed aircraft (≥{ConfidenceLevel} detections)",
-            totalConfirmedAircraft, (int)workers[0].ConfidenceTracker.TotalFrames > 0 ? 10 : 0);
-        Log.Information("");
-        Log.Information("Message parsing:");
-        Log.Information("  {Parsed:N0} messages parsed successfully", totalMessagesParsed);
-        Log.Information("");
-
-        // Log DF breakdown
-        if (aggregatedDfBreakdown.Any())
-        {
-            Log.Information("Downlink Format breakdown:");
-            foreach (KeyValuePair<DownlinkFormat, long> kvp in aggregatedDfBreakdown.OrderByDescending(x => x.Value))
-            {
-                double percentage = totalMessagesParsed > 0 ? kvp.Value * 100.0 / totalMessagesParsed : 0.0;
-                Log.Information("  DF {DF,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
-                    (int)kvp.Key, kvp.Value, percentage);
-            }
-            Log.Information("");
-        }
-
-        // Log TC breakdown
-        if (aggregatedTcBreakdown.Any())
-        {
-            long totalTcMessages = aggregatedTcBreakdown.Sum(x => x.Value);
-            Log.Information("Type Code breakdown (DF 17/18 only):");
-            foreach (KeyValuePair<int, long> kvp in aggregatedTcBreakdown.OrderByDescending(x => x.Value))
-            {
-                double percentage = totalTcMessages > 0 ? kvp.Value * 100.0 / totalTcMessages : 0.0;
-                Log.Information("  TC {TC,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
-                    kvp.Key, kvp.Value, percentage);
-            }
-            Log.Information("");
-        }
-
-        // Performance summary
-        Log.Information("Performance:");
-        Log.Information("  Session duration: {Duration}", duration.ToString(@"hh\:mm\:ss"));
-        Log.Information("  {SamplesPerSec:F2}M samples/sec (per device)", samplesPerSecond / 1_000_000.0 / workers.Count);
-        Log.Information("  {MessagesPerSec:F1} messages/sec (combined)", messagesPerSecond);
-        Log.Information("");
-
-        // Future features (Phase 6+)
-        Log.Information("Position decoding: Implemented (CPR airborne + surface with receiver location)");
-        Log.Information("Signal quality: N/A - dBFS measurements not yet implemented");
-        Log.Information("Network clients: N/A - TCP servers not yet implemented (Phase 6)");
-        Log.Information("═══════════════════════════════════════════════════════════════");
     }
 }

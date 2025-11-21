@@ -113,10 +113,11 @@ public class ConfigurationBuilder
             ],
             Network = new NetworkConfig
             {
-                BeastPort = 30002,
-                SbsPort = 30003,
+                BeastPort = 30005,
+                JsonPort = 30006,
+                SbsPort = 30104,
                 HttpPort = 8080,
-                BindAddress = "0.0.0.0"
+                BindAddress = System.Net.IPAddress.Any
             },
             Tracking = new TrackingConfig
             {
@@ -152,20 +153,10 @@ public class ConfigurationBuilder
     {
         // Apply CLI overrides (highest priority)
         // All sections are non-null after merge, so use null-forgiving operator
-        if (settings.BeastPort.HasValue)
-        {
-            config.Network!.BeastPort = settings.BeastPort.Value;
-        }
 
-        if (settings.SbsPort.HasValue)
-        {
-            config.Network!.SbsPort = settings.SbsPort.Value;
-        }
-
-        if (settings.HttpPort.HasValue)
-        {
-            config.Network!.HttpPort = settings.HttpPort.Value;
-        }
+        // Note: Network port overrides (--beast-port, --json-port, --sbs-port, --bind-address)
+        // are daemon-specific and handled directly in DaemonCommand.ExecuteAsync()
+        // using ValidatePort() and ValidateBindAddress() methods.
 
         if (settings.LogLevel.HasValue)
         {

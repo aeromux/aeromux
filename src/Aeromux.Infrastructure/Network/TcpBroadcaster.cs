@@ -16,6 +16,8 @@
 
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Channels;
+using Aeromux.Core.ModeS;
 using Aeromux.Infrastructure.Network.Enums;
 using Aeromux.Infrastructure.Streaming;
 using Aeromux.Infrastructure.Network.Protocols;
@@ -24,33 +26,34 @@ using Serilog;
 namespace Aeromux.Infrastructure.Network;
 
 /// <summary>
-/// TCP broadcaster that sends aggregated data to multiple clients.
+/// TCP broadcaster that sends processed frames to multiple clients.
 /// Supports Beast, JSON, and SBS formats (dump1090/readsb/tar1090 compatible).
-/// Phase 6: Broadcasts data from IFrameStream to all connected clients.
-/// Beast uses raw ValidatedFrame, JSON/SBS use parsed ModeSMessage.
+/// Phase 6: Broadcasts ProcessedFrame data from IFrameStream to all connected clients.
+/// Beast encoder uses raw ValidatedFrame, JSON/SBS encoders use parsed ModeSMessage.
 /// </summary>
 /// <remarks>
-/// Architecture:
-/// - One TcpBroadcaster instance per format/port (e.g., Beast on 30005, JSON on 30006)
+/// ARCHITECTURE:
+/// - One TcpBroadcaster instance per format/port (e.g., Beast on 30005, JSON on 30006, SBS on 30104)
 /// - Each instance accepts multiple concurrent clients
-/// - All clients receive the same data stream from IFrameStream
+/// - All clients receive the same data stream from IFrameStream via Subscribe()
 /// - Client disconnections are detected and cleaned up automatically
 ///
-/// Format Selection:
+/// FORMAT SELECTION:
 /// The BroadcastFormat enum determines which encoder is used:
-/// - Beast: BeastEncoder.Encode(data.Frame) - binary protocol
-/// - JSON: JsonEncoder.Encode(data.ParsedMessage) - line-delimited JSON
-/// - SBS: SbsEncoder.Encode(data.ParsedMessage) - BaseStation CSV
+/// - Beast: BeastEncoder.Encode(data.Frame) - binary protocol for raw frames
+/// - JSON: JsonEncoder.Encode(data.ParsedMessage) - line-delimited JSON for web apps
+/// - SBS: SbsEncoder.Encode(data.ParsedMessage) - BaseStation CSV for VRS compatibility
 ///
-/// Threading Model:
-/// - AcceptClientsAsync: Background task accepting new connections
+/// THREADING MODEL:
+/// - AcceptClientsAsync: Background task accepting new connections (synchronous accept with polling)
 /// - BroadcastFramesAsync: Background task reading from IFrameStream and writing to all clients
 /// - Both tasks run concurrently and coordinate via thread-safe client list
 ///
-/// Disposal Order:
+/// DISPOSAL ORDER:
 /// 1. Cancel background tasks (CancelAsync)
-/// 2. Wait for tasks to complete (await with try-catch)
-/// 3. Dispose clients (now safe, no tasks accessing them)
+/// 2. Wait for AcceptClientsAsync to complete (before disposing listener)
+/// 3. Wait for BroadcastFramesAsync to complete (before disposing clients)
+/// 4. Dispose listener, clients, and unsubscribe from frame stream
 /// </remarks>
 public sealed class TcpBroadcaster : IAsyncDisposable
 {
@@ -58,6 +61,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     private readonly IPAddress _bindAddress;
     private readonly IFrameStream _frameStream;
     private readonly BroadcastFormat _format;
+    private ChannelReader<ProcessedFrame>? _dataReader;
 
     // Client management (thread-safe via Lock)
     private readonly List<TcpClient> _clients = [];
@@ -74,7 +78,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     /// </summary>
     /// <param name="port">TCP port to listen on (e.g., 30005 for Beast, 30006 for JSON)</param>
     /// <param name="bindAddress">IP address to bind to (IPAddress.Any, Loopback, or specific interface)</param>
-    /// <param name="frameStream">Frame stream providing aggregated data to broadcast</param>
+    /// <param name="frameStream">Frame stream providing processed frames to broadcast</param>
     /// <param name="format">Broadcast format (determines which encoder is used)</param>
     public TcpBroadcaster(int port, IPAddress bindAddress, IFrameStream frameStream, BroadcastFormat format)
     {
@@ -93,19 +97,24 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         // Create linked cancellation token that responds to both external cancellation and internal disposal
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
+        // Subscribe to frame stream BEFORE starting listener
+        // This ensures we're ready to receive data when devices start
+        _dataReader = _frameStream.Subscribe();
+
         // Start TCP listener on specified bind address and port
         _listener = new TcpListener(_bindAddress, _port);
         _listener.Start();
 
-        Log.Information("TCP broadcaster started on {BindAddress}:{Port} (format: {Format})", _bindAddress, _port, _format);
+        Log.Information("TCP broadcaster started on {BindAddress}:{Port} (format: {Format})", _bindAddress, _port, _format.ToString());
 
         // Launch background task to accept new client connections
         // This task runs until cancellation or disposal
-        _acceptTask = Task.Run(async () => await AcceptClientsAsync(_cts.Token), _cts.Token);
+        // Use Task.Run without redundant async/await wrapper
+        _acceptTask = Task.Run(() => AcceptClientsAsync(_cts.Token), cancellationToken);
 
         // Launch background task to broadcast frames to all clients
         // This task runs until cancellation or disposal
-        _broadcastTask = Task.Run(async () => await BroadcastFramesAsync(_cts.Token), _cts.Token);
+        _broadcastTask = Task.Run(() => BroadcastFramesAsync(_cts.Token), cancellationToken);
 
         await Task.CompletedTask;
     }
@@ -113,6 +122,14 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     /// <summary>
     /// Background task that accepts new client connections.
     /// Runs until cancellation or listener disposal.
+    /// Uses synchronous accept with polling to avoid SocketAsyncEventArgs corruption.
+    ///
+    /// SYNCHRONOUS ACCEPT PATTERN:
+    /// Uses Pending() + AcceptTcpClient() instead of AcceptTcpClientAsync().
+    /// Async socket operations (AcceptTcpClientAsync) can corrupt SocketAsyncEventArgs memory
+    /// when combined with concurrent async enumerators, causing AccessViolationException.
+    /// Synchronous accept with polling avoids SocketAsyncEventArgs entirely.
+    /// The 100ms polling delay is acceptable for connection acceptance (non-critical path).
     /// </summary>
     private async Task AcceptClientsAsync(CancellationToken ct)
     {
@@ -120,15 +137,24 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         {
             try
             {
-                // Wait for new client connection (blocks until client connects)
-                TcpClient client = await _listener.AcceptTcpClientAsync(ct);
-
-                // Add client to list (thread-safe via lock)
-                lock (_clientsLock)
+                // Check if a connection is pending (non-blocking)
+                if (_listener.Pending())
                 {
-                    _clients.Add(client);
-                    Log.Information("TCP client connected from {Remote} (total clients: {Count})",
-                        client.Client.RemoteEndPoint, _clients.Count);
+                    // Synchronous accept (no SocketAsyncEventArgs involved)
+                    TcpClient client = await _listener.AcceptTcpClientAsync(ct);
+
+                    // Add client to list (thread-safe via lock)
+                    lock (_clientsLock)
+                    {
+                        _clients.Add(client);
+                        Log.Information("[{Format}] Client connected from {Remote} on port {Port} (total: {Count})",
+                            _format.ToString(), client.Client.RemoteEndPoint, _port, _clients.Count);
+                    }
+                }
+                else
+                {
+                    // No pending connection, wait before polling again
+                    await Task.Delay(100, ct);
                 }
             }
             catch (OperationCanceledException)
@@ -146,13 +172,28 @@ public sealed class TcpBroadcaster : IAsyncDisposable
 
     /// <summary>
     /// Background task that broadcasts frames to all connected clients.
-    /// Reads from IFrameStream, encodes based on format, and writes to all clients.
+    /// Reads from subscribed channel, encodes based on format, and writes to all clients.
     /// Runs until cancellation or stream ends.
+    ///
+    /// ENCODING LOGIC:
+    /// - Beast format: Encodes ValidatedFrame (raw binary with timestamps)
+    /// - JSON format: Encodes ModeSMessage (parsed, line-delimited JSON)
+    /// - SBS format: Encodes ModeSMessage (parsed, BaseStation CSV)
+    /// Encoder returns null for unparseable frames or unsupported message types.
+    ///
+    /// CLIENT MANAGEMENT:
+    /// Uses snapshot pattern to avoid holding lock during slow network writes.
+    /// Detects disconnections via write failures and cleans up after broadcast loop.
     /// </summary>
     private async Task BroadcastFramesAsync(CancellationToken ct)
     {
-        // Read aggregated data from frame stream (async enumerable)
-        await foreach (AggregatedData data in _frameStream.GetDataAsync(ct))
+        if (_dataReader == null)
+        {
+            throw new InvalidOperationException("Data reader not initialized. Call StartAsync() first.");
+        }
+
+        // Read aggregated data from subscribed channel
+        await foreach (ProcessedFrame data in _dataReader.ReadAllAsync(ct))
         {
             // Step 1: Encode frame based on broadcaster's format
             // Beast uses raw ValidatedFrame, JSON/SBS use parsed ModeSMessage
@@ -197,12 +238,11 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                     // Propagate cancellation to stop broadcast loop immediately
                     throw;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Client disconnected or write failed (network error, buffer full, etc.)
-                    // Log at Debug level since disconnections are normal events
-                    Log.Debug(ex, "Failed to write to TCP client {Remote}",
-                        client.Client.RemoteEndPoint);
+                    // Don't log here - will be logged at Information level when cleaned up below
+                    // This avoids noisy Debug logs with stack traces for normal disconnections
                     disconnected.Add(client);
                 }
             }
@@ -214,13 +254,17 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 {
                     foreach (TcpClient client in disconnected)
                     {
+                        // Log individual disconnection with remote endpoint before disposal
+                        Log.Information("[{Format}] Client disconnected from {Remote} on port {Port}",
+                            _format.ToString(), client.Client.RemoteEndPoint, _port);
+
                         _clients.Remove(client);
                         client.Close();
                         client.Dispose();
                     }
 
-                    Log.Information("Removed {Count} disconnected clients (remaining: {Remaining})",
-                        disconnected.Count, _clients.Count);
+                    Log.Information("[{Format}] Total clients on port {Port}: {Remaining}",
+                        _format.ToString(), _port, _clients.Count);
                 }
             }
         }
@@ -231,43 +275,55 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     /// Ensures proper shutdown order: cancel → wait for tasks → dispose clients.
     /// </summary>
     /// <remarks>
-    /// Disposal Order (Critical for Thread Safety):
+    /// DISPOSAL ORDER (Critical for Thread Safety):
     /// 1. Signal cancellation to background tasks (CancelAsync)
-    /// 2. Stop accepting new connections (Stop listener)
-    /// 3. Wait for background tasks to complete (await with try-catch)
-    /// 4. NOW safe to dispose clients (no tasks accessing them)
-    /// 5. Dispose cancellation token source
+    /// 2. Wait for AcceptClientsAsync to complete FIRST (must finish before disposing listener)
+    /// 3. Wait for BroadcastFramesAsync to complete (must finish before disposing clients)
+    /// 4. NOW safe to dispose listener (no AcceptClientsAsync accessing it)
+    /// 5. NOW safe to dispose clients (no BroadcastFramesAsync writing to them)
+    /// 6. Unsubscribe from frame stream
+    /// 7. Dispose cancellation token source
     ///
-    /// Why This Order:
-    /// We must wait for background tasks to complete BEFORE disposing clients,
-    /// otherwise we risk disposing TcpClients that are still being accessed by
-    /// BroadcastFramesAsync (causing ObjectDisposedException).
+    /// WHY THIS ORDER:
+    /// AcceptClientsAsync and BroadcastFramesAsync may be accessing resources concurrently.
+    /// We must wait for both tasks to complete BEFORE disposing those resources,
+    /// otherwise we get ObjectDisposedException from background tasks.
+    /// Waiting for AcceptClientsAsync before disposing listener prevents socket disposal races.
+    /// Waiting for BroadcastFramesAsync before disposing clients prevents TcpClient disposal races.
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
         // Step 1: Signal cancellation to both background tasks
-        await _cts?.CancelAsync()!;
+        if (_cts != null)
+        {
+            await _cts.CancelAsync();
+        }
 
-        // Step 2: Stop listener (prevents new connections)
-        _listener?.Stop();
-
-        // Step 3: Wait for AcceptClientsAsync to complete
-        // Task will see cancellation and exit cleanly
+        // Step 2: Wait for AcceptClientsAsync to complete FIRST
+        // CRITICAL: Must wait for task before disposing listener
         if (_acceptTask != null)
         {
             try { await _acceptTask; }
             catch (OperationCanceledException) { } // Expected during cancellation
+            catch (ObjectDisposedException) { } // May occur if listener disposed during accept
         }
 
-        // Step 4: Wait for BroadcastFramesAsync to complete
-        // Task will see cancellation and stop reading/writing
+        // Step 3: Wait for BroadcastFramesAsync to complete
         if (_broadcastTask != null)
         {
             try { await _broadcastTask; }
             catch (OperationCanceledException) { } // Expected during cancellation
         }
 
-        // Step 5: NOW safe to dispose clients (no tasks accessing them)
+        // Step 4: NOW safe to dispose listener (no tasks using it)
+        if (_listener != null)
+        {
+            _listener.Stop();
+            _listener.Server?.Close();
+            _listener.Server?.Dispose();
+        }
+
+        // Step 5: Dispose clients (safe after broadcast task stopped)
         lock (_clientsLock)
         {
             foreach (TcpClient client in _clients)
@@ -278,7 +334,13 @@ public sealed class TcpBroadcaster : IAsyncDisposable
             _clients.Clear();
         }
 
-        // Step 6: Dispose cancellation token source
+        // Step 6: Unsubscribe from frame stream
+        if (_dataReader != null)
+        {
+            _frameStream.Unsubscribe(_dataReader);
+        }
+
+        // Step 7: Dispose cancellation token source
         _cts?.Dispose();
     }
 

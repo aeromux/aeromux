@@ -32,10 +32,11 @@ devices:                                  # List of SDR devices to use (multiple
 
 # Network ports and binding
 network:                                  # Network server configuration
-  beastPort: 30002                        # Beast binary protocol port (for feeding other software)
-  sbsPort: 30003                          # SBS BaseStation text protocol port
-  httpPort: 8080                          # HTTP API and web interface port
-  bindAddress: "0.0.0.0"                  # Network interface to bind (0.0.0.0 = all interfaces)
+  beastPort: 30005                        # Beast binary protocol port (default: 30005, dump1090-compatible)
+  jsonPort: 30006                         # JSON streaming port (default: 30006, web-friendly)
+  sbsPort: 30104                          # SBS BaseStation text protocol port (default: 30104, VRS-compatible)
+  httpPort: 8080                          # HTTP API and web interface port (Phase 7)
+  bindAddress: "0.0.0.0"                  # Network interface to bind (0.0.0.0 = all interfaces, 127.0.0.1 = localhost only)
 
 # Aircraft tracking settings
 tracking:                                 # Aircraft state tracking configuration
