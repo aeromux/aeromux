@@ -1,12 +1,11 @@
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
-using Serilog;
 
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// MessageParser partial class: Helper and utility methods.
-/// Contains bit extraction, character decoding, and altitude decoding helpers.
+/// Contains the bit extraction, character decoding, and altitude decoding helpers.
 /// </summary>
 public sealed partial class MessageParser
 {
@@ -81,7 +80,7 @@ public sealed partial class MessageParser
     /// <remarks>
     /// Gillham code uses Gray code (reflected binary) encoding where adjacent values
     /// differ by only one bit. This reduces errors during altitude changes.
-    /// Bit rearrangement: AC field → Gillham format → Gray code conversion → altitude
+    /// The bit rearrangement: AC field → Gillham format → Gray code conversion → altitude
     /// </remarks>
     private static int DecodeGillham(int ac13Field)
     {
@@ -204,7 +203,7 @@ public sealed partial class MessageParser
         }
 
         // Check for invalid codes, only 1 to 5 are valid
-        if (oneHundreds < 1 || oneHundreds > 5)
+        if (oneHundreds is < 1 or > 5)
         {
             return -9999;  // INVALID_ALTITUDE
         }
@@ -308,7 +307,7 @@ public sealed partial class MessageParser
     /// <returns>ASCII character, or '#' for invalid values.</returns>
     private static char DecodeAisCharacter(int value)
     {
-        if (value < 0 || value > 63)
+        if (value is < 0 or > 63)
         {
             return '#';
         }
@@ -376,12 +375,21 @@ public sealed partial class MessageParser
             int altitudeFeet = (n * 25) - 1000;
             return Altitude.FromFeet(altitudeFeet, altitudeType);
         }
-        else
+
+        // Q=0: Gillham code (100-foot increments)
+        // Used for altitudes > 50,175 feet (U-2, ER-2, high-altitude jets, balloons)
+        // Convert AC12 to AC13 format by inserting M=0 at bit position 6
+        // AC12 format: [b11 b10 b9 b8 b7 b6 b5 b4(Q=0) b3 b2 b1 b0]
+        // AC13 format: [b12 b11 b10 b9 b8 b7 b6(M=0) b5 b4(Q=0) b3 b2 b1 b0]
+        int ac13Equivalent = ((altRaw & 0x0FC0) << 1) |  // Upper 6 bits (shift left to make room for M)
+                             (altRaw & 0x003F);          // Lower 6 bits (Q and below)
+
+        int gillhamResult = DecodeGillham(ac13Equivalent);
+        if (gillhamResult == -9999)
         {
-            // Q=0: 100-foot Gillham code (rare, used for > 50,175 ft)
-            // TODO Priority 3: Implement Gillham decoding
-            // For now, return null (most aircraft use Q=1 encoding)
-            return null;
+            return null;  // Invalid Gillham code
         }
+
+        return Altitude.FromFeet(gillhamResult * 100, altitudeType);
     }
 }

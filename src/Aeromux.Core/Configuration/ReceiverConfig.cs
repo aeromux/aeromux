@@ -52,4 +52,14 @@ public class ReceiverConfig
     /// Example: "San Francisco Bay Area", "London Heathrow"
     /// </summary>
     public string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the receiver UUID for MLAT triangulation and deduplication (optional).
+    /// Must be RFC 4122 compliant UUID format (e.g., "0033062d-e17e-4389-91a9-79ebb967fb4c").
+    /// If not specified, no receiver ID messages (0xe3) will be sent in Beast output.
+    /// Used by aggregation networks (FlightAware, FR24) to correlate timing data across receivers.
+    /// Generate with: uuidgen (macOS/Linux), [guid]::NewGuid() (PowerShell), or https://www.uuidgenerator.net/
+    /// The same UUID should be used consistently for a receiver to maintain historical data tracking.
+    /// </summary>
+    public Guid? ReceiverUuid { get; set; }
 }

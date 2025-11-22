@@ -143,7 +143,7 @@ public sealed partial class MessageParser
     /// <returns>Surveillance identity reply message with squawk code.</returns>
     /// <remarks>
     /// DF 5 messages contain a 13-bit identity code (squawk code) that requires
-    /// bit rearrangement to extract the 4-digit octal code.
+    /// the bit rearrangement to extract the 4-digit octal code.
     /// </remarks>
     private ModeSMessage? ParseSurveillanceIdentityReply(ValidatedFrame frame)
     {
@@ -185,7 +185,6 @@ public sealed partial class MessageParser
     /// ID field: C1 A1 C2 A2 C4 A4 X B1 D1 B2 D2 B4 D4
     /// Squawk:   A4 A2 A1 | B4 B2 B1 | C4 C2 C1 | D4 D2 D1
     /// Each group forms one octal digit (0-7).
-    /// Algorithm verified against pyModeS common.idcode and common.squawk functions.
     /// </remarks>
     private static string DecodeSquawkCode(int id13)
     {

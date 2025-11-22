@@ -16,7 +16,7 @@ namespace Aeromux.Core.ModeS;
 /// <para><b>Detection Strategy:</b></para>
 /// <list type="bullet">
 /// <item><b>Pre-check filter:</b> Fast rejection test using magnitude relationships (reduces false positives by ~90%)</item>
-/// <item><b>Multi-phase correlation:</b> Tests 5 possible phase alignments (phases 4-8) to find optimal sampling offset</item>
+/// <item><b>Multiphase correlation:</b> Tests 5 possible phase alignments (phases 4-8) to find optimal sampling offset</item>
 /// <item><b>Weighted correlation functions:</b> Extracts bit values from 3-4 adjacent samples using hand-tuned coefficients</item>
 /// <item><b>Noise-adaptive thresholding:</b> Dynamic threshold based on local noise estimation from valley samples</item>
 /// <item><b>Linear buffer scanning:</b> Direct array access without modulo operations for maximum performance</item>
@@ -142,7 +142,7 @@ public sealed class PreambleDetector
     }
 
     /// <summary>
-    /// Performs multi-phase preamble detection with noise-adaptive thresholding.
+    /// Performs multiphase preamble detection with noise-adaptive thresholding.
     /// Tests 5 possible phase alignments (4-8) and extracts the best-scoring frame.
     /// </summary>
     /// <param name="m">Magnitude sample buffer</param>
@@ -416,7 +416,7 @@ public sealed class PreambleDetector
     // - Phase 2 exception: Slightly DC-unbalanced (sum = +1) but yields better practical results
     //
     // Coefficients were empirically optimized for Mode S signal characteristics and should NOT be modified.
-    // Changing these values will degrade bit extraction accuracy and increase error rates.
+    // Changing these values will degrade the bit extraction accuracy and increase error rates.
     // ============================================================================
 
     /// <summary>

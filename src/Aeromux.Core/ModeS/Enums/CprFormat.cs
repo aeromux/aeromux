@@ -5,7 +5,7 @@ namespace Aeromux.Core.ModeS.Enums;
 /// Indicates whether the CPR-encoded position is an even or odd frame.
 /// </summary>
 /// <remarks>
-/// CPR encoding requires paired even and odd frames for global position decoding.
+/// CPR encoding requires to be paired even and odd frames for global position decoding.
 /// The format bit (F) determines which frame type:
 /// - Even frames (F=0): Use NZ = 60 for latitude zones
 /// - Odd frames (F=1): Use NZ = 59 for latitude zones

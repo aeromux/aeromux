@@ -1,4 +1,3 @@
-using System;
 using Aeromux.Core.ModeS.Enums;
 
 namespace Aeromux.Core.ModeS.ValueObjects;

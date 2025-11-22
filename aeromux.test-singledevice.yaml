@@ -45,3 +45,7 @@ receiver:
   longitude: 19.693172                    # Receiver longitude in decimal degrees (-180 to +180)
   altitude: 120                           # Receiver altitude in meters above sea level (optional)
   name: "Kecskemét"                       # Friendly name for this receiver station (optional)
+  # Optional: UUID for MLAT triangulation and receiver identification
+  # IMPORTANT: Each receiver MUST have a unique UUID. Do NOT reuse UUIDs across multiple receivers.
+  # Generate a new UUID with: uuidgen (macOS/Linux), [guid]::NewGuid() (PowerShell), or https://www.uuidgenerator.net/
+  # receiverUuid: "00000000-0000-0000-0000-000000000000"  # Replace with YOUR unique UUID

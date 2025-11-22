@@ -60,7 +60,7 @@ public record GeographicCoordinate(double Latitude, double Longitude)
     {
         ArgumentNullException.ThrowIfNull(other);
 
-        const double earthRadiusNM = 3440.065; // Earth's radius in nautical miles
+        const double earthRadiusNm = 3440.065; // Earth's radius in nautical miles
 
         double lat1Rad = Latitude * Math.PI / 180.0;
         double lat2Rad = other.Latitude * Math.PI / 180.0;
@@ -72,7 +72,7 @@ public record GeographicCoordinate(double Latitude, double Longitude)
                     Math.Sin(deltaLonRad / 2.0) * Math.Sin(deltaLonRad / 2.0));
         double c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a));
 
-        return earthRadiusNM * c;
+        return earthRadiusNm * c;
     }
 
     /// <summary>

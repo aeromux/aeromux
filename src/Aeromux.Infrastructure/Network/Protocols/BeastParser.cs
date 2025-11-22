@@ -94,10 +94,42 @@ public sealed class BeastParser
             // Step 2: Read message type indicator
             // '2' = short frame (56 bits / 7 bytes)
             // '3' = long frame (112 bits / 14 bytes)
+            // 0xe3 = receiver ID message (8 bytes, MLAT identification)
             bytesRead = await stream.ReadAsync(buffer.AsMemory(1, 1), cancellationToken);
             if (bytesRead == 0)
             {
                 break;
+            }
+
+            // Handle receiver ID message (0xe3) - consumed but not processed
+            // Receiver ID messages contain the first 64 bits of the sender's UUID
+            // Format: ESC 0xe3 [8 bytes with escaping applied]
+            // We consume these messages to maintain stream synchronization but don't use the UUID
+            // (our use case is receiving frames, not correlating multi-receiver MLAT timing)
+            if (buffer[1] == 0xe3)
+            {
+                // Read 8-byte UUID payload with escape sequence handling
+                // Must read with unescaping to maintain proper stream position for next message
+                for (int i = 0; i < 8; i++)
+                {
+                    bytesRead = await stream.ReadAsync(buffer.AsMemory(0, 1), cancellationToken);
+                    if (bytesRead == 0)
+                    {
+                        break; // Stream ended mid-message
+                    }
+
+                    byte b = buffer[0];
+                    if (b == ESC)
+                    {
+                        // Doubled escape byte - read the actual data byte that follows
+                        bytesRead = await stream.ReadAsync(buffer.AsMemory(0, 1), cancellationToken);
+                        if (bytesRead == 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+                continue; // Message consumed, proceed to next Beast message
             }
 
             bool isLong = buffer[1] == '3';

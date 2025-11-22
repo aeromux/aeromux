@@ -16,7 +16,6 @@
 
 using System.Threading.Channels;
 using Aeromux.Core.ModeS;
-using Aeromux.Infrastructure.Streaming;
 
 namespace Aeromux.Infrastructure.Aggregation;
 

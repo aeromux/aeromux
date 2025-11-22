@@ -31,7 +31,7 @@ public sealed record Bds20AircraftIdentification(
 /// <summary>
 /// BDS 3,0: ACAS Resolution Advisory (simplified - VDS validation only).
 /// </summary>
-public sealed record Bds30AcasResolutionAdvisory() : BdsData;
+public sealed record Bds30AcasResolutionAdvisory : BdsData;
 
 /// <summary>
 /// BDS 4,0: Selected vertical intention (MCP/FMS altitude, barometric pressure).

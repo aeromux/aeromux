@@ -19,6 +19,8 @@ using System.Net;
 using Aeromux.CLI.Configuration;
 using Aeromux.Core.Configuration;
 using Aeromux.Infrastructure.Streaming;
+using Aeromux.Infrastructure.Network;
+using Aeromux.Infrastructure.Network.Enums;
 using Serilog;
 using Spectre.Console.Cli;
 
@@ -45,6 +47,10 @@ public class DaemonSettings : GlobalSettings
     [CommandOption("--bind-address")]
     [Description("IP address to bind to (default: 0.0.0.0 for all interfaces, examples: 127.0.0.1, 192.168.1.100, 10.2.25.1)")]
     public string? BindAddress { get; set; }  // CLI uses string, parsed to IPAddress in validation
+
+    [CommandOption("--receiver-uuid")]
+    [Description("Receiver UUID for MLAT triangulation (overrides YAML config, RFC 4122 format)")]
+    public string? ReceiverUuid { get; set; }
 }
 
 /// <summary>
@@ -98,6 +104,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             int jsonPort = ValidatePort(settings.JsonPort, config.Network.JsonPort, "JsonPort");
             int sbsPort = ValidatePort(settings.SbsPort, config.Network.SbsPort, "SbsPort");
             IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
+            Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
 
             Log.Information("Network configuration: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
                 beastPort, jsonPort, sbsPort, bindAddress);
@@ -122,26 +129,34 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // Now create and start TCP broadcasters
             // Each TcpBroadcaster.StartAsync() will call Subscribe() on the device stream
             // This gives each broadcaster its own channel reader for independent consumption
-            var beastBroadcaster = new Infrastructure.Network.TcpBroadcaster(
+            // Receiver UUID passed to Beast broadcaster enables MLAT identification (sent as 0xe3 message)
+            //
+            // IMPORTANT: Staggered startup with 50ms delays between broadcasters
+            // This prevents a race condition in .NET's Socket.ValidateBlockingMode() on macOS ARM64
+            // where concurrent socket initialization can corrupt internal state fields, causing AccessViolationException
+            var beastBroadcaster = new TcpBroadcaster(
                 beastPort,
                 bindAddress,
                 deviceStream,
-                Infrastructure.Network.Enums.BroadcastFormat.Beast);
+                BroadcastFormat.Beast,
+                receiverUuid);
             await beastBroadcaster.StartAsync(cancellationToken);
+            await Task.Delay(50, cancellationToken);  // Prevent concurrent socket initialization
 
-            var jsonBroadcaster = new Infrastructure.Network.TcpBroadcaster(
+            var jsonBroadcaster = new TcpBroadcaster(
                 jsonPort,
                 bindAddress,
                 deviceStream,
-                Infrastructure.Network.Enums.BroadcastFormat.Json);
+                BroadcastFormat.Json);
             await jsonBroadcaster.StartAsync(cancellationToken);
+            await Task.Delay(50, cancellationToken);  // Prevent concurrent socket initialization
 
-            var sbsBroadcaster = new Infrastructure.Network.TcpBroadcaster(
+            var sbsBroadcaster = new TcpBroadcaster(
                 sbsPort,
                 bindAddress,
                 deviceStream,
-                Infrastructure.Network.Enums.BroadcastFormat.Sbs);
-            await sbsBroadcaster.StartAsync(cancellationToken);
+                BroadcastFormat.Sbs);
+            await Task.Delay(50, cancellationToken);  // Prevent concurrent socket initialization
 
             Log.Information("TCP broadcasters started: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
                 beastPort, jsonPort, sbsPort, bindAddress);
@@ -338,6 +353,38 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
     }
 
     /// <summary>
+    /// Validates and resolves receiver UUID from CLI parameter or config value.
+    /// Priority order: CLI parameter > YAML config.
+    ///
+    /// UUID VALIDATION:
+    /// - Must be RFC 4122 compliant format (8-4-4-4-12 hex digits)
+    /// - Examples: "550e8400-e29b-41d4-a716-446655440000"
+    /// - Used for MLAT triangulation and receiver identification
+    /// - Must be unique per receiver (shared UUIDs corrupt MLAT timing)
+    /// </summary>
+    /// <param name="cliReceiverUuid">Optional receiver UUID from CLI parameter (string format).</param>
+    /// <param name="configReceiverUuid">Receiver UUID from configuration file (Guid? type).</param>
+    /// <returns>Validated Guid instance, or null if not provided.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when UUID format is invalid.</exception>
+    private static Guid? ValidateReceiverUuid(string? cliReceiverUuid, Guid? configReceiverUuid)
+    {
+        // If CLI provided, parse and validate
+        if (!string.IsNullOrEmpty(cliReceiverUuid))
+        {
+            if (!Guid.TryParse(cliReceiverUuid, out Guid parsed))
+            {
+                throw new InvalidOperationException(
+                    $"ReceiverUuid '{cliReceiverUuid}' is not a valid RFC 4122 UUID format. " +
+                    $"Generate with: uuidgen (macOS/Linux), [guid]::NewGuid() (PowerShell), or https://www.uuidgenerator.net/");
+            }
+            return parsed;
+        }
+
+        // Use config value (already Guid? from YAML deserialization)
+        return configReceiverUuid;
+    }
+
+    /// <summary>
     /// Checks daemon-specific preconditions (high-level business logic validation).
     /// Verifies that the daemon can operate with the loaded configuration.
     /// Device-specific validation (frequencies, gains, etc.) is done in DeviceWorker.OpenDevice().
@@ -389,22 +436,16 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         // Validate receiver location (optional, but validate if configured)
         if (config.Receiver != null)
         {
-            if (config.Receiver.Latitude.HasValue)
+            if (config.Receiver.Latitude is < -90 or > 90)
             {
-                if (config.Receiver.Latitude < -90 || config.Receiver.Latitude > 90)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot start daemon: Receiver latitude must be between -90 and +90 degrees, but was {config.Receiver.Latitude}");
-                }
+                throw new InvalidOperationException(
+                    $"Cannot start daemon: Receiver latitude must be between -90 and +90 degrees, but was {config.Receiver.Latitude}");
             }
 
-            if (config.Receiver.Longitude.HasValue)
+            if (config.Receiver.Longitude is < -180 or > 180)
             {
-                if (config.Receiver.Longitude < -180 || config.Receiver.Longitude > 180)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot start daemon: Receiver longitude must be between -180 and +180 degrees, but was {config.Receiver.Longitude}");
-                }
+                throw new InvalidOperationException(
+                    $"Cannot start daemon: Receiver longitude must be between -180 and +180 degrees, but was {config.Receiver.Longitude}");
             }
 
             // Both lat/lon must be provided together
@@ -422,6 +463,14 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     config.Receiver.Latitude.Value >= 0 ? "N" : "S",
                     Math.Abs(config.Receiver.Longitude.Value),
                     config.Receiver.Longitude.Value >= 0 ? "E" : "W");
+            }
+
+            // Log receiver UUID if configured
+            // UUID identifies this receiver for MLAT triangulation and frame deduplication
+            // Must be unique per receiver - shared UUIDs corrupt MLAT timing correlation
+            if (config.Receiver.ReceiverUuid.HasValue)
+            {
+                Log.Information("Receiver UUID configured: {ReceiverUuid}", config.Receiver.ReceiverUuid.Value);
             }
         }
         else

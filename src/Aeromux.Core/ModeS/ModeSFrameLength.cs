@@ -11,7 +11,7 @@ namespace Aeromux.Core.ModeS;
 ///
 /// At 2.4 MSPS sampling rate (standard):
 /// - Mode S data rate: 1 Mbit/s
-/// - Samples per bit: 2.4 samples (requiring phase tracking for bit detection)
+/// - Samples per bit: 2.4 samples (requiring phase tracking for the bit detection)
 /// - Short frame: ~134 samples
 /// - Long frame: ~269 samples
 /// </remarks>
