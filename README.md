@@ -6,8 +6,8 @@ Aeromux receives and decodes aircraft transponder signals from RTL-SDR devices, 
 
 ## Status
 
-**Current Phase:** Phase 5 ✅ COMPLETE (Message Parsing)
-**Next Phase:** Phase 6 (Multi-Device Aggregation and TCP Broadcasting)
+**Current Phase:** Phase 6 ✅ COMPLETE (Live Display and TCP Broadcasting)
+**Next Phase:** Phase 7 (Aircraft Tracking Infrastructure)
 
 ### Phase 5 Completion Summary
 
@@ -40,9 +40,10 @@ Aeromux receives and decodes aircraft transponder signals from RTL-SDR devices, 
 - ✅ Structured logging with Serilog
 - ✅ YAML-based configuration
 
-### Upcoming (Phase 6+)
-- 🔄 Frame aggregation across multiple devices
-- 🔄 TCP broadcasting (Beast, SBS, JSON formats)
+### Upcoming (Phase 7+)
+- 🔄 Aircraft state tracking (position, velocity, identification)
+- 🔄 Terminal UI for live aircraft display
+- 🔄 Enhanced protocol compatibility (full state output)
 - 🔄 HTTP REST API for statistics and aircraft data
 - 🔄 WebSocket real-time updates
 - 🔄 Web-based aircraft map visualization
@@ -191,4 +192,4 @@ GNU General Public License v3.0 - See [LICENSE.md](LICENSE.md) for details.
 
 ---
 
-**Note:** Aeromux is currently in active development. Phase 5 (Message Parsing) is complete with 100% Mode S protocol coverage. Phase 6 (TCP Broadcasting) is next.
+**Note:** Aeromux is currently in active development. Phase 6 (Live Display & TCP Broadcasting) is complete with Beast/JSON/SBS protocol support. Phase 7 (Aircraft Tracking Infrastructure) is next.
