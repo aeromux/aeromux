@@ -50,6 +50,31 @@ public class TrackingConfig
     /// Default: 1000 positions
     /// </summary>
     public int PositionHistorySize { get; set; } = 1000;
+
+    /// <summary>
+    /// Enable position history tracking (circular buffer).
+    /// Default: true
+    /// </summary>
+    public bool EnablePositionHistory { get; set; } = true;
+
+    /// <summary>
+    /// Enable altitude history tracking (circular buffer).
+    /// Default: true
+    /// </summary>
+    public bool EnableAltitudeHistory { get; set; } = true;
+
+    /// <summary>
+    /// Enable velocity history tracking (circular buffer).
+    /// Default: true
+    /// </summary>
+    public bool EnableVelocityHistory { get; set; } = true;
+
+    /// <summary>
+    /// Maximum number of historical data points per buffer.
+    /// Default: 1000 (per aircraft, per buffer)
+    /// Memory: ~96 KB per aircraft with all histories enabled
+    /// </summary>
+    public int MaxHistorySize { get; set; } = 1000;
 }
 
 /// <summary>

@@ -18,6 +18,7 @@ using System.ComponentModel;
 using System.Net;
 using Aeromux.CLI.Configuration;
 using Aeromux.Core.Configuration;
+using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
 using Aeromux.Infrastructure.Network;
 using Aeromux.Infrastructure.Network.Enums;
@@ -59,9 +60,11 @@ public class DaemonSettings : GlobalSettings
 /// and broadcasts data to multiple clients via TCP (Beast/JSON/SBS formats).
 /// </summary>
 /// <remarks>
-/// Phase 1-5 (Complete): Device management, demodulation, decoding, tracking.
+/// Phase 1-5 (Complete): Device management, demodulation, decoding, ICAO confidence tracking.
 /// Phase 6 (Complete): TCP broadcasting (Beast/JSON/SBS), multi-device support, network configuration.
-/// Phase 7 (Planned): HTTP API and web interface.
+/// Phase 7 (Complete): Aircraft state tracking infrastructure (ready for Phase 8 enhanced output).
+/// Phase 8 (Planned): Enhanced JSON/SBS output with full aircraft state.
+/// Phase 9 (Planned): HTTP API and web interface.
 /// </remarks>
 public class DaemonCommand : AsyncCommand<DaemonSettings>
 {
@@ -125,6 +128,52 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // DeviceStream.StartAsync() initializes the internal broadcaster task and makes Subscribe() available
             await deviceStream.StartAsync(cancellationToken);
             Log.Information("Device stream started");
+
+            // === Phase 7: Aircraft State Tracking ===
+            // Create centralized aircraft state tracker for all devices
+            // Tracks aircraft across multiple RTL-SDR devices (automatic deduplication by ICAO)
+            // Provides foundation for Phase 8 (enhanced JSON/SBS) and Phase 9 (HTTP API)
+            var aircraftTracker = new AircraftStateTracker(config.Tracking!);
+
+            // Subscribe to aircraft lifecycle events for logging
+            aircraftTracker.OnAircraftAdded += (sender, e) =>
+            {
+                Aircraft aircraft = e.Aircraft;
+                Log.Information("New aircraft: ICAO={Icao}, Callsign={Callsign}",
+                    aircraft.Identification.Icao,
+                    aircraft.Identification.Callsign ?? "Unknown");
+            };
+
+            // Log significant updates (position, altitude, velocity changes)
+            aircraftTracker.OnAircraftUpdated += (sender, e) =>
+            {
+                Aircraft aircraft = e.Updated;
+                HashSet<string> fields = e.ChangedFields;
+
+                // Only log if position, altitude, or velocity changed
+                if (fields.Contains(nameof(Aircraft.Position)) ||
+                    fields.Contains(nameof(Aircraft.Velocity)))
+                {
+                    string positionInfo = aircraft.Position.Coordinate != null
+                        ? $"Lat={aircraft.Position.Coordinate.Latitude:F4}, Lon={aircraft.Position.Coordinate.Longitude:F4}"
+                        : "Position unknown";
+                    string altitudeInfo = aircraft.Position.BarometricAltitude != null
+                        ? $"{aircraft.Position.BarometricAltitude.Feet:N0} ft"
+                        : "Altitude unknown";
+                    string velocityInfo = aircraft.Velocity.Speed != null
+                        ? $"{aircraft.Velocity.Speed.Knots:N0} kts"
+                        : "Speed unknown";
+
+                    Log.Information("Aircraft update: ICAO={Icao}, {Position}, Alt={Altitude}, Speed={Velocity}",
+                        aircraft.Identification.Icao,
+                        positionInfo,
+                        altitudeInfo,
+                        velocityInfo);
+                }
+            };
+
+            aircraftTracker.StartConsuming(deviceStream.Subscribe(), cancellationToken);
+            Log.Information("Aircraft state tracker started");
 
             // Now create and start TCP broadcasters
             // Each TcpBroadcaster.StartAsync() will call Subscribe() on the device stream
@@ -208,8 +257,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 // GRACEFUL SHUTDOWN ORDER:
                 // Dispose in correct order to ensure clean resource cleanup
                 Console.WriteLine();
-                Console.WriteLine("Shutting down TCP broadcasters and device stream...");
-                Log.Information("Shutting down TCP broadcasters and device stream...");
+                Console.WriteLine("Shutting down TCP broadcasters, tracker, and device stream...");
+                Log.Information("Shutting down TCP broadcasters, tracker, and device stream...");
 
                 // Step 1: Stop TCP broadcasters first
                 // Each DisposeAsync waits for background tasks then disposes clients
@@ -218,10 +267,15 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 await jsonBroadcaster.DisposeAsync();
                 await sbsBroadcaster.DisposeAsync();
 
-                // Step 2: Stop device stream last
+                // Step 2: Stop device stream
                 // Closes RTL-SDR devices and completes internal broadcast channel
-                // Safe to do after broadcasters are stopped (no more consumers)
+                // This will complete the trackerChannel, causing the tracker's consumer task to finish
                 await deviceStream.DisposeAsync();
+
+                // Step 3: Dispose aircraft tracker
+                // Tracker.Dispose() waits for consumer task to complete, then disposes cleanup timer
+                aircraftTracker.Dispose();
+                Log.Information("Aircraft state tracker stopped");
 
                 Console.WriteLine("All device workers and TCP broadcasters stopped.");
                 Log.Information("All device workers and TCP broadcasters stopped");
