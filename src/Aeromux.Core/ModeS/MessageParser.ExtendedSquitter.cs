@@ -134,9 +134,6 @@ public sealed partial class MessageParser
             frame.WasCorrected,
             position,
             altitude,
-            cprLat,
-            cprLon,
-            cprFormat,
             surveillanceStatus);
     }
 
@@ -362,9 +359,6 @@ public sealed partial class MessageParser
             position,
             groundSpeed,
             groundTrack,
-            cprLat,
-            cprLon,
-            cprFormat,
             movement);
     }
 

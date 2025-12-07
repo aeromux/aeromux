@@ -18,27 +18,30 @@ namespace Aeromux.Core.ModeS;
 /// </remarks>
 public sealed class CprDecoder
 {
-    // NL lookup table (Number of Longitude zones by latitude)
-    // Precomputed for latitudes 0-87 degrees (symmetric for negative latitudes)
-    private static readonly int[] NlTable =
-    [
-        59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  // 0-9°
-        49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  // 10-19°
-        39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  // 20-29°
-        29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  // 30-39°
-        19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  // 40-49°
-        9, 8, 7, 6, 5, 4, 3, 2, 1, 1,            // 50-59°
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,            // 60-69°
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,            // 70-79°
-        1, 1, 1, 1, 1, 1, 1, 1                   // 80-87°
-    ];
-
-    // Per-aircraft CPR state for frame pairing
+    /// <summary>
+    /// Per-aircraft CPR state storage for frame pairing.
+    /// Each aircraft must maintain separate even/odd frames for global decoding.
+    /// Thread-safe for concurrent frame processing from multiple SDRs.
+    /// </summary>
     private readonly ConcurrentDictionary<string, CprFramePair> _aircraftCprState = new();
 
-    // Cleanup timer (remove stale state)
+    /// <summary>
+    /// Timestamp of last cleanup operation.
+    /// Cleanup runs periodically to prevent unbounded memory growth.
+    /// </summary>
     private DateTime _lastCleanup = DateTime.UtcNow;
+
+    /// <summary>
+    /// How often to clean up stale aircraft state (5 minutes).
+    /// Balances memory usage with cleanup overhead.
+    /// </summary>
     private readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Maximum age difference between even and odd frames for valid pairing (10 seconds).
+    /// ADS-B transmits position messages every 0.5-2 seconds, so 10 seconds allows
+    /// for missed frames while preventing incorrect pairing from stale data.
+    /// </summary>
     private readonly TimeSpan _maxFrameAge = TimeSpan.FromSeconds(10);
 
     /// <summary>
@@ -58,7 +61,8 @@ public sealed class CprDecoder
         CprFormat cprFormat,
         DateTime timestamp)
     {
-        // Periodic cleanup
+        // Periodic cleanup to prevent unbounded memory growth
+        // Removes state for aircraft not seen in 10+ minutes
         if ((timestamp - _lastCleanup) > _cleanupInterval)
         {
             CleanupStaleState(timestamp);
@@ -66,9 +70,11 @@ public sealed class CprDecoder
         }
 
         // Get or create CPR state for this aircraft
+        // Each aircraft needs separate state to pair even/odd frames correctly
         CprFramePair state = _aircraftCprState.GetOrAdd(icaoAddress, _ => new CprFramePair());
 
-        // Store this frame
+        // Store this frame (overwrites previous frame of same type)
+        // Aircraft transmits alternating even/odd frames, we keep the latest of each
         var newFrame = new CprFrame(cprLat, cprLon, timestamp);
         if (cprFormat == CprFormat.Even)
         {
@@ -80,19 +86,23 @@ public sealed class CprDecoder
         }
 
         // Check if we have both frames for global decoding
+        // Global CPR requires paired even+odd frames to resolve position ambiguity
         if (state is not { EvenFrame: not null, OddFrame: not null })
         {
-            return null;
+            return null;  // Need both frame types before we can decode
         }
 
         // Check time difference (must be < 10 seconds)
+        // Frames too far apart may not be from the same position transmission sequence
+        // This prevents incorrect pairing after aircraft maneuvers or data gaps
         double timeDiff = Math.Abs((state.EvenFrame.Timestamp - state.OddFrame.Timestamp).TotalSeconds);
         if (!(timeDiff < _maxFrameAge.TotalSeconds))
         {
-            return null;
+            return null;  // Frames too old, wait for fresh pair
         }
 
-        // Use most recent frame type
+        // Use most recent frame type to determine final position
+        // The newer frame is more likely to reflect current aircraft position
         bool useOdd = state.OddFrame.Timestamp > state.EvenFrame.Timestamp;
 
         return DecodeCprGlobal(
@@ -118,21 +128,30 @@ public sealed class CprDecoder
         int oddCprLat, int oddCprLon,
         bool useOddFrame)
     {
-        const double airDlat0 = 360.0 / 60.0;  // Even frame latitude zone (6°)
-        const double airDlat1 = 360.0 / 59.0;  // Odd frame latitude zone (~6.1°)
+        // === STEP 1: LATITUDE DECODING ===
+        // CPR divides Earth into latitude zones: 60 zones for even frames, 59 for odd frames
+        // This creates overlapping grids that allow position disambiguation
+        const double airDlat0 = 360.0 / 60.0;  // Even frame latitude zone width (6°)
+        const double airDlat1 = 360.0 / 59.0;  // Odd frame latitude zone width (~6.1°)
 
-        // Normalize CPR values to [0, 1)
-        double lat0 = evenCprLat / 131072.0;
+        // Normalize CPR values from 17-bit integers (0-131071) to fractional [0, 1)
+        // This represents position as fraction within the current latitude zone
+        double lat0 = evenCprLat / 131072.0;  // 131072 = 2^17
         double lat1 = oddCprLat / 131072.0;
 
-        // Calculate latitude index j
+        // Calculate latitude zone index (j) by comparing even/odd frame positions
+        // The formula resolves which of the 60/59 overlapping zones the aircraft is in
+        // The +0.5 provides rounding to nearest integer zone
         int j = (int)Math.Floor((59 * lat0) - (60 * lat1) + 0.5);
 
-        // Compute latitudes for even and odd frames
-        double rlat0 = airDlat0 * (CprMod(j, 60) + lat0);
-        double rlat1 = airDlat1 * (CprMod(j, 59) + lat1);
+        // Compute actual latitudes for both frames
+        // rlat0/rlat1 = (zone index) * (zone width) + (fractional position within zone)
+        // CprMod ensures zone index wraps correctly (handles Southern Hemisphere)
+        double rlat0 = airDlat0 * (CprMod(j, 60) + lat0);  // Even frame latitude
+        double rlat1 = airDlat1 * (CprMod(j, 59) + lat1);  // Odd frame latitude
 
-        // Normalize to [-90, +90]
+        // Normalize latitude to standard range [-90°, +90°]
+        // CPR can produce values 0-360, need to wrap Southern Hemisphere (270-360 → -90-0)
         if (rlat0 >= 270)
         {
             rlat0 -= 360;
@@ -143,33 +162,59 @@ public sealed class CprDecoder
             rlat1 -= 360;
         }
 
-        // Validation: Both latitudes must be in valid range
+        // Validation: Both latitudes must be in valid geographic range
+        // If outside valid range, frame pair is corrupted or incorrectly paired
         if (rlat0 < -90 || rlat0 > 90 || rlat1 < -90 || rlat1 > 90)
         {
-            return null;
+            return null;  // Invalid latitude, reject decode
         }
 
-        // Validation: Same latitude zone (NL must match)
+        // Validation: Both frames must be in same latitude zone (NL function)
+        // NL (Number of Longitude zones) changes with latitude due to Earth's curvature
+        // If even/odd frames have different NL, they can't be from the same position
+        // This catches aircraft crossing latitude zone boundaries during frame pair
         if (CprNL(rlat0) != CprNL(rlat1))
         {
-            return null;
+            return null;  // Zone transition, wait for consistent pair
         }
 
-        // Choose latitude based on frame type
+        // Choose final latitude based on which frame is newer
+        // Newer frame better represents current aircraft position
         double rlat = useOddFrame ? rlat1 : rlat0;
 
-        // Calculate longitude
-        double lon0 = evenCprLon / 131072.0;
-        double lon1 = oddCprLon / 131072.0;
+        // === STEP 2: LONGITUDE DECODING ===
+        // Longitude is more complex because number of zones varies with latitude
+        // Near equator: 59 zones (~6.1° wide), near poles: fewer zones (wider)
+        // This accounts for meridian convergence (longitude lines meet at poles)
 
+        // Normalize CPR longitude values to fractional [0, 1)
+        double lon0 = evenCprLon / 131072.0;  // Even frame longitude (fraction)
+        double lon1 = oddCprLon / 131072.0;   // Odd frame longitude (fraction)
+
+        // Get number of longitude zones at computed latitude
+        // nl (Number of Longitude zones) depends on latitude due to Earth's curvature
+        // At equator: nl=59, at poles: nl=1
         int nl = CprNL(rlat);
+
+        // Get number of longitude zones for selected frame type (even or odd)
+        // ni is used to determine which of the nl zones we're in
+        // Math.Max ensures ni is at least 1 to avoid division by zero at poles
         int ni = Math.Max(CprN(rlat, useOddFrame ? 1 : 0), 1);
+
+        // Calculate longitude zone index (m) by comparing even/odd frame positions
+        // Similar to latitude index j, but accounts for varying zone counts
+        // This resolves which of the nl overlapping longitude zones the aircraft is in
         int m = (int)Math.Floor((lon0 * (nl - 1)) - (lon1 * nl) + 0.5);
 
+        // Compute actual longitude
+        // rlon = (zone width) * (zone index + fractional position within zone)
+        // CprDlon calculates zone width based on latitude and frame type
+        // CprMod ensures zone index wraps correctly (handles Eastern/Western hemispheres)
         double rlon = CprDlon(rlat, useOddFrame ? 1 : 0) *
                       (CprMod(m, ni) + (useOddFrame ? lon1 : lon0));
 
-        // Normalize to [-180, +180]
+        // Normalize longitude to standard range [-180°, +180°]
+        // CPR can produce values 0-360, need to wrap Western Hemisphere (180-360 → -180-0)
         if (rlon > 180)
         {
             rlon -= 360;
@@ -183,44 +228,110 @@ public sealed class CprDecoder
     /// Returns the number of longitude zones (1-59) based on latitude.
     /// Used in CPR decoding to handle varying longitude zone widths.
     /// </summary>
+    /// <remarks>
+    /// The NL function accounts for meridian convergence (longitude lines meet at poles).
+    /// At the equator, longitude zones are narrow (59 zones, ~6.1° each).
+    /// Near the poles, longitude zones are wider (fewer zones, eventually 1 zone at pole).
+    /// This table is defined by ICAO Annex 10 and must match exactly for correct decoding.
+    /// </remarks>
     /// <param name="lat">Latitude in decimal degrees (-90 to +90).</param>
     /// <returns>Number of longitude zones (1 at poles, 59 at the equator).</returns>
     private static int CprNL(double lat)
     {
         double absLat = Math.Abs(lat);
 
-        if (absLat >= 87)
+        return absLat switch
         {
-            return 1;
-        }
-
-        // Lookup in precomputed table
-        int index = (int)Math.Floor(absLat);
-        if (index >= 0 && index < NlTable.Length)
-        {
-            return NlTable[index];
-        }
-
-        return 59;  // Default for equator
+            < 10.47047130 => 59,
+            < 14.82817437 => 58,
+            < 18.18626357 => 57,
+            < 21.02939493 => 56,
+            < 23.54504487 => 55,
+            < 25.82924707 => 54,
+            < 27.93898710 => 53,
+            < 29.91135686 => 52,
+            < 31.77209708 => 51,
+            < 33.53993436 => 50,
+            < 35.22899598 => 49,
+            < 36.85025108 => 48,
+            < 38.41241892 => 47,
+            < 39.92256684 => 46,
+            < 41.38651832 => 45,
+            < 42.80914012 => 44,
+            < 44.19454951 => 43,
+            < 45.54626723 => 42,
+            < 46.86733252 => 41,
+            < 48.16039128 => 40,
+            < 49.42776439 => 39,
+            < 50.67150166 => 38,
+            < 51.89342469 => 37,
+            < 53.09516153 => 36,
+            < 54.27817472 => 35,
+            < 55.44378444 => 34,
+            < 56.59318756 => 33,
+            < 57.72747354 => 32,
+            < 58.84763776 => 31,
+            < 59.95459277 => 30,
+            < 61.04917774 => 29,
+            < 62.13216659 => 28,
+            < 63.20427479 => 27,
+            < 64.26616523 => 26,
+            < 65.31845310 => 25,
+            < 66.36171008 => 24,
+            < 67.39646774 => 23,
+            < 68.42322022 => 22,
+            < 69.44242631 => 21,
+            < 70.45451075 => 20,
+            < 71.45986473 => 19,
+            < 72.45884545 => 18,
+            < 73.45177442 => 17,
+            < 74.43893416 => 16,
+            < 75.42056257 => 15,
+            < 76.39684391 => 14,
+            < 77.36789461 => 13,
+            < 78.33374083 => 12,
+            < 79.29428225 => 11,
+            < 80.24923213 => 10,
+            < 81.19801349 => 9,
+            < 82.13956981 => 8,
+            < 83.07199445 => 7,
+            < 83.99173563 => 6,
+            < 84.89166191 => 5,
+            < 85.75541621 => 4,
+            < 86.53536998 => 3,
+            < 87.00000000 => 2,
+            _ => 1
+        };
     }
 
     /// <summary>
     /// N function: Number of longitude zones for even or odd frame.
     /// Calculates NL(lat) for even frames, NL(lat)-1 for odd frames.
     /// </summary>
+    /// <remarks>
+    /// Even frames use NL(lat) zones, odd frames use NL(lat)-1 zones.
+    /// This difference creates the overlapping grid pattern needed for CPR disambiguation.
+    /// The minimum return value is 1 to prevent division by zero at polar latitudes.
+    /// </remarks>
     /// <param name="lat">Latitude in decimal degrees (-90 to +90).</param>
     /// <param name="fflag">Format flag (0 = even frame, 1 = odd frame).</param>
-    /// <returns>Number of longitude zones for the given frame type.</returns>
+    /// <returns>Number of longitude zones for the given frame type (minimum 1).</returns>
     private static int CprN(double lat, int fflag)
     {
         int nl = CprNL(lat) - (fflag == 1 ? 1 : 0);
-        return nl < 1 ? 1 : nl;
+        return nl < 1 ? 1 : nl;  // Ensure at least 1 zone (prevents division by zero)
     }
 
     /// <summary>
     /// Dlon function: Longitude zone width at given latitude.
     /// Calculates the width (in degrees) of each longitude zone.
     /// </summary>
+    /// <remarks>
+    /// Zone width = 360° / number of zones at this latitude.
+    /// Near equator with 59 zones: ~6.1° per zone.
+    /// Near poles with fewer zones: wider zones (e.g., 10 zones = 36° each).
+    /// At pole with 1 zone: 360° (entire circumference is one zone).
+    /// </remarks>
     /// <param name="lat">Latitude in decimal degrees (-90 to +90).</param>
     /// <param name="fflag">Format flag (0 = even frame, 1 = odd frame).</param>
     /// <returns>Longitude zone width in degrees.</returns>

@@ -19,9 +19,6 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Position">Decoded geographic position (null if not yet decoded).</param>
 /// <param name="Altitude">Decoded altitude (null if not available).</param>
-/// <param name="CprLat">CPR-encoded latitude (17 bits, 0-131071).</param>
-/// <param name="CprLon">CPR-encoded longitude (17 bits, 0-131071).</param>
-/// <param name="CprFormat">CPR format (even or odd frame for position decoding).</param>
 /// <param name="SurveillanceStatus">Surveillance status (alert and SPI conditions).</param>
 public sealed record AirbornePosition(
     string IcaoAddress,
@@ -31,7 +28,4 @@ public sealed record AirbornePosition(
     bool WasCorrected,
     GeographicCoordinate? Position,
     Altitude? Altitude,
-    int CprLat,
-    int CprLon,
-    CprFormat CprFormat,
     SurveillanceStatus SurveillanceStatus) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

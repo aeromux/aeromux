@@ -39,7 +39,4 @@ public sealed record SurfacePosition(
     GeographicCoordinate? Position,
     int? GroundSpeed,
     double? GroundTrack,
-    int CprLatitude,
-    int CprLongitude,
-    CprFormat CprFormat,
     SurfaceMovement Movement) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
