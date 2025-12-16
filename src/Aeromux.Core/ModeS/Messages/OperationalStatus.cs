@@ -21,7 +21,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <summary>
 /// Operational status message (DF 17/18, TC 31).
 /// Contains aircraft version, capabilities, and accuracy parameters.
-/// Priority 3: Implements essential fields (version, NACp, NICbaro, SIL).
+/// Priority 3: Implements essential fields (version, NACp, NACv, NICbaro, SIL).
 /// </summary>
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
@@ -31,6 +31,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="Subtype">Airborne or surface operational status.</param>
 /// <param name="Version">ADS-B protocol version (DO-260, DO-260A, DO-260B, etc.).</param>
 /// <param name="NACp">Navigation Accuracy Category for Position (horizontal accuracy).</param>
+/// <param name="NACv">Navigation Accuracy Category for Velocity (velocity accuracy, 0-7 scale).</param>
 /// <param name="NICBaroAltitudeIntegrity">Barometric altitude integrity flag (cross-checked with GNSS).</param>
 /// <param name="SIL">Surveillance Integrity Level (probability of position error).</param>
 public sealed record OperationalStatus(
@@ -42,5 +43,6 @@ public sealed record OperationalStatus(
     OperationalStatusSubtype Subtype,
     AdsbVersion Version,
     NavigationAccuracyCategory NACp,
+    int NACv,
     bool NICBaroAltitudeIntegrity,
     SurveillanceIntegrityLevel SIL) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

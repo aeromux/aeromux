@@ -66,17 +66,21 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         // Update Position data quality metrics from TC 31
         // NACp: Navigation Accuracy Category for Position (horizontal GPS accuracy)
         //       Scale 0-11: 11=<3m, 10=<10m, 9=<30m, 8=<92.6m, ..., 0=unknown
+        // NACv: Navigation Accuracy Category for Velocity (velocity accuracy)
+        //       Scale 0-7: 0=unknown, 1=<10 m/s, 2=<3 m/s, 3=<1 m/s, 4=<0.3 m/s
         // NICbaro: Navigation Integrity Category for Barometric altitude
         //          True if barometric altitude is cross-checked with GNSS
         // SIL: Source Integrity Level (probability of error containment)
         //      Scale 0-3: 3=<10^-7 per hour (highest), 2=<10^-5, 1=<10^-3, 0=unknown
         if (position.NACp != msg.NACp ||
+            position.NACv != msg.NACv ||
             position.NICbaro != msg.NICBaroAltitudeIntegrity ||
             position.SIL != msg.SIL)
         {
             position = position with
             {
                 NACp = msg.NACp,
+                NACv = msg.NACv,
                 NICbaro = msg.NICBaroAltitudeIntegrity,
                 SIL = msg.SIL
             };

@@ -498,6 +498,10 @@ public sealed partial class MessageParser
         int nacpRaw = ExtractBits(frame.Data, 59, 4);
         var nacp = (NavigationAccuracyCategory)nacpRaw;  // All values 0-15 are defined
 
+        // NACv (Navigation Accuracy Category - Velocity, bits 43-45, 3 bits)
+        // 0 = unknown, 1 = <10 m/s, 2 = <3 m/s, 3 = <1 m/s, 4 = <0.3 m/s
+        int nacv = ExtractBits(frame.Data, 43, 3);
+
         // NICbaro (NIC barometric altitude integrity, bit 63, 1 bit)
         int nicBaroRaw = ExtractBits(frame.Data, 63, 1);
         bool nicBaro = nicBaroRaw == 1;
@@ -515,6 +519,7 @@ public sealed partial class MessageParser
             subtype,
             version,
             nacp,
+            nacv,
             nicBaro,
             sil);
     }

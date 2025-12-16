@@ -88,6 +88,15 @@ public sealed record TrackedPosition
     public SurveillanceIntegrityLevel? SIL { get; init; }
 
     /// <summary>
+    /// Navigation Accuracy Category for Velocity (TC 31 Operational Status).
+    /// Indicates velocity accuracy: 0-7 scale (0 = unknown, 1 = &lt;10 m/s, 2 = &lt;3 m/s, 3 = &lt;1 m/s, 4 = &lt;0.3 m/s).
+    /// Extracted from OperationalStatus messages (TC 31) and preserved across updates.
+    /// Values are retained until a new TC 31 message provides updated accuracy information.
+    /// Null if no TC 31 message received yet or NACv not provided.
+    /// </summary>
+    public int? NACv { get; init; }
+
+    /// <summary>
     /// Timestamp of last position update (when Coordinate or altitude was last set).
     /// Null if no position data received yet.
     /// Used for calculating "seen_pos" (seconds since last position update).

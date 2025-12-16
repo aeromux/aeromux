@@ -592,11 +592,11 @@ public sealed partial class MessageParser
         int rhStatus = ExtractBits(mb, 39, 1);
         int rhRaw = ExtractBits(mb, 40, 12);
 
-        int? turbulence = turbStatus == 1 ? turb : null;
-        int? windShear = wsStatus == 1 ? ws : null;
-        int? microburst = mbStatus == 1 ? mburst : null;
-        int? icing = iceStatus == 1 ? ice : null;
-        int? wakeVortex = wvStatus == 1 ? wv : null;
+        Severity? turbulence = turbStatus == 1 ? (Severity)turb : null;
+        Severity? windShear = wsStatus == 1 ? (Severity)ws : null;
+        Severity? microburst = mbStatus == 1 ? (Severity)mburst : null;
+        Severity? icing = iceStatus == 1 ? (Severity)ice : null;
+        Severity? wakeVortex = wvStatus == 1 ? (Severity)wv : null;
 
         double? temp = null;
         if (tempStatus == 1)
@@ -665,6 +665,8 @@ public sealed partial class MessageParser
         int trackRaw = ExtractBits(mb, 13, 11);
         int gsStatus = ExtractBits(mb, 24, 1);
         int gsRaw = ExtractBits(mb, 25, 10);
+        int trackRateStatus = ExtractBits(mb, 35, 1);
+        int trackRateRaw = ExtractBits(mb, 36, 10);
         int tasStatus = ExtractBits(mb, 46, 1);
         int tasRaw = ExtractBits(mb, 47, 10);
 
@@ -707,6 +709,25 @@ public sealed partial class MessageParser
             }
         }
 
+        // Track Rate (bits 35-45): Rate of change of ground track angle
+        // Added in Phase 7 Extension - previously bits 35-45 were skipped
+        double? trackRate = null;
+        if (trackRateStatus == 1)
+        {
+            // Track rate is signed 10-bit value with 1/4 degree/second resolution
+            // Bit 36 is the sign bit, bits 37-45 are the magnitude
+            int sign = (trackRateRaw & 0x200) != 0 ? -1 : 1;
+            int value = trackRateRaw & 0x1FF;
+            trackRate = sign * value * 0.25; // 1/4 degree/second (0.25°/s) resolution
+
+            // Range validation: typical aircraft turn rates are within ±10 deg/s
+            // Standard rate turn (3°/s) is most common, but military aircraft can exceed this
+            if (Math.Abs(trackRate.Value) > 10)
+            {
+                return null; // Reject unreasonable values (likely corrupted data)
+            }
+        }
+
         int? tas = null;
         if (tasStatus == 1)
         {
@@ -718,12 +739,12 @@ public sealed partial class MessageParser
         }
 
         // At least one field must be valid
-        if (roll == null && track == null && gs == null && tas == null)
+        if (roll == null && track == null && gs == null && trackRate == null && tas == null)
         {
             return null;
         }
 
-        return new Bds50TrackAndTurn(roll, track, gs, tas);
+        return new Bds50TrackAndTurn(roll, track, gs, tas, trackRate);
     }
 
     /// <summary>

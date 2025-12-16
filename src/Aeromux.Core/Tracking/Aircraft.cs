@@ -71,6 +71,27 @@ public sealed record Aircraft
     public TrackedHistory History { get; init; } = new();
 
     /// <summary>
+    /// Aircraft autopilot/FMS intent information (selected altitude, heading, modes).
+    /// Optional - may be null until first TC 29 or BDS 4,0 message received.
+    /// Sources: TC 29 (Target State and Status), BDS 4,0 (Selected Vertical Intention).
+    /// </summary>
+    public TrackedAutopilot? Autopilot { get; init; }
+
+    /// <summary>
+    /// Aircraft flight dynamics (roll, magnetic heading, vertical rates, mach, track rate).
+    /// Optional - may be null until first BDS 5,0/5,3/6,0 message received.
+    /// Sources: BDS 5,0 (Track and Turn), BDS 5,3/6,0 (Air-Referenced State), BDS 6,0 (Heading and Speed).
+    /// </summary>
+    public TrackedFlightDynamics? FlightDynamics { get; init; }
+
+    /// <summary>
+    /// Aircraft meteorological information (wind, temperature, pressure, hazards).
+    /// Optional - may be null until first BDS 4,4 or BDS 4,5 message received.
+    /// Sources: BDS 4,4 (Meteorological Routine), BDS 4,5 (Meteorological Hazard).
+    /// </summary>
+    public TrackedMeteo? Meteo { get; init; }
+
+    /// <summary>
     /// Applies an update from a processed frame to create a new aircraft state.
     /// NOTE: This method is a placeholder and currently not used.
     /// Actual updates are performed by AircraftStateTracker.ApplyUpdate() instead.

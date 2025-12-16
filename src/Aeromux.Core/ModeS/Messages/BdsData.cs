@@ -1,3 +1,5 @@
+using Aeromux.Core.ModeS.Enums;
+
 namespace Aeromux.Core.ModeS.Messages;
 
 /// <summary>
@@ -62,36 +64,38 @@ public sealed record Bds44MeteorologicalRoutine(
 /// <summary>
 /// BDS 4,5: Meteorological hazard report (turbulence, wind shear, icing, etc).
 /// </summary>
-/// <param name="Turbulence">Turbulence severity (0=NIL, 1=Light, 2=Moderate, 3=Severe, null if not available).</param>
-/// <param name="WindShear">Wind shear severity (0-3, null if not available).</param>
-/// <param name="Microburst">Microburst severity (0-3, null if not available).</param>
-/// <param name="Icing">Icing severity (0-3, null if not available).</param>
-/// <param name="WakeVortex">Wake vortex severity (0-3, null if not available).</param>
+/// <param name="Turbulence">Turbulence severity level (Nil, Light, Moderate, Severe, null if not available).</param>
+/// <param name="WindShear">Wind shear severity level (Nil, Light, Moderate, Severe, null if not available).</param>
+/// <param name="Microburst">Microburst severity level (Nil, Light, Moderate, Severe, null if not available).</param>
+/// <param name="Icing">Icing severity level (Nil, Light, Moderate, Severe, null if not available).</param>
+/// <param name="WakeVortex">Wake vortex severity level (Nil, Light, Moderate, Severe, null if not available).</param>
 /// <param name="StaticAirTemperature">Static air temperature in °C (null if not available).</param>
 /// <param name="Pressure">Average static pressure in hPa (null if not available).</param>
 /// <param name="RadioHeight">Radio height in feet (null if not available).</param>
 public sealed record Bds45MeteorologicalHazard(
-    int? Turbulence,
-    int? WindShear,
-    int? Microburst,
-    int? Icing,
-    int? WakeVortex,
+    Severity? Turbulence,
+    Severity? WindShear,
+    Severity? Microburst,
+    Severity? Icing,
+    Severity? WakeVortex,
     double? StaticAirTemperature,
     double? Pressure,
     int? RadioHeight) : BdsData;
 
 /// <summary>
-/// BDS 5,0: Track and turn report (roll, track, ground speed, TAS).
+/// BDS 5,0: Track and turn report (roll, track, ground speed, TAS, track rate).
 /// </summary>
 /// <param name="RollAngle">Roll angle in degrees (null if not available).</param>
 /// <param name="TrackAngle">True track angle in degrees (null if not available).</param>
 /// <param name="GroundSpeed">Ground speed in knots (null if not available).</param>
 /// <param name="TrueAirspeed">True airspeed in knots (null if not available).</param>
+/// <param name="TrackRate">Track angle rate (rate of turn) in degrees per second (null if not available).</param>
 public sealed record Bds50TrackAndTurn(
     double? RollAngle,
     double? TrackAngle,
     int? GroundSpeed,
-    int? TrueAirspeed) : BdsData;
+    int? TrueAirspeed,
+    double? TrackRate) : BdsData;
 
 /// <summary>
 /// BDS 5,3: Air-referenced state vector (magnetic heading, IAS, Mach, TAS).

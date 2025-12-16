@@ -49,8 +49,15 @@ public sealed class TrackingHandlerRegistry
         // Velocity handler
         Register(new AirborneVelocityHandler());
 
-        // Operational status handler
+        // Operational status handler (TC 31)
         Register(new OperationalStatusHandler());
+
+        // Target state and status handler (TC 29)
+        Register(new TargetStateAndStatusHandler());
+
+        // Comm-B handlers (DF 20, DF 21)
+        Register(new CommBAltitudeReplyHandler());
+        Register(new CommBIdentityReplyHandler());
 
         // Surveillance reply handlers
         Register(new SurveillanceAltitudeReplyHandler());
