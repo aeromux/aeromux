@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -21,7 +37,7 @@ public sealed partial class MessageParser
     /// DF 20 structure:
     /// - Bits 6-8: Flight Status (FS)
     /// - Bits 9-13: Downlink Request (DR)
-    /// - Bits 14-18: Utility Message (UM)
+    /// - Bits 14-19: Utility Message (UM)
     /// - Bits 20-32: Altitude Code (AC)
     /// - Bits 33-88: Message, Comm-B (MB) - 56-bit BDS register data
     ///
@@ -29,8 +45,8 @@ public sealed partial class MessageParser
     /// </remarks>
     private ModeSMessage? ParseCommBAltitudeReply(ValidatedFrame frame)
     {
-        // Extract Flight Status (FS) - bits 6-8 (byte 0, bits 0-2)
-        int flightStatusRaw = frame.Data[0] & 0x07;
+        // Extract Flight Status (FS) - bits 6-8 (3 bits)
+        int flightStatusRaw = ExtractBits(frame.Data, 6, 3);
         if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 20 from {Icao}",
@@ -41,13 +57,13 @@ public sealed partial class MessageParser
         var flightStatus = (FlightStatus)flightStatusRaw;
 
         // Extract Downlink Request (DR) - bits 9-13 (5 bits)
-        int dr = ((frame.Data[1] & 0x7C) >> 2);
+        int dr = ExtractBits(frame.Data, 9, 5);
 
-        // Extract Utility Message (UM) - bits 14-18 (byte 1, bits 1-5 + byte 2, bit 7)
-        int um = ((frame.Data[1] & 0x03) << 4) | ((frame.Data[2] & 0xF0) >> 4);
+        // Extract Utility Message (UM) - bits 14-19 (6 bits)
+        int um = ExtractBits(frame.Data, 14, 6);
 
         // Extract Altitude Code (AC) - bits 20-32 (13 bits)
-        int altitudeCode = ((frame.Data[2] & 0x0F) << 9) | (frame.Data[3] << 1) | ((frame.Data[4] & 0x80) >> 7);
+        int altitudeCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode altitude (null if invalid or unavailable)
         Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
@@ -89,7 +105,7 @@ public sealed partial class MessageParser
     /// DF 21 structure:
     /// - Bits 6-8: Flight Status (FS)
     /// - Bits 9-13: Downlink Request (DR)
-    /// - Bits 14-18: Utility Message (UM)
+    /// - Bits 14-19: Utility Message (UM)
     /// - Bits 20-32: Identity Code (ID) - squawk code
     /// - Bits 33-88: Message, Comm-B (MB) - 56-bit BDS register data
     ///
@@ -97,8 +113,8 @@ public sealed partial class MessageParser
     /// </remarks>
     private ModeSMessage? ParseCommBIdentityReply(ValidatedFrame frame)
     {
-        // Extract Flight Status (FS) - bits 6-8 (byte 0, bits 0-2)
-        int flightStatusRaw = frame.Data[0] & 0x07;
+        // Extract Flight Status (FS) - bits 6-8 (3 bits)
+        int flightStatusRaw = ExtractBits(frame.Data, 6, 3);
         if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 21 from {Icao}",
@@ -109,13 +125,13 @@ public sealed partial class MessageParser
         var flightStatus = (FlightStatus)flightStatusRaw;
 
         // Extract Downlink Request (DR) - bits 9-13 (5 bits)
-        int dr = ((frame.Data[1] & 0x7C) >> 2);
+        int dr = ExtractBits(frame.Data, 9, 5);
 
-        // Extract Utility Message (UM) - bits 14-18 (byte 1, bits 1-5 + byte 2, bit 7)
-        int um = ((frame.Data[1] & 0x03) << 4) | ((frame.Data[2] & 0xF0) >> 4);
+        // Extract Utility Message (UM) - bits 14-19 (6 bits)
+        int um = ExtractBits(frame.Data, 14, 6);
 
         // Extract Identity Code (ID) - bits 20-32 (13 bits)
-        int identityCode = ((frame.Data[2] & 0x0F) << 9) | (frame.Data[3] << 1) | ((frame.Data[4] & 0x80) >> 7);
+        int identityCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode squawk code (4-digit octal string)
         string squawkCode = DecodeSquawkCode(identityCode);
@@ -710,7 +726,6 @@ public sealed partial class MessageParser
         }
 
         // Track Rate (bits 35-45): Rate of change of ground track angle
-        // Added in Phase 7 Extension - previously bits 35-45 were skipped
         double? trackRate = null;
         if (trackRateStatus == 1)
         {

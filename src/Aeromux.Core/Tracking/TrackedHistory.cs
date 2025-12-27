@@ -20,7 +20,7 @@ namespace Aeromux.Core.Tracking;
 /// Aircraft historical data group.
 /// Contains three circular buffers for time-series position, altitude, and velocity tracking.
 /// Each buffer: configurable max size (default 1000 entries), ~96 KB per aircraft total.
-/// Used for trail visualization (Phase 9), time-series graphs, and performance analysis.
+/// Used for trail visualization (planned to be introduced later), time-series graphs, and performance analysis.
 /// Buffers may be null if history tracking disabled in configuration to save memory.
 /// </summary>
 /// <remarks>

@@ -81,6 +81,7 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
             Track = track,                                             // Ground track angle (subtype 1-2 only)
             VerticalRate = msg.VerticalRate,                           // Climb/descent rate
             VelocitySubtype = msg.Subtype,                             // Velocity source and speed range
+            NACv = msg.NACv,                                           // Navigation accuracy category for velocity
             LastUpdate = msg.Velocity != null ? timestamp : null       // Update timestamp only if velocity present
         };
 

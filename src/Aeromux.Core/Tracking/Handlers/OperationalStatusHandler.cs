@@ -20,28 +20,36 @@ using Aeromux.Core.ModeS.Messages;
 namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
-/// Handles OperationalStatus messages (TC 31).
+/// Handles OperationalStatus messages (TC 31, Version 0/1/2).
 /// Updates aircraft capability version and position data quality metrics.
 /// </summary>
 /// <remarks>
 /// <para><strong>TC 31 provides equipment capability and data quality information:</strong></para>
 /// <list type="bullet">
-/// <item>ADS-B Version: Equipment capability level (DO-260, DO-260A, DO-260B, etc.)</item>
+/// <item>ADS-B Version: Equipment capability level (DO-260, DO-260A, DO-260B)</item>
+/// <item>Capability Class (CC): Aircraft capabilities (TCAS, ADS-B receive, ARV, TS, UAT, etc.)</item>
+/// <item>Operational Mode (OM): Current operational state (TCAS RA, IDENT, ATC services, antenna config, SDA)</item>
 /// <item>NACp (Navigation Accuracy Category - Position): GPS horizontal accuracy indicator</item>
-/// <item>NICbaro: Barometric altitude cross-checked with GNSS (integrity flag)</item>
+/// <item>NIC Supplement-A: For position accuracy determination with CPR</item>
+/// <item>GVA (Geometric Vertical Accuracy): GNSS vertical accuracy (Version 1+)</item>
 /// <item>SIL (Source Integrity Level): Probability of position error exceeding containment radius</item>
+/// <item>NICbaro (Barometric Altitude Integrity Code): Cross-check status (Version 1+)</item>
+/// <item>HRD (Horizontal Reference Direction): True North vs Magnetic North</item>
+/// <item>SIL Supplement: Per-hour vs per-sample basis (Version 2)</item>
 /// </list>
 /// <para><strong>Updated fields:</strong></para>
 /// <list type="bullet">
-/// <item>Status.Version: ADS-B protocol version (0=DO-260, 1=DO-260A, 2=DO-260B/C)</item>
+/// <item>Status.Version: ADS-B protocol version (0=DO-260, 1=DO-260A, 2=DO-260B)</item>
 /// <item>Position.NACp: Horizontal position accuracy (11=&lt;3m, 10=&lt;10m, 9=&lt;30m, down to 0=unknown)</item>
-/// <item>Position.NICbaro: Barometric altitude integrity verified flag</item>
-/// <item>Position.SIL: Surveillance integrity level (3=highest &lt;10^-7 per hour, down to 0)</item>
+/// <item>Position.NICbaro: Barometric altitude integrity cross-check status</item>
+/// <item>Position.SIL: Source integrity level (3=highest &lt;10^-7 per hour, down to 0)</item>
 /// </list>
 /// <para>
 /// These metrics are used for data quality assessment, UI confidence indicators, and filtering low-quality data.
 /// TC 31 messages are transmitted less frequently than position/velocity updates (typically every 5-10 seconds).
 /// </para>
+/// <para><strong>Note:</strong> NACv (velocity accuracy) is NOT in TC 31; it comes from TC 19 (Airborne Velocity).</para>
+/// <para><strong>Reference:</strong> https://mode-s.org/1090mhz/content/ads-b/6-operation-status.html</para>
 /// </remarks>
 public sealed class OperationalStatusHandler : ITrackingHandler
 {
@@ -66,22 +74,26 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         // Update Position data quality metrics from TC 31
         // NACp: Navigation Accuracy Category for Position (horizontal GPS accuracy)
         //       Scale 0-11: 11=<3m, 10=<10m, 9=<30m, 8=<92.6m, ..., 0=unknown
-        // NACv: Navigation Accuracy Category for Velocity (velocity accuracy)
-        //       Scale 0-7: 0=unknown, 1=<10 m/s, 2=<3 m/s, 3=<1 m/s, 4=<0.3 m/s
-        // NICbaro: Navigation Integrity Category for Barometric altitude
-        //          True if barometric altitude is cross-checked with GNSS
-        // SIL: Source Integrity Level (probability of error containment)
+        // NICbaro: Barometric Altitude Integrity Code (1-bit, indicates cross-check status)
+        //          Enum: NotCrossChecked (0) or CrossCheckedOrNonGilham (1)
+        //          Converted to bool: true if cross-checked, false if not, null if unavailable
+        // SIL: Source Integrity Level (probability of error containment, bits 83-84)
         //      Scale 0-3: 3=<10^-7 per hour (highest), 2=<10^-5, 1=<10^-3, 0=unknown
+        // Note: NACv (velocity accuracy) is NOT in TC 31; it comes from TC 19 (Airborne Velocity)
+
+        // Convert NICbaro from enum to bool for storage
+        bool? nicBaroValue = msg.NICbaro.HasValue
+            ? msg.NICbaro.Value == ModeS.Enums.BarometricAltitudeIntegrityCode.CrossCheckedOrNonGilham
+            : null;
+
         if (position.NACp != msg.NACp ||
-            position.NACv != msg.NACv ||
-            position.NICbaro != msg.NICBaroAltitudeIntegrity ||
+            position.NICbaro != nicBaroValue ||
             position.SIL != msg.SIL)
         {
             position = position with
             {
                 NACp = msg.NACp,
-                NACv = msg.NACv,
-                NICbaro = msg.NICBaroAltitudeIntegrity,
+                NICbaro = nicBaroValue,
                 SIL = msg.SIL
             };
             changedFields.Add(nameof(Aircraft.Position));

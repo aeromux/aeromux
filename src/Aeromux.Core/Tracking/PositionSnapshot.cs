@@ -30,5 +30,5 @@ namespace Aeromux.Core.Tracking;
 public sealed record PositionSnapshot(
     DateTime Timestamp,
     GeographicCoordinate Position,
-    NavigationAccuracyCategory? NACp
+    NavigationAccuracyCategoryPosition? NACp
 );

@@ -34,7 +34,7 @@ namespace Aeromux.Infrastructure.Streaming;
 /// RTL-SDR → IQ Samples → Demodulator → PreambleDetector → ValidatedFrameFactory → ValidatedFrame
 /// → MessageParser → ProcessedFrame (frame + parsed message + timestamp)
 ///
-/// BROADCAST ARCHITECTURE (Phase 6):
+/// BROADCAST ARCHITECTURE:
 /// Supports multiple concurrent consumers (e.g., 3 TcpBroadcasters for Beast/JSON/SBS).
 /// Each Subscribe() call creates an independent channel that receives ALL ProcessedFrames.
 /// Internal broadcaster task fans out each frame to all registered subscribers.

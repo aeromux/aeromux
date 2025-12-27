@@ -60,11 +60,9 @@ public class DaemonSettings : GlobalSettings
 /// and broadcasts data to multiple clients via TCP (Beast/JSON/SBS formats).
 /// </summary>
 /// <remarks>
-/// Phase 1-5 (Complete): Device management, demodulation, decoding, ICAO confidence tracking.
-/// Phase 6 (Complete): TCP broadcasting (Beast/JSON/SBS), multi-device support, network configuration.
-/// Phase 7 (Complete): Aircraft state tracking infrastructure (ready for Phase 8 enhanced output).
-/// Phase 8 (Planned): Enhanced JSON/SBS output with full aircraft state.
-/// Phase 9 (Planned): HTTP API and web interface.
+/// Device management, demodulation, decoding, ICAO confidence tracking.
+/// TCP broadcasting (Beast/JSON/SBS), multi-device support, network configuration.
+/// Aircraft state tracking infrastructure.
 /// </remarks>
 public class DaemonCommand : AsyncCommand<DaemonSettings>
 {
@@ -129,10 +127,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             await deviceStream.StartAsync(cancellationToken);
             Log.Information("Device stream started");
 
-            // === Phase 7: Aircraft State Tracking ===
             // Create centralized aircraft state tracker for all devices
             // Tracks aircraft across multiple RTL-SDR devices (automatic deduplication by ICAO)
-            // Provides foundation for Phase 8 (enhanced JSON/SBS) and Phase 9 (HTTP API)
             var aircraftTracker = new AircraftStateTracker(config.Tracking!);
 
             // Subscribe to aircraft lifecycle events for logging

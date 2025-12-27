@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -6,11 +22,78 @@ using Serilog;
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
-/// MessageParser partial class: ACAS coordination messages (DF 16).
-/// Handles long air-air surveillance with middle ground MV field decoding.
+/// MessageParser partial class: ACAS coordination messages (DF 0, DF 16).
+/// Handles short and long air-air surveillance with ACAS field decoding.
 /// </summary>
 public sealed partial class MessageParser
 {
+    /// <summary>
+    /// Parses short air-air surveillance from Downlink Format 0.
+    /// ACAS coordination message containing altitude and ACAS status fields.
+    /// </summary>
+    /// <param name="frame">Validated frame to parse.</param>
+    /// <returns>Short air-air surveillance message with ACAS data, or null if invalid.</returns>
+    /// <remarks>
+    /// DF 0 structure (56 bits total, per ICAO Annex 10 Vol IV):
+    /// - Bits 1-5: DF (Downlink Format)
+    /// - Bit 6: Vertical Status (VS)
+    /// - Bit 7: Cross-link Capability (CC)
+    /// - Bit 8: Reserved
+    /// - Bits 9-11: Sensitivity Level (SL)
+    /// - Bits 12-13: Reserved
+    /// - Bits 14-17: Reply Information (RI)
+    /// - Bits 18-19: Reserved
+    /// - Bits 20-32: Altitude Code (AC)
+    /// - Bits 33-56: Address Parity (AP)
+    ///
+    /// DF 0 is used for ACAS coordination between aircraft (aircraft-to-aircraft).
+    /// Unlike DF 4 (ground surveillance), DF 0 contains ACAS-specific fields (VS, CC, SL, RI).
+    /// </remarks>
+    private ModeSMessage? ParseShortAirAirSurveillance(ValidatedFrame frame)
+    {
+        // Extract Vertical Status (VS) - bit 6
+        VerticalStatus verticalStatus = ExtractBits(frame.Data, 6, 1) == 0
+            ? VerticalStatus.Airborne
+            : VerticalStatus.Ground;
+
+        // Extract Cross-link Capability (CC) - bit 7
+        bool crossLinkCapability = ExtractBits(frame.Data, 7, 1) != 0;
+
+        // Extract Sensitivity Level (SL) - bits 9-11 (3 bits)
+        int sensitivityLevel = ExtractBits(frame.Data, 9, 3);
+
+        // Extract Reply Information (RI) - bits 14-17 (4 bits)
+        int riRaw = ExtractBits(frame.Data, 14, 4);
+
+        // Validate RI field (only 0, 2, 3, 4 are valid)
+        if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
+        {
+            Log.Debug("Invalid ACAS reply information {RI} in DF 0 from {Icao}",
+                riRaw, frame.IcaoAddress);
+            return null;
+        }
+
+        var replyInformation = (AcasReplyInformation)riRaw;
+
+        // Extract Altitude Code (AC) - bits 20-32 (13 bits)
+        int altitudeCode = ExtractBits(frame.Data, 20, 13);
+
+        // Decode altitude (null if invalid or unavailable)
+        Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
+
+        return new ShortAirAirSurveillance(
+            frame.IcaoAddress,
+            frame.Timestamp,
+            frame.DownlinkFormat,
+            frame.SignalStrength,
+            frame.WasCorrected,
+            altitude,
+            verticalStatus,
+            crossLinkCapability,
+            sensitivityLevel,
+            replyInformation);
+    }
+
     /// <summary>
     /// Parses long air-air surveillance from Downlink Format 16.
     /// ACAS coordination message with middle ground MV decoding (VDS validation, RAC, RAT, MTE).
@@ -18,43 +101,51 @@ public sealed partial class MessageParser
     /// <param name="frame">Validated frame to parse.</param>
     /// <returns>Long air-air surveillance message with ACAS data, or null if invalid.</returns>
     /// <remarks>
-    /// DF 16 structure:
+    /// DF 16 structure (112 bits total, per ICAO Annex 10 Vol IV):
+    /// - Bits 1-5: DF (Downlink Format)
     /// - Bit 6: Vertical Status (VS)
-    /// - Bits 9-10: Reserved
-    /// - Bit 11: Cross-link Capability (CC)
-    /// - Bits 14-16: Sensitivity Level (SL)
+    /// - Bits 7-8: Reserved
+    /// - Bits 9-11: Sensitivity Level (SL)
+    /// - Bits 12-13: Reserved
+    /// - Bits 14-17: Reply Information (RI)
+    /// - Bits 18-19: Reserved
     /// - Bits 20-32: Altitude Code (AC)
-    /// - Bits 33-36: Reply Information (RI)
-    /// - Bits 41-96: Message Vertical (MV) - ACAS data
+    /// - Bits 33-88: Message Vertical (MV) - ACAS data (56 bits)
+    /// - Bits 89-112: Address Parity (AP)
+    ///
+    /// MV field structure (56 bits):
+    /// - Bits 33-40: VDS (Vertical Data Source, VDS1+VDS2, 8 bits)
+    /// - Bits 41-54: ARA (Active Resolution Advisories, 14 bits) - SKIPPED
+    /// - Bits 55-58: RAC (Resolution Advisory Complement, 4 bits)
+    /// - Bit 59: RAT (Resolution Advisory Terminated)
+    /// - Bit 60: MTE (Multiple Threat Encounter)
+    /// - Bits 61-88: Reserved
     ///
     /// Middle ground MV decoding approach:
-    /// - Extract VDS field (bits 41-48), validate it's 0x30 for valid ACAS
-    /// - Extract RAC (Resolution Advisory Complement, bits 49-52)
-    /// - Extract RAT (Resolution Advisory Terminated, bit 53)
-    /// - Extract MTE (Multiple Threat Encounter, bit 54)
-    /// - Skip ARA field (bits 55-68) due to complex conditional decoding
+    /// - Extract VDS field (bits 33-40), validate it's 0x30 for valid ACAS
+    /// - Extract RAC (Resolution Advisory Complement, bits 55-58)
+    /// - Extract RAT (Resolution Advisory Terminated, bit 59)
+    /// - Extract MTE (Multiple Threat Encounter, bit 60)
+    /// - Skip ARA field (bits 41-54) due to complex conditional decoding
     /// </remarks>
     private ModeSMessage? ParseLongAirAirSurveillance(ValidatedFrame frame)
     {
-        // Extract Vertical Status (VS) - bit 6 (byte 0, bit 2)
-        VerticalStatus verticalStatus = ((frame.Data[0] & 0x04) >> 2) == 0
+        // Extract Vertical Status (VS) - bit 6
+        VerticalStatus verticalStatus = ExtractBits(frame.Data, 6, 1) == 0
             ? VerticalStatus.Airborne
             : VerticalStatus.Ground;
 
-        // Extract Cross-link Capability (CC) - bit 11 (byte 1, bit 4)
-        bool crossLinkCapability = (frame.Data[1] & 0x08) != 0;
-
-        // Extract Sensitivity Level (SL) - bits 14-16 (byte 1, bits 1-3)
-        int sensitivityLevel = frame.Data[1] & 0x07;
+        // Extract Sensitivity Level (SL) - bits 9-11 (3 bits)
+        int sensitivityLevel = ExtractBits(frame.Data, 9, 3);
 
         // Extract Altitude Code (AC) - bits 20-32 (13 bits)
-        int altitudeCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
+        int altitudeCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode altitude (null if invalid or unavailable)
         Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
 
-        // Extract Reply Information (RI) - bits 33-36 (4 bits)
-        int riRaw = ((frame.Data[4] & 0x07) << 1) | ((frame.Data[5] & 0x80) >> 7);
+        // Extract Reply Information (RI) - bits 14-17 (4 bits)
+        int riRaw = ExtractBits(frame.Data, 14, 4);
 
         // Validate RI field (only 0, 2, 3, 4 are valid)
         if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
@@ -66,12 +157,12 @@ public sealed partial class MessageParser
 
         var replyInformation = (AcasReplyInformation)riRaw;
 
-        // Extract MV field (Message Vertical, bits 41-96, 56 bits = 7 bytes)
-        // MV starts at bit 41 = byte 5, bit 1
-        // VDS (Vertical Data Source) is bits 41-48 (first byte of MV)
-        int vds = ((frame.Data[5] & 0x7F) << 1) | ((frame.Data[6] & 0x80) >> 7);
+        // Extract MV field (Message Vertical, bits 33-88, 56 bits)
+        // VDS (Vertical Data Source) is bits 33-40 (VDS1 + VDS2 = 8 bits)
+        int vds = ExtractBits(frame.Data, 33, 8);
 
-        // Check if VDS indicates valid ACAS data (VDS = 0x30 for DF 16)
+        // Check if VDS indicates valid ACAS data (VDS = 0x30 = binary 0011 0000)
+        // VDS1=3, VDS2=0 indicates coordinated ACAS reply with resolution advisory data
         bool acasValid = vds == 0x30;
 
         bool? resolutionAdvisoryTerminated = null;
@@ -83,21 +174,18 @@ public sealed partial class MessageParser
 
         if (acasValid)
         {
-            // Extract RAC (Resolution Advisory Complement, bits 49-52, 4 bits)
-            // Bits 49-52 = byte 6, bits 1-4
-            int rac = (frame.Data[6] & 0x78) >> 3;
-            racNotBelow = (rac & 0x08) != 0;   // bit 49
-            racNotAbove = (rac & 0x04) != 0;   // bit 50
-            racNotLeft = (rac & 0x02) != 0;    // bit 51
-            racNotRight = (rac & 0x01) != 0;   // bit 52
+            // Extract RAC (Resolution Advisory Complement, bits 55-58, 4 bits)
+            int rac = ExtractBits(frame.Data, 55, 4);
+            racNotBelow = (rac & 0x08) != 0;   // bit 55
+            racNotAbove = (rac & 0x04) != 0;   // bit 56
+            racNotLeft = (rac & 0x02) != 0;    // bit 57
+            racNotRight = (rac & 0x01) != 0;   // bit 58
 
-            // Extract RAT (Resolution Advisory Terminated, bit 53)
-            // Bit 53 = byte 6, bit 5
-            resolutionAdvisoryTerminated = (frame.Data[6] & 0x04) != 0;
+            // Extract RAT (Resolution Advisory Terminated, bit 59)
+            resolutionAdvisoryTerminated = ExtractBits(frame.Data, 59, 1) != 0;
 
-            // Extract MTE (Multiple Threat Encounter, bit 54)
-            // Bit 54 = byte 6, bit 6
-            multipleThreatEncounter = (frame.Data[6] & 0x02) != 0;
+            // Extract MTE (Multiple Threat Encounter, bit 60)
+            multipleThreatEncounter = ExtractBits(frame.Data, 60, 1) != 0;
         }
 
         return new LongAirAirSurveillance(
@@ -108,7 +196,6 @@ public sealed partial class MessageParser
             frame.WasCorrected,
             altitude,
             verticalStatus,
-            crossLinkCapability,
             sensitivityLevel,
             replyInformation,
             acasValid,

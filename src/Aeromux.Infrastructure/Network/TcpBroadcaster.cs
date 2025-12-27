@@ -28,7 +28,7 @@ namespace Aeromux.Infrastructure.Network;
 /// <summary>
 /// TCP broadcaster that sends processed frames to multiple clients.
 /// Supports Beast, JSON, and SBS formats (dump1090/readsb/tar1090 compatible).
-/// Phase 6: Broadcasts ProcessedFrame data from IFrameStream to all connected clients.
+/// Broadcasts ProcessedFrame data from IFrameStream to all connected clients.
 /// Beast encoder uses raw ValidatedFrame, JSON/SBS encoders use parsed ModeSMessage.
 /// </summary>
 /// <remarks>

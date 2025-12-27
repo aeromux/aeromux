@@ -81,17 +81,17 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         // Determine selected altitude source based on which field is available
         // MCP (Mode Control Panel) takes priority over FMS (Flight Management System)
         Altitude? selectedAltitude = null;
-        string? altitudeSource = null;
+        AltitudeSource? altitudeSource = null;
 
         if (data.McpSelectedAltitude.HasValue)
         {
             selectedAltitude = Altitude.FromFeet(data.McpSelectedAltitude.Value, AltitudeType.Barometric);
-            altitudeSource = "MCP/FCU";
+            altitudeSource = AltitudeSource.McpFcu;
         }
         else if (data.FmsSelectedAltitude.HasValue)
         {
             selectedAltitude = Altitude.FromFeet(data.FmsSelectedAltitude.Value, AltitudeType.Barometric);
-            altitudeSource = "FMS/RNAV";
+            altitudeSource = AltitudeSource.FmsRnav;
         }
 
         // Create new autopilot state with field-level merging:

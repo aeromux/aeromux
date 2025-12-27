@@ -41,7 +41,7 @@ public sealed record TrackedAutopilot
     /// Indicates whether altitude came from pilot-set MCP or FMS flight plan.
     /// Null if SelectedAltitude is null.
     /// </summary>
-    public string? AltitudeSource { get; init; }
+    public AltitudeSource? AltitudeSource { get; init; }
 
     /// <summary>
     /// Selected heading from autopilot (TC 29 V1/V2).

@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -25,22 +41,22 @@ public sealed partial class MessageParser
 
         return tc switch
         {
-            // Priority 1: Essential ADS-B messages
-            >= 1 and <= 4 => ParseAircraftIdentification(frame, tc),      // Aircraft ID & Category
+            // Essential ADS-B messages
+            >= 1 and <= 4 => ParseAircraftIdentification(frame, tc),            // Aircraft ID & Category
             >= 9 and <= 18 => ParseAirbornePosition(frame, tc, false),    // Airborne Position (Barometric)
-            19 => ParseAirborneVelocity(frame),                            // Airborne Velocity
+            19 => ParseAirborneVelocity(frame),                                 // Airborne Velocity
 
-            // Priority 2: GNSS altitude positions
+            // GNSS altitude positions
             >= 20 and <= 22 => ParseAirbornePosition(frame, tc, true),    // Airborne Position (GNSS)
 
-            // Priority 3: Surface and status
-            >= 5 and <= 8 => ParseSurfacePosition(frame, tc),             // Surface Position
-            28 => ParseAircraftStatus(frame),                              // Aircraft Status
-            31 => ParseAircraftOperationStatus(frame),                     // Operation Status
+            // Surface and status
+            >= 5 and <= 8 => ParseSurfacePosition(frame, tc),                   // Surface Position
+            28 => ParseAircraftStatus(frame),                                   // Aircraft Status
+            31 => ParseAircraftOperationStatus(frame),                          // Operation Status
 
-            // Priority 4: Target state and trajectory
-            29 => ParseTargetStateAndStatus(frame),                        // Target State
-            >= 23 and <= 27 => null,                                       // Reserved (not used)
+            // Target state and trajectory
+            29 => ParseTargetStateAndStatus(frame),                             // Target State
+            >= 23 and <= 27 => null,                                            // Reserved (not used)
 
             // Not implemented
             _ => LogUnsupportedTC(frame, tc)
@@ -48,7 +64,7 @@ public sealed partial class MessageParser
     }
 
     // ========================================
-    // Priority 1: Essential ADS-B (IMPLEMENTED)
+    // Essential ADS-B
     // ========================================
 
     /// <summary>
@@ -104,6 +120,9 @@ public sealed partial class MessageParser
         int ssRaw = ExtractBits(frame.Data, 38, 2);
         var surveillanceStatus = (SurveillanceStatus)ssRaw;
 
+        // Extract single antenna flag - bit 40 (1 bit)
+        var antenna = (AntennaFlag)ExtractBits(frame.Data, 40, 1);
+
         // Extract altitude - bits 41-52 (12 bits)
         int altRaw = ExtractBits(frame.Data, 41, 12);
         Altitude? altitude = DecodeAltitude(altRaw, isGnss ? AltitudeType.Geometric : AltitudeType.Barometric);
@@ -134,6 +153,7 @@ public sealed partial class MessageParser
             frame.WasCorrected,
             position,
             altitude,
+            antenna,
             surveillanceStatus);
     }
 
@@ -158,6 +178,14 @@ public sealed partial class MessageParser
 
         var subtype = (VelocitySubtype)subtypeRaw;
 
+        // Extract NACv (Navigation Accuracy Category - Velocity, bits 43-45, 3 bits)
+        int nacvRaw = ExtractBits(frame.Data, 43, 3);
+        NavigationAccuracyCategoryVelocity? nacv = null;
+        if (Enum.IsDefined(typeof(NavigationAccuracyCategoryVelocity), nacvRaw))
+        {
+            nacv = (NavigationAccuracyCategoryVelocity)nacvRaw;
+        }
+
         // Extract vertical rate first (common to all subtypes)
         int? verticalRate = ParseVerticalRate(frame);
 
@@ -165,9 +193,9 @@ public sealed partial class MessageParser
         return subtype switch
         {
             VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic
-                => ParseGroundSpeedVelocity(frame, subtype, verticalRate),
+                => ParseGroundSpeedVelocity(frame, subtype, verticalRate, nacv),
             VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic
-                => ParseAirspeedVelocity(frame, subtype, verticalRate),
+                => ParseAirspeedVelocity(frame, subtype, verticalRate, nacv),
             _ => null  // Unknown subtype
         };
     }
@@ -175,7 +203,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Parses ground speed velocity (subtypes 1-2).
     /// </summary>
-    private ModeSMessage? ParseGroundSpeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate)
+    private ModeSMessage? ParseGroundSpeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate, NavigationAccuracyCategoryVelocity? nacv)
     {
         // Extract EW direction and velocity - bits 46 and 47-56
         int sew = ExtractBits(frame.Data, 46, 1);
@@ -201,10 +229,7 @@ public sealed partial class MessageParser
 
         // Calculate track angle (0-360°, North = 0°)
         double trackAngle = Math.Atan2(vx, vy) * 180.0 / Math.PI;
-        if (trackAngle < 0)
-        {
-            trackAngle += 360;
-        }
+        double normalizedHeading = ((trackAngle % 360) + 360) % 360;
 
         return new AirborneVelocity(
             frame.IcaoAddress,
@@ -213,15 +238,16 @@ public sealed partial class MessageParser
             frame.SignalStrength,
             frame.WasCorrected,
             Velocity.FromKnots(groundSpeed, VelocityType.GroundSpeed),
-            trackAngle,
+            normalizedHeading,
             verticalRate,
-            subtype);
+            subtype,
+            nacv);
     }
 
     /// <summary>
     /// Parses airspeed velocity (subtypes 3-4).
     /// </summary>
-    private ModeSMessage? ParseAirspeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate)
+    private ModeSMessage? ParseAirspeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate, NavigationAccuracyCategoryVelocity? nacv)
     {
         // Extract heading status and value - bit 46 and bits 47-56
         int sh = ExtractBits(frame.Data, 46, 1);
@@ -261,7 +287,8 @@ public sealed partial class MessageParser
             velocity,
             heading,
             verticalRate,
-            subtype);
+            subtype,
+            nacv);
     }
 
     /// <summary>
@@ -270,7 +297,7 @@ public sealed partial class MessageParser
     private int? ParseVerticalRate(ValidatedFrame frame)
     {
         // VrSrc (bit 68): 0=GNSS, 1=Barometric
-        // int vrSrc = ExtractBits(frame.Data, 68, 1);  // Not used currently
+        int vrSrc = ExtractBits(frame.Data, 68, 1);  // Not used currently
 
         // SVr (bit 69): 0=climb, 1=descent
         int svr = ExtractBits(frame.Data, 69, 1);
@@ -297,7 +324,7 @@ public sealed partial class MessageParser
     }
 
     // ========================================
-    // Priority 3: Additional Formats (IMPLEMENTED)
+    // Additional Formats
     // ========================================
 
     /// <summary>
@@ -306,7 +333,7 @@ public sealed partial class MessageParser
     /// Requires receiver location for CPR decoding.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <param name="tc">Type code (5-8).</param>
+    /// <param name="tc">Type Code (5-8).</param>
     /// <returns>Surface position message with movement, track, and CPR coordinates.</returns>
     private ModeSMessage? ParseSurfacePosition(ValidatedFrame frame, int tc)
     {
@@ -453,8 +480,7 @@ public sealed partial class MessageParser
         else if (subtype == AircraftStatusSubtype.TcasResolutionAdvisory)
         {
             // TCAS/ACAS Resolution Advisory
-            // For Priority 3: Just acknowledge the RA, full decoding in Priority 4
-            Log.Debug("TCAS RA from {Icao} (full RA decoding deferred to Priority 4)",
+            Log.Debug("TCAS RA from {Icao} (full RA decoding is deferred)",
                 frame.IcaoAddress);
         }
 
@@ -470,9 +496,12 @@ public sealed partial class MessageParser
     }
 
     /// <summary>
-    /// Parses Operational Status message (TC 31).
-    /// Priority 3: Implements essential fields (version, NACp, NICbaro, SIL).
+    /// Parses Operational Status message (TC 31, Version 0/1/2).
+    /// Extracts capability codes, operational modes, version, and accuracy parameters.
     /// </summary>
+    /// <remarks>
+    /// Based on ADS-B Version 1/2 specification (DO-260A/B).
+    /// </remarks>
     /// <param name="frame">Validated frame to parse.</param>
     /// <returns>Operational status message, or null if subtype not supported.</returns>
     private ModeSMessage? ParseAircraftOperationStatus(ValidatedFrame frame)
@@ -490,25 +519,426 @@ public sealed partial class MessageParser
 
         var subtype = (OperationalStatusSubtype)subtypeRaw;
 
-        // Version number (bits 75-77, 3 bits)
-        int versionRaw = ExtractBits(frame.Data, 75, 3);
-        var version = (AdsbVersion)versionRaw;  // All values 0-7 are defined
+        // Version number (bits 73-75, 3 bits)
+        var version = (AdsbVersion)ExtractBits(frame.Data, 73, 3);
 
-        // NACp (Navigation Accuracy Category - Position, bits 59-62, 4 bits)
-        int nacpRaw = ExtractBits(frame.Data, 59, 4);
-        var nacp = (NavigationAccuracyCategory)nacpRaw;  // All values 0-15 are defined
+        // Variables for parsing CC
+        CapabilityClass? capabilityClass = null;
+        bool? ccTcasOperational = null;
+        bool? ccCdtiCapability = null;
+        bool? ccAdsb1090EsCapability = null;
+        bool? ccArvCapability = null;
+        bool? ccTsCapability = null;
+        TrajectoryChangeReportCapability? ccTcCapabilityLevel = null;
+        bool? ccUatCapability = null;
+        bool? ccPoa = null;
+        bool? ccB2Low = null;
+        NavigationAccuracyCategoryVelocity? ccNacv = null;
+        bool? ccNicSupplementC = null;
 
-        // NACv (Navigation Accuracy Category - Velocity, bits 43-45, 3 bits)
-        // 0 = unknown, 1 = <10 m/s, 2 = <3 m/s, 3 = <1 m/s, 4 = <0.3 m/s
-        int nacv = ExtractBits(frame.Data, 43, 3);
+        // Variables for parsing OM
+        OperationalMode? operationalMode = null;
+        bool? omTcasRaActive = null;
+        bool? omIdentSwitchActive = null;
+        bool? omAtcServices = null;
+        AntennaFlag? omSingleAntenna = null;
+        SdaSupportedFailureCondition? omSda = null;
+        LateralGpsAntennaOffset? omGpsLatOffset = null;
+        LongitudinalGpsAntennaOffset? omGpsLongOffset = null;
 
-        // NICbaro (NIC barometric altitude integrity, bit 63, 1 bit)
-        int nicBaroRaw = ExtractBits(frame.Data, 63, 1);
-        bool nicBaro = nicBaroRaw == 1;
+        // Other variables
+        AircraftLengthAndWidth? aircraftLengthWidth = null;
+        bool? nicSupplementA =  null;
+        NavigationAccuracyCategoryPosition? nacp = null;
+        SourceIntegrityLevel? sil = null;
+        GeometricVerticalAccuracy? gva = null;
+        BarometricAltitudeIntegrityCode? nicBaro = null;
+        TargetHeadingType? trkHdg = null;
+        HorizontalReferenceDirection? hrd = null;
+        SilSupplement? silSupplement = null;
 
-        // SIL (Surveillance Integrity Level, bits 64-65, 2 bits)
-        int silRaw = ExtractBits(frame.Data, 64, 2);
-        var sil = (SurveillanceIntegrityLevel)silRaw;  // All values 0-3 are defined
+        // Parse based on the version and CC/OM content
+        int ccContent;
+        int omContent;
+
+        switch (version)
+        {
+            // Version 0
+            case AdsbVersion.DO260:
+                ccContent = ExtractBits(frame.Data, 41, 2);
+                if (subtype == OperationalStatusSubtype.Airborne && ccContent == 0)
+                {
+                    // TCAS/ACAS not installed or not operational
+                    ccTcasOperational = ExtractBits(frame.Data, 43, 1) != 0;
+
+                    // CDTI Traffic Display capability
+                    ccCdtiCapability = ExtractBits(frame.Data, 44, 1) == 1;
+                }
+
+                capabilityClass = new CapabilityClass
+                {
+                    TcasOperational = ccTcasOperational,
+                    CdtiCapability = ccCdtiCapability
+                };
+                break;
+
+            // Version 1
+            case AdsbVersion.DO260A:
+                // Get Capability Class content bits (only 0,0 applies)
+                ccContent = ExtractBits(frame.Data, 41, 2);
+
+                // Get Operational Mode content bits (only O,O applies)
+                omContent = ExtractBits(frame.Data, 57, 2);
+
+                // CC - Airborne
+                if (subtype == OperationalStatusSubtype.Airborne && ccContent == 0)
+                {
+
+                    // TCAS is operational or not operational
+                    ccTcasOperational = ExtractBits(frame.Data, 43, 1) == 1;
+
+                    // Capability to receive ADS-B 1090ES
+                    ccAdsb1090EsCapability = ExtractBits(frame.Data, 44, 1) == 1;
+
+                    // Capability of sending messages to support Air-Referenced Velocity reports
+                    ccArvCapability = ExtractBits(frame.Data, 47, 1) == 1;
+
+                    // Capability to send Target State reports
+                    ccTsCapability = ExtractBits(frame.Data, 48, 1) == 1;
+
+                    // Trajectory Change Report capability level
+                    ccTcCapabilityLevel = (TrajectoryChangeReportCapability)ExtractBits(frame.Data, 49, 2);
+
+                    // Capability to receive ADS-B UAT messages.
+                    ccUatCapability = ExtractBits(frame.Data, 51, 1) == 1;
+
+                    capabilityClass = new CapabilityClass()
+                    {
+                        TcasOperational = ccTcasOperational,
+                        Adsb1090EsCapability = ccAdsb1090EsCapability,
+                        ArvCapability = ccArvCapability,
+                        TsCapability = ccTsCapability,
+                        TcCapabilityLevel = ccTcCapabilityLevel,
+                        UatCapability = ccUatCapability
+                    };
+                }
+
+                // CC - Surface
+                if (subtype == OperationalStatusSubtype.Surface && ccContent == 0)
+                {
+                    // The position transmitted in the Surface Position Message is known to
+                    // be referenced to the ADS-B Position Reference Point of the A/V
+                    ccPoa = ExtractBits(frame.Data, 43, 1) == 1;
+
+                    // Capability to receive ADS-B 1090ES
+                    ccAdsb1090EsCapability = ExtractBits(frame.Data, 44, 1) == 1;
+
+                    // Non-Transponder-Based Transmitting Subsystem on a Ground Vehicle meets
+                    // the requirements of Class B2, except that it transmits with less than 70 watts of power.
+                    ccB2Low = ExtractBits(frame.Data, 47, 1) == 1;
+
+                    // Capability to receive ADS-B UAT messages.
+                    ccUatCapability = ExtractBits(frame.Data, 48, 1) == 1;
+
+                    // Navigation Accuracy Category for Velocity
+                    ccNacv = (NavigationAccuracyCategoryVelocity)ExtractBits(frame.Data, 49, 3);
+
+                    // NIC Supplement-C for NIC decoding (together with Surface Position Messages and NIC Supplement-A)
+                    ccNicSupplementC = ExtractBits(frame.Data, 52, 1) == 1;
+
+                    capabilityClass = new CapabilityClass()
+                    {
+                        Poa = ccPoa,
+                        Adsb1090EsCapability = ccAdsb1090EsCapability,
+                        B2Low = ccB2Low,
+                        UatCapability = ccUatCapability,
+                        Nacv = ccNacv,
+                        NicSupplementC = ccNicSupplementC
+                    };
+                }
+
+                // OM - Airborne
+                if (subtype == OperationalStatusSubtype.Airborne && omContent == 0)
+                {
+                    // TCAS II or ACAS Resolution Advisory is known to be in effect
+                    omTcasRaActive = ExtractBits(frame.Data, 59, 1) == 1;
+
+                    // The IDENT switch is active for a period of 18 ± 1 seconds
+                    omIdentSwitchActive = ExtractBits(frame.Data, 60, 1) == 1;
+
+                    // Receiving ATC Services within the last 5 seconds
+                    omAtcServices = ExtractBits(frame.Data, 61, 1) == 1;
+
+                    // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
+                    omSingleAntenna = (AntennaFlag)ExtractBits(frame.Data, 62, 1);
+
+                    // Defines the failure condition that the ADS-B system is designed to support
+                    omSda = (SdaSupportedFailureCondition)ExtractBits(frame.Data, 63, 2);
+
+                    operationalMode = new OperationalMode()
+                    {
+                        TcasRaActive = omTcasRaActive,
+                        IdentSwitchActive = omIdentSwitchActive,
+                        AtcServices = omAtcServices,
+                        SingleAntenna = omSingleAntenna,
+                        Sda = omSda
+                    };
+                }
+
+                // OM - Surface
+                if (subtype == OperationalStatusSubtype.Surface && omContent == 0)
+                {
+                    // TCAS II or ACAS Resolution Advisory is known to be in effect
+                    omTcasRaActive = ExtractBits(frame.Data, 59, 1) == 1;
+
+                    // The IDENT switch is active for a period of 18 ± 1 seconds
+                    omIdentSwitchActive = ExtractBits(frame.Data, 60, 1) == 1;
+
+                    // Receiving ATC Services within the last 5 seconds
+                    omAtcServices = ExtractBits(frame.Data, 61, 1) == 1;
+
+                    // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
+                    omSingleAntenna = (AntennaFlag)ExtractBits(frame.Data, 62, 1);
+
+                    // Defines the failure condition that the ADS-B system is designed to support
+                    omSda = (SdaSupportedFailureCondition)ExtractBits(frame.Data, 63, 2);
+
+                    // Position of the GPS antenna (if POA is 0, value is provided otherwise all zero)
+                    int tempGpsLat = ExtractBits(frame.Data, 65, 3);
+                    omGpsLatOffset = new LateralGpsAntennaOffset(tempGpsLat);
+                    int tempGpsLon = ExtractBits(frame.Data, 68, 5);
+                    omGpsLongOffset = new LongitudinalGpsAntennaOffset(tempGpsLon);
+
+                    operationalMode = new OperationalMode()
+                    {
+                        TcasRaActive = omTcasRaActive,
+                        IdentSwitchActive = omIdentSwitchActive,
+                        AtcServices = omAtcServices,
+                        SingleAntenna = omSingleAntenna,
+                        Sda = omSda,
+                        GpsLatOffset = omGpsLatOffset,
+                        GpsLongOffset = omGpsLongOffset
+                    };
+                }
+
+                // GVA and NICb - Airborne only
+                if (subtype == OperationalStatusSubtype.Airborne)
+                {
+                    // Geometrical Vertical Accuracy
+                    gva = (GeometricVerticalAccuracy)ExtractBits(frame.Data, 81, 2);
+
+                    // Barometric Altitude Integrity Code
+                    nicBaro = (BarometricAltitudeIntegrityCode)ExtractBits(frame.Data, 85, 1);
+                }
+
+                // LW and TRK/HDG - Surface only
+                if (subtype == OperationalStatusSubtype.Surface)
+                {
+                    // Aircraft/Vehicle (A/V) Length and Width based on the actual dimensions
+                    // of the transmitting aircraft or surface vehicle
+                    aircraftLengthWidth = new AircraftLengthAndWidth(ExtractBits(frame.Data, 53, 4));
+
+                    // Track Angle or Heading
+                    trkHdg = (TargetHeadingType)ExtractBits(frame.Data, 85, 1);
+                }
+
+                // Everything else
+
+                // NIC Supplement-A for NIC decoding (together with Surface Position Messages and NIC Supplement-C)
+                nicSupplementA = ExtractBits(frame.Data, 86, 1) == 1;
+
+                // Navigation Accuracy Category for Position (NACp)
+                nacp = (NavigationAccuracyCategoryPosition)ExtractBits(frame.Data, 77, 4);
+
+                // Source Integrity Level
+                sil = (SourceIntegrityLevel)ExtractBits(frame.Data, 83, 2);
+
+                // Horizontal Reference Direction
+                hrd = (HorizontalReferenceDirection)ExtractBits(frame.Data, 86, 1);
+
+                break;
+
+            // Version 2
+            case AdsbVersion.DO260B:
+                // Get Capability Class content bits (only 0,0 applies)
+                ccContent = ExtractBits(frame.Data, 41, 2);
+
+                // Get Operational Mode content bits (only O,O applies)
+                omContent = ExtractBits(frame.Data, 57, 2);
+
+                // CC - Airborne
+                if (subtype == OperationalStatusSubtype.Airborne && ccContent == 0)
+                {
+
+                    // TCAS is operational or not operational
+                    ccTcasOperational = ExtractBits(frame.Data, 43, 1) == 1;
+
+                    // Capability to receive ADS-B 1090ES
+                    ccAdsb1090EsCapability = ExtractBits(frame.Data, 44, 1) == 1;
+
+                    // Capability of sending messages to support Air-Referenced Velocity reports
+                    ccArvCapability = ExtractBits(frame.Data, 47, 1) == 1;
+
+                    // Capability to send Target State reports
+                    ccTsCapability = ExtractBits(frame.Data, 48, 1) == 1;
+
+                    // Trajectory Change Report capability level
+                    ccTcCapabilityLevel = (TrajectoryChangeReportCapability)ExtractBits(frame.Data, 49, 2);
+
+                    // Capability to receive ADS-B UAT messages.
+                    ccUatCapability = ExtractBits(frame.Data, 51, 1) == 1;
+
+                    capabilityClass = new CapabilityClass()
+                    {
+                        TcasOperational = ccTcasOperational,
+                        Adsb1090EsCapability = ccAdsb1090EsCapability,
+                        ArvCapability = ccArvCapability,
+                        TsCapability = ccTsCapability,
+                        TcCapabilityLevel = ccTcCapabilityLevel,
+                        UatCapability = ccUatCapability
+                    };
+                }
+
+                // CC - Surface
+                if (subtype == OperationalStatusSubtype.Surface && ccContent == 0)
+                {
+                    // The position transmitted in the Surface Position Message is known to
+                    // be referenced to the ADS-B Position Reference Point of the A/V
+                    ccPoa = ExtractBits(frame.Data, 43, 1) == 1;
+
+                    // Capability to receive ADS-B 1090ES
+                    ccAdsb1090EsCapability = ExtractBits(frame.Data, 44, 1) == 1;
+
+                    // Non-Transponder-Based Transmitting Subsystem on a Ground Vehicle meets
+                    // the requirements of Class B2, except that it transmits with less than 70 watts of power.
+                    ccB2Low = ExtractBits(frame.Data, 47, 1) == 1;
+
+                    // Capability to receive ADS-B UAT messages.
+                    ccUatCapability = ExtractBits(frame.Data, 48, 1) == 1;
+
+                    // Navigation Accuracy Category for Velocity
+                    ccNacv = (NavigationAccuracyCategoryVelocity)ExtractBits(frame.Data, 49, 3);
+
+                    // NIC Supplement-C for NIC decoding (together with Surface Position Messages and NIC Supplement-A)
+                    ccNicSupplementC = ExtractBits(frame.Data, 52, 1) == 1;
+
+                    capabilityClass = new CapabilityClass()
+                    {
+                        Poa = ccPoa,
+                        Adsb1090EsCapability = ccAdsb1090EsCapability,
+                        B2Low = ccB2Low,
+                        UatCapability = ccUatCapability,
+                        Nacv = ccNacv,
+                        NicSupplementC = ccNicSupplementC
+                    };
+                }
+
+                // OM - Airborne
+                if (subtype == OperationalStatusSubtype.Airborne && omContent == 0)
+                {
+                    // TCAS II or ACAS Resolution Advisory is known to be in effect
+                    omTcasRaActive = ExtractBits(frame.Data, 59, 1) == 1;
+
+                    // The IDENT switch is active for a period of 18 ± 1 seconds
+                    omIdentSwitchActive = ExtractBits(frame.Data, 60, 1) == 1;
+
+                    // Receiving ATC Services within the last 5 seconds
+                    omAtcServices = ExtractBits(frame.Data, 61, 1) == 1;
+
+                    // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
+                    omSingleAntenna = (AntennaFlag)ExtractBits(frame.Data, 62, 1);
+
+                    // Defines the failure condition that the ADS-B system is designed to support
+                    omSda = (SdaSupportedFailureCondition)ExtractBits(frame.Data, 63, 2);
+
+                    operationalMode = new OperationalMode()
+                    {
+                        TcasRaActive = omTcasRaActive,
+                        IdentSwitchActive = omIdentSwitchActive,
+                        AtcServices = omAtcServices,
+                        SingleAntenna = omSingleAntenna,
+                        Sda = omSda
+                    };
+                }
+
+                // OM - Surface
+                if (subtype == OperationalStatusSubtype.Surface && omContent == 0)
+                {
+                    // TCAS II or ACAS Resolution Advisory is known to be in effect
+                    omTcasRaActive = ExtractBits(frame.Data, 59, 1) == 1;
+
+                    // The IDENT switch is active for a period of 18 ± 1 seconds
+                    omIdentSwitchActive = ExtractBits(frame.Data, 60, 1) == 1;
+
+                    // Receiving ATC Services within the last 5 seconds
+                    omAtcServices = ExtractBits(frame.Data, 61, 1) == 1;
+
+                    // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
+                    omSingleAntenna = (AntennaFlag)ExtractBits(frame.Data, 62, 1);
+
+                    // Defines the failure condition that the ADS-B system is designed to support
+                    omSda = (SdaSupportedFailureCondition)ExtractBits(frame.Data, 63, 2);
+
+                    // Position of the GPS antenna (if POA is 0, value is provided otherwise all zero)
+                    int tempGpsLat = ExtractBits(frame.Data, 65, 3);
+                    omGpsLatOffset = new LateralGpsAntennaOffset(tempGpsLat);
+                    int tempGpsLon = ExtractBits(frame.Data, 68, 5);
+                    omGpsLongOffset = new LongitudinalGpsAntennaOffset(tempGpsLon);
+
+                    operationalMode = new OperationalMode()
+                    {
+                        TcasRaActive = omTcasRaActive,
+                        IdentSwitchActive = omIdentSwitchActive,
+                        AtcServices = omAtcServices,
+                        SingleAntenna = omSingleAntenna,
+                        Sda = omSda,
+                        GpsLatOffset = omGpsLatOffset,
+                        GpsLongOffset = omGpsLongOffset
+                    };
+                }
+
+                // GVA and NICb - Airborne only
+                if (subtype == OperationalStatusSubtype.Airborne)
+                {
+                    // Geometrical Vertical Accuracy
+                    gva = (GeometricVerticalAccuracy)ExtractBits(frame.Data, 81, 2);
+
+                    // Barometric Altitude Integrity Code
+                    nicBaro = (BarometricAltitudeIntegrityCode)ExtractBits(frame.Data, 85, 1);
+                }
+
+                // LW and TRK/HDG - Surface only
+                if (subtype == OperationalStatusSubtype.Surface)
+                {
+                    // Aircraft/Vehicle (A/V) Length and Width based on the actual dimensions
+                    // of the transmitting aircraft or surface vehicle
+                    aircraftLengthWidth = new AircraftLengthAndWidth(ExtractBits(frame.Data, 53, 4));
+
+                    // Track Angle or Heading
+                    trkHdg = (TargetHeadingType)ExtractBits(frame.Data, 85, 1);
+                }
+
+                // Everything else
+
+                // NIC Supplement-A for NIC decoding (together with Surface Position Messages and NIC Supplement-C)
+                nicSupplementA = ExtractBits(frame.Data, 86, 1) == 1;
+
+                // Navigation Accuracy Category for Position (NACp)
+                nacp = (NavigationAccuracyCategoryPosition)ExtractBits(frame.Data, 77, 4);
+
+                // Source Integrity Level
+                sil = (SourceIntegrityLevel)ExtractBits(frame.Data, 83, 2);
+
+                // Horizontal Reference Direction
+                hrd = (HorizontalReferenceDirection)ExtractBits(frame.Data, 86, 1);
+
+                // SIL Supplement
+                silSupplement = (SilSupplement)ExtractBits(frame.Data, 87, 1);
+
+                break;
+            default:
+                return null;
+        }
 
         return new OperationalStatus(
             frame.IcaoAddress,
@@ -518,19 +948,27 @@ public sealed partial class MessageParser
             frame.WasCorrected,
             subtype,
             version,
+            capabilityClass,
+            operationalMode,
+            aircraftLengthWidth,
+            nicSupplementA,
             nacp,
-            nacv,
+            gva,
+            sil,
             nicBaro,
-            sil);
+            trkHdg,
+            hrd,
+            silSupplement
+            );
     }
 
     // ========================================
-    // Priority 4: Less Common Formats (IMPLEMENTED)
+    // Less Common Formats
     // ========================================
 
     /// <summary>
     /// Parses Target State and Status message (TC 29).
-    /// Priority 3: FULL implementation of all fields for both Version 1 and Version 2.
+    /// FULL implementation of all fields for both Version 1 and Version 2.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
     /// <returns>Target state and status message, or null if subtype not supported.</returns>
@@ -550,8 +988,9 @@ public sealed partial class MessageParser
         var subtype = (TargetStateSubtype)subtypeRaw;
 
         Altitude? targetAltitude = null;
-        string? altitudeSource = null;
+        AltitudeSource? altitudeSource = null;
         double? targetHeading = null;
+        TargetHeadingType? targetHeadingType = null;
         double? barometricPressure = null;
         VerticalMode? verticalMode = null;
         HorizontalMode? horizontalMode = null;
@@ -563,138 +1002,135 @@ public sealed partial class MessageParser
         bool? tcasOperational = null;
         bool? tcasRaActive = null;
         EmergencyState? emergencyPriority = null;
-        SurveillanceIntegrityLevel? sil = null;
-        NavigationAccuracyCategory? nacp = null;
-        bool? nicBaro = null;
+        SourceIntegrityLevel? sil = null;
+        NavigationAccuracyCategoryPosition? nacp = null;
+        BarometricAltitudeIntegrityCode? nicBaro = null;
 
-        if (subtype == TargetStateSubtype.Version1)
+        switch (subtype)
         {
-            // Version 1: Target altitude, target angle, modes, emergency
-
-            // Target altitude available (bits 40-41, 2 bits)
-            int altAvail = ExtractBits(frame.Data, 40, 2);
-            if (altAvail != 0)
+            // Version 1
+            case TargetStateSubtype.Version1:
             {
-                altitudeSource = altAvail switch
+                // Target altitude available (bits 40-41, 2 bits)
+                int altAvail = ExtractBits(frame.Data, 40, 2);
+                if (altAvail != 0)
                 {
-                    // Altitude source
-                    1 => "MCP/FCU",
-                    2 => "Holding mode",
-                    _ => "FMS/RNAV"
-                };
+                    altitudeSource = altAvail switch
+                    {
+                        // Altitude source
+                        1 => AltitudeSource.McpFcu,
+                        2 => AltitudeSource.HoldingMode,
+                        _ => AltitudeSource.FmsRnav
+                    };
 
-                // Altitude reference (bit 42, 0=FL, 1=MSL)
-                int altRef = ExtractBits(frame.Data, 42, 1);
-                string altRefStr = altRef == 0 ? "FL" : "MSL";
-                altitudeSource += $" ({altRefStr})";
+                    // Target altitude (bits 48-57, 10 bits)
+                    int altRaw = ExtractBits(frame.Data, 48, 10);
+                    int altitudeFeet = -1000 + (altRaw * 100);
+                    targetAltitude = Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
+                }
 
-                // Target altitude (bits 48-57, 10 bits)
-                int altRaw = ExtractBits(frame.Data, 48, 10);
-                int altitudeFeet = -1000 + (altRaw * 100);
-                targetAltitude = Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
+                // Vertical mode (bits 46-47, 2 bits)
+                verticalMode = (VerticalMode)ExtractBits(frame.Data, 46, 2);
+
+                // Target angle available (bits 58-59, 2 bits)
+                int angleAvail = ExtractBits(frame.Data, 58, 2);
+                if (angleAvail != 0)
+                {
+                    // Target angle (bits 60-68, 9 bits)
+                    int angleRaw = ExtractBits(frame.Data, 60, 9);
+                    targetHeading = angleRaw * (360.0 / 512.0);
+
+                    // Angle type (bit 69, 1 bit, 0=track, 1=heading)
+                    targetHeadingType = (TargetHeadingType)ExtractBits(frame.Data, 69, 1);
+                }
+
+                // Horizontal mode (bits 70-71, 2 bits)
+                horizontalMode = (HorizontalMode)ExtractBits(frame.Data, 70, 2);
+
+                // NACp (Navigation Accuracy Category - Position, bits 72-75, 4 bits)
+                nacp = (NavigationAccuracyCategoryPosition)ExtractBits(frame.Data, 72, 4);
+
+                // NICbaro (NIC barometric altitude integrity, bit 76, 1 bit)
+                nicBaro = (BarometricAltitudeIntegrityCode)ExtractBits(frame.Data, 76, 1);
+
+                // SIL (Source Integrity Level, bits 77-78, 2 bits)
+                sil = (SourceIntegrityLevel)ExtractBits(frame.Data, 77, 2);
+
+                // TCAS operational (bit 84, 1 bit)
+                tcasOperational = ExtractBits(frame.Data, 84, 1) == 0;  // 0=operational
+
+                // TCAS RA active (bit 85, 1 bit)
+                tcasRaActive = ExtractBits(frame.Data, 85, 1) == 1;
+
+                // Emergency/priority status (bits 86-88, 3 bits)
+                emergencyPriority = (EmergencyState)ExtractBits(frame.Data, 86, 3);
+
+                break;
             }
-
-            // Vertical mode (bits 60-61, 2 bits)
-            int verticalModeRaw = ExtractBits(frame.Data, 60, 2);
-            if (verticalModeRaw != 0)
-            {
-                verticalMode = (VerticalMode)verticalModeRaw;
-            }
-
-            // Horizontal mode (bits 58-59, 2 bits)
-            int horizontalModeRaw = ExtractBits(frame.Data, 58, 2);
-            if (horizontalModeRaw != 0)
-            {
-                horizontalMode = (HorizontalMode)horizontalModeRaw;
-            }
-
-            // Target angle available (bits 62-63, 2 bits)
-            int angleAvail = ExtractBits(frame.Data, 62, 2);
-            if (angleAvail != 0)
-            {
-                // Target angle (bits 64-72, 9 bits)
-                int angleRaw = ExtractBits(frame.Data, 64, 9);
-
-                // Angle type (bit 73, 0=track, 1=heading)
-                // int angleType = ExtractBits(frame.Data, 73, 1);
-
-                targetHeading = angleRaw * (360.0 / 512.0);
-            }
-
-            // TCAS operational (bit 84, 1 bit)
-            tcasOperational = ExtractBits(frame.Data, 84, 1) == 0;  // 0=operational
-
-            // TCAS RA active (bit 85, 1 bit)
-            tcasRaActive = ExtractBits(frame.Data, 85, 1) == 1;
-
-            // Emergency/priority status (bits 86-88, 3 bits)
-            int esRaw = ExtractBits(frame.Data, 86, 3);
-            if (Enum.IsDefined(typeof(EmergencyState), esRaw))
-            {
-                emergencyPriority = (EmergencyState)esRaw;
-            }
-        }
-        else // subtype == 1
-        {
             // Version 2: Selected altitude, heading, pressure, modes, accuracy
-
-            // SIL (Surveillance Integrity Level, bits 40-41, 2 bits)
-            int silRaw = ExtractBits(frame.Data, 40, 2);
-            sil = (SurveillanceIntegrityLevel)silRaw;
-
-            // Selected altitude source (bit 42, 0=MCP/FCU, 1=FMS)
-            int altSrc = ExtractBits(frame.Data, 42, 1);
-            altitudeSource = altSrc == 0 ? "MCP/FCU" : "FMS";
-
-            // Selected altitude (bits 43-53, 11 bits)
-            int altRaw = ExtractBits(frame.Data, 43, 11);
-            if (altRaw != 0)
+            case TargetStateSubtype.Version2:
             {
-                int altitudeFeet = (altRaw - 1) * 32;
-                targetAltitude = Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
+                // Selected altitude source (bit 41, 0=MCP/FCU, 1=FMS)
+                altitudeSource = ExtractBits(frame.Data, 41, 1) == 0
+                    ? AltitudeSource.McpFcu : AltitudeSource.Fms;
+
+                // Selected altitude (bits 42-52, 11 bits)
+                int altitudeRaw = ExtractBits(frame.Data, 42, 11);
+                if (altitudeRaw != 0)
+                {
+                    int altitudeFeet = (altitudeRaw - 1) * 32;
+                    targetAltitude = Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
+                }
+
+                // Barometric pressure setting (bits 53-61, 9 bits)
+                int baroRaw = ExtractBits(frame.Data, 53, 9);
+                if (baroRaw != 0)
+                {
+                    barometricPressure = 800.0 + ((baroRaw - 1) * 0.8);
+                }
+
+                // Selected heading (bits 63-72, 10 bits total: status + sign + value)
+                int headingStatus = ExtractBits(frame.Data, 62, 1);
+                if (headingStatus == 1)
+                {
+                    int hdgRaw = ExtractBits(frame.Data, 63, 9);
+                    targetHeading = hdgRaw * (180.0 / 256.0);
+                }
+
+                // NACp (Navigation Accuracy Category - Position, bits 72-75, 4 bits)
+                nacp = (NavigationAccuracyCategoryPosition)ExtractBits(frame.Data, 72, 4);
+
+                // NICbaro (NIC barometric altitude integrity, bit 76, 1 bit)
+                nicBaro = (BarometricAltitudeIntegrityCode)ExtractBits(frame.Data, 76, 1);
+
+                // SIL (Surveillance Integrity Level, bits 77-78, 2 bits)
+                sil = (SourceIntegrityLevel)ExtractBits(frame.Data, 77, 2);
+
+                // Status of MCP/FCU (bit 79, 1 bit)
+                int mcpFcuStatus = ExtractBits(frame.Data, 79, 1);
+                if (mcpFcuStatus == 1)
+                {
+                    // Autopilot engaged (bit 80, 1 bit)
+                    autopilotEngaged = ExtractBits(frame.Data, 80, 1) == 1;
+
+                    // VNAV mode (bit 81, 1 bit)
+                    vnavMode = ExtractBits(frame.Data, 81, 1) == 1;
+
+                    // Altitude hold mode (bit 82, 1 bit)
+                    altitudeHoldMode = ExtractBits(frame.Data, 82, 1) == 1;
+
+                    // Approach mode (bit 84, 1 bit)
+                    approachMode = ExtractBits(frame.Data, 84, 1) == 1;
+                }
+
+                // TCAS/ACAS operational (bit 85, 1 bit)
+                tcasOperational = ExtractBits(frame.Data, 85, 1) == 1;
+
+                // LNAV mode (bit 86, 1 bit)
+                lnavMode = ExtractBits(frame.Data, 86, 1) == 1;
+
+                break;
             }
-
-            // Barometric pressure setting (bits 54-62, 9 bits)
-            int baroRaw = ExtractBits(frame.Data, 54, 9);
-            if (baroRaw != 0)
-            {
-                barometricPressure = 800.0 + ((baroRaw - 1) * 0.8);
-            }
-
-            // Selected heading (bits 63-72, 10 bits total: status + sign + value)
-            int hdgStatus = ExtractBits(frame.Data, 63, 1);
-            if (hdgStatus == 1)
-            {
-                int hdgSign = ExtractBits(frame.Data, 64, 1);
-                int hdgRaw = ExtractBits(frame.Data, 65, 8);
-                targetHeading = (hdgSign + 1) * hdgRaw * (180.0 / 256.0);
-            }
-
-            // NACp (Navigation Accuracy Category - Position, bits 73-76, 4 bits)
-            int nacpRaw = ExtractBits(frame.Data, 73, 4);
-            nacp = (NavigationAccuracyCategory)nacpRaw;
-
-            // NICbaro (NIC barometric altitude integrity, bit 77, 1 bit)
-            int nicBaroRaw = ExtractBits(frame.Data, 77, 1);
-            nicBaro = nicBaroRaw == 1;
-
-            // Autopilot engaged (bit 78, 1 bit)
-            autopilotEngaged = ExtractBits(frame.Data, 78, 1) == 1;
-
-            // VNAV mode (bit 79, 1 bit)
-            vnavMode = ExtractBits(frame.Data, 79, 1) == 1;
-
-            // Altitude hold mode (bit 80, 1 bit)
-            altitudeHoldMode = ExtractBits(frame.Data, 80, 1) == 1;
-
-            // Approach mode (bit 82, 1 bit)
-            approachMode = ExtractBits(frame.Data, 82, 1) == 1;
-
-            // TCAS/ACAS operational (bit 83, 1 bit)
-            tcasOperational = ExtractBits(frame.Data, 83, 1) == 1;
-
-            // LNAV mode (bit 84, 1 bit)
-            lnavMode = ExtractBits(frame.Data, 84, 1) == 1;
         }
 
         return new TargetStateAndStatus(
@@ -707,6 +1143,7 @@ public sealed partial class MessageParser
             targetAltitude,
             altitudeSource,
             targetHeading,
+            targetHeadingType,
             barometricPressure,
             verticalMode,
             horizontalMode,

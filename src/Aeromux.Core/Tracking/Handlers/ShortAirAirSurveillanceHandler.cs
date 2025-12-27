@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 
 namespace Aeromux.Core.Tracking.Handlers;
@@ -27,12 +28,12 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <para><strong>DF 0: Short Air-Air Surveillance (ACAS)</strong></para>
 /// <para>
 /// Used for ACAS/TCAS coordination between aircraft for collision avoidance.
-/// Structure identical to DF 4 (Surveillance Altitude Reply), but semantic purpose is aircraft-to-aircraft
-/// coordination rather than ground interrogation response. Represents less than 1% of Mode S message traffic.
+/// Unlike DF 4 (Surveillance Altitude Reply), DF 0 uses ACAS-specific fields (VS, CC, SL, RI)
+/// for aircraft-to-aircraft coordination. Represents less than 1% of Mode S message traffic.
 /// </para>
 /// <para><strong>Updated fields:</strong></para>
 /// <list type="bullet">
-/// <item>Identification.FlightStatus: Airborne/ground status, alert conditions for collision avoidance calculations</item>
+/// <item>Identification.FlightStatus: Mapped from VerticalStatus (Airborne/Ground), no alert/SPI information</item>
 /// <item>Position.BarometricAltitude: Pressure altitude for vertical separation calculations in TCAS</item>
 /// </list>
 /// <para>
@@ -61,11 +62,18 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
         bool identChanged = false;
         bool posChanged = false;
 
+        // Map VerticalStatus to FlightStatus for tracking purposes
+        // DF 0 (ACAS) uses VerticalStatus, but tracking system uses FlightStatus for consistency
+        // No alert or SPI information available in DF 0, so map to "Normal" states
+        FlightStatus mappedFlightStatus = msg.VerticalStatus == VerticalStatus.Airborne
+            ? FlightStatus.AirborneNormal
+            : FlightStatus.OnGroundNormal;
+
         // Update FlightStatus from ACAS coordination message
         // Used by TCAS for collision avoidance calculations (threat assessment)
-        if (identification.FlightStatus != msg.FlightStatus)
+        if (identification.FlightStatus != mappedFlightStatus)
         {
-            identification = identification with { FlightStatus = msg.FlightStatus };
+            identification = identification with { FlightStatus = mappedFlightStatus };
             changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.FlightStatus)}");
             identChanged = true;
         }

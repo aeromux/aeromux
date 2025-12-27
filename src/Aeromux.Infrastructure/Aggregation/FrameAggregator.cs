@@ -22,8 +22,8 @@ namespace Aeromux.Infrastructure.Aggregation;
 /// <summary>
 /// Aggregates processed frames from multiple DeviceWorkers into a single stream.
 /// Used internally by DeviceStream for multi-device scenarios only.
-/// Phase 6: Simple pass-through with no deduplication (intentional design decision).
-/// Deduplication deferred to Phase 7+ when requirements are clearer.
+/// Simple pass-through with no deduplication (intentional design decision).
+/// Deduplication deferred for later.
 /// </summary>
 /// <remarks>
 /// AGGREGATION STRATEGY:
@@ -38,7 +38,7 @@ namespace Aeromux.Infrastructure.Aggregation;
 /// - Multi-device setups will see duplicate frames from overlapping coverage
 /// - Frame order is non-deterministic (whichever device processes first)
 ///
-/// This is intentional for Phase 6 - full deduplication requires:
+/// This is intentional - full deduplication requires:
 /// - ICAO tracking across time windows
 /// - Signal strength comparison for duplicate detection
 /// - Timestamp-based frame merging logic
@@ -56,7 +56,7 @@ public sealed class FrameAggregator : IDisposable
 
     /// <summary>
     /// Adds a processed frame from a device. Called by DeviceWorker callback.
-    /// Phase 6: Lazy aggregation - all frames pass through without deduplication checks.
+    /// Lazy aggregation - all frames pass through without deduplication checks.
     /// </summary>
     public void AddData(ProcessedFrame data)
     {

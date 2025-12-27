@@ -20,7 +20,7 @@ namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// Tracks ICAO address detections to filter noise from real aircraft signals.
-/// Only frames meeting the confidence threshold are passed to Phase 5 message parsing.
+/// Only frames meeting the confidence threshold are passed to message parsing.
 /// Implements automatic cleanup of expired ICAOs to prevent memory growth.
 /// </summary>
 /// <remarks>
@@ -96,9 +96,9 @@ public sealed class IcaoConfidenceTracker
     /// Tracks a validated frame and determines if it meets confidence threshold.
     /// Automatically performs lazy cleanup of expired ICAOs every 100 frames.
     /// </summary>
-    /// <param name="frame">Validated frame from Phase 4 CRC validation</param>
+    /// <param name="frame">Validated frame from CRC validation</param>
     /// <param name="isNewConfirmedIcao">True if this ICAO just reached confidence threshold</param>
-    /// <returns>True if frame meets confidence threshold and should be passed to Phase 5 parsing</returns>
+    /// <returns>True if frame meets confidence threshold and should be passed to parsing</returns>
     public bool TrackAndValidate(ValidatedFrame frame, out bool isNewConfirmedIcao)
     {
         ArgumentNullException.ThrowIfNull(frame);
@@ -173,7 +173,7 @@ public sealed class IcaoConfidenceTracker
     /// <summary>Total frames processed (both confident and non-confident)</summary>
     public long TotalFrames => _totalFrames;
 
-    /// <summary>Frames meeting confidence threshold (passed to Phase 5)</summary>
+    /// <summary>Frames meeting confidence threshold</summary>
     public long ConfidentFrames => _confidentFrames;
 
     /// <summary>Frames that didn't meet confidence threshold (rejected after extraction)</summary>

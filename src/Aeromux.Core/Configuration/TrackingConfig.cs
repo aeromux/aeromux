@@ -23,7 +23,7 @@ public class TrackingConfig
 {
     /// <summary>
     /// Gets or sets the ICAO confidence level (global setting for all devices).
-    /// Determines how many detections required before frames are passed to Phase 5 parsing.
+    /// Determines how many detections required before frames are passed to parsing.
     /// Low=5, Medium=10, High=15 detections required.
     /// Default: Medium (10 detections)
     /// </summary>
@@ -79,7 +79,7 @@ public class TrackingConfig
 
 /// <summary>
 /// ICAO confidence levels (global setting for all devices).
-/// Determines how many detections required before passing frames to Phase 5 parsing.
+/// Determines how many detections required before passing frames to parsing.
 /// Higher levels reduce false positives but require stronger signals.
 /// Real aircraft transmit 5-10 messages/second, so thresholds are reached quickly (~2-8 seconds).
 /// </summary>

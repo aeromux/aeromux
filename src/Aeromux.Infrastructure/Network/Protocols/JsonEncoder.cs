@@ -27,19 +27,19 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// </summary>
 /// <remarks>
 /// IMPORTANT - Implementation Status:
-/// This is a Phase 6 implementation that outputs individual message serialization.
-/// Phase 7 (Aircraft Tracking) will introduce aircraft state aggregation similar to
+/// This is an implementation that outputs individual message serialization.
+/// Aircraft Tracking will introduce aircraft state aggregation similar to
 /// readsb's --net-json-port, which outputs consolidated aircraft objects with 50+ fields
 /// (position, velocity, identification, navigation data) aggregated from multiple messages.
 /// See Issue #002 for details.
 ///
-/// Current Behavior (Phase 6):
+/// Current Behavior:
 /// - Outputs every parsed message immediately (no aggregation)
 /// - Message-level granularity (not aircraft-level)
 /// - No rate limiting per aircraft
 /// - Useful for message stream logging and debugging
 ///
-/// Future Behavior (Phase 7):
+/// Future Behavior:
 /// - Will output aggregated aircraft state objects
 /// - Aircraft-level granularity with state tracking
 /// - Rate-limited per aircraft (configurable interval)

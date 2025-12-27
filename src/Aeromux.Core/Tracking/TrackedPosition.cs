@@ -59,13 +59,19 @@ public sealed record TrackedPosition
     public bool IsOnGround { get; init; }
 
     /// <summary>
+    /// /Represents the Single Antenna (SA) flag in ADS-B airborne position messages.
+    /// Indicates whether the aircraft is equipped with diversity antenna capability.
+    /// </summary>
+    public AntennaFlag? Antenna { get; init; }
+
+    /// <summary>
     /// Navigation Accuracy Category for Position (TC 31 Operational Status).
     /// Indicates GPS accuracy: 0-11 scale (11 = &lt;3m, 10 = &lt;10m, 9 = &lt;30m, etc.).
     /// Extracted from OperationalStatus messages (TC 31) and preserved across position updates.
     /// Values are retained until a new TC 31 message provides updated accuracy information.
     /// Null if no TC 31 message received yet.
     /// </summary>
-    public NavigationAccuracyCategory? NACp { get; init; }
+    public NavigationAccuracyCategoryPosition? NACp { get; init; }
 
     /// <summary>
     /// Navigation Integrity Category for Barometric altitude (TC 31 Operational Status).
@@ -85,16 +91,7 @@ public sealed record TrackedPosition
     /// Values are retained until a new TC 31 message provides updated integrity information.
     /// Null if no TC 31 message received yet.
     /// </summary>
-    public SurveillanceIntegrityLevel? SIL { get; init; }
-
-    /// <summary>
-    /// Navigation Accuracy Category for Velocity (TC 31 Operational Status).
-    /// Indicates velocity accuracy: 0-7 scale (0 = unknown, 1 = &lt;10 m/s, 2 = &lt;3 m/s, 3 = &lt;1 m/s, 4 = &lt;0.3 m/s).
-    /// Extracted from OperationalStatus messages (TC 31) and preserved across updates.
-    /// Values are retained until a new TC 31 message provides updated accuracy information.
-    /// Null if no TC 31 message received yet or NACv not provided.
-    /// </summary>
-    public int? NACv { get; init; }
+    public SourceIntegrityLevel? SIL { get; init; }
 
     /// <summary>
     /// Timestamp of last position update (when Coordinate or altitude was last set).

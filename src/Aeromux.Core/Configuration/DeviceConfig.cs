@@ -63,7 +63,7 @@ public class DeviceConfig
 
     /// <summary>
     /// Gets or sets the preamble detection threshold ratio.
-    /// Controls sensitivity of Mode S preamble detection (Phase 3).
+    /// Controls sensitivity of Mode S preamble detection.
     /// Lower values = more sensitive (more frames detected, more false positives)
     /// Higher values = less sensitive (only strong signals detected)
     /// Valid range: 1.5 to 10.0

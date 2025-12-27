@@ -1,0 +1,182 @@
+using Aeromux.Core.Tests.Builders;
+using Aeromux.Core.Tests.TestData;
+
+namespace Aeromux.Core.Tests.MessageParser;
+
+/// <summary>
+/// Tests for parsing Long Air-Air Surveillance (DF 16 ACAS coordination messages)
+/// </summary>
+public class LongAirAirSurveillanceTest
+{
+    private readonly Aeromux.Core.ModeS.MessageParser _parser = new();
+
+    [Theory]
+    [InlineData(RealFrames.LongAirAir_71C011, "71C011", 31000, AltitudeType.Barometric)]
+    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", 35000, AltitudeType.Barometric)]
+    [InlineData(RealFrames.LongAirAir_80073B, "80073B", 39975, AltitudeType.Barometric)]
+    public void ParseMessage_DF16_LongAirAirSurveillance_Altitude(
+        string hexFrame,
+        string expectedIcao,
+        int expectedAltitude,
+        AltitudeType expectedAltitudeType)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .WithIcaoAddress(expectedIcao)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        LongAirAirSurveillance longAirAirSurveillance = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
+        longAirAirSurveillance.Altitude.Should().NotBeNull();
+        longAirAirSurveillance.Altitude.Feet.Should().Be(expectedAltitude);
+        longAirAirSurveillance.Altitude.Type.Should().Be(expectedAltitudeType);
+    }
+
+    [Theory]
+    [InlineData(RealFrames.LongAirAir_71C011, "71C011", VerticalStatus.Airborne)]
+    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", VerticalStatus.Airborne)]
+    [InlineData(RealFrames.LongAirAir_80073B, "80073B", VerticalStatus.Airborne)]
+    public void ParseMessage_DF16_LongAirAirSurveillance_VerticalStatus(
+        string hexFrame,
+        string expectedIcao,
+        VerticalStatus expectedVerticalStatus)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .WithIcaoAddress(expectedIcao)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        LongAirAirSurveillance longAirAirSurveillance = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
+        longAirAirSurveillance.VerticalStatus.Should().Be(expectedVerticalStatus);
+    }
+
+    [Theory]
+    [InlineData(RealFrames.LongAirAir_71C011, "71C011", 7)]
+    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", 7)]
+    [InlineData(RealFrames.LongAirAir_80073B, "80073B", 7)]
+    public void ParseMessage_DF16_LongAirAirSurveillance_SensitivityLevel(
+        string hexFrame,
+        string expectedIcao,
+        int expectedSensitivityLevel)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .WithIcaoAddress(expectedIcao)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        LongAirAirSurveillance longAirAirSurveillance = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
+        longAirAirSurveillance.SensitivityLevel.Should().Be(expectedSensitivityLevel);
+    }
+
+    [Theory]
+    [InlineData(RealFrames.LongAirAir_71C011, "71C011", AcasReplyInformation.VerticalOnlyRA)]
+    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", AcasReplyInformation.VerticalOnlyRA)]
+    [InlineData(RealFrames.LongAirAir_80073B, "80073B", AcasReplyInformation.VerticalOnlyRA)]
+    public void ParseMessage_DF16_LongAirAirSurveillance_ReplyInformation(
+        string hexFrame,
+        string expectedIcao,
+        AcasReplyInformation expectedReplyInformation)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .WithIcaoAddress(expectedIcao)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        LongAirAirSurveillance longAirAirSurveillance = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
+        longAirAirSurveillance.ReplyInformation.Should().Be(expectedReplyInformation);
+    }
+
+    [Theory]
+    [InlineData(RealFrames.LongAirAir_71C011, "71C011")]
+    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E")]
+    [InlineData(RealFrames.LongAirAir_80073B, "80073B")]
+    public void ParseMessage_DF16_LongAirAirSurveillance_AcasInvalid_WhenVdsIsNot0x30(
+        string hexFrame,
+        string expectedIcao)
+    {
+        // These frames have VDS=0x58 (ground-initiated Comm-B data), not 0x30 (ACAS coordination)
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .WithIcaoAddress(expectedIcao)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        LongAirAirSurveillance longAirAirSurveillance = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
+        longAirAirSurveillance.AcasValid.Should().BeFalse("VDS = 0x58 indicates non-ACAS data (ground-initiated Comm-B)");
+
+        // When ACAS is invalid, MV subfields should be null
+        longAirAirSurveillance.ResolutionAdvisoryTerminated.Should().BeNull();
+        longAirAirSurveillance.MultipleThreatEncounter.Should().BeNull();
+        longAirAirSurveillance.RacNotBelow.Should().BeNull();
+        longAirAirSurveillance.RacNotAbove.Should().BeNull();
+        longAirAirSurveillance.RacNotLeft.Should().BeNull();
+        longAirAirSurveillance.RacNotRight.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseMessage_DF16_LongAirAirSurveillance_AllFields()
+    {
+        // Test all fields together with one comprehensive frame test
+        // Frame: 80073B at 39975 ft (VDS=0x58, not ACAS coordination data)
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.LongAirAir_80073B)
+            .WithIcaoAddress("80073B")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        LongAirAirSurveillance msg = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
+
+        // Basic message fields
+        msg.IcaoAddress.Should().Be("80073B");
+        msg.DownlinkFormat.Should().Be(DownlinkFormat.LongAirAirSurveillance);
+
+        // ACAS fields (always present in DF 16)
+        msg.Altitude.Should().NotBeNull();
+        msg.Altitude!.Feet.Should().Be(39975);
+        msg.Altitude.Type.Should().Be(AltitudeType.Barometric);
+        msg.VerticalStatus.Should().Be(VerticalStatus.Airborne);
+        msg.SensitivityLevel.Should().Be(7, "maximum ACAS sensitivity");
+        msg.ReplyInformation.Should().Be(AcasReplyInformation.VerticalOnlyRA);
+
+        // MV field - Not valid ACAS coordination data (VDS=0x58, not 0x30)
+        msg.AcasValid.Should().BeFalse("VDS != 0x30 indicates non-ACAS MV data");
+        msg.ResolutionAdvisoryTerminated.Should().BeNull("MV subfields only populated when AcasValid=true");
+        msg.MultipleThreatEncounter.Should().BeNull("MV subfields only populated when AcasValid=true");
+        msg.RacNotBelow.Should().BeNull("MV subfields only populated when AcasValid=true");
+        msg.RacNotAbove.Should().BeNull("MV subfields only populated when AcasValid=true");
+        msg.RacNotLeft.Should().BeNull("MV subfields only populated when AcasValid=true");
+        msg.RacNotRight.Should().BeNull("MV subfields only populated when AcasValid=true");
+    }
+}

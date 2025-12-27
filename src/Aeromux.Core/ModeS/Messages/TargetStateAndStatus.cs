@@ -22,7 +22,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <summary>
 /// Target state and status message (DF 17/18, TC 29).
 /// Contains autopilot target parameters and flight management system settings.
-/// Priority 3: FULL implementation of both Version 1 and Version 2.
+/// Full implementation of both Version 1 and Version 2.
 /// </summary>
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
@@ -46,7 +46,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="EmergencyPriority">Emergency state (V1 only).</param>
 /// <param name="SIL">Surveillance Integrity Level (V2 only).</param>
 /// <param name="NACp">Navigation Accuracy Category for Position (V2 only).</param>
-/// <param name="NICBaroAltitudeIntegrity">Barometric altitude integrity flag (V2 only).</param>
+/// <param name="NICBaroIntegrity">Barometric altitude integrity flag (V2 only).</param>
 public sealed record TargetStateAndStatus(
     string IcaoAddress,
     DateTime Timestamp,
@@ -55,8 +55,9 @@ public sealed record TargetStateAndStatus(
     bool WasCorrected,
     TargetStateSubtype Subtype,
     Altitude? TargetAltitude,
-    string? AltitudeSource,
+    AltitudeSource? AltitudeSource,
     double? TargetHeading,
+    TargetHeadingType? TargetHeadingType,
     double? BarometricPressure,
     VerticalMode? VerticalMode,
     HorizontalMode? HorizontalMode,
@@ -68,6 +69,6 @@ public sealed record TargetStateAndStatus(
     bool? TcasOperational,
     bool? TcasRaActive,
     EmergencyState? EmergencyPriority,
-    SurveillanceIntegrityLevel? SIL,
-    NavigationAccuracyCategory? NACp,
-    bool? NICBaroAltitudeIntegrity) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    SourceIntegrityLevel? SIL,
+    NavigationAccuracyCategoryPosition? NACp,
+    BarometricAltitudeIntegrityCode? NICBaroIntegrity) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

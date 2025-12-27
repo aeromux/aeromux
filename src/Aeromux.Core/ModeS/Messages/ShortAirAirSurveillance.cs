@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
 
@@ -9,8 +25,8 @@ namespace Aeromux.Core.ModeS.Messages;
 /// </summary>
 /// <remarks>
 /// Used for ACAS (Airborne Collision Avoidance System) coordination between aircraft.
-/// Contains altitude and flight status for collision avoidance calculations.
-/// Structure identical to DF 4, but semantic purpose is aircraft-to-aircraft coordination.
+/// DF 0 is an ACAS reply containing altitude and ACAS status fields (VS, CC, SL, RI).
+/// Unlike DF 4 (ground surveillance), DF 0 uses ACAS-specific fields for collision avoidance.
 /// Traffic: Less than 1% of Mode S messages.
 /// </remarks>
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
@@ -19,7 +35,10 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Altitude">Decoded altitude (null if unavailable or invalid).</param>
-/// <param name="FlightStatus">Flight status (airborne/ground and alert conditions).</param>
+/// <param name="VerticalStatus">Vertical status (Airborne or Ground).</param>
+/// <param name="CrossLinkCapability">True if aircraft supports DF 16 coordination replies.</param>
+/// <param name="SensitivityLevel">ACAS sensitivity level (0-7, where 0=inoperative).</param>
+/// <param name="ReplyInformation">ACAS operational state (0=no ACAS, 2=RA active, 3=vertical RA, 4=RA terminated).</param>
 public sealed record ShortAirAirSurveillance(
     string IcaoAddress,
     DateTime Timestamp,
@@ -27,4 +46,7 @@ public sealed record ShortAirAirSurveillance(
     byte SignalStrength,
     bool WasCorrected,
     Altitude? Altitude,
-    FlightStatus FlightStatus) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    VerticalStatus VerticalStatus,
+    bool CrossLinkCapability,
+    int SensitivityLevel,
+    AcasReplyInformation ReplyInformation) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

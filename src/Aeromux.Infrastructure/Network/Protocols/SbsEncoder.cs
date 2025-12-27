@@ -25,17 +25,17 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// </summary>
 /// <remarks>
 /// IMPORTANT - Compatibility Status:
-/// This is a Phase 6 implementation with PARTIAL readsb SBS compatibility.
+/// This is an implementation with PARTIAL readsb SBS compatibility.
 /// Supports ADS-B messages (MSG,1/3/4) but NOT surveillance messages (MSG,2/5/6/7/8).
 /// See Issue #003 for complete compatibility analysis and enhancement roadmap.
 ///
-/// Current Support (Phase 6):
+/// Current Support:
 /// - MSG,1: ES Aircraft identification (DF 17/18, TC 1-4) ✅
 /// - MSG,3: ES Airborne position (DF 17/18, TC 9-18) ✅
 /// - MSG,3: ES Surface position (DF 17/18, TC 5-8) ✅ (output as MSG,3, should be MSG,2)
 /// - MSG,4: ES Airborne velocity (DF 17/18, TC 19) ✅
 ///
-/// Missing from readsb (Phase 7/8 Enhancement):
+/// Missing from readsb:
 /// - MSG,2: ES Surface position as separate type (currently merged with MSG,3)
 /// - MSG,5: Surveillance altitude reply (DF 4, 20) ❌
 /// - MSG,6: Surveillance identity reply (DF 5, 21) ❌

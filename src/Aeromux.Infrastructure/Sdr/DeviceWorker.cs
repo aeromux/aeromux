@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Serilog;
 using RtlSdrManager;
 using RtlSdrManager.Modes;
@@ -264,9 +280,9 @@ public sealed class DeviceWorker : IDisposable
     /// <param name="args">Event arguments containing sample count available.</param>
     /// <remarks>
     /// This method runs on a background thread managed by RtlSdrManager.
-    /// Phase 2: Converts IQ samples to magnitude using pre-computed lookup table.
-    /// Phase 3: Detects Mode S preambles with local noise estimation and extracts raw frames.
-    /// Frames are ready for CRC validation in Phase 4.
+    /// Converts IQ samples to magnitude using pre-computed lookup table.
+    /// Detects Mode S preambles with local noise estimation and extracts raw frames.
+    /// Frames are ready for CRC validation.
     /// </remarks>
     private void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs args)
     {
@@ -283,7 +299,7 @@ public sealed class DeviceWorker : IDisposable
 
             _totalSamplesReceived += samples.Count;
 
-            // Convert samples to magnitude (Phase 2: IQ → Magnitude)
+            // Convert samples to magnitude (IQ → Magnitude)
             // Fills a linear buffer with prefix from previous buffer for seamless preamble detection
             // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
             // (ADR-009: Coordinator Pattern - zero overhead in hot path)
@@ -295,20 +311,20 @@ public sealed class DeviceWorker : IDisposable
                 return;
             }
 
-            // Phase 3: Detect preambles and extract frames
+            // Detect preambles and extract frames
             // Scan linear buffer from start (index 0) through new data region
             // The buffer layout is: [326 prefix samples][new data]
             // Scanning starts at index 0, allowing detector to access prefix for boundary detection
             List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer);
 
-            // Phase 4: Validate frames with CRC and extract ICAO addresses
+            // Validate frames with CRC and extract ICAO addresses
             foreach (RawFrame rawFrame in frames)
             {
                 // Use peak magnitude from preamble as signal strength indicator
                 // For now, use a placeholder value (will be improved in future phases)
                 byte signalStrength = 128;  // TODO: Extract actual signal strength from preamble
 
-                // Phase 4a: CRC validation
+                // CRC validation
                 ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
 
                 if (validatedFrame == null)
@@ -316,7 +332,7 @@ public sealed class DeviceWorker : IDisposable
                     continue;
                 }
 
-                // Phase 4b: Confidence tracking (filter noise from real aircraft)
+                // Confidence tracking (filter noise from real aircraft)
                 bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool isNewConfirmedIcao);
 
                 // Log when ICAO reaches confidence threshold
@@ -332,17 +348,17 @@ public sealed class DeviceWorker : IDisposable
                         validatedFrame.UsesPIMode ? "PI" : "AP");
                 }
 
-                // Only pass confident frames to Phase 5+
+                // Only pass confident frames to next steps
                 if (!isConfident)
                 {
                     continue;
                 }
 
-                // Phase 5: Parse validated frame into structured message
+                // Parse validated frame into structured message
                 // Noise and unconfident ICAOs are filtered out above
                 ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
 
-                // Phase 6: Invoke callback with frame and message (even if message is null)
+                // Invoke callback with frame and message (even if message is null)
                 // Beast format needs ALL frames, JSON/SBS will skip nulls
                 _onDataParsed?.Invoke(validatedFrame, message);
 
@@ -350,10 +366,6 @@ public sealed class DeviceWorker : IDisposable
                 // - Unsupported message type (DF 24 Comm-D, rare formats)
                 // - Parse error occurred (logged by MessageParser)
                 // - Validation failure (invalid data in message fields)
-                if (message != null)
-                {
-                    // TODO Phase 7: Feed message to AircraftTracker for state tracking
-                }
             }
         }
         catch (Exception ex)
@@ -392,7 +404,7 @@ public sealed class DeviceWorker : IDisposable
                 double deltaInMillions = delta / 1_000_000.0;
                 double samplesPerSecondInMillions = samplesPerSecond / 1_000_000.0;
 
-                // Log device statistics (Phase 1: sample reception + Phase 2: magnitude conversion)
+                // Log device statistics (sample reception + magnitude conversion)
                 Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) stats: {TotalSamples:F3}M samples ({Delta:F3}M increase), {SamplesPerSec:F3}M samples/sec, running {Elapsed}",
                     _config.Name,
                     _config.DeviceIndex,
@@ -401,14 +413,14 @@ public sealed class DeviceWorker : IDisposable
                     samplesPerSecondInMillions,
                     elapsed.ToString(@"hh\:mm\:ss"));
 
-                // Log demodulator buffer status (Phase 2) at Debug level
+                // Log demodulator buffer status at Debug level
                 // Note: Uses Coordinator Pattern (ADR-009) - DeviceWorker logs IQDemodulator's statistics
                 Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) demodulator: {SamplesProcessed:F3}M samples converted to magnitude",
                     _config.Name,
                     _config.DeviceIndex,
                     _demodulator.TotalSamplesProcessed / 1_000_000.0);
 
-                // Log preamble detection statistics (Phase 3) at Debug level
+                // Log preamble detection statistics at Debug level
                 // Shows extraction rate to monitor threshold effectiveness
                 long candidates = _preambleDetector.PreambleCandidates;
                 long extracted = _preambleDetector.FramesExtracted;
@@ -421,7 +433,7 @@ public sealed class DeviceWorker : IDisposable
                     extracted,
                     extractedRate);
 
-                // Log CRC validation statistics (Phase 4) at Debug level
+                // Log CRC validation statistics at Debug level
                 // Shows validation and correction rates to monitor frame quality
                 long crcChecked = _validatedFrameFactory.FramesChecked;
                 long crcValid = _validatedFrameFactory.FramesValid;
@@ -440,7 +452,7 @@ public sealed class DeviceWorker : IDisposable
                     crcCorrectedRate,
                     crcInvalid);
 
-                // Log confidence tracking statistics (Phase 4b) at Debug level
+                // Log confidence tracking statistics at Debug level
                 // Shows how many frames pass confidence filter, active ICAOs, and cleanup stats
                 long confTotal = _confidenceTracker.TotalFrames;
                 long confConfident = _confidenceTracker.ConfidentFrames;
@@ -459,7 +471,7 @@ public sealed class DeviceWorker : IDisposable
                     confConfirmed,
                     confExpired);
 
-                // Log message parsing statistics (Phase 5) at Debug level
+                // Log message parsing statistics at Debug level
                 // Shows how many frames were parsed, validation failures, unexpected errors, unsupported
                 long msgParsed = _messageParser.MessagesParsed;
                 long msgValidationFailures = _messageParser.ValidationFailures;

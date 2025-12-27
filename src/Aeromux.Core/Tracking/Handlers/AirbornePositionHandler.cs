@@ -91,6 +91,14 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             }
         }
 
+        // Update Single Antenna flag.
+        // This field is encoded in bit 40 of Type Code 9-18 and 20-22 messages.
+        if (msg.Antenna != null && position.Antenna != msg.Antenna)
+        {
+            position = position with { Antenna = msg.Antenna };
+            positionChanged = true;
+        }
+
         // Update IsOnGround status (airborne position messages always indicate in-flight)
         // Used to distinguish from surface position messages (TC 5-8) and filter ground traffic
         if (position.IsOnGround)

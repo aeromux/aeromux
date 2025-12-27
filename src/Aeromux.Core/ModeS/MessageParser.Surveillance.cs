@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -12,47 +28,8 @@ namespace Aeromux.Core.ModeS;
 public sealed partial class MessageParser
 {
     // ========================================
-    // Priority 2: Basic Surveillance (IMPLEMENTED)
+    // Basic Surveillance
     // ========================================
-
-    /// <summary>
-    /// Parses Short Air-Air Surveillance message (DF 0).
-    /// Extracts flight status and altitude for ACAS coordination.
-    /// </summary>
-    /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Short air-air surveillance message with altitude and flight status.</returns>
-    /// <remarks>
-    /// DF 0 is used for ACAS (Airborne Collision Avoidance System) coordination between aircraft.
-    /// Structure identical to DF 4, but semantic purpose is aircraft-to-aircraft coordination.
-    /// </remarks>
-    private ModeSMessage? ParseShortAirAirSurveillance(ValidatedFrame frame)
-    {
-        // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
-        int flightStatusRaw = frame.Data[0] & 0x07;
-        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
-        {
-            Log.Debug("Invalid flight status {FS} in DF 0 from {Icao}",
-                flightStatusRaw, frame.IcaoAddress);
-            return null;
-        }
-
-        var flightStatus = (FlightStatus)flightStatusRaw;
-
-        // Extract Altitude Code (AC) field from bits 20-32
-        int altitudeCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
-
-        // Decode altitude (null if invalid or unavailable)
-        Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
-
-        return new ShortAirAirSurveillance(
-            frame.IcaoAddress,
-            frame.Timestamp,
-            frame.DownlinkFormat,
-            frame.SignalStrength,
-            frame.WasCorrected,
-            altitude,
-            flightStatus);
-    }
 
     /// <summary>
     /// Parses Surveillance Altitude Reply message (DF 4).
@@ -68,7 +45,7 @@ public sealed partial class MessageParser
     private ModeSMessage? ParseSurveillanceAltitudeReply(ValidatedFrame frame)
     {
         // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
-        int flightStatusRaw = frame.Data[0] & 0x07;
+        int  flightStatusRaw = ExtractBits(frame.Data, 6, 3);
         if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 4 from {Icao}",
@@ -79,7 +56,7 @@ public sealed partial class MessageParser
         var flightStatus = (FlightStatus)flightStatusRaw;
 
         // Extract Altitude Code (AC) field from bits 20-32
-        int altitudeCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
+        int altitudeCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode altitude (null if invalid or unavailable)
         Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
@@ -114,7 +91,7 @@ public sealed partial class MessageParser
     private ModeSMessage? ParseAllCallReply(ValidatedFrame frame)
     {
         // Extract Capability (CA) field from bits 6-8 (byte 0, bits 0-2)
-        int capabilityRaw = frame.Data[0] & 0x07;
+        int capabilityRaw = ExtractBits(frame.Data, 6, 3);
 
         // Validate capability value (0-7 are defined in TransponderCapability enum)
         if (!Enum.IsDefined(typeof(TransponderCapability), capabilityRaw))
@@ -126,12 +103,17 @@ public sealed partial class MessageParser
 
         var capability = (TransponderCapability)capabilityRaw;
 
+        // Extract ICAO from AA field (bit 9-32)
+        int extractedRawIcao = ExtractBits(frame.Data, 9, 24);
+        string extractedIcao = $"{extractedRawIcao:X6}";
+
         return new AllCallReply(
             frame.IcaoAddress,
             frame.Timestamp,
             frame.DownlinkFormat,
             frame.SignalStrength,
             frame.WasCorrected,
+            extractedIcao,
             capability);
     }
 
@@ -148,7 +130,7 @@ public sealed partial class MessageParser
     private ModeSMessage? ParseSurveillanceIdentityReply(ValidatedFrame frame)
     {
         // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
-        int flightStatusRaw = frame.Data[0] & 0x07;
+        int flightStatusRaw = ExtractBits(frame.Data, 6, 3);
         if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 5 from {Icao}",
@@ -159,7 +141,7 @@ public sealed partial class MessageParser
         var flightStatus = (FlightStatus)flightStatusRaw;
 
         // Extract Identity Code (ID) field from bits 20-32
-        int identityCode = ((frame.Data[2] & 0x1F) << 8) | (frame.Data[3] >> 1);
+        int identityCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode squawk code (4-digit octal string)
         string squawkCode = DecodeSquawkCode(identityCode);

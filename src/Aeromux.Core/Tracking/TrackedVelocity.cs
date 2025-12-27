@@ -87,6 +87,16 @@ public sealed record TrackedVelocity
     public VelocitySubtype? VelocitySubtype { get; init; }
 
     /// <summary>
+    /// Navigation Accuracy Category for Velocity (TC 19 Airborne Velocity).
+    /// Indicates the 95% accuracy of horizontal and vertical velocity measurements.
+    /// Scale: 0-4 (0 = unknown, 1 = &lt;10 m/s, 2 = &lt;3 m/s, 3 = &lt;1 m/s, 4 = &lt;0.3 m/s).
+    /// Extracted from TC 19 (Airborne Velocity) messages and preserved across velocity updates.
+    /// Higher values indicate better velocity measurement accuracy.
+    /// Null if no TC 19 message received yet.
+    /// </summary>
+    public NavigationAccuracyCategoryVelocity? NACv { get; init; }
+
+    /// <summary>
     /// Timestamp of last velocity update (when Speed, GroundSpeed, or related fields were last set).
     /// Updated by both TC 19 (airborne velocity) and TC 5-8 (surface position) messages.
     /// Null if no velocity data received yet.

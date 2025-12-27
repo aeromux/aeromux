@@ -20,8 +20,6 @@ namespace Aeromux.Core.Configuration;
 
 /// <summary>
 /// Network server configuration for output protocols.
-/// Phase 6: Beast, JSON, SBS TCP broadcasting on separate ports.
-/// Phase 7: HTTP API and web interface.
 /// </summary>
 public class NetworkConfig
 {
@@ -29,14 +27,14 @@ public class NetworkConfig
     /// Gets or sets the Beast binary protocol port number.
     /// Beast format: Raw binary Mode S frames with timestamps.
     /// Used for feeding other ADS-B software (e.g., tar1090, Virtual Radar Server).
-    /// Default: 30005 (dump1090-compatible standard port, changed from 30002 in Phase 6).
+    /// Default: 30005.
     /// </summary>
     public int BeastPort { get; set; } = 30005;
 
     /// <summary>
     /// Gets or sets the JSON streaming port number.
     /// JSON format: Line-delimited JSON objects with decoded aircraft data.
-    /// Used for web applications and real-time streaming (introduced in Phase 6).
+    /// Used for web applications and real-time streaming.
     /// Default: 30006 (web-friendly, non-standard port).
     /// </summary>
     public int JsonPort { get; set; } = 30006;
@@ -45,14 +43,14 @@ public class NetworkConfig
     /// Gets or sets the SBS BaseStation text protocol port number.
     /// SBS format: CSV text format compatible with Kinetic's BaseStation application.
     /// Used for compatibility with legacy ADS-B applications.
-    /// Default: 30104 (Virtual Radar Server compatible, changed from 30003 in Phase 6).
+    /// Default: 30104.
     /// </summary>
     public int SbsPort { get; set; } = 30104;
 
     /// <summary>
     /// Gets or sets the HTTP API and web interface port number.
     /// Used for REST API endpoints and serving the web interface.
-    /// Default: 8080 (standard non-privileged HTTP port, implemented in Phase 7).
+    /// Default: 8080 (standard non-privileged HTTP port).
     /// </summary>
     public int HttpPort { get; set; } = 8080;
 

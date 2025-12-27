@@ -137,10 +137,10 @@ public class ConfigurationBuilder
         return new AeromuxConfig
         {
             Logging = yamlConfig.Logging ?? baseConfig.Logging,
-            Devices = yamlConfig.Devices ?? baseConfig.Devices,  // Phase 1: Simplified from Sdr.Devices
+            Devices = yamlConfig.Devices ?? baseConfig.Devices,
             Network = yamlConfig.Network ?? baseConfig.Network,
             Tracking = yamlConfig.Tracking ?? baseConfig.Tracking,
-            Receiver = yamlConfig.Receiver ?? baseConfig.Receiver  // Phase 5: Receiver location for TC 5-8
+            Receiver = yamlConfig.Receiver ?? baseConfig.Receiver
         };
     }
 

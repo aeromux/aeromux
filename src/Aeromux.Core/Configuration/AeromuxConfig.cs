@@ -31,7 +31,6 @@ public class AeromuxConfig
     /// <summary>
     /// Gets or sets the list of SDR devices to use.
     /// Multiple devices can be configured for diversity reception.
-    /// Phase 1: Simplified from Sdr.Devices to top-level Devices (removed SdrConfig wrapper).
     /// </summary>
     public List<DeviceConfig>? Devices { get; set; }
 

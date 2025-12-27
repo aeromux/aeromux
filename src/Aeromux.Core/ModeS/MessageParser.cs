@@ -1,3 +1,19 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.ValueObjects;
 using Serilog;
@@ -9,8 +25,8 @@ namespace Aeromux.Core.ModeS;
 /// Implements the Coordinator Pattern (ADR-009) for statistics.
 /// </summary>
 /// <remarks>
-/// Phase 5 Foundation: Complete DF/TC routing skeleton with statistics.
-/// Priority 1-4: All parsers implemented across partial classes:
+/// Complete DF/TC routing skeleton with statistics.
+/// All parsers implemented across partial classes:
 /// - MessageParser.cs: Core routing and statistics
 /// - MessageParser.ExtendedSquitter.cs: DF 17/18/19 (ADS-B)
 /// - MessageParser.Surveillance.cs: DF 0/4/5/11 (Basic surveillance)
@@ -81,20 +97,20 @@ public sealed partial class MessageParser
         {
             ModeSMessage? message = frame.DownlinkFormat switch
             {
-                // Priority 1: ADS-B Extended Squitter (most common)
+                // ADS-B Extended Squitter
                 DownlinkFormat.ExtendedSquitter => ParseExtendedSquitter(frame),
                 DownlinkFormat.ExtendedSquitterNonTransponder => ParseExtendedSquitter(frame),
 
-                // Priority 2: Basic surveillance
-                DownlinkFormat.ShortAirAirSurveillance => ParseShortAirAirSurveillance(frame),
+                // Basic surveillance
                 DownlinkFormat.SurveillanceAltitudeReply => ParseSurveillanceAltitudeReply(frame),
                 DownlinkFormat.SurveillanceIdentityReply => ParseSurveillanceIdentityReply(frame),
                 DownlinkFormat.AllCallReply => ParseAllCallReply(frame),
 
-                // Priority 3: Additional surveillance formats
+                // Additional surveillance formats
+                DownlinkFormat.ShortAirAirSurveillance => ParseShortAirAirSurveillance(frame),
                 DownlinkFormat.LongAirAirSurveillance => ParseLongAirAirSurveillance(frame),
 
-                // Priority 4: Less common formats
+                // Less common formats
                 DownlinkFormat.MilitaryExtendedSquitter => ParseExtendedSquitter(frame),
                 DownlinkFormat.CommBAltitudeReply => ParseCommBAltitudeReply(frame),
                 DownlinkFormat.CommBIdentityReply => ParseCommBIdentityReply(frame),
