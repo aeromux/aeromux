@@ -40,7 +40,7 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
 {
     public Type MessageType => typeof(AirborneVelocity);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -50,7 +50,6 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (AirborneVelocity)message;
-        var changedFields = new HashSet<string>();
 
         // Extract heading vs track based on velocity subtype
         // TC 19 message encoding quirk: the "Heading" field has different meanings:
@@ -85,7 +84,6 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
             LastUpdate = msg.Velocity != null ? timestamp : null       // Update timestamp only if velocity present
         };
 
-        changedFields.Add(nameof(Aircraft.Velocity));
-        return (aircraft with { Velocity = velocity }, changedFields);
+        return aircraft with { Velocity = velocity };
     }
 }

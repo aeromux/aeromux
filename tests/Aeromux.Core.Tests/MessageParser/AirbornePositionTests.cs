@@ -37,8 +37,8 @@ public class AirbornePositionTests
         message.Should().NotBeNull();
         AirbornePosition? position = message.Should().BeOfType<AirbornePosition>().Subject;
         position.Altitude.Should().NotBeNull();
-        position.Altitude.Feet.Should().Be(expectedAltitudeFeet);
-        position.Altitude.Type.Should().Be(expectedAltitudeType);
+        position.Altitude!.Feet.Should().Be(expectedAltitudeFeet);
+        position.Altitude!.Type.Should().Be(expectedAltitudeType);
     }
 
     [Theory]

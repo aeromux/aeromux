@@ -62,7 +62,10 @@ public sealed class TrackingHandlerRegistry
         // Surveillance reply handlers
         Register(new SurveillanceAltitudeReplyHandler());
         Register(new SurveillanceIdentityReplyHandler());
+
+        // ACAS/TCAS handlers
         Register(new ShortAirAirSurveillanceHandler());
+        Register(new LongAirAirSurveillanceHandler());
     }
 
     /// <summary>

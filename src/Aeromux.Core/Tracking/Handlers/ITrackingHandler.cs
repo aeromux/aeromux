@@ -31,7 +31,10 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// Each handler is responsible for:
 /// - Extracting fields from its specific message type
 /// - Merging those fields into aircraft state
-/// - Tracking what changed for event notifications
+/// </para>
+/// <para>
+/// Handlers are pure data extraction functions - they don't track what changed.
+/// The event system compares aircraft states to determine changes for subscribers.
 /// </para>
 /// </remarks>
 public interface ITrackingHandler
@@ -50,12 +53,13 @@ public interface ITrackingHandler
     /// <param name="message">Parsed Mode S message (guaranteed to be of MessageType)</param>
     /// <param name="frame">Complete processed frame (for signal strength, metadata, etc.)</param>
     /// <param name="timestamp">Current UTC timestamp</param>
-    /// <returns>Tuple containing updated aircraft state and set of changed field names</returns>
+    /// <returns>Updated aircraft state (may be same instance if no fields extracted)</returns>
     /// <remarks>
-    /// Changed field names use dot notation for nested properties (e.g., "Identification.Callsign").
-    /// The returned aircraft instance may be the same as input if no fields changed.
+    /// Handlers are pure data extraction functions. They create new aircraft instances
+    /// with updated fields using C# record 'with' expressions.
+    /// The returned aircraft instance may be the same as input if message contains no usable data.
     /// </remarks>
-    (Aircraft updated, HashSet<string> changedFields) Apply(
+    Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,

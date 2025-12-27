@@ -41,8 +41,8 @@ public class AirborneVelocityTests
         message.Should().NotBeNull();
         AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
         velocity.Velocity.Should().NotBeNull();
-        velocity.Velocity.Knots.Should().Be(expectedVelocity);
-        velocity.Velocity.Type.Should().Be(expectedVelocityType);
+        velocity.Velocity!.Knots.Should().Be(expectedVelocity);
+        velocity.Velocity!.Type.Should().Be(expectedVelocityType);
         velocity.Subtype.Should().Be(expectedVelocitySubtype);
     }
 

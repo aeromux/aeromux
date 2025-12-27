@@ -51,7 +51,7 @@ public sealed class AircraftStatusHandler : ITrackingHandler
 {
     public Type MessageType => typeof(AircraftStatus);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -61,34 +61,21 @@ public sealed class AircraftStatusHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (AircraftStatus)message;
-        var changedFields = new HashSet<string>();
-        TrackedIdentification identification = aircraft.Identification;
 
         // Update Squawk code (4-digit octal transponder code)
         // Used for: ATC identification, special condition signaling (7700/7600/7500)
         // Format: 4 octal digits (0-7 for each digit), e.g., "7700", "1200", "0035"
-        if (msg.SquawkCode != null && identification.Squawk != msg.SquawkCode)
-        {
-            identification = identification with { Squawk = msg.SquawkCode };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.Squawk)}");
-        }
-
+        //
         // Update EmergencyState (critical safety information)
         // States: NoEmergency, GeneralEmergency, MedicalEmergency, MinimumFuel,
         //         NoCommunications, UnlawfulInterference, Downed
         // Triggers: UI alerts, priority display, logging, notification systems
-        if (msg.EmergencyState.HasValue && identification.EmergencyState != msg.EmergencyState.Value)
+        TrackedIdentification identification = aircraft.Identification with
         {
-            identification = identification with { EmergencyState = msg.EmergencyState.Value };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.EmergencyState)}");
-        }
+            Squawk = msg.SquawkCode ?? aircraft.Identification.Squawk,
+            EmergencyState = msg.EmergencyState ?? aircraft.Identification.EmergencyState
+        };
 
-        // Return updated aircraft state if anything changed
-        if (changedFields.Count > 0)
-        {
-            return (aircraft with { Identification = identification }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Identification = identification };
     }
 }

@@ -20,10 +20,10 @@ using Aeromux.Core.ModeS.Messages;
 namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
-/// Handles TargetStateAndStatus messages (TC 29) for autopilot/FMS intent tracking.
-/// Updates: SelectedAltitude, AltitudeSource, SelectedHeading, BarometricPressureSetting,
-/// VerticalMode, HorizontalMode, AutopilotEngaged, VnavMode, LnavMode, AltitudeHoldMode,
-/// ApproachMode, TcasOperational, TcasRaActive, LastUpdate
+/// Handles TargetStateAndStatus messages (TC 29) for autopilot/FMS intent and TCAS status tracking.
+/// Updates autopilot fields: SelectedAltitude, AltitudeSource, SelectedHeading, BarometricPressureSetting,
+/// VerticalMode, HorizontalMode, AutopilotEngaged, VnavMode, LnavMode, AltitudeHoldMode, ApproachMode.
+/// Updates ACAS fields: TcasOperational, TcasRaActive.
 /// </summary>
 /// <remarks>
 /// <para><strong>TC 29 has two versions with different field sets:</strong></para>
@@ -36,13 +36,14 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <para>
 /// This handler preserves fields from both versions using field-level merging.
 /// Only updates fields that are present in the current message (doesn't null out V1 fields when receiving V2 or vice versa).
+/// TCAS fields are now stored in TrackedAcas category instead of TrackedAutopilot.
 /// </para>
 /// </remarks>
 public sealed class TargetStateAndStatusHandler : ITrackingHandler
 {
     public Type MessageType => typeof(TargetStateAndStatus);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -52,75 +53,57 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (TargetStateAndStatus)message;
-        var changedFields = new HashSet<string>();
-
-        // Get existing autopilot state or create new one
-        TrackedAutopilot? existing = aircraft.Autopilot;
+        TrackedAutopilot? existingAutopilot = aircraft.Autopilot;
+        TrackedAcas? existingAcas = aircraft.Acas;
 
         // Create updated autopilot state with field-level merging
         // Only update fields present in this message, preserve others from existing state
+        // Note: TCAS fields have been moved to TrackedAcas category
         var autopilot = new TrackedAutopilot
         {
             // Shared fields (V1 and V2)
-            SelectedAltitude = msg.TargetAltitude ?? existing?.SelectedAltitude,
-            AltitudeSource = msg.AltitudeSource ?? existing?.AltitudeSource,
-            SelectedHeading = msg.TargetHeading ?? existing?.SelectedHeading,
-            TcasOperational = msg.TcasOperational ?? existing?.TcasOperational,
+            SelectedAltitude = msg.TargetAltitude ?? existingAutopilot?.SelectedAltitude,
+            AltitudeSource = msg.AltitudeSource ?? existingAutopilot?.AltitudeSource,
+            SelectedHeading = msg.TargetHeading ?? existingAutopilot?.SelectedHeading,
 
             // V2-only fields
-            BarometricPressureSetting = msg.BarometricPressure ?? existing?.BarometricPressureSetting,
-            AutopilotEngaged = msg.AutopilotEngaged ?? existing?.AutopilotEngaged,
-            VnavMode = msg.VnavMode ?? existing?.VnavMode,
-            LnavMode = msg.LnavMode ?? existing?.LnavMode,
-            AltitudeHoldMode = msg.AltitudeHoldMode ?? existing?.AltitudeHoldMode,
-            ApproachMode = msg.ApproachMode ?? existing?.ApproachMode,
+            BarometricPressureSetting = msg.BarometricPressure ?? existingAutopilot?.BarometricPressureSetting,
+            AutopilotEngaged = msg.AutopilotEngaged ?? existingAutopilot?.AutopilotEngaged,
+            VnavMode = msg.VNAVMode ?? existingAutopilot?.VnavMode,
+            LnavMode = msg.LNAVMode ?? existingAutopilot?.LnavMode,
+            AltitudeHoldMode = msg.AltitudeHoldMode ?? existingAutopilot?.AltitudeHoldMode,
+            ApproachMode = msg.ApproachMode ?? existingAutopilot?.ApproachMode,
 
             // V1-only fields
-            VerticalMode = msg.VerticalMode ?? existing?.VerticalMode,
-            HorizontalMode = msg.HorizontalMode ?? existing?.HorizontalMode,
-            TcasRaActive = msg.TcasRaActive ?? existing?.TcasRaActive,
+            VerticalMode = msg.VerticalMode ?? existingAutopilot?.VerticalMode,
+            HorizontalMode = msg.HorizontalMode ?? existingAutopilot?.HorizontalMode,
 
             // Update timestamp
             LastUpdate = timestamp
         };
 
-        // Mark as changed if any autopilot field changed
-        if (!AutopilotEquals(existing, autopilot))
+        // Create updated ACAS state with TC 29 TCAS fields
+        // Preserve DF 0/DF 16 fields that TC 29 doesn't provide
+        var acas = new TrackedAcas
         {
-            changedFields.Add(nameof(Aircraft.Autopilot));
-        }
+            // TC 29 TCAS fields
+            TcasOperational = msg.TCASOperational ?? existingAcas?.TcasOperational,
+            TcasRaActive = msg.TCASRaActive ?? existingAcas?.TcasRaActive,
 
-        return (aircraft with { Autopilot = autopilot }, changedFields);
-    }
+            // Preserve DF 0/DF 16 fields
+            SensitivityLevel = existingAcas?.SensitivityLevel,
+            CrossLinkCapability = existingAcas?.CrossLinkCapability,
+            ReplyInformation = existingAcas?.ReplyInformation,
+            ResolutionAdvisoryTerminated = existingAcas?.ResolutionAdvisoryTerminated,
+            MultipleThreatEncounter = existingAcas?.MultipleThreatEncounter,
+            RacNotBelow = existingAcas?.RacNotBelow,
+            RacNotAbove = existingAcas?.RacNotAbove,
+            RacNotLeft = existingAcas?.RacNotLeft,
+            RacNotRight = existingAcas?.RacNotRight,
 
-    /// <summary>
-    /// Compares two TrackedAutopilot instances for equality (excluding LastUpdate).
-    /// Returns true if all fields except LastUpdate are equal.
-    /// </summary>
-    private static bool AutopilotEquals(TrackedAutopilot? a, TrackedAutopilot? b)
-    {
-        if (a == null && b == null)
-        {
-            return true;
-        }
+            LastUpdate = timestamp
+        };
 
-        if (a == null || b == null)
-        {
-            return false;
-        }
-
-        return a.SelectedAltitude == b.SelectedAltitude &&
-               a.AltitudeSource == b.AltitudeSource &&
-               a.SelectedHeading == b.SelectedHeading &&
-               a.BarometricPressureSetting == b.BarometricPressureSetting &&
-               a.VerticalMode == b.VerticalMode &&
-               a.HorizontalMode == b.HorizontalMode &&
-               a.AutopilotEngaged == b.AutopilotEngaged &&
-               a.VnavMode == b.VnavMode &&
-               a.LnavMode == b.LnavMode &&
-               a.AltitudeHoldMode == b.AltitudeHoldMode &&
-               a.ApproachMode == b.ApproachMode &&
-               a.TcasOperational == b.TcasOperational &&
-               a.TcasRaActive == b.TcasRaActive;
+        return aircraft with { Autopilot = autopilot, Acas = acas };
     }
 }

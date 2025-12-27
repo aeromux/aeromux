@@ -78,6 +78,13 @@ public sealed record Aircraft
     public TrackedAutopilot? Autopilot { get; init; }
 
     /// <summary>
+    /// Aircraft ACAS/TCAS collision avoidance information (operational status, RA state, threat coordination).
+    /// Optional - may be null until first DF 0, DF 16, or TC 29 ACAS message received.
+    /// Sources: DF 0 (Short Air-Air), DF 16 (Long Air-Air), TC 29 (Target State).
+    /// </summary>
+    public TrackedAcas? Acas { get; init; }
+
+    /// <summary>
     /// Aircraft flight dynamics (roll, magnetic heading, vertical rates, mach, track rate).
     /// Optional - may be null until first BDS 5,0/5,3/6,0 message received.
     /// Sources: BDS 5,0 (Track and Turn), BDS 5,3/6,0 (Air-Referenced State), BDS 6,0 (Heading and Speed).

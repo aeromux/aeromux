@@ -37,12 +37,12 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="VerticalMode">Vertical navigation mode (V1 only: None, Acquiring, or CapturingOrMaintaining).</param>
 /// <param name="HorizontalMode">Horizontal navigation mode (V1 only: None, Acquiring, or CapturingOrMaintaining).</param>
 /// <param name="AutopilotEngaged">Autopilot engaged (V2 only).</param>
-/// <param name="VnavMode">VNAV mode engaged (V2 only).</param>
+/// <param name="VNAVMode">VNAV mode engaged (V2 only).</param>
 /// <param name="AltitudeHoldMode">Altitude hold mode engaged (V2 only).</param>
 /// <param name="ApproachMode">Approach mode engaged (V2 only).</param>
-/// <param name="LnavMode">LNAV mode engaged (V2 only).</param>
-/// <param name="TcasOperational">TCAS/ACAS operational.</param>
-/// <param name="TcasRaActive">TCAS RA active (V1 only).</param>
+/// <param name="LNAVMode">LNAV mode engaged (V2 only).</param>
+/// <param name="TCASOperational">TCAS/ACAS operational.</param>
+/// <param name="TCASRaActive">TCAS RA active (V1 only).</param>
 /// <param name="EmergencyPriority">Emergency state (V1 only).</param>
 /// <param name="SIL">Surveillance Integrity Level (V2 only).</param>
 /// <param name="NACp">Navigation Accuracy Category for Position (V2 only).</param>
@@ -62,12 +62,12 @@ public sealed record TargetStateAndStatus(
     VerticalMode? VerticalMode,
     HorizontalMode? HorizontalMode,
     bool? AutopilotEngaged,
-    bool? VnavMode,
+    bool? VNAVMode,
     bool? AltitudeHoldMode,
     bool? ApproachMode,
-    bool? LnavMode,
-    bool? TcasOperational,
-    bool? TcasRaActive,
+    bool? LNAVMode,
+    bool? TCASOperational,
+    bool? TCASRaActive,
     EmergencyState? EmergencyPriority,
     SourceIntegrityLevel? SIL,
     NavigationAccuracyCategoryPosition? NACp,

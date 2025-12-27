@@ -35,7 +35,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
 {
     public Type MessageType => typeof(CommBAltitudeReply);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -45,21 +45,18 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (CommBAltitudeReply)message;
-        var changedFields = new HashSet<string>();
 
         // Route to appropriate handler based on BDS data type
-        Aircraft updatedAircraft = msg.BdsData switch
+        return msg.BdsData switch
         {
-            Bds40SelectedVerticalIntention data => HandleBds40(aircraft, data, timestamp, changedFields),
-            Bds44MeteorologicalRoutine data => HandleBds44(aircraft, data, timestamp, changedFields),
-            Bds45MeteorologicalHazard data => HandleBds45(aircraft, data, timestamp, changedFields),
-            Bds50TrackAndTurn data => HandleBds50(aircraft, data, timestamp, changedFields),
-            Bds53AirReferencedState data => HandleBds53(aircraft, data, timestamp, changedFields),
-            Bds60HeadingAndSpeed data => HandleBds60(aircraft, data, timestamp, changedFields),
+            Bds40SelectedVerticalIntention data => HandleBds40(aircraft, data, timestamp),
+            Bds44MeteorologicalRoutine data => HandleBds44(aircraft, data, timestamp),
+            Bds45MeteorologicalHazard data => HandleBds45(aircraft, data, timestamp),
+            Bds50TrackAndTurn data => HandleBds50(aircraft, data, timestamp),
+            Bds53AirReferencedState data => HandleBds53(aircraft, data, timestamp),
+            Bds60HeadingAndSpeed data => HandleBds60(aircraft, data, timestamp),
             _ => aircraft // Unknown/unsupported BDS code, no update
         };
-
-        return (updatedAircraft, changedFields);
     }
 
     /// <summary>
@@ -73,8 +70,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     private static Aircraft HandleBds40(
         Aircraft aircraft,
         Bds40SelectedVerticalIntention data,
-        DateTime timestamp,
-        HashSet<string> changedFields)
+        DateTime timestamp)
     {
         TrackedAutopilot? existing = aircraft.Autopilot;
 
@@ -97,6 +93,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
         // Create new autopilot state with field-level merging:
         // - Update altitude and pressure from BDS 4,0
         // - Preserve all other fields from existing state (from TC 29)
+        // Note: TCAS fields have been moved to TrackedAcas category
         var autopilot = new TrackedAutopilot
         {
             SelectedAltitude = selectedAltitude ?? existing?.SelectedAltitude,
@@ -110,12 +107,9 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LnavMode = existing?.LnavMode,                                            // From TC 29 V2
             AltitudeHoldMode = existing?.AltitudeHoldMode,                            // From TC 29 V2
             ApproachMode = existing?.ApproachMode,                                    // From TC 29 V2
-            TcasOperational = existing?.TcasOperational,                              // From TC 29
-            TcasRaActive = existing?.TcasRaActive,                                    // From TC 29 V1
             LastUpdate = timestamp
         };
 
-        changedFields.Add(nameof(Aircraft.Autopilot));
         return aircraft with { Autopilot = autopilot };
     }
 
@@ -130,8 +124,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     private static Aircraft HandleBds44(
         Aircraft aircraft,
         Bds44MeteorologicalRoutine data,
-        DateTime timestamp,
-        HashSet<string> changedFields)
+        DateTime timestamp)
     {
         TrackedMeteo? existing = aircraft.Meteo;
 
@@ -154,7 +147,6 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        changedFields.Add(nameof(Aircraft.Meteo));
         return aircraft with { Meteo = meteo };
     }
 
@@ -169,8 +161,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     private static Aircraft HandleBds45(
         Aircraft aircraft,
         Bds45MeteorologicalHazard data,
-        DateTime timestamp,
-        HashSet<string> changedFields)
+        DateTime timestamp)
     {
         TrackedMeteo? existing = aircraft.Meteo;
 
@@ -193,7 +184,6 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        changedFields.Add(nameof(Aircraft.Meteo));
         return aircraft with { Meteo = meteo };
     }
 
@@ -209,8 +199,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     private static Aircraft HandleBds50(
         Aircraft aircraft,
         Bds50TrackAndTurn data,
-        DateTime timestamp,
-        HashSet<string> changedFields)
+        DateTime timestamp)
     {
         TrackedFlightDynamics? existing = aircraft.FlightDynamics;
 
@@ -228,7 +217,6 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        changedFields.Add(nameof(Aircraft.FlightDynamics));
         return aircraft with { FlightDynamics = dynamics };
     }
 
@@ -243,8 +231,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     private static Aircraft HandleBds53(
         Aircraft aircraft,
         Bds53AirReferencedState data,
-        DateTime timestamp,
-        HashSet<string> changedFields)
+        DateTime timestamp)
     {
         TrackedFlightDynamics? existing = aircraft.FlightDynamics;
 
@@ -262,7 +249,6 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        changedFields.Add(nameof(Aircraft.FlightDynamics));
         return aircraft with { FlightDynamics = dynamics };
     }
 
@@ -277,8 +263,7 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     private static Aircraft HandleBds60(
         Aircraft aircraft,
         Bds60HeadingAndSpeed data,
-        DateTime timestamp,
-        HashSet<string> changedFields)
+        DateTime timestamp)
     {
         TrackedFlightDynamics? existing = aircraft.FlightDynamics;
 
@@ -296,7 +281,6 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        changedFields.Add(nameof(Aircraft.FlightDynamics));
         return aircraft with { FlightDynamics = dynamics };
     }
 }

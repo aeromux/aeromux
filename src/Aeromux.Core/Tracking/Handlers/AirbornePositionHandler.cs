@@ -16,6 +16,7 @@
 
 using Aeromux.Core.ModeS;
 using Aeromux.Core.ModeS.Messages;
+using Aeromux.Core.ModeS.ValueObjects;
 
 namespace Aeromux.Core.Tracking.Handlers;
 
@@ -46,7 +47,7 @@ public sealed class AirbornePositionHandler : ITrackingHandler
 {
     public Type MessageType => typeof(AirbornePosition);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -56,70 +57,44 @@ public sealed class AirbornePositionHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (AirbornePosition)message;
-        var changedFields = new HashSet<string>();
         TrackedPosition position = aircraft.Position;
-        bool positionChanged = false;
-
-        // Update Coordinate from CPR decoding (if successfully decoded)
-        // Airborne CPR encoding uses standard NL functions (different from surface CPR)
-        if (msg.Position != null && position.Coordinate != msg.Position)
-        {
-            position = position with { Coordinate = msg.Position };
-            positionChanged = true;
-        }
 
         // Update altitude based on type - CRITICAL: Check altitude type to store in correct field
         // TC 9-18: Barometric altitude (pressure altitude, used for ATC separation)
         // TC 20-22: Geometric altitude (GNSS height, more accurate but not used for ATC)
         // Both types are preserved separately to avoid lossy merging
+        Altitude? barometricAltitude = position.BarometricAltitude;
+        Altitude? geometricAltitude = position.GeometricAltitude;
+
         if (msg.Altitude != null)
         {
-            if (msg.Altitude.Type == ModeS.Enums.AltitudeType.Barometric &&
-                position.BarometricAltitude != msg.Altitude)
+            if (msg.Altitude.Type == ModeS.Enums.AltitudeType.Barometric)
             {
                 // Store barometric altitude (standard pressure setting 29.92 inHg / 1013.25 hPa)
-                position = position with { BarometricAltitude = msg.Altitude };
-                positionChanged = true;
+                barometricAltitude = msg.Altitude;
             }
-            else if (msg.Altitude.Type == ModeS.Enums.AltitudeType.Geometric &&
-                     position.GeometricAltitude != msg.Altitude)
+            else if (msg.Altitude.Type == ModeS.Enums.AltitudeType.Geometric)
             {
                 // Store geometric altitude (GNSS height above WGS84 ellipsoid)
                 // Typically 50-100 feet higher than barometric altitude
-                position = position with { GeometricAltitude = msg.Altitude };
-                positionChanged = true;
+                geometricAltitude = msg.Altitude;
             }
         }
 
-        // Update Single Antenna flag.
-        // This field is encoded in bit 40 of Type Code 9-18 and 20-22 messages.
-        if (msg.Antenna != null && position.Antenna != msg.Antenna)
+        // Update position with all fields
+        // Coordinate from CPR decoding (if successfully decoded)
+        // Single Antenna flag from bit 40
+        // IsOnGround always false for airborne messages
+        position = position with
         {
-            position = position with { Antenna = msg.Antenna };
-            positionChanged = true;
-        }
+            Coordinate = msg.Position ?? position.Coordinate,
+            BarometricAltitude = barometricAltitude,
+            GeometricAltitude = geometricAltitude,
+            Antenna = msg.Antenna ?? position.Antenna,
+            IsOnGround = false,
+            LastUpdate = timestamp
+        };
 
-        // Update IsOnGround status (airborne position messages always indicate in-flight)
-        // Used to distinguish from surface position messages (TC 5-8) and filter ground traffic
-        if (position.IsOnGround)
-        {
-            position = position with { IsOnGround = false };
-            positionChanged = true;
-        }
-
-        // Update position LastUpdate timestamp if any position data changed
-        if (positionChanged)
-        {
-            position = position with { LastUpdate = timestamp };
-            changedFields.Add(nameof(Aircraft.Position));
-        }
-
-        // Return updated aircraft state if anything changed
-        if (changedFields.Count > 0)
-        {
-            return (aircraft with { Position = position }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Position = position };
     }
 }

@@ -44,7 +44,7 @@ public sealed class SurveillanceAltitudeReplyHandler : ITrackingHandler
 {
     public Type MessageType => typeof(SurveillanceAltitudeReply);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -54,38 +54,23 @@ public sealed class SurveillanceAltitudeReplyHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (SurveillanceAltitudeReply)message;
-        var changedFields = new HashSet<string>();
-        TrackedIdentification identification = aircraft.Identification;
-        TrackedPosition position = aircraft.Position;
-        bool identChanged = false;
-        bool posChanged = false;
 
         // Update FlightStatus from surveillance reply
         // Indicates: airborne/ground, alert condition, SPI (ident button pressed)
         // Used for ground/airborne discrimination and alert monitoring
-        if (identification.FlightStatus != msg.FlightStatus)
+        TrackedIdentification identification = aircraft.Identification with
         {
-            identification = identification with { FlightStatus = msg.FlightStatus };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.FlightStatus)}");
-            identChanged = true;
-        }
+            FlightStatus = msg.FlightStatus
+        };
 
         // Update BarometricAltitude from transponder reply
         // Encoding: Q-bit (25-foot increments), Gillham code (100-foot), or metric
         // This provides altitude for non-ADS-B equipped aircraft
-        if (msg.Altitude != null && position.BarometricAltitude != msg.Altitude)
+        TrackedPosition position = aircraft.Position with
         {
-            position = position with { BarometricAltitude = msg.Altitude };
-            changedFields.Add(nameof(Aircraft.Position));
-            posChanged = true;
-        }
+            BarometricAltitude = msg.Altitude ?? aircraft.Position.BarometricAltitude
+        };
 
-        // Return updated aircraft if anything changed
-        if (identChanged || posChanged)
-        {
-            return (aircraft with { Identification = identification, Position = position }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Identification = identification, Position = position };
     }
 }

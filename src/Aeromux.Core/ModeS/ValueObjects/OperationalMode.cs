@@ -28,7 +28,7 @@ public record OperationalMode
     /// Indicates whether a TCAS Resolution Advisory (RA) is currently active.
     /// An RA is issued when TCAS detects a collision threat and provides escape maneuvers.
     /// </summary>
-    public bool? TcasRaActive { get; init; }
+    public bool? TCASRAActive { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft's IDENT switch is currently active.
@@ -39,7 +39,7 @@ public record OperationalMode
     /// <summary>
     /// Indicates whether the aircraft is receiving ATC (Air Traffic Control) services.
     /// </summary>
-    public bool? AtcServices { get; init; }
+    public bool? ATCServices { get; init; }
 
     /// <summary>
     /// Indicates the antenna configuration (single or dual antenna system).
@@ -52,17 +52,17 @@ public record OperationalMode
     /// Indicates the probability of failure conditions that could cause loss of function.
     /// Higher SDA levels indicate more rigorous design assurance.
     /// </summary>
-    public SdaSupportedFailureCondition? Sda { get; init; }
+    public SdaSupportedFailureCondition? SDA { get; init; }
 
     /// <summary>
     /// Lateral offset of the GPS antenna from the aircraft reference point.
     /// Used to accurately determine the aircraft's position based on antenna location.
     /// </summary>
-    public LateralGpsAntennaOffset? GpsLatOffset { get; init; }
+    public LateralGpsAntennaOffset? GPSLatOffset { get; init; }
 
     /// <summary>
     /// Longitudinal offset of the GPS antenna from the aircraft reference point.
     /// Used to accurately determine the aircraft's position based on antenna location.
     /// </summary>
-    public LongitudinalGpsAntennaOffset? GpsLongOffset { get; init; }
+    public LongitudinalGpsAntennaOffset? GPSLongOffset { get; init; }
 }

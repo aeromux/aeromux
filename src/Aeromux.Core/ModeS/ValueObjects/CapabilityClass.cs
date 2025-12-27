@@ -27,45 +27,45 @@ public record CapabilityClass
     /// <summary>
     /// Indicates whether TCAS (Traffic Collision Avoidance System) is operational.
     /// </summary>
-    public bool? TcasOperational { get; init; }
+    public bool? TCASOperational { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft has CDTI (Cockpit Display of Traffic Information) capability.
     /// </summary>
-    public bool? CdtiCapability { get; init; }
+    public bool? CDTICapability { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft supports ADS-B 1090ES (1090 MHz Extended Squitter) transmission.
     /// </summary>
-    public bool? Adsb1090EsCapability { get; init; }
+    public bool? ADSB1090ESCapability { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft has ARV (Air-Referenced Velocity) reporting capability.
     /// </summary>
-    public bool? ArvCapability { get; init; }
+    public bool? ARVCapability { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft supports TS (Target State) reporting.
     /// </summary>
-    public bool? TsCapability { get; init; }
+    public bool? TSCapability { get; init; }
 
     /// <summary>
     /// Indicates the aircraft's Trajectory Change (TC) reporting capability level.
     /// Defines how the aircraft reports intended trajectory changes.
     /// </summary>
-    public TrajectoryChangeReportCapability? TcCapabilityLevel { get; init; }
+    public TrajectoryChangeReportCapability? TCCapabilityLevel { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft supports UAT (Universal Access Transceiver) transmission.
     /// UAT operates on 978 MHz and is primarily used in the United States.
     /// </summary>
-    public bool? UatCapability { get; init; }
+    public bool? UATCapability { get; init; }
 
     /// <summary>
     /// Position Offset Applied (POA) flag.
     /// Indicates whether a position offset has been applied for privacy or security reasons.
     /// </summary>
-    public bool? Poa { get; init; }
+    public bool? POA { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft transmits on 1090ES at low power (B2 Low).
@@ -77,12 +77,12 @@ public record CapabilityClass
     /// Navigation Accuracy Category for Velocity (NACv).
     /// Indicates the accuracy of the aircraft's velocity vector information.
     /// </summary>
-    public NavigationAccuracyCategoryVelocity? Nacv { get; init; }
+    public NavigationAccuracyCategoryVelocity? NACv { get; init; }
 
     /// <summary>
     /// NIC Supplement-C bit.
     /// Used in combination with NIC (Navigation Integrity Category) to determine
     /// the horizontal containment radius for position accuracy.
     /// </summary>
-    public bool? NicSupplementC { get; init; }
+    public bool? NICSupplementC { get; init; }
 }

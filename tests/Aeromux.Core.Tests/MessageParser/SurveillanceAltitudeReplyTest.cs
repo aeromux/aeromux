@@ -32,7 +32,7 @@ public class SurveillanceAltitudeReplyTest
         message.Should().NotBeNull();
         SurveillanceAltitudeReply reply = message.Should().BeOfType<SurveillanceAltitudeReply>().Subject;
         reply.Altitude.Should().NotBeNull();
-        reply.Altitude.Feet.Should().Be(expectedAltitude);
-        reply.Altitude.Type.Should().Be(expectedAltitudeType);
+        reply.Altitude!.Feet.Should().Be(expectedAltitude);
+        reply.Altitude!.Type.Should().Be(expectedAltitudeType);
     }
 }

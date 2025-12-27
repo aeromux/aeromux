@@ -21,8 +21,8 @@ using Aeromux.Core.ModeS.Messages;
 namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
-/// Handles ShortAirAirSurveillance messages (DF 0).
-/// Updates flight status and altitude from ACAS (Airborne Collision Avoidance System) coordination messages.
+/// Handles ShortAirAirSurveillance messages (DF 0) for ACAS/TCAS coordination.
+/// Updates flight status, altitude, and ACAS operational data.
 /// </summary>
 /// <remarks>
 /// <para><strong>DF 0: Short Air-Air Surveillance (ACAS)</strong></para>
@@ -35,6 +35,9 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <list type="bullet">
 /// <item>Identification.FlightStatus: Mapped from VerticalStatus (Airborne/Ground), no alert/SPI information</item>
 /// <item>Position.BarometricAltitude: Pressure altitude for vertical separation calculations in TCAS</item>
+/// <item>Acas.SensitivityLevel: ACAS sensitivity level (0-7)</item>
+/// <item>Acas.CrossLinkCapability: DF 16 coordination support flag</item>
+/// <item>Acas.ReplyInformation: ACAS operational state and RA status</item>
 /// </list>
 /// <para>
 /// ACAS systems use these messages to coordinate Resolution Advisories (RAs) between aircraft.
@@ -46,7 +49,7 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
 {
     public Type MessageType => typeof(ShortAirAirSurveillance);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -56,11 +59,7 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (ShortAirAirSurveillance)message;
-        var changedFields = new HashSet<string>();
-        TrackedIdentification identification = aircraft.Identification;
-        TrackedPosition position = aircraft.Position;
-        bool identChanged = false;
-        bool posChanged = false;
+        TrackedAcas? existingAcas = aircraft.Acas;
 
         // Map VerticalStatus to FlightStatus for tracking purposes
         // DF 0 (ACAS) uses VerticalStatus, but tracking system uses FlightStatus for consistency
@@ -69,31 +68,40 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
             ? FlightStatus.AirborneNormal
             : FlightStatus.OnGroundNormal;
 
-        // Update FlightStatus from ACAS coordination message
-        // Used by TCAS for collision avoidance calculations (threat assessment)
-        if (identification.FlightStatus != mappedFlightStatus)
+        TrackedIdentification identification = aircraft.Identification with
         {
-            identification = identification with { FlightStatus = mappedFlightStatus };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.FlightStatus)}");
-            identChanged = true;
-        }
+            FlightStatus = mappedFlightStatus
+        };
 
-        // Update BarometricAltitude from ACAS coordination message
-        // Critical for vertical separation calculations in TCAS Resolution Advisories
-        // Used to determine whether to climb or descend to avoid collision
-        if (msg.Altitude != null && position.BarometricAltitude != msg.Altitude)
+        TrackedPosition position = aircraft.Position with
         {
-            position = position with { BarometricAltitude = msg.Altitude };
-            changedFields.Add(nameof(Aircraft.Position));
-            posChanged = true;
-        }
+            BarometricAltitude = msg.Altitude ?? aircraft.Position.BarometricAltitude
+        };
 
-        // Return updated aircraft state if anything changed
-        if (identChanged || posChanged)
+        // Update ACAS state with DF 0 fields
+        // Preserve TC 29 and DF 16 fields that DF 0 doesn't provide
+        var acas = new TrackedAcas
         {
-            return (aircraft with { Identification = identification, Position = position }, changedFields);
-        }
+            // DF 0 ACAS fields
+            SensitivityLevel = msg.SensitivityLevel,
+            CrossLinkCapability = msg.CrossLinkCapability,
+            ReplyInformation = msg.ReplyInformation,
 
-        return (aircraft, changedFields);
+            // Preserve TC 29 fields (TcasOperational, TcasRaActive)
+            TcasOperational = existingAcas?.TcasOperational,
+            TcasRaActive = existingAcas?.TcasRaActive,
+
+            // Preserve DF 16 fields (RAC, MTE, RAT)
+            ResolutionAdvisoryTerminated = existingAcas?.ResolutionAdvisoryTerminated,
+            MultipleThreatEncounter = existingAcas?.MultipleThreatEncounter,
+            RacNotBelow = existingAcas?.RacNotBelow,
+            RacNotAbove = existingAcas?.RacNotAbove,
+            RacNotLeft = existingAcas?.RacNotLeft,
+            RacNotRight = existingAcas?.RacNotRight,
+
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { Identification = identification, Position = position, Acas = acas };
     }
 }

@@ -577,8 +577,8 @@ public sealed partial class MessageParser
 
                 capabilityClass = new CapabilityClass
                 {
-                    TcasOperational = ccTcasOperational,
-                    CdtiCapability = ccCdtiCapability
+                    TCASOperational = ccTcasOperational,
+                    CDTICapability = ccCdtiCapability
                 };
                 break;
 
@@ -614,12 +614,12 @@ public sealed partial class MessageParser
 
                     capabilityClass = new CapabilityClass()
                     {
-                        TcasOperational = ccTcasOperational,
-                        Adsb1090EsCapability = ccAdsb1090EsCapability,
-                        ArvCapability = ccArvCapability,
-                        TsCapability = ccTsCapability,
-                        TcCapabilityLevel = ccTcCapabilityLevel,
-                        UatCapability = ccUatCapability
+                        TCASOperational = ccTcasOperational,
+                        ADSB1090ESCapability = ccAdsb1090EsCapability,
+                        ARVCapability = ccArvCapability,
+                        TSCapability = ccTsCapability,
+                        TCCapabilityLevel = ccTcCapabilityLevel,
+                        UATCapability = ccUatCapability
                     };
                 }
 
@@ -648,12 +648,12 @@ public sealed partial class MessageParser
 
                     capabilityClass = new CapabilityClass()
                     {
-                        Poa = ccPoa,
-                        Adsb1090EsCapability = ccAdsb1090EsCapability,
+                        POA = ccPoa,
+                        ADSB1090ESCapability = ccAdsb1090EsCapability,
                         B2Low = ccB2Low,
-                        UatCapability = ccUatCapability,
-                        Nacv = ccNacv,
-                        NicSupplementC = ccNicSupplementC
+                        UATCapability = ccUatCapability,
+                        NACv = ccNacv,
+                        NICSupplementC = ccNicSupplementC
                     };
                 }
 
@@ -677,11 +677,11 @@ public sealed partial class MessageParser
 
                     operationalMode = new OperationalMode()
                     {
-                        TcasRaActive = omTcasRaActive,
+                        TCASRAActive = omTcasRaActive,
                         IdentSwitchActive = omIdentSwitchActive,
-                        AtcServices = omAtcServices,
+                        ATCServices = omAtcServices,
                         SingleAntenna = omSingleAntenna,
-                        Sda = omSda
+                        SDA = omSda
                     };
                 }
 
@@ -711,13 +711,13 @@ public sealed partial class MessageParser
 
                     operationalMode = new OperationalMode()
                     {
-                        TcasRaActive = omTcasRaActive,
+                        TCASRAActive = omTcasRaActive,
                         IdentSwitchActive = omIdentSwitchActive,
-                        AtcServices = omAtcServices,
+                        ATCServices = omAtcServices,
                         SingleAntenna = omSingleAntenna,
-                        Sda = omSda,
-                        GpsLatOffset = omGpsLatOffset,
-                        GpsLongOffset = omGpsLongOffset
+                        SDA = omSda,
+                        GPSLatOffset = omGpsLatOffset,
+                        GPSLongOffset = omGpsLongOffset
                     };
                 }
 
@@ -790,12 +790,12 @@ public sealed partial class MessageParser
 
                     capabilityClass = new CapabilityClass()
                     {
-                        TcasOperational = ccTcasOperational,
-                        Adsb1090EsCapability = ccAdsb1090EsCapability,
-                        ArvCapability = ccArvCapability,
-                        TsCapability = ccTsCapability,
-                        TcCapabilityLevel = ccTcCapabilityLevel,
-                        UatCapability = ccUatCapability
+                        TCASOperational = ccTcasOperational,
+                        ADSB1090ESCapability = ccAdsb1090EsCapability,
+                        ARVCapability = ccArvCapability,
+                        TSCapability = ccTsCapability,
+                        TCCapabilityLevel = ccTcCapabilityLevel,
+                        UATCapability = ccUatCapability
                     };
                 }
 
@@ -824,12 +824,12 @@ public sealed partial class MessageParser
 
                     capabilityClass = new CapabilityClass()
                     {
-                        Poa = ccPoa,
-                        Adsb1090EsCapability = ccAdsb1090EsCapability,
+                        POA = ccPoa,
+                        ADSB1090ESCapability = ccAdsb1090EsCapability,
                         B2Low = ccB2Low,
-                        UatCapability = ccUatCapability,
-                        Nacv = ccNacv,
-                        NicSupplementC = ccNicSupplementC
+                        UATCapability = ccUatCapability,
+                        NACv = ccNacv,
+                        NICSupplementC = ccNicSupplementC
                     };
                 }
 
@@ -853,11 +853,11 @@ public sealed partial class MessageParser
 
                     operationalMode = new OperationalMode()
                     {
-                        TcasRaActive = omTcasRaActive,
+                        TCASRAActive = omTcasRaActive,
                         IdentSwitchActive = omIdentSwitchActive,
-                        AtcServices = omAtcServices,
+                        ATCServices = omAtcServices,
                         SingleAntenna = omSingleAntenna,
-                        Sda = omSda
+                        SDA = omSda
                     };
                 }
 
@@ -887,13 +887,13 @@ public sealed partial class MessageParser
 
                     operationalMode = new OperationalMode()
                     {
-                        TcasRaActive = omTcasRaActive,
+                        TCASRAActive = omTcasRaActive,
                         IdentSwitchActive = omIdentSwitchActive,
-                        AtcServices = omAtcServices,
+                        ATCServices = omAtcServices,
                         SingleAntenna = omSingleAntenna,
-                        Sda = omSda,
-                        GpsLatOffset = omGpsLatOffset,
-                        GpsLongOffset = omGpsLongOffset
+                        SDA = omSda,
+                        GPSLatOffset = omGpsLatOffset,
+                        GPSLongOffset = omGpsLongOffset
                     };
                 }
 

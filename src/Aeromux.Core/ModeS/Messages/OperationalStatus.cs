@@ -45,7 +45,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="OperationalMode">Operational Mode (OM) codes indicating current operational state (bits 57-72, version-dependent, nullable).</param>
 /// <param name="AircraftLengthAndWidth">Aircraft/vehicle dimensions for surface operations (Surface subtype only, nullable).</param>
 /// <param name="Version">ADS-B protocol version: DO-260 (0), DO-260A (1), DO-260B (2), etc. (3 bits, bits 73-75).</param>
-/// <param name="NicSupplementA">NIC Supplement-A for position accuracy decoding (1 bit, bit 86).</param>
+/// <param name="NICSupplementA">NIC Supplement-A for position accuracy decoding (1 bit, bit 86).</param>
 /// <param name="NACp">Navigation Accuracy Category for Position - horizontal accuracy (4 bits, bits 77-80).</param>
 /// <param name="GeometricVerticalAccuracy">Geometric (GNSS) vertical accuracy (GVA, 2 bits, bits 81-82, Airborne only, nullable).</param>
 /// <param name="SIL">Source Integrity Level - probability of position error (2 bits, bits 83-84).</param>
@@ -64,7 +64,7 @@ public sealed record OperationalStatus(
     CapabilityClass? CapabilityClass,
     OperationalMode? OperationalMode,
     AircraftLengthAndWidth? AircraftLengthAndWidth,
-    bool? NicSupplementA,
+    bool? NICSupplementA,
     NavigationAccuracyCategoryPosition? NACp,
     GeometricVerticalAccuracy? GeometricVerticalAccuracy,
     SourceIntegrityLevel? SIL,

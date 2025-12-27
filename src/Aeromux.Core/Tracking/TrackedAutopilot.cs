@@ -24,6 +24,10 @@ namespace Aeromux.Core.Tracking;
 /// Contains target altitude, heading, and barometric settings from autopilot/FMS.
 /// Sources: TC 29 (Target State and Status), BDS 4,0 (Comm-B Selected Vertical Intention).
 /// </summary>
+/// <remarks>
+/// TCAS fields (TcasOperational, TcasRaActive) have been moved to TrackedAcas.
+/// This record now focuses exclusively on autopilot/FMS intent and configuration.
+/// </remarks>
 public sealed record TrackedAutopilot
 {
     /// <summary>
@@ -111,20 +115,6 @@ public sealed record TrackedAutopilot
     /// Null if TC 29 V2 not received.
     /// </summary>
     public bool? ApproachMode { get; init; }
-
-    /// <summary>
-    /// TCAS operational status (TC 29 V1/V2).
-    /// True if TCAS is operational.
-    /// Null if TC 29 not received.
-    /// </summary>
-    public bool? TcasOperational { get; init; }
-
-    /// <summary>
-    /// TCAS Resolution Advisory active (TC 29 V1).
-    /// True if TCAS RA is currently active (collision avoidance maneuver).
-    /// Null if TC 29 V1 not received.
-    /// </summary>
-    public bool? TcasRaActive { get; init; }
 
     /// <summary>
     /// Timestamp of last autopilot data update.

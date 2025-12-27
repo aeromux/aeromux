@@ -31,9 +31,13 @@ public class AircraftEventArgs : EventArgs
 
 /// <summary>
 /// Event arguments for aircraft update events.
-/// Provides both previous and updated state plus list of changed fields.
+/// Provides both previous and updated state for comparison.
 /// Used by OnAircraftUpdated event.
 /// </summary>
+/// <remarks>
+/// This event fires on EVERY frame update. Subscribers should compare Previous vs Updated
+/// to filter only the changes they care about (e.g., position changes, velocity changes).
+/// </remarks>
 public class AircraftUpdateEventArgs : EventArgs
 {
     /// <summary>
@@ -47,12 +51,4 @@ public class AircraftUpdateEventArgs : EventArgs
     /// This is the new current state stored in the tracker.
     /// </summary>
     public required Aircraft Updated { get; init; }
-
-    /// <summary>
-    /// Set of field names that changed during the update.
-    /// Field names use dotted notation for nested properties.
-    /// Examples: "Position", "Velocity", "Identification.Callsign", "Identification.Category"
-    /// Only populated when actual value changes occur, not on every frame.
-    /// </summary>
-    public required HashSet<string> ChangedFields { get; init; }
 }

@@ -50,7 +50,7 @@ public sealed class SurveillanceIdentityReplyHandler : ITrackingHandler
 {
     public Type MessageType => typeof(SurveillanceIdentityReply);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -60,32 +60,19 @@ public sealed class SurveillanceIdentityReplyHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (SurveillanceIdentityReply)message;
-        var changedFields = new HashSet<string>();
-        TrackedIdentification identification = aircraft.Identification;
 
         // Update FlightStatus from surveillance reply
         // Same as DF 4: airborne/ground, alert, SPI flags
-        if (identification.FlightStatus != msg.FlightStatus)
-        {
-            identification = identification with { FlightStatus = msg.FlightStatus };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.FlightStatus)}");
-        }
-
+        //
         // Update Squawk code from identity reply
         // 4-digit octal transponder code: primary identification for non-ADS-B aircraft
         // Special codes (7700/7600/7500) trigger alerts in ATC systems
-        if (identification.Squawk != msg.SquawkCode)
+        TrackedIdentification identification = aircraft.Identification with
         {
-            identification = identification with { Squawk = msg.SquawkCode };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.Squawk)}");
-        }
+            FlightStatus = msg.FlightStatus,
+            Squawk = msg.SquawkCode
+        };
 
-        // Return updated aircraft state if anything changed
-        if (changedFields.Count > 0)
-        {
-            return (aircraft with { Identification = identification }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Identification = identification };
     }
 }

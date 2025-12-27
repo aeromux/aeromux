@@ -40,7 +40,7 @@ public sealed class SurfacePositionHandler : ITrackingHandler
 {
     public Type MessageType => typeof(SurfacePosition);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -50,70 +50,31 @@ public sealed class SurfacePositionHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (SurfacePosition)message;
-        var changedFields = new HashSet<string>();
-        TrackedPosition position = aircraft.Position;
-        TrackedVelocity velocity = aircraft.Velocity;
-        bool positionChanged = false;
-        bool velocityChanged = false;
 
-        // Update Coordinate from CPR decoding (if successfully decoded)
+        // Update position with coordinate and ground status
         // Surface CPR uses modified NL functions different from airborne CPR
-        if (msg.Position != null && position.Coordinate != msg.Position)
+        // Surface messages always indicate ground
+        TrackedPosition position = aircraft.Position with
         {
-            position = position with { Coordinate = msg.Position };
-            positionChanged = true;
-        }
+            Coordinate = msg.Position ?? aircraft.Position.Coordinate,
+            IsOnGround = true,
+            LastUpdate = timestamp
+        };
 
-        // Update IsOnGround status (surface messages always indicate ground)
-        // Used to filter ground traffic and apply surface-specific logic
-        if (position.IsOnGround != true)
+        // Update velocity with ground movement data
+        // GroundSpeed: Non-linear quantization: 0-199 knots with higher precision at lower speeds
+        // GroundTrack: 0-360° with 2.8125° resolution (360/128 quantization)
+        Velocity? groundSpeed = msg.GroundSpeed.HasValue
+            ? Velocity.FromKnots(msg.GroundSpeed.Value, VelocityType.GroundSpeed)
+            : aircraft.Velocity.GroundSpeed;
+
+        TrackedVelocity velocity = aircraft.Velocity with
         {
-            position = position with { IsOnGround = true };
-            positionChanged = true;
-        }
+            GroundSpeed = groundSpeed,
+            GroundTrack = msg.GroundTrack ?? aircraft.Velocity.GroundTrack,
+            LastUpdate = timestamp
+        };
 
-        // Update position LastUpdate timestamp if any position data changed
-        if (positionChanged)
-        {
-            position = position with { LastUpdate = timestamp };
-            changedFields.Add(nameof(Aircraft.Position));
-        }
-
-        // Update GroundSpeed from surface movement field (if available)
-        // Non-linear quantization: 0-199 knots with higher precision at lower speeds
-        // Converted to Velocity value object for type safety and unit conversions
-        if (msg.GroundSpeed.HasValue)
-        {
-            var groundSpeed = Velocity.FromKnots(msg.GroundSpeed.Value, VelocityType.GroundSpeed);
-            if (!Equals(velocity.GroundSpeed, groundSpeed))
-            {
-                velocity = velocity with { GroundSpeed = groundSpeed };
-                velocityChanged = true;
-            }
-        }
-
-        // Update GroundTrack direction (if available)
-        // 0-360° with 2.8125° resolution (360/128 quantization)
-        // Indicates direction of surface movement during taxi operations
-        if (msg.GroundTrack.HasValue && !Equals(velocity.GroundTrack, msg.GroundTrack.Value))
-        {
-            velocity = velocity with { GroundTrack = msg.GroundTrack.Value };
-            velocityChanged = true;
-        }
-
-        // Update velocity LastUpdate timestamp if any velocity data changed
-        if (velocityChanged)
-        {
-            velocity = velocity with { LastUpdate = timestamp };
-            changedFields.Add(nameof(Aircraft.Velocity));
-        }
-
-        // Return updated aircraft state if anything changed
-        if (changedFields.Count > 0)
-        {
-            return (aircraft with { Position = position, Velocity = velocity }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Position = position, Velocity = velocity };
     }
 }

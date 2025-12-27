@@ -55,7 +55,7 @@ public sealed class OperationalStatusHandler : ITrackingHandler
 {
     public Type MessageType => typeof(OperationalStatus);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -65,11 +65,6 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (OperationalStatus)message;
-        var changedFields = new HashSet<string>();
-        TrackedPosition position = aircraft.Position;
-        TrackedStatus status = aircraft.Status;
-        bool positionChanged = false;
-        bool statusChanged = false;
 
         // Update Position data quality metrics from TC 31
         // NACp: Navigation Accuracy Category for Position (horizontal GPS accuracy)
@@ -86,38 +81,22 @@ public sealed class OperationalStatusHandler : ITrackingHandler
             ? msg.NICbaro.Value == ModeS.Enums.BarometricAltitudeIntegrityCode.CrossCheckedOrNonGilham
             : null;
 
-        if (position.NACp != msg.NACp ||
-            position.NICbaro != nicBaroValue ||
-            position.SIL != msg.SIL)
+        TrackedPosition position = aircraft.Position with
         {
-            position = position with
-            {
-                NACp = msg.NACp,
-                NICbaro = nicBaroValue,
-                SIL = msg.SIL
-            };
-            changedFields.Add(nameof(Aircraft.Position));
-            positionChanged = true;
-        }
+            NACp = msg.NACp,
+            NICbaro = nicBaroValue,
+            SIL = msg.SIL
+        };
 
         // Update ADS-B protocol version (equipment capability indicator)
         // Version 0: DO-260 (original ADS-B standard)
         // Version 1: DO-260A (improved NACp/NIC categories)
         // Version 2: DO-260B/C (enhanced surveillance, emergency codes)
-        // Used to determine supported features and data quality expectations
-        if (status.Version != msg.Version)
+        TrackedStatus status = aircraft.Status with
         {
-            status = status with { Version = msg.Version };
-            changedFields.Add(nameof(Aircraft.Status));
-            statusChanged = true;
-        }
+            Version = msg.Version
+        };
 
-        // Return updated aircraft state if anything changed
-        if (positionChanged || statusChanged)
-        {
-            return (aircraft with { Position = position, Status = status }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Position = position, Status = status };
     }
 }

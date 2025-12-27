@@ -72,8 +72,8 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
 
     /// <summary>
     /// Fired when an aircraft's state is updated with new data.
-    /// Provides both previous and updated state, plus set of changed field names.
-    /// Only fired when actual field changes occur (not on every frame).
+    /// Provides both previous and updated state for comparison.
+    /// Fired on EVERY frame update - subscribers should compare Previous vs Updated to filter changes.
     /// </summary>
     public event EventHandler<AircraftUpdateEventArgs>? OnAircraftUpdated;
 
@@ -221,7 +221,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
             ITrackingHandler? handler = _handlerRegistry.GetHandler(frame.ParsedMessage.GetType());
             if (handler != null)
             {
-                (aircraft, _) = handler.Apply(aircraft, frame.ParsedMessage, frame, now);
+                aircraft = handler.Apply(aircraft, frame.ParsedMessage, frame, now);
             }
         }
 
@@ -237,7 +237,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <summary>
     /// Applies an update from a processed frame to existing aircraft state.
     /// Delegates message-specific logic to registered handlers.
-    /// Tracks which fields changed and fires OnAircraftUpdated event if any changes occurred.
+    /// Fires OnAircraftUpdated event on every update (subscribers compare Previous vs Updated for filtering).
     /// </summary>
     /// <param name="existing">Current aircraft state</param>
     /// <param name="frame">New frame with updated data</param>
@@ -245,7 +245,6 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     private Aircraft ApplyUpdate(Aircraft existing, ProcessedFrame frame)
     {
         DateTime now = DateTime.UtcNow;
-        var allChangedFields = new HashSet<string>();
         Aircraft updated = existing;
 
         // Apply message-specific updates via handler
@@ -254,8 +253,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
             ITrackingHandler? handler = _handlerRegistry.GetHandler(frame.ParsedMessage.GetType());
             if (handler != null)
             {
-                (updated, HashSet<string> changedFields) = handler.Apply(updated, frame.ParsedMessage, frame, now);
-                allChangedFields.UnionWith(changedFields);
+                updated = handler.Apply(updated, frame.ParsedMessage, frame, now);
             }
         }
 
@@ -265,16 +263,12 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         // Update history buffers
         updated = updated with { History = UpdateHistory(updated.History, frame, updated.Position, updated.Velocity, now) };
 
-        // Fire update event if any fields changed
-        if (allChangedFields.Count > 0)
+        // Always fire update event (subscribers compare Previous vs Updated for filtering)
+        OnAircraftUpdated?.Invoke(this, new AircraftUpdateEventArgs
         {
-            OnAircraftUpdated?.Invoke(this, new AircraftUpdateEventArgs
-            {
-                Previous = existing,
-                Updated = updated,
-                ChangedFields = allChangedFields
-            });
-        }
+            Previous = existing,
+            Updated = updated
+        });
 
         return updated;
     }

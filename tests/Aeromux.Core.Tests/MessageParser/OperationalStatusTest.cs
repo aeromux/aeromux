@@ -236,7 +236,7 @@ public class OperationalStatusTest
         // Assert
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
-        opStatus.NicSupplementA.Should().Be(expectedNicSupplementA);
+        opStatus.NICSupplementA.Should().Be(expectedNicSupplementA);
     }
 
     [Theory]
@@ -339,7 +339,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.TcasOperational.Should().Be(expectedTcasOperational, "All test aircraft have TCAS operational");
+        opStatus.CapabilityClass!.TCASOperational.Should().Be(expectedTcasOperational, "All test aircraft have TCAS operational");
     }
 
     [Theory]
@@ -368,7 +368,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.ArvCapability.Should().Be(expectedArvCapability, reason);
+        opStatus.CapabilityClass!.ARVCapability.Should().Be(expectedArvCapability, reason);
     }
 
     [Theory]
@@ -396,7 +396,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.TsCapability.Should().Be(expectedTsCapability, "All test aircraft have Target State capability");
+        opStatus.CapabilityClass!.TSCapability.Should().Be(expectedTsCapability, "All test aircraft have Target State capability");
     }
 
     [Theory]
@@ -424,7 +424,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.Adsb1090EsCapability.Should().Be(expectedAdsb1090EsCapability, "Test aircraft do not have ADS-B 1090ES receive capability");
+        opStatus.CapabilityClass!.ADSB1090ESCapability.Should().Be(expectedAdsb1090EsCapability, "Test aircraft do not have ADS-B 1090ES receive capability");
     }
 
     [Theory]
@@ -452,7 +452,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.TcCapabilityLevel.Should().Be(expectedTcCapabilityLevel, "Test aircraft have no trajectory change capability");
+        opStatus.CapabilityClass!.TCCapabilityLevel.Should().Be(expectedTcCapabilityLevel, "Test aircraft have no trajectory change capability");
     }
 
     [Theory]
@@ -480,7 +480,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.UatCapability.Should().Be(expectedUatCapability, "Test aircraft do not support UAT (978 MHz)");
+        opStatus.CapabilityClass!.UATCapability.Should().Be(expectedUatCapability, "Test aircraft do not support UAT (978 MHz)");
     }
 
     [Theory]
@@ -506,7 +506,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.CdtiCapability.Should().BeNull("CDTI capability is only present in Version 0, test frames are Version 2");
+        opStatus.CapabilityClass!.CDTICapability.Should().BeNull("CDTI capability is only present in Version 0, test frames are Version 2");
     }
 
     [Theory]
@@ -532,10 +532,10 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.Poa.Should().BeNull("POA is only for surface messages");
+        opStatus.CapabilityClass!.POA.Should().BeNull("POA is only for surface messages");
         opStatus.CapabilityClass!.B2Low.Should().BeNull("B2Low is only for surface messages");
-        opStatus.CapabilityClass!.Nacv.Should().BeNull("NACv is only for surface messages");
-        opStatus.CapabilityClass!.NicSupplementC.Should().BeNull("NIC Supplement-C is only for surface messages");
+        opStatus.CapabilityClass!.NACv.Should().BeNull("NACv is only for surface messages");
+        opStatus.CapabilityClass!.NICSupplementC.Should().BeNull("NIC Supplement-C is only for surface messages");
     }
 
     // ========================================
@@ -584,7 +584,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.OperationalMode.Should().NotBeNull();
-        opStatus.OperationalMode!.Sda.Should().Be(expectedSda);
+        opStatus.OperationalMode!.SDA.Should().Be(expectedSda);
     }
 
     [Theory]
@@ -640,7 +640,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.OperationalMode.Should().NotBeNull();
-        opStatus.OperationalMode!.TcasRaActive.Should().Be(expectedTcasRaActive, "No TCAS Resolution Advisory active in test frames");
+        opStatus.OperationalMode!.TCASRAActive.Should().Be(expectedTcasRaActive, "No TCAS Resolution Advisory active in test frames");
     }
 
     [Theory]
@@ -696,7 +696,7 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.OperationalMode.Should().NotBeNull();
-        opStatus.OperationalMode!.AtcServices.Should().Be(expectedAtcServices, "Not receiving ATC services in test frames");
+        opStatus.OperationalMode!.ATCServices.Should().Be(expectedAtcServices, "Not receiving ATC services in test frames");
     }
 
     [Theory]
@@ -722,8 +722,8 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.OperationalMode.Should().NotBeNull();
-        opStatus.OperationalMode!.GpsLatOffset.Should().BeNull("Airborne messages do not include GPS antenna offset (surface only)");
-        opStatus.OperationalMode!.GpsLongOffset.Should().BeNull("Airborne messages do not include GPS antenna offset (surface only)");
+        opStatus.OperationalMode!.GPSLatOffset.Should().BeNull("Airborne messages do not include GPS antenna offset (surface only)");
+        opStatus.OperationalMode!.GPSLongOffset.Should().BeNull("Airborne messages do not include GPS antenna offset (surface only)");
     }
 
     // ========================================
@@ -848,9 +848,9 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.TcasOperational.Should().BeTrue("Aircraft has TCAS operational");
-        opStatus.CapabilityClass!.ArvCapability.Should().BeTrue("Aircraft supports Air-Referenced Velocity");
-        opStatus.CapabilityClass!.TsCapability.Should().BeTrue("Aircraft supports Target State");
+        opStatus.CapabilityClass!.TCASOperational.Should().BeTrue("Aircraft has TCAS operational");
+        opStatus.CapabilityClass!.ARVCapability.Should().BeTrue("Aircraft supports Air-Referenced Velocity");
+        opStatus.CapabilityClass!.TSCapability.Should().BeTrue("Aircraft supports Target State");
     }
 
     [Fact]
@@ -869,9 +869,9 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.CapabilityClass.Should().NotBeNull();
-        opStatus.CapabilityClass!.TcasOperational.Should().BeTrue("Aircraft has TCAS operational");
-        opStatus.CapabilityClass!.ArvCapability.Should().BeFalse("Aircraft does NOT support Air-Referenced Velocity");
-        opStatus.CapabilityClass!.TsCapability.Should().BeTrue("Aircraft supports Target State");
+        opStatus.CapabilityClass!.TCASOperational.Should().BeTrue("Aircraft has TCAS operational");
+        opStatus.CapabilityClass!.ARVCapability.Should().BeFalse("Aircraft does NOT support Air-Referenced Velocity");
+        opStatus.CapabilityClass!.TSCapability.Should().BeTrue("Aircraft supports Target State");
         opStatus.NACp.Should().Be(NavigationAccuracyCategoryPosition.LessThan3m, "This aircraft has very high position accuracy");
     }
 }

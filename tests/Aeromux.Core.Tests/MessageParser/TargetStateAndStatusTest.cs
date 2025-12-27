@@ -194,7 +194,7 @@ public class TargetStateAndStatusTest
         // Assert
         message.Should().NotBeNull();
         TargetStateAndStatus? targetState = message.Should().BeOfType<TargetStateAndStatus>().Subject;
-        targetState.TcasOperational.Should().Be(expectedTcasOperational);
+        targetState.TCASOperational.Should().Be(expectedTcasOperational);
     }
 
     [Theory]
@@ -315,8 +315,8 @@ public class TargetStateAndStatusTest
         // Assert
         message.Should().NotBeNull();
         TargetStateAndStatus? targetState = message.Should().BeOfType<TargetStateAndStatus>().Subject;
-        targetState.VnavMode.Should().NotBeNull();
-        targetState.VnavMode.Should().Be(expectedVnav);
+        targetState.VNAVMode.Should().NotBeNull();
+        targetState.VNAVMode.Should().Be(expectedVnav);
     }
 
     [Fact]
@@ -353,7 +353,7 @@ public class TargetStateAndStatusTest
         message.Should().NotBeNull();
         TargetStateAndStatus? targetState = message.Should().BeOfType<TargetStateAndStatus>().Subject;
         targetState.AutopilotEngaged.Should().BeTrue("Frame indicates autopilot engaged");
-        targetState.VnavMode.Should().BeTrue("Frame indicates VNAV mode engaged");
+        targetState.VNAVMode.Should().BeTrue("Frame indicates VNAV mode engaged");
         targetState.TargetAltitude.Should().NotBeNull();
         targetState.TargetAltitude!.Feet.Should().Be(32992);
         targetState.TargetHeading.Should().BeApproximately(104.0, 0.5);

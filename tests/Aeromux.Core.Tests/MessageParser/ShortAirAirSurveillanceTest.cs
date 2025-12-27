@@ -33,8 +33,8 @@ public class ShortAirAirSurveillanceTest
         message.Should().NotBeNull();
         ShortAirAirSurveillance shortAirAirMessage = message.Should().BeOfType<ShortAirAirSurveillance>().Subject;
         shortAirAirMessage.Altitude.Should().NotBeNull();
-        shortAirAirMessage.Altitude.Feet.Should().Be(expectedAltitude);
-        shortAirAirMessage.Altitude.Type.Should().Be(expectedAltitudeType);
+        shortAirAirMessage.Altitude!.Feet.Should().Be(expectedAltitude);
+        shortAirAirMessage.Altitude!.Type.Should().Be(expectedAltitudeType);
     }
 
     [Theory]

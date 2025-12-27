@@ -37,6 +37,7 @@ public class ValidatedFrameBuilder
     /// <param name="icao">24-bit ICAO address as hex string (e.g., "4840D6")</param>
     public ValidatedFrameBuilder WithIcaoAddress(string icao)
     {
+        ArgumentNullException.ThrowIfNull(icao);
         _icaoAddress = icao.ToUpperInvariant();
         return this;
     }

@@ -33,8 +33,8 @@ public class LongAirAirSurveillanceTest
         message.Should().NotBeNull();
         LongAirAirSurveillance longAirAirSurveillance = message.Should().BeOfType<LongAirAirSurveillance>().Subject;
         longAirAirSurveillance.Altitude.Should().NotBeNull();
-        longAirAirSurveillance.Altitude.Feet.Should().Be(expectedAltitude);
-        longAirAirSurveillance.Altitude.Type.Should().Be(expectedAltitudeType);
+        longAirAirSurveillance.Altitude!.Feet.Should().Be(expectedAltitude);
+        longAirAirSurveillance.Altitude!.Type.Should().Be(expectedAltitudeType);
     }
 
     [Theory]

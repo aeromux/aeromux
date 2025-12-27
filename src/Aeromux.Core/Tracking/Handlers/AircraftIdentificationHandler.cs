@@ -45,7 +45,7 @@ public sealed class AircraftIdentificationHandler : ITrackingHandler
 {
     public Type MessageType => typeof(AircraftIdentification);
 
-    public (Aircraft updated, HashSet<string> changedFields) Apply(
+    public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
         ProcessedFrame frame,
@@ -55,33 +55,20 @@ public sealed class AircraftIdentificationHandler : ITrackingHandler
         ArgumentNullException.ThrowIfNull(message);
 
         var msg = (AircraftIdentification)message;
-        var changedFields = new HashSet<string>();
-        TrackedIdentification identification = aircraft.Identification;
 
         // Update Callsign (flight number or aircraft registration)
         // Primary human-readable identifier for the aircraft
         // Format: 8 characters max, space-padded (e.g., "UAL1234 ", "N12345  ")
-        if (identification.Callsign != msg.Callsign)
-        {
-            identification = identification with { Callsign = msg.Callsign };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.Callsign)}");
-        }
-
+        //
         // Update Category (wake vortex category / emitter type)
         // Used for: wake turbulence separation requirements, display icon selection, traffic filtering
         // Categories: NoInfo, Light, Small, Large, LargeHighVortex, Heavy, HighPerformance, Rotorcraft, etc.
-        if (identification.Category != msg.Category)
+        TrackedIdentification identification = aircraft.Identification with
         {
-            identification = identification with { Category = msg.Category };
-            changedFields.Add($"{nameof(Aircraft.Identification)}.{nameof(TrackedIdentification.Category)}");
-        }
+            Callsign = msg.Callsign,
+            Category = msg.Category
+        };
 
-        // Return updated aircraft state if anything changed
-        if (changedFields.Count > 0)
-        {
-            return (aircraft with { Identification = identification }, changedFields);
-        }
-
-        return (aircraft, changedFields);
+        return aircraft with { Identification = identification };
     }
 }

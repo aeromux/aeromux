@@ -46,8 +46,9 @@ public class DaemonSettings : GlobalSettings
     public int? SbsPort { get; set; }
 
     [CommandOption("--bind-address")]
-    [Description("IP address to bind to (default: 0.0.0.0 for all interfaces, examples: 127.0.0.1, 192.168.1.100, 10.2.25.1)")]
-    public string? BindAddress { get; set; }  // CLI uses string, parsed to IPAddress in validation
+    [Description(
+        "IP address to bind to (default: 0.0.0.0 for all interfaces, examples: 127.0.0.1, 192.168.1.100, 10.2.25.1)")]
+    public string? BindAddress { get; set; } // CLI uses string, parsed to IPAddress in validation
 
     [CommandOption("--receiver-uuid")]
     [Description("Receiver UUID for MLAT triangulation (overrides YAML config, RFC 4122 format)")]
@@ -74,7 +75,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
     /// <param name="settings">Command settings (unused - only for Spectre.Console.Cli framework).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>Exit code: 0 for success, 1 for failure.</returns>
-    public override async Task<int> ExecuteAsync(CommandContext context, DaemonSettings settings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, DaemonSettings settings,
+        CancellationToken cancellationToken)
     {
         // Validate settings parameter (required by CA1062)
         ArgumentNullException.ThrowIfNull(settings);
@@ -107,7 +109,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
             Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
 
-            Log.Information("Network configuration: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
+            Log.Information(
+                "Network configuration: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
                 beastPort, jsonPort, sbsPort, bindAddress);
 
             // Create DeviceStream (uninitialized - devices not opened yet)
@@ -143,28 +146,22 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // Log significant updates (position, altitude, velocity changes)
             aircraftTracker.OnAircraftUpdated += (sender, e) =>
             {
-                Aircraft aircraft = e.Updated;
-                HashSet<string> fields = e.ChangedFields;
+                Aircraft prev = e.Previous;
+                Aircraft curr = e.Updated;
 
-                // Only log if position, altitude, or velocity changed
-                if (fields.Contains(nameof(Aircraft.Position)) ||
-                    fields.Contains(nameof(Aircraft.Velocity)))
+                // Only log if position or velocity actually changed
+                bool positionChanged = prev.Position.Coordinate != curr.Position.Coordinate ||
+                                      prev.Position.BarometricAltitude != curr.Position.BarometricAltitude;
+                bool velocityChanged = prev.Velocity.GroundSpeed != curr.Velocity.GroundSpeed ||
+                                      prev.Velocity.Speed != curr.Velocity.Speed;
+
+                if (positionChanged || velocityChanged)
                 {
-                    string positionInfo = aircraft.Position.Coordinate != null
-                        ? $"Lat={aircraft.Position.Coordinate.Latitude:F4}, Lon={aircraft.Position.Coordinate.Longitude:F4}"
-                        : "Position unknown";
-                    string altitudeInfo = aircraft.Position.BarometricAltitude != null
-                        ? $"{aircraft.Position.BarometricAltitude.Feet:N0} ft"
-                        : "Altitude unknown";
-                    string velocityInfo = aircraft.Velocity.Speed != null
-                        ? $"{aircraft.Velocity.Speed.Knots:N0} kts"
-                        : "Speed unknown";
-
-                    Log.Information("Aircraft update: ICAO={Icao}, {Position}, Alt={Altitude}, Speed={Velocity}",
-                        aircraft.Identification.Icao,
-                        positionInfo,
-                        altitudeInfo,
-                        velocityInfo);
+                    Log.Information("Aircraft update: ICAO={Icao}, Position={Position}, Alt={Altitude}, Speed={Velocity}",
+                        curr.Identification.Icao,
+                        curr.Position.Coordinate,
+                        curr.Position.BarometricAltitude,
+                        curr.Velocity.GroundSpeed ?? curr.Velocity.Speed);
                 }
             };
 
@@ -186,7 +183,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 BroadcastFormat.Beast,
                 receiverUuid);
             await beastBroadcaster.StartAsync(cancellationToken);
-            await Task.Delay(50, cancellationToken);  // Prevent concurrent socket initialization
+            await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
 
             var jsonBroadcaster = new TcpBroadcaster(
                 jsonPort,
@@ -194,16 +191,17 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 deviceStream,
                 BroadcastFormat.Json);
             await jsonBroadcaster.StartAsync(cancellationToken);
-            await Task.Delay(50, cancellationToken);  // Prevent concurrent socket initialization
+            await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
 
             var sbsBroadcaster = new TcpBroadcaster(
                 sbsPort,
                 bindAddress,
                 deviceStream,
                 BroadcastFormat.Sbs);
-            await Task.Delay(50, cancellationToken);  // Prevent concurrent socket initialization
+            await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
 
-            Log.Information("TCP broadcasters started: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
+            Log.Information(
+                "TCP broadcasters started: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
                 beastPort, jsonPort, sbsPort, bindAddress);
 
             // Create linked CTS to handle both interactive (CTRL+C) and service (SIGTERM) shutdown
@@ -236,7 +234,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
             try
             {
-                Console.WriteLine($"Aeromux daemon running with {enabledDevices.Count} device(s). Press Ctrl+C to stop.");
+                Console.WriteLine(
+                    $"Aeromux daemon running with {enabledDevices.Count} device(s). Press Ctrl+C to stop.");
                 Log.Debug("Entering wait loop for cancellation");
 
                 try
@@ -395,6 +394,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     $"BindAddress '{cliBindAddress}' is not a valid IP address. " +
                     $"Examples: 0.0.0.0 (all interfaces), 127.0.0.1 (localhost), 192.168.1.100 (specific interface)");
             }
+
             return parsed;
         }
 
@@ -427,6 +427,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     $"ReceiverUuid '{cliReceiverUuid}' is not a valid RFC 4122 UUID format. " +
                     $"Generate with: uuidgen (macOS/Linux), [guid]::NewGuid() (PowerShell), or https://www.uuidgenerator.net/");
             }
+
             return parsed;
         }
 
