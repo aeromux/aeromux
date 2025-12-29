@@ -52,30 +52,38 @@ public sealed record Bds20AircraftIdentification(
 public sealed record Bds30AcasResolutionAdvisory : BdsData;
 
 /// <summary>
-/// BDS 4,0: Selected vertical intention (MCP/FMS altitude, barometric pressure).
+/// BDS 4,0: Selected vertical intention (MCP/FMS altitude, barometric pressure, navigation modes, altitude source).
 /// </summary>
 /// <param name="McpSelectedAltitude">MCP/FCU selected altitude in feet (null if not available).</param>
 /// <param name="FmsSelectedAltitude">FMS selected altitude in feet (null if not available).</param>
 /// <param name="BarometricPressureSetting">Barometric pressure in millibars (null if not available).</param>
+/// <param name="NavigationModes">Active navigation modes (VNAV, ALT HOLD, APPROACH), null if not available.</param>
+/// <param name="AltitudeSource">Source of altitude selection (Unknown, Aircraft, MCP, FMS), null if not available.</param>
 public sealed record Bds40SelectedVerticalIntention(
     int? McpSelectedAltitude,
     int? FmsSelectedAltitude,
-    double? BarometricPressureSetting) : BdsData;
+    double? BarometricPressureSetting,
+    Bds40NavigationMode? NavigationModes,
+    Bds40AltitudeSource? AltitudeSource) : BdsData;
 
 /// <summary>
-/// BDS 4,4: Meteorological routine report (wind, temperature, pressure).
+/// BDS 4,4: Meteorological routine report (wind, temperature, pressure, turbulence, humidity).
 /// </summary>
 /// <param name="FigureOfMerit">Figure of merit (0-7, quality indicator, null if not available).</param>
 /// <param name="WindSpeed">Wind speed in knots (null if not available).</param>
 /// <param name="WindDirection">Wind direction in degrees (null if not available).</param>
 /// <param name="StaticAirTemperature">Static air temperature in °C (null if not available).</param>
 /// <param name="Pressure">Pressure in hPa (null if not available).</param>
+/// <param name="Turbulence">Turbulence severity level (Nil, Light, Moderate, Severe, null if not available).</param>
+/// <param name="Humidity">Relative humidity percentage (0-100%, null if not available).</param>
 public sealed record Bds44MeteorologicalRoutine(
     int? FigureOfMerit,
     int? WindSpeed,
     double? WindDirection,
     double? StaticAirTemperature,
-    double? Pressure) : BdsData;
+    double? Pressure,
+    Severity? Turbulence,
+    double? Humidity) : BdsData;
 
 /// <summary>
 /// BDS 4,5: Meteorological hazard report (turbulence, wind shear, icing, etc).
@@ -114,17 +122,19 @@ public sealed record Bds50TrackAndTurn(
     double? TrackRate) : BdsData;
 
 /// <summary>
-/// BDS 5,3: Air-referenced state vector (magnetic heading, IAS, Mach, TAS).
+/// BDS 5,3: Air-referenced state vector (magnetic heading, IAS, Mach, TAS, vertical rate).
 /// </summary>
 /// <param name="MagneticHeading">Magnetic heading in degrees (null if not available).</param>
 /// <param name="IndicatedAirspeed">Indicated airspeed in knots (null if not available).</param>
 /// <param name="MachNumber">Mach number (null if not available).</param>
 /// <param name="TrueAirspeed">True airspeed in knots (null if not available).</param>
+/// <param name="VerticalRate">Vertical rate in feet/minute (null if not available).</param>
 public sealed record Bds53AirReferencedState(
     double? MagneticHeading,
     int? IndicatedAirspeed,
     double? MachNumber,
-    int? TrueAirspeed) : BdsData;
+    int? TrueAirspeed,
+    int? VerticalRate) : BdsData;
 
 /// <summary>
 /// BDS 6,0: Heading and speed report (magnetic heading, IAS, Mach, vertical rate).

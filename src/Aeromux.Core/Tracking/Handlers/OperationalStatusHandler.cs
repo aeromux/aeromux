@@ -21,34 +21,29 @@ namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
 /// Handles OperationalStatus messages (TC 31, Version 0/1/2).
-/// Updates aircraft capability version and position data quality metrics.
+/// Extracts comprehensive aircraft capabilities, operational modes, data quality indicators, and ADS-B version.
 /// </summary>
 /// <remarks>
-/// <para><strong>TC 31 provides equipment capability and data quality information:</strong></para>
+/// <para><strong>TC 31 provides complete equipment capability and operational status information:</strong></para>
 /// <list type="bullet">
 /// <item>ADS-B Version: Equipment capability level (DO-260, DO-260A, DO-260B)</item>
-/// <item>Capability Class (CC): Aircraft capabilities (TCAS, ADS-B receive, ARV, TS, UAT, etc.)</item>
-/// <item>Operational Mode (OM): Current operational state (TCAS RA, IDENT, ATC services, antenna config, SDA)</item>
-/// <item>NACp (Navigation Accuracy Category - Position): GPS horizontal accuracy indicator</item>
-/// <item>NIC Supplement-A: For position accuracy determination with CPR</item>
-/// <item>GVA (Geometric Vertical Accuracy): GNSS vertical accuracy (Version 1+)</item>
-/// <item>SIL (Source Integrity Level): Probability of position error exceeding containment radius</item>
-/// <item>NICbaro (Barometric Altitude Integrity Code): Cross-check status (Version 1+)</item>
-/// <item>HRD (Horizontal Reference Direction): True North vs Magnetic North</item>
-/// <item>SIL Supplement: Per-hour vs per-sample basis (Version 2)</item>
+/// <item>Capability Class (CC): Aircraft capabilities (TCAS, CDTI, ADS-B 1090ES, ARV, TS, TC, UAT, POA, B2Low, NACv, NIC Supplement-C)</item>
+/// <item>Operational Mode (OM): Current operational state (TCAS RA, IDENT, ATC services, antenna config, SDA, GPS offsets)</item>
+/// <item>Data Quality: NACp, NIC Supplement-A, GVA, SIL, NICbaro, HRD, SIL Supplement, Target Heading Type</item>
+/// <item>Physical Configuration: Aircraft length and width (surface only)</item>
 /// </list>
-/// <para><strong>Updated fields:</strong></para>
+/// <para><strong>Updated categories:</strong></para>
 /// <list type="bullet">
-/// <item>Status.Version: ADS-B protocol version (0=DO-260, 1=DO-260A, 2=DO-260B)</item>
-/// <item>Position.NACp: Horizontal position accuracy (11=&lt;3m, 10=&lt;10m, 9=&lt;30m, down to 0=unknown)</item>
-/// <item>Position.NICbaro: Barometric altitude integrity cross-check status</item>
-/// <item>Position.SIL: Source integrity level (3=highest &lt;10^-7 per hour, down to 0)</item>
+/// <item>Identification.Version: ADS-B protocol version (moved from Status per user requirement)</item>
+/// <item>Capabilities: All CapabilityClass fields (11 fields) + Dimensions</item>
+/// <item>OperationalMode: All OperationalMode fields (7 fields)</item>
+/// <item>DataQuality: GeometricVerticalAccuracy, NICSupplementA, SILSupplement, HorizontalReference, HeadingType</item>
+/// <item>Position: NACp, NICbaro, SIL (preserved for backward compatibility)</item>
 /// </list>
 /// <para>
-/// These metrics are used for data quality assessment, UI confidence indicators, and filtering low-quality data.
-/// TC 31 messages are transmitted less frequently than position/velocity updates (typically every 5-10 seconds).
+/// This handler now tracks ~30 fields from TC 31, providing complete metadata coverage.
+/// TC 31 messages are transmitted less frequently than position/velocity (typically every 5-10 seconds).
 /// </para>
-/// <para><strong>Note:</strong> NACv (velocity accuracy) is NOT in TC 31; it comes from TC 19 (Airborne Velocity).</para>
 /// <para><strong>Reference:</strong> https://mode-s.org/1090mhz/content/ads-b/6-operation-status.html</para>
 /// </remarks>
 public sealed class OperationalStatusHandler : ITrackingHandler
@@ -66,7 +61,83 @@ public sealed class OperationalStatusHandler : ITrackingHandler
 
         var msg = (OperationalStatus)message;
 
-        // Update Position data quality metrics from TC 31
+        // ═══════════════════════════════════════════════════════════════════════════
+        // IDENTIFICATION: ADS-B Version (moved from Status per user requirement)
+        // ═══════════════════════════════════════════════════════════════════════════
+        TrackedIdentification identification = aircraft.Identification with
+        {
+            Version = msg.Version
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CAPABILITIES: CapabilityClass fields (11 fields) + Dimensions
+        // ═══════════════════════════════════════════════════════════════════════════
+        TrackedCapabilities? capabilities = aircraft.Capabilities ?? new();
+
+        // Extract all CapabilityClass fields if available
+        if (msg.CapabilityClass is not null)
+        {
+            capabilities = capabilities with
+            {
+                TcasCapability = msg.CapabilityClass.TCASOperational,
+                CockpitDisplayTraffic = msg.CapabilityClass.CDTICapability,
+                Adsb1090ES = msg.CapabilityClass.ADSB1090ESCapability,
+                AirReferencedVelocity = msg.CapabilityClass.ARVCapability,
+                TargetStateReporting = msg.CapabilityClass.TSCapability,
+                TrajectoryChangeLevel = msg.CapabilityClass.TCCapabilityLevel,
+                Uat978Support = msg.CapabilityClass.UATCapability,
+                PositionOffsetApplied = msg.CapabilityClass.POA,
+                LowPower1090ES = msg.CapabilityClass.B2Low,
+                NACv = msg.CapabilityClass.NACv,
+                NICSupplementC = msg.CapabilityClass.NICSupplementC
+            };
+        }
+
+        // Physical dimensions (surface operations only)
+        capabilities = capabilities with
+        {
+            Dimensions = msg.AircraftLengthAndWidth ?? capabilities.Dimensions,
+            LastUpdate = timestamp
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // OPERATIONAL MODE: OperationalMode fields (7 fields)
+        // ═══════════════════════════════════════════════════════════════════════════
+        TrackedOperationalMode? operationalMode = aircraft.OperationalMode ?? new();
+
+        // Extract all OperationalMode fields if available
+        if (msg.OperationalMode is not null)
+        {
+            operationalMode = operationalMode with
+            {
+                TcasRaActive = msg.OperationalMode.TCASRAActive,
+                IdentSwitchActive = msg.OperationalMode.IdentSwitchActive,
+                ReceivingATCServices = msg.OperationalMode.ATCServices,
+                SingleAntenna = msg.OperationalMode.SingleAntenna,
+                SystemDesignAssurance = msg.OperationalMode.SDA,
+                GpsLateralOffset = msg.OperationalMode.GPSLatOffset,
+                GpsLongitudinalOffset = msg.OperationalMode.GPSLongOffset,
+                LastUpdate = timestamp
+            };
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // DATA QUALITY: Quality indicators and integrity levels
+        // ═══════════════════════════════════════════════════════════════════════════
+        TrackedDataQuality? dataQuality = aircraft.DataQuality ?? new();
+        dataQuality = dataQuality with
+        {
+            GeometricVerticalAccuracy = msg.GeometricVerticalAccuracy ?? dataQuality.GeometricVerticalAccuracy,
+            NICSupplementA = msg.NICSupplementA ?? dataQuality.NICSupplementA,
+            SILSupplement = msg.SILSupplement ?? dataQuality.SILSupplement,
+            HorizontalReference = msg.HRD ?? dataQuality.HorizontalReference,
+            HeadingType = msg.TargetHeading ?? dataQuality.HeadingType,
+            LastUpdate = timestamp
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // POSITION: Data quality metrics (preserved for backward compatibility)
+        // ═══════════════════════════════════════════════════════════════════════════
         // NACp: Navigation Accuracy Category for Position (horizontal GPS accuracy)
         //       Scale 0-11: 11=<3m, 10=<10m, 9=<30m, 8=<92.6m, ..., 0=unknown
         // NICbaro: Barometric Altitude Integrity Code (1-bit, indicates cross-check status)
@@ -74,7 +145,6 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         //          Converted to bool: true if cross-checked, false if not, null if unavailable
         // SIL: Source Integrity Level (probability of error containment, bits 83-84)
         //      Scale 0-3: 3=<10^-7 per hour (highest), 2=<10^-5, 1=<10^-3, 0=unknown
-        // Note: NACv (velocity accuracy) is NOT in TC 31; it comes from TC 19 (Airborne Velocity)
 
         // Convert NICbaro from enum to bool for storage
         bool? nicBaroValue = msg.NICbaro.HasValue
@@ -88,15 +158,13 @@ public sealed class OperationalStatusHandler : ITrackingHandler
             SIL = msg.SIL
         };
 
-        // Update ADS-B protocol version (equipment capability indicator)
-        // Version 0: DO-260 (original ADS-B standard)
-        // Version 1: DO-260A (improved NACp/NIC categories)
-        // Version 2: DO-260B/C (enhanced surveillance, emergency codes)
-        TrackedStatus status = aircraft.Status with
+        return aircraft with
         {
-            Version = msg.Version
+            Identification = identification,
+            Capabilities = capabilities,
+            OperationalMode = operationalMode,
+            DataQuality = dataQuality,
+            Position = position
         };
-
-        return aircraft with { Position = position, Status = status };
     }
 }

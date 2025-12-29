@@ -68,6 +68,23 @@ public static class RealFrames
     /// </remarks>
     public const string ShortAirAir_73806C = "02E1983264B70A";
 
+    /// <summary>
+    /// Short Air-Air Surveillance (DF 0): ICAO 8418B4 at 37000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 8418B4 (extracted from CRC)
+    /// Altitude: 37000 ft barometric
+    /// Vertical Status (VS): 0 (airborne)
+    /// Cross-link Capability (CC): 1 (DF 16 coordination supported)
+    /// Sensitivity Level (SL): 7 (maximum sensitivity)
+    /// Reply Information (RI): 3 (Vertical-only Resolution Capability)
+    /// Altitude Code (AC): 6064 (Gillham coded)
+    /// DF: 0 (ACAS coordination message)
+    /// RSSI: -16.2 dBFS
+    /// </remarks>
+    public const string ShortAirAir_8418B4 = "02E197B0CE7989";
+
     // ========================================
     // DF 4: Surveillance Altitude Reply
     // ========================================

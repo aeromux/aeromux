@@ -14,6 +14,7 @@ public class ShortAirAirSurveillanceTest
     [Theory]
     [InlineData(RealFrames.ShortAirAir_4D2407, "4D2407", 33000, AltitudeType.Barometric)]
     [InlineData(RealFrames.ShortAirAir_73806C, "73806C", 37850, AltitudeType.Barometric)]
+    [InlineData(RealFrames.ShortAirAir_8418B4, "8418B4", 37000, AltitudeType.Barometric)]
     public void ParseMessage_DF0_ShortAirAirSurveillance_Altitude(
         string hexFrame,
         string expectedIcao,
@@ -40,6 +41,7 @@ public class ShortAirAirSurveillanceTest
     [Theory]
     [InlineData(RealFrames.ShortAirAir_4D2407, "4D2407", VerticalStatus.Airborne)]
     [InlineData(RealFrames.ShortAirAir_73806C, "73806C", VerticalStatus.Airborne)]
+    [InlineData(RealFrames.ShortAirAir_8418B4, "8418B4", VerticalStatus.Airborne)]
     public void ParseMessage_DF0_ShortAirAirSurveillance_VerticalStatus(
         string hexFrame,
         string expectedIcao,
@@ -63,6 +65,7 @@ public class ShortAirAirSurveillanceTest
     [Theory]
     [InlineData(RealFrames.ShortAirAir_4D2407, "4D2407", true)]
     [InlineData(RealFrames.ShortAirAir_73806C, "73806C", true)]
+    [InlineData(RealFrames.ShortAirAir_8418B4, "8418B4", true)]
     public void ParseMessage_DF0_ShortAirAirSurveillance_CrossLinkCapability(
         string hexFrame,
         string expectedIcao,
@@ -86,6 +89,7 @@ public class ShortAirAirSurveillanceTest
     [Theory]
     [InlineData(RealFrames.ShortAirAir_4D2407, "4D2407", 7)]
     [InlineData(RealFrames.ShortAirAir_73806C, "73806C", 7)]
+    [InlineData(RealFrames.ShortAirAir_8418B4, "8418B4", 7)]
     public void ParseMessage_DF0_ShortAirAirSurveillance_SensitivityLevel(
         string hexFrame,
         string expectedIcao,
@@ -107,8 +111,9 @@ public class ShortAirAirSurveillanceTest
     }
 
     [Theory]
-    [InlineData(RealFrames.ShortAirAir_4D2407, "4D2407", AcasReplyInformation.VerticalOnlyRA)]
-    [InlineData(RealFrames.ShortAirAir_73806C, "73806C", AcasReplyInformation.VerticalOnlyRA)]
+    [InlineData(RealFrames.ShortAirAir_4D2407, "4D2407", AcasReplyInformation.VerticalOnlyResolutionCapability)]
+    [InlineData(RealFrames.ShortAirAir_73806C, "73806C", AcasReplyInformation.VerticalOnlyResolutionCapability)]
+    [InlineData(RealFrames.ShortAirAir_8418B4, "8418B4", AcasReplyInformation.VerticalOnlyResolutionCapability)]
     public void ParseMessage_DF0_ShortAirAirSurveillance_ReplyInformation(
         string hexFrame,
         string expectedIcao,

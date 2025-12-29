@@ -99,6 +99,30 @@ public sealed record Aircraft
     public TrackedMeteo? Meteo { get; init; }
 
     /// <summary>
+    /// Aircraft system capabilities and configuration metadata.
+    /// Contains transponder capabilities, ADS-B capabilities, Comm-B capabilities, and physical configuration.
+    /// Optional - may be null until first DF 11, TC 31, or BDS 1,0/1,7 message received.
+    /// Sources: DF 11 (All-Call Reply), TC 31 (Operational Status), BDS 1,0 (Data Link Capability), BDS 1,7 (GICB Capability).
+    /// </summary>
+    public TrackedCapabilities? Capabilities { get; init; }
+
+    /// <summary>
+    /// Data quality, accuracy, and integrity indicators.
+    /// Contains navigation accuracy categories, integrity levels, and reference system indicators.
+    /// Optional - may be null until first TC 31 or TC 29 V2 message received.
+    /// Sources: TC 31 (Operational Status), TC 29 V2 (Target State and Status Version 2).
+    /// </summary>
+    public TrackedDataQuality? DataQuality { get; init; }
+
+    /// <summary>
+    /// Real-time operational status and ATC coordination information.
+    /// Contains cockpit mode indicators, system status, GPS antenna configuration, and ATC coordination metadata.
+    /// Optional - may be null until first TC 31 or DF 20/21 message received.
+    /// Sources: TC 31 (Operational Status), DF 20/21 (Comm-B Altitude/Identity Reply).
+    /// </summary>
+    public TrackedOperationalMode? OperationalMode { get; init; }
+
+    /// <summary>
     /// Applies an update from a processed frame to create a new aircraft state.
     /// NOTE: This method is a placeholder and currently not used.
     /// Actual updates are performed by AircraftStateTracker.ApplyUpdate() instead.

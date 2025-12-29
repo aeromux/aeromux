@@ -70,4 +70,13 @@ public sealed record TrackedIdentification
     /// Values: AirborneNormal, OnGroundNormal, AirborneAlert, OnGroundAlert, AlertSPI, NoAlertSPI.
     /// </summary>
     public FlightStatus? FlightStatus { get; init; }
+
+    /// <summary>
+    /// ADS-B version from TC 31 (Operational Status).
+    /// Values: 0 (DO-260), 1 (DO-260A), 2 (DO-260B/C), etc.
+    /// Indicates ADS-B equipment capability level and supported features.
+    /// This represents aircraft capability metadata, not internal tracking statistics.
+    /// Null if no TC 31 message received yet.
+    /// </summary>
+    public AdsbVersion? Version { get; init; }
 }

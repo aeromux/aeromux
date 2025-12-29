@@ -59,6 +59,18 @@ public sealed record TrackedPosition
     public bool IsOnGround { get; init; }
 
     /// <summary>
+    /// Surface movement speed category (TC 5-8 surface position messages only).
+    /// Provides categorized speed ranges for ground operations:
+    /// - Stationary: No movement.
+    /// - Speed0_125To1: 0.125 to 1 kt.
+    /// - Speed1To2: 1 to 2 kt.
+    /// - And so on up to Speed150To175 and GreaterThan175.
+    /// These non-linear categories are optimized for taxiing and ground operations.
+    /// Null if no surface position message received, or if aircraft is airborne.
+    /// </summary>
+    public SurfaceMovement? MovementCategory { get; init; }
+
+    /// <summary>
     /// /Represents the Single Antenna (SA) flag in ADS-B airborne position messages.
     /// Indicates whether the aircraft is equipped with diversity antenna capability.
     /// </summary>

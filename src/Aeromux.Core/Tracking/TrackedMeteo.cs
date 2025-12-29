@@ -113,6 +113,15 @@ public sealed record TrackedMeteo
     public int? FigureOfMerit { get; init; }
 
     /// <summary>
+    /// Relative humidity in percentage (BDS 4,4).
+    /// Atmospheric humidity measured by aircraft.
+    /// Range: 0-100%.
+    /// Resolution: 100/64 (~1.5625%).
+    /// Null if BDS 4,4 not received or humidity data unavailable.
+    /// </summary>
+    public double? Humidity { get; init; }
+
+    /// <summary>
     /// Timestamp of last meteorological data update.
     /// Updated when any meteo field changes.
     /// Null if no meteorological data received yet.

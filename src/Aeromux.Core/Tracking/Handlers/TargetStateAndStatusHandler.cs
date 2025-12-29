@@ -20,10 +20,11 @@ using Aeromux.Core.ModeS.Messages;
 namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
-/// Handles TargetStateAndStatus messages (TC 29) for autopilot/FMS intent and TCAS status tracking.
+/// Handles TargetStateAndStatus messages (TC 29) for autopilot/FMS intent, TCAS status, and data quality tracking.
 /// Updates autopilot fields: SelectedAltitude, AltitudeSource, SelectedHeading, BarometricPressureSetting,
 /// VerticalMode, HorizontalMode, AutopilotEngaged, VnavMode, LnavMode, AltitudeHoldMode, ApproachMode.
 /// Updates ACAS fields: TcasOperational, TcasRaActive.
+/// Updates DataQuality fields (V2 only): SIL_TC29, NACp_TC29, NICbaro_TC29.
 /// </summary>
 /// <remarks>
 /// <para><strong>TC 29 has two versions with different field sets:</strong></para>
@@ -37,6 +38,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// This handler preserves fields from both versions using field-level merging.
 /// Only updates fields that are present in the current message (doesn't null out V1 fields when receiving V2 or vice versa).
 /// TCAS fields are now stored in TrackedAcas category instead of TrackedAutopilot.
+/// V2 quality indicators (SIL, NACp, NICbaro) provide redundancy to TC 31, useful for cross-validation.
 /// </para>
 /// </remarks>
 public sealed class TargetStateAndStatusHandler : ITrackingHandler
@@ -104,6 +106,26 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        return aircraft with { Autopilot = autopilot, Acas = acas };
+        // TC 29 V2: Extract data quality indicators
+        // These fields provide redundancy to TC 31 quality indicators, useful for cross-validation
+        TrackedDataQuality? dataQuality = aircraft.DataQuality;
+        if (msg.SIL.HasValue || msg.NACp.HasValue || msg.NICBaroIntegrity.HasValue)
+        {
+            dataQuality = dataQuality ?? new();
+            dataQuality = dataQuality with
+            {
+                SIL_TC29 = msg.SIL ?? dataQuality.SIL_TC29,
+                NACp_TC29 = msg.NACp ?? dataQuality.NACp_TC29,
+                NICbaro_TC29 = msg.NICBaroIntegrity ?? dataQuality.NICbaro_TC29,
+                LastUpdate = timestamp
+            };
+        }
+
+        return aircraft with
+        {
+            Autopilot = autopilot,
+            Acas = acas,
+            DataQuality = dataQuality
+        };
     }
 }

@@ -70,6 +70,33 @@ public sealed record TrackedVelocity
     public double? GroundTrack { get; init; }
 
     /// <summary>
+    /// Indicated Airspeed (IAS) from Comm-B BDS registers (BDS 5,3 or BDS 6,0).
+    /// Airspeed as measured by the aircraft's pitot-static system (uncorrected for altitude/temperature).
+    /// Range: 0-500 knots.
+    /// IAS is the speed displayed to pilots and used for aircraft performance (stall speed, V-speeds).
+    /// Null if no BDS 5,3 or BDS 6,0 message received (requires ground interrogation for Comm-B).
+    /// </summary>
+    public Velocity? IndicatedAirspeed { get; init; }
+
+    /// <summary>
+    /// True Airspeed (TAS) from Comm-B BDS registers (BDS 5,0 or BDS 5,3).
+    /// Indicated airspeed corrected for altitude and temperature (actual speed through air mass).
+    /// Range: 0-2000 knots.
+    /// TAS is used for navigation calculations and differs from ground speed due to wind.
+    /// Null if no BDS 5,0 or BDS 5,3 message received (requires ground interrogation for Comm-B).
+    /// </summary>
+    public Velocity? TrueAirspeed { get; init; }
+
+    /// <summary>
+    /// True track angle from Comm-B BDS 5,0 (Track and Turn) register.
+    /// Direction of movement over ground in degrees (0-360, 0 = North).
+    /// Provides redundancy to TC 19 Track field and allows cross-validation.
+    /// Range: 0-359.9 degrees.
+    /// Null if no BDS 5,0 message received (requires ground interrogation for Comm-B).
+    /// </summary>
+    public double? TrackAngle { get; init; }
+
+    /// <summary>
     /// Climb/descent rate in feet per minute (TC 19, all subtypes).
     /// Positive: climbing, Negative: descending, Zero/null: level flight or unavailable.
     /// Range: typically -6000 to +6000 fpm for normal flight.

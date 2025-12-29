@@ -74,13 +74,14 @@ public sealed record TrackedAcas
     // ========================================
 
     /// <summary>
-    /// ACAS reply information - operational state indicator (from DF 0, DF 16).
-    /// Indicates current ACAS/TCAS state and whether Resolution Advisory is active.
+    /// ACAS reply information - ACAS capability indicator (from DF 0, DF 16).
+    /// Indicates the operational capabilities of the ACAS system.
     /// Values:
-    /// - NoAcas (0): No ACAS installed
-    /// - ResolutionAdvisoryActive (2): RA currently active (collision avoidance maneuver)
-    /// - VerticalOnlyRA (3): RA active, vertical-only guidance
-    /// - ResolutionAdvisoryTerminated (4): RA recently terminated, returning to normal flight
+    /// - NoAcas (0): No operating ACAS
+    /// - ResolutionCapabilityInhibited (2): ACAS present but resolution advisories inhibited
+    /// - VerticalOnlyResolutionCapability (3): ACAS with vertical-only RA capability
+    /// - VerticalAndHorizontalResolutionCapability (7): ACAS with vertical and horizontal RA capability
+    /// Note: This field indicates capability, not whether an RA is currently active.
     /// Null if no ACAS messages received yet.
     /// </summary>
     public AcasReplyInformation? ReplyInformation { get; init; }
@@ -88,8 +89,8 @@ public sealed record TrackedAcas
     /// <summary>
     /// TCAS Resolution Advisory active flag (from TC 29 V1, DF 16).
     /// True if TCAS RA is currently active, requiring pilot to execute collision avoidance maneuver.
-    /// False if no RA active (normal flight).
-    /// Sources: TC 29 Version 1 (TcasRaActive field) or derived from DF 16 ReplyInformation.
+    /// False if no RA active (normal flight) or RA recently terminated.
+    /// Sources: TC 29 Version 1 (TcasRaActive field) or derived from DF 16 MV field (ResolutionAdvisoryTerminated=false).
     /// Null if neither TC 29 V1 nor DF 16 received.
     /// </summary>
     public bool? TcasRaActive { get; init; }
@@ -97,7 +98,7 @@ public sealed record TrackedAcas
     /// <summary>
     /// Resolution Advisory terminated flag (from DF 16 only, MV field bit 59).
     /// True if RA recently terminated, aircraft returning to normal flight path.
-    /// False if RA ongoing or no recent RA.
+    /// False if RA currently active (ongoing collision avoidance).
     /// Only valid when DF 16 MV field is valid (AcasValid = true).
     /// Null if DF 16 not received or MV field invalid.
     /// </summary>

@@ -86,9 +86,9 @@ public class LongAirAirSurveillanceTest
     }
 
     [Theory]
-    [InlineData(RealFrames.LongAirAir_71C011, "71C011", AcasReplyInformation.VerticalOnlyRA)]
-    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", AcasReplyInformation.VerticalOnlyRA)]
-    [InlineData(RealFrames.LongAirAir_80073B, "80073B", AcasReplyInformation.VerticalOnlyRA)]
+    [InlineData(RealFrames.LongAirAir_71C011, "71C011", AcasReplyInformation.VerticalOnlyResolutionCapability)]
+    [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", AcasReplyInformation.VerticalOnlyResolutionCapability)]
+    [InlineData(RealFrames.LongAirAir_80073B, "80073B", AcasReplyInformation.VerticalOnlyResolutionCapability)]
     public void ParseMessage_DF16_LongAirAirSurveillance_ReplyInformation(
         string hexFrame,
         string expectedIcao,
@@ -168,7 +168,7 @@ public class LongAirAirSurveillanceTest
         msg.Altitude.Type.Should().Be(AltitudeType.Barometric);
         msg.VerticalStatus.Should().Be(VerticalStatus.Airborne);
         msg.SensitivityLevel.Should().Be(7, "maximum ACAS sensitivity");
-        msg.ReplyInformation.Should().Be(AcasReplyInformation.VerticalOnlyRA);
+        msg.ReplyInformation.Should().Be(AcasReplyInformation.VerticalOnlyResolutionCapability);
 
         // MV field - Not valid ACAS coordination data (VDS=0x58, not 0x30)
         msg.AcasValid.Should().BeFalse("VDS != 0x30 indicates non-ACAS MV data");

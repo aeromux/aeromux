@@ -60,6 +60,7 @@ public sealed class TrackingHandlerRegistry
         Register(new CommBIdentityReplyHandler());
 
         // Surveillance reply handlers
+        Register(new AllCallReplyHandler());
         Register(new SurveillanceAltitudeReplyHandler());
         Register(new SurveillanceIdentityReplyHandler());
 
@@ -79,8 +80,8 @@ public sealed class TrackingHandlerRegistry
     /// <param name="messageType">The Mode S message type to look up</param>
     /// <returns>The handler for this message type, or null if no handler is registered</returns>
     /// <remarks>
-    /// Returns null for message types that don't affect tracking state
-    /// (e.g., AllCallReply, CommB messages without relevant data).
+    /// Returns null for message types that don't have handlers registered,
+    /// such as Comm-B messages with unsupported BDS codes or other unhandled message types.
     /// </remarks>
     public ITrackingHandler? GetHandler(Type messageType)
     {

@@ -54,10 +54,12 @@ public sealed class SurfacePositionHandler : ITrackingHandler
         // Update position with coordinate and ground status
         // Surface CPR uses modified NL functions different from airborne CPR
         // Surface messages always indicate ground
+        // MovementCategory: Non-linear speed categories optimized for ground operations
         TrackedPosition position = aircraft.Position with
         {
             Coordinate = msg.Position ?? aircraft.Position.Coordinate,
             IsOnGround = true,
+            MovementCategory = msg.Movement,
             LastUpdate = timestamp
         };
 

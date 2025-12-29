@@ -209,8 +209,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
                 LastSeen = now,
                 SeenSeconds = 0,
                 SeenPosSeconds = null,
-                NextJsonOutput = now,
-                Version = null
+                NextJsonOutput = now
             },
             History = CreateHistory()
         };
@@ -392,12 +391,12 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         {
             history.VelocityHistory.Add(new VelocitySnapshot(
                 now,
-                velocity.Speed,              // Airborne velocity from TC 19 (may be null if only surface data)
-                velocity.Heading,            // True heading from TC 19 subtype 3-4 (may be null)
-                velocity.Track,              // Ground track from TC 19 subtype 1-2 (may be null)
-                velocity.GroundSpeed,        // Surface ground speed from TC 5-8 (may be null if airborne)
-                velocity.GroundTrack,        // Surface ground track from TC 5-8 (may be null if airborne)
-                velocity.VerticalRate,       // Vertical rate from TC 19 (may be null)
+                velocity.Speed,              // Airborne velocity from TC 19 (maybe null if only surface data)
+                velocity.Heading,            // True heading from TC 19 subtype 3-4 (maybe null)
+                velocity.Track,              // Ground track from TC 19 subtype 1-2 (maybe null)
+                velocity.GroundSpeed,        // Surface ground speed from TC 5-8 (maybe null if airborne)
+                velocity.GroundTrack,        // Surface ground track from TC 5-8 (maybe null if airborne)
+                velocity.VerticalRate,       // Vertical rate from TC 19 (maybe null)
                 velocity.VelocitySubtype));  // Velocity subtype from TC 19 (null if only surface data)
         }
 

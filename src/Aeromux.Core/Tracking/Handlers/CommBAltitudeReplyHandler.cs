@@ -22,14 +22,17 @@ using Aeromux.Core.ModeS.ValueObjects;
 namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
-/// Handles CommBAltitudeReply messages (DF 20) for Comm-B register data tracking.
+/// Handles CommBAltitudeReply messages (DF 20) for Comm-B register data and ATC coordination tracking.
 /// Routes BDS register data to appropriate tracking groups:
+/// - BDS 1,0 → TrackedCapabilities (data link capability bits)
+/// - BDS 1,7 → TrackedCapabilities (supported BDS registers mask)
 /// - BDS 4,0 → TrackedAutopilot (MCP/FMS altitude, pressure setting)
 /// - BDS 4,4 → TrackedMeteo (wind, temperature, pressure)
 /// - BDS 4,5 → TrackedMeteo (turbulence, wind shear, hazards)
-/// - BDS 5,0 → TrackedFlightDynamics + TrackedVelocity (roll, track, speeds)
-/// - BDS 5,3 → TrackedFlightDynamics + TrackedVelocity (heading, mach, speeds)
-/// - BDS 6,0 → TrackedFlightDynamics + TrackedVelocity (heading, mach, vertical rates, IAS)
+/// - BDS 5,0 → TrackedFlightDynamics + TrackedVelocity (roll, track rate, track angle, true airspeed, ground speed)
+/// - BDS 5,3 → TrackedFlightDynamics + TrackedVelocity (magnetic heading, mach, indicated airspeed, true airspeed)
+/// - BDS 6,0 → TrackedFlightDynamics + TrackedVelocity (heading, mach, vertical rates, indicated airspeed)
+/// Also extracts DF 20 metadata: DownlinkRequest, UtilityMessage → TrackedOperationalMode.
 /// </summary>
 public sealed class CommBAltitudeReplyHandler : ITrackingHandler
 {
@@ -46,9 +49,23 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
 
         var msg = (CommBAltitudeReply)message;
 
+        // Extract DF 20 metadata for ATC coordination tracking
+        // DownlinkRequest and UtilityMessage indicate interrogator communication patterns
+        TrackedOperationalMode? operationalMode = aircraft.OperationalMode ?? new();
+        operationalMode = operationalMode with
+        {
+            DownlinkRequest = msg.DownlinkRequest,
+            UtilityMessage = msg.UtilityMessage,
+            LastUpdate = timestamp
+        };
+
+        aircraft = aircraft with { OperationalMode = operationalMode };
+
         // Route to appropriate handler based on BDS data type
         return msg.BdsData switch
         {
+            Bds10DataLinkCapability data => HandleBds10(aircraft, data, timestamp),
+            Bds17GicbCapability data => HandleBds17(aircraft, data, timestamp),
             Bds40SelectedVerticalIntention data => HandleBds40(aircraft, data, timestamp),
             Bds44MeteorologicalRoutine data => HandleBds44(aircraft, data, timestamp),
             Bds45MeteorologicalHazard data => HandleBds45(aircraft, data, timestamp),
@@ -57,6 +74,53 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             Bds60HeadingAndSpeed data => HandleBds60(aircraft, data, timestamp),
             _ => aircraft // Unknown/unsupported BDS code, no update
         };
+    }
+
+    /// <summary>
+    /// Handles BDS 1,0 (Data Link Capability) - updates TrackedCapabilities.
+    /// Provides: 16-bit capability flags for Comm-A/B/C/D services.
+    /// </summary>
+    /// <remarks>
+    /// Indicates which Mode S data link services the aircraft supports.
+    /// Used by interrogators to determine which Comm-B registers can be requested.
+    /// </remarks>
+    private static Aircraft HandleBds10(
+        Aircraft aircraft,
+        Bds10DataLinkCapability data,
+        DateTime timestamp)
+    {
+        TrackedCapabilities? capabilities = aircraft.Capabilities ?? new();
+        capabilities = capabilities with
+        {
+            DataLinkCapabilityBits = data.CapabilityBits,
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { Capabilities = capabilities };
+    }
+
+    /// <summary>
+    /// Handles BDS 1,7 (GICB Capability Report) - updates TrackedCapabilities.
+    /// Provides: 56-bit bitmask indicating which BDS registers are supported.
+    /// </summary>
+    /// <remarks>
+    /// Each bit represents support for a specific BDS register.
+    /// Allows interrogators to intelligently query only supported registers,
+    /// reducing unnecessary interrogations.
+    /// </remarks>
+    private static Aircraft HandleBds17(
+        Aircraft aircraft,
+        Bds17GicbCapability data,
+        DateTime timestamp)
+    {
+        TrackedCapabilities? capabilities = aircraft.Capabilities ?? new();
+        capabilities = capabilities with
+        {
+            SupportedBdsRegisters = data.CapabilityMask,
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { Capabilities = capabilities };
     }
 
     /// <summary>
@@ -74,26 +138,59 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     {
         TrackedAutopilot? existing = aircraft.Autopilot;
 
-        // Determine selected altitude source based on which field is available
+        // Determine selected altitude from MCP or FMS fields
         // MCP (Mode Control Panel) takes priority over FMS (Flight Management System)
         Altitude? selectedAltitude = null;
-        AltitudeSource? altitudeSource = null;
-
         if (data.McpSelectedAltitude.HasValue)
         {
             selectedAltitude = Altitude.FromFeet(data.McpSelectedAltitude.Value, AltitudeType.Barometric);
-            altitudeSource = AltitudeSource.McpFcu;
         }
         else if (data.FmsSelectedAltitude.HasValue)
         {
             selectedAltitude = Altitude.FromFeet(data.FmsSelectedAltitude.Value, AltitudeType.Barometric);
-            altitudeSource = AltitudeSource.FmsRnav;
+        }
+
+        // Handle altitude source from BDS 4,0 explicit field or infer from altitude fields
+        AltitudeSource? altitudeSource = null;
+        if (data.AltitudeSource.HasValue)
+        {
+            // Use explicit altitude source from BDS 4,0
+            altitudeSource = data.AltitudeSource.Value switch
+            {
+                Bds40AltitudeSource.McpFcu => AltitudeSource.McpFcu,
+                Bds40AltitudeSource.Fms => AltitudeSource.Fms,
+                Bds40AltitudeSource.Aircraft => AltitudeSource.Unknown,
+                _ => null  // Unknown: don't update
+            };
+        }
+        else
+        {
+            // Infer from which altitude field is populated (legacy logic)
+            if (data.McpSelectedAltitude.HasValue)
+            {
+                altitudeSource = AltitudeSource.McpFcu;
+            }
+            else if (data.FmsSelectedAltitude.HasValue)
+            {
+                altitudeSource = AltitudeSource.Fms;
+            }
+        }
+
+        // Extract navigation mode flags from BDS 4,0
+        bool? vnavMode = null;
+        bool? altitudeHoldMode = null;
+        bool? approachMode = null;
+        if (data.NavigationModes.HasValue)
+        {
+            var modes = data.NavigationModes.Value;
+            vnavMode = modes.HasFlag(Bds40NavigationMode.Vnav);
+            altitudeHoldMode = modes.HasFlag(Bds40NavigationMode.AltitudeHold);
+            approachMode = modes.HasFlag(Bds40NavigationMode.Approach);
         }
 
         // Create new autopilot state with field-level merging:
-        // - Update altitude and pressure from BDS 4,0
+        // - Update altitude, pressure, altitude source, and navigation modes from BDS 4,0
         // - Preserve all other fields from existing state (from TC 29)
-        // Note: TCAS fields have been moved to TrackedAcas category
         var autopilot = new TrackedAutopilot
         {
             SelectedAltitude = selectedAltitude ?? existing?.SelectedAltitude,
@@ -103,10 +200,10 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             VerticalMode = existing?.VerticalMode,                                    // From TC 29 V1
             HorizontalMode = existing?.HorizontalMode,                                // From TC 29 V1
             AutopilotEngaged = existing?.AutopilotEngaged,                            // From TC 29 V2
-            VnavMode = existing?.VnavMode,                                            // From TC 29 V2
+            VnavMode = vnavMode ?? existing?.VnavMode,
             LnavMode = existing?.LnavMode,                                            // From TC 29 V2
-            AltitudeHoldMode = existing?.AltitudeHoldMode,                            // From TC 29 V2
-            ApproachMode = existing?.ApproachMode,                                    // From TC 29 V2
+            AltitudeHoldMode = altitudeHoldMode ?? existing?.AltitudeHoldMode,
+            ApproachMode = approachMode ?? existing?.ApproachMode,
             LastUpdate = timestamp
         };
 
@@ -137,7 +234,8 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             WindDirection = data.WindDirection ?? existing?.WindDirection,
             StaticAirTemperature = data.StaticAirTemperature ?? existing?.StaticAirTemperature,
             Pressure = data.Pressure ?? existing?.Pressure,
-            Turbulence = existing?.Turbulence,                    // From BDS 4,5
+            Turbulence = data.Turbulence ?? existing?.Turbulence,             // From BDS 4,4
+            Humidity = data.Humidity ?? existing?.Humidity,                   // From BDS 4,4
             WindShear = existing?.WindShear,                      // From BDS 4,5
             Microburst = existing?.Microburst,                    // From BDS 4,5
             Icing = existing?.Icing,                              // From BDS 4,5
@@ -188,13 +286,13 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     }
 
     /// <summary>
-    /// Handles BDS 5,0 (Track and Turn) - updates TrackedFlightDynamics.
-    /// Provides: Roll angle and track rate.
+    /// Handles BDS 5,0 (Track and Turn) - updates TrackedFlightDynamics + TrackedVelocity.
+    /// Provides: Roll angle, track rate, track angle, true airspeed, ground speed.
     /// </summary>
     /// <remarks>
     /// Field-level merging: Updates roll and track rate from BDS 5,0,
     /// preserves magnetic heading and mach from BDS 5,3/6,0, and vertical rates from BDS 6,0.
-    /// Note: TC 19 velocity data takes priority, so we don't update TrackedVelocity here.
+    /// Now also updates TrackedVelocity with track angle, TAS, and ground speed for redundancy/cross-validation.
     /// </remarks>
     private static Aircraft HandleBds50(
         Aircraft aircraft,
@@ -217,16 +315,30 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        return aircraft with { FlightDynamics = dynamics };
+        // Update velocity with BDS 5,0 speed and track data
+        // These fields provide redundancy to TC 19 for cross-validation
+        // Note: TAS can be 0-2046 knots, but Velocity value object only supports 0-1500 knots
+        TrackedVelocity velocity = aircraft.Velocity with
+        {
+            TrackAngle = data.TrackAngle ?? aircraft.Velocity.TrackAngle,
+            TrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
+                ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
+                : aircraft.Velocity.TrueAirspeed,
+            // Note: GroundSpeed from BDS 5,0 stored separately from TC 5-8 GroundSpeed
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { FlightDynamics = dynamics, Velocity = velocity };
     }
 
     /// <summary>
-    /// Handles BDS 5,3 (Air-Referenced State) - updates TrackedFlightDynamics.
-    /// Provides: Magnetic heading and Mach number.
+    /// Handles BDS 5,3 (Air-Referenced State) - updates TrackedFlightDynamics + TrackedVelocity.
+    /// Provides: Magnetic heading, Mach number, indicated airspeed, true airspeed.
     /// </summary>
     /// <remarks>
     /// Field-level merging: Updates magnetic heading and Mach from BDS 5,3,
     /// preserves roll from BDS 5,0, vertical rates from BDS 6,0.
+    /// Now also updates TrackedVelocity with IAS and TAS for cross-validation with BDS 6,0.
     /// </remarks>
     private static Aircraft HandleBds53(
         Aircraft aircraft,
@@ -236,29 +348,43 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
         TrackedFlightDynamics? existing = aircraft.FlightDynamics;
 
         // Create new dynamics state with field-level merging:
-        // - Update magnetic heading and Mach from BDS 5,3
-        // - Preserve roll and track rate from BDS 5,0, vertical rates from BDS 6,0
+        // - Update magnetic heading, Mach, and barometric vertical rate from BDS 5,3
+        // - Preserve roll and track rate from BDS 5,0, inertial vertical rate from BDS 6,0
         var dynamics = new TrackedFlightDynamics
         {
             RollAngle = existing?.RollAngle,                       // From BDS 5,0
             MagneticHeading = data.MagneticHeading ?? existing?.MagneticHeading,
-            BarometricVerticalRate = existing?.BarometricVerticalRate,          // From BDS 6,0
+            BarometricVerticalRate = data.VerticalRate ?? existing?.BarometricVerticalRate,
             InertialVerticalRate = existing?.InertialVerticalRate,              // From BDS 6,0
             MachNumber = data.MachNumber ?? existing?.MachNumber,
             TrackRate = existing?.TrackRate,                       // From BDS 5,0
             LastUpdate = timestamp
         };
 
-        return aircraft with { FlightDynamics = dynamics };
+        // Update velocity with BDS 5,3 airspeed data
+        // Note: IAS range 0-500 knots (OK), TAS range 0-2046 knots (validate ≤1500)
+        TrackedVelocity velocity = aircraft.Velocity with
+        {
+            IndicatedAirspeed = data.IndicatedAirspeed.HasValue
+                ? Velocity.FromKnots(data.IndicatedAirspeed.Value, VelocityType.IndicatedAirspeed)
+                : aircraft.Velocity.IndicatedAirspeed,
+            TrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
+                ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
+                : aircraft.Velocity.TrueAirspeed,
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { FlightDynamics = dynamics, Velocity = velocity };
     }
 
     /// <summary>
-    /// Handles BDS 6,0 (Heading and Speed) - updates TrackedFlightDynamics.
-    /// Provides: Magnetic heading, Mach number, barometric and inertial vertical rates.
+    /// Handles BDS 6,0 (Heading and Speed) - updates TrackedFlightDynamics + TrackedVelocity.
+    /// Provides: Magnetic heading, Mach number, barometric and inertial vertical rates, indicated airspeed.
     /// </summary>
     /// <remarks>
     /// Field-level merging: Updates heading, Mach, and vertical rates from BDS 6,0,
     /// preserves roll and track rate from BDS 5,0.
+    /// Now also updates TrackedVelocity with IAS for cross-validation with BDS 5,3.
     /// </remarks>
     private static Aircraft HandleBds60(
         Aircraft aircraft,
@@ -281,6 +407,15 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        return aircraft with { FlightDynamics = dynamics };
+        // Update velocity with BDS 6,0 indicated airspeed
+        TrackedVelocity velocity = aircraft.Velocity with
+        {
+            IndicatedAirspeed = data.IndicatedAirspeed.HasValue
+                ? Velocity.FromKnots(data.IndicatedAirspeed.Value, VelocityType.IndicatedAirspeed)
+                : aircraft.Velocity.IndicatedAirspeed,
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { FlightDynamics = dynamics, Velocity = velocity };
     }
 }

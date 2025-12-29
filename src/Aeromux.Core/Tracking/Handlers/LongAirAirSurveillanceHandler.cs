@@ -22,7 +22,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
 /// Handles LongAirAirSurveillance messages (DF 16) for ACAS Resolution Advisory tracking.
-/// Updates: SensitivityLevel, ReplyInformation, ResolutionAdvisoryTerminated,
+/// Updates: SensitivityLevel, ReplyInformation, TcasRaActive,
 /// MultipleThreatEncounter, RAC fields (RacNotBelow/Above/Left/Right), BarometricAltitude
 /// </summary>
 /// <remarks>
@@ -43,8 +43,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <list type="bullet">
 /// <item>Acas.SensitivityLevel: ACAS sensitivity level (0-7)</item>
 /// <item>Acas.ReplyInformation: Current ACAS operational state</item>
-/// <item>Acas.TcasRaActive: Derived from ReplyInformation (RA active if ResolutionAdvisoryActive or VerticalOnlyRA)</item>
-/// <item>Acas.ResolutionAdvisoryTerminated: RA termination flag (MV bit 59)</item>
+/// <item>Acas.TcasRaActive: Derived from ResolutionAdvisoryTerminated (RA active if MV field valid and RAT=false)</item>
 /// <item>Acas.MultipleThreatEncounter: Multiple threats flag (MV bit 60)</item>
 /// <item>Acas.RacNotBelow: Prohibition on descending (MV bit 55)</item>
 /// <item>Acas.RacNotAbove: Prohibition on climbing (MV bit 56)</item>
@@ -88,12 +87,12 @@ public sealed class LongAirAirSurveillanceHandler : ITrackingHandler
             // Resolution Advisory state
             ReplyInformation = msg.ReplyInformation,  // From DF 16 (update)
 
-            // Derive TcasRaActive from ReplyInformation
-            // RA is active if state is ResolutionAdvisoryActive or VerticalOnlyRA
-            TcasRaActive = msg.ReplyInformation == AcasReplyInformation.ResolutionAdvisoryActive ||
-                          msg.ReplyInformation == AcasReplyInformation.VerticalOnlyRA,
+            // Derive TcasRaActive from MV field data
+            // RA is active if MV field is valid and RA is not terminated
+            // Note: ResolutionAdvisoryTerminated is only populated when MV field is valid (msg.AcasValid=true)
+            TcasRaActive = msg.ResolutionAdvisoryTerminated == false,
 
-            ResolutionAdvisoryTerminated = msg.ResolutionAdvisoryTerminated,  // From DF 16 MV field
+            ResolutionAdvisoryTerminated = msg.ResolutionAdvisoryTerminated,  // From DF 16 MV field (null if invalid)
             MultipleThreatEncounter = msg.MultipleThreatEncounter,  // From DF 16 MV field
 
             // Resolution Advisory Complement (RAC) - only valid when msg.AcasValid = true

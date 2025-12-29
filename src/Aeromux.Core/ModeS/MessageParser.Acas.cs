@@ -65,11 +65,11 @@ public sealed partial class MessageParser
         // Extract Reply Information (RI) - bits 14-17 (4 bits)
         int riRaw = ExtractBits(frame.Data, 14, 4);
 
-        // Validate RI field (only 0, 2, 3, 4 are valid)
+        // Validate RI field (only 0, 2, 3, 7 are valid ACAS values)
         if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
         {
-            Log.Debug("Invalid ACAS reply information {RI} in DF 0 from {Icao}",
-                riRaw, frame.IcaoAddress);
+            Log.Debug("Invalid ACAS reply information {RI} in DF 0 from {Icao} (valid: 0,2,3,7), frame: {Frame}",
+                riRaw, frame.IcaoAddress, frame.Data);
             return null;
         }
 
@@ -147,11 +147,11 @@ public sealed partial class MessageParser
         // Extract Reply Information (RI) - bits 14-17 (4 bits)
         int riRaw = ExtractBits(frame.Data, 14, 4);
 
-        // Validate RI field (only 0, 2, 3, 4 are valid)
+        // Validate RI field (only 0, 2, 3, 7 are valid ACAS values)
         if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
         {
-            Log.Debug("Invalid ACAS reply information {RI} in DF 16 from {Icao}",
-                riRaw, frame.IcaoAddress);
+            Log.Debug("Invalid ACAS reply information {RI} in DF 16 from {Icao} (valid: 0,2,3,7), frame: {Frame}",
+                riRaw, frame.IcaoAddress, frame.Data);
             return null;
         }
 
