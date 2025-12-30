@@ -29,10 +29,10 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
     public async Task StartConsuming_ReadsFromChannel_TracksAllAircraft()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Write 3 frames to channel
         await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
@@ -41,33 +41,33 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         channel.Writer.Complete();
 
         // Act
-        _tracker.StartConsuming(channel.Reader, cts.Token);
+        Tracker.StartConsuming(channel.Reader, cts.Token);
 
         // Wait for consumption to complete
         await Task.Delay(500, cts.Token);
 
         // Assert
-        _tracker.Count.Should().Be(3);
-        _tracker.GetAircraft("471DBC").Should().NotBeNull();
-        _tracker.GetAircraft("4D2407").Should().NotBeNull();
-        _tracker.GetAircraft("80073B").Should().NotBeNull();
+        Tracker.Count.Should().Be(3);
+        Tracker.GetAircraft("471DBC").Should().NotBeNull();
+        Tracker.GetAircraft("4D2407").Should().NotBeNull();
+        Tracker.GetAircraft("80073B").Should().NotBeNull();
     }
 
     [Fact]
     public void StartConsuming_CalledTwice_ThrowsInvalidOperationException()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var channel1 = Channel.CreateUnbounded<ProcessedFrame>();
         var channel2 = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Act
-        _tracker.StartConsuming(channel1.Reader, cts.Token);
+        Tracker.StartConsuming(channel1.Reader, cts.Token);
 
         // Assert
-        Action secondCall = () => _tracker.StartConsuming(channel2.Reader, cts.Token);
+        Action secondCall = () => Tracker.StartConsuming(channel2.Reader, cts.Token);
         secondCall.Should().Throw<InvalidOperationException>()
             .WithMessage("StartConsuming can only be called once");
 
@@ -79,16 +79,16 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
     public async Task StartConsuming_WithCancellation_StopsConsumption()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Write initial frames
         await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
 
         // Act
-        _tracker.StartConsuming(channel.Reader, cts.Token);
+        Tracker.StartConsuming(channel.Reader, cts.Token);
         await Task.Delay(100, cts.Token);
 
         // Cancel
@@ -100,9 +100,9 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         await Task.Delay(100, CancellationToken.None);
 
         // Assert - Only first frame should be processed
-        _tracker.Count.Should().Be(1);
-        _tracker.GetAircraft("471DBC").Should().NotBeNull();
-        _tracker.GetAircraft("4D2407").Should().BeNull("frame written after cancellation");
+        Tracker.Count.Should().Be(1);
+        Tracker.GetAircraft("471DBC").Should().NotBeNull();
+        Tracker.GetAircraft("4D2407").Should().BeNull("frame written after cancellation");
 
         channel.Writer.Complete();
     }
@@ -111,13 +111,13 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
     public async Task StartConsuming_ManyFrames_ProcessesAllInOrder()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Act - Start consuming
-        _tracker.StartConsuming(channel.Reader, cts.Token);
+        Tracker.StartConsuming(channel.Reader, cts.Token);
 
         // Write frames gradually
         for (int i = 0; i < 100; i++)
@@ -130,7 +130,7 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         await Task.Delay(500, cts.Token); // Wait for all frames to be consumed
 
         // Assert
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull();
         aircraft!.Status.TotalMessages.Should().Be(100);
     }

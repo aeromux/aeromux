@@ -1,25 +1,41 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.Tests.Builders;
 using Aeromux.Core.Tests.TestData;
 
-namespace Aeromux.Core.Tests.MessageParser;
+namespace Aeromux.Core.Tests.MessageParsing;
 
 /// <summary>
-/// Tests for parsing Comm-B Identity Reply messages (DF 21).
-/// Covers basic DF 21 fields: squawk code, flight status, downlink request, and utility message.
+/// Tests for parsing Comm-B Altitude Reply messages (DF 20).
+/// Covers basic DF 20 fields: altitude, flight status, downlink request, and utility message.
 /// BDS-specific decoding (BdsCode, BdsData) is intentionally out of scope.
 /// </summary>
-public class CommBIdentityReplyTest
+public class CommBAltitudeReplyTest
 {
-    private readonly Aeromux.Core.ModeS.MessageParser _parser = new();
+    private readonly MessageParser _parser = new();
 
     // ========================================
     // Basic Message Fields
     // ========================================
 
     [Theory]
-    [InlineData(RealFrames.CommB_Identity_4D2407, "4D2407", DownlinkFormat.CommBIdentityReply)]
-    [InlineData(RealFrames.CommB_Identity_49D414, "49D414", DownlinkFormat.CommBIdentityReply)]
-    public void ParseMessage_DF21_CommB_BasicFields(
+    [InlineData(RealFrames.CommB_Altitude_4D2407, "4D2407", DownlinkFormat.CommBAltitudeReply)]
+    [InlineData(RealFrames.CommB_Altitude_80073B, "80073B", DownlinkFormat.CommBAltitudeReply)]
+    public void ParseMessage_DF20_CommB_BasicFields(
         string hexFrame,
         string expectedIcao,
         DownlinkFormat expectedDF)
@@ -35,21 +51,21 @@ public class CommBIdentityReplyTest
 
         // Assert
         message.Should().NotBeNull();
-        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
         reply.IcaoAddress.Should().Be(expectedIcao);
         reply.DownlinkFormat.Should().Be(expectedDF);
     }
 
     // ========================================
-    // Squawk Code
+    // Altitude
     // ========================================
 
     [Theory]
-    [InlineData(RealFrames.CommB_Identity_4D2407, "6415")]
-    [InlineData(RealFrames.CommB_Identity_49D414, "1420")]
-    public void ParseMessage_DF21_CommB_SquawkCode(
+    [InlineData(RealFrames.CommB_Altitude_4D2407, 33000)]
+    [InlineData(RealFrames.CommB_Altitude_80073B, 39975)]
+    public void ParseMessage_DF20_CommB_Altitude(
         string hexFrame,
-        string expectedSquawk)
+        int expectedAltitude)
     {
         // Arrange
         ValidatedFrame frame = new ValidatedFrameBuilder()
@@ -61,9 +77,10 @@ public class CommBIdentityReplyTest
 
         // Assert
         message.Should().NotBeNull();
-        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
-        reply.SquawkCode.Should().NotBeNull();
-        reply.SquawkCode.Should().Be(expectedSquawk, "Squawk code is a 4-digit octal identifier");
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.Altitude.Should().NotBeNull();
+        reply.Altitude!.Feet.Should().Be(expectedAltitude);
+        reply.Altitude!.Type.Should().Be(AltitudeType.Barometric, "DF 20 altitude is always barometric");
     }
 
     // ========================================
@@ -71,9 +88,9 @@ public class CommBIdentityReplyTest
     // ========================================
 
     [Theory]
-    [InlineData(RealFrames.CommB_Identity_4D2407, FlightStatus.AirborneNormal)]
-    [InlineData(RealFrames.CommB_Identity_49D414, FlightStatus.AirborneNormal)]
-    public void ParseMessage_DF21_CommB_FlightStatus(
+    [InlineData(RealFrames.CommB_Altitude_4D2407, FlightStatus.AirborneNormal)]
+    [InlineData(RealFrames.CommB_Altitude_80073B, FlightStatus.AirborneNormal)]
+    public void ParseMessage_DF20_CommB_FlightStatus(
         string hexFrame,
         FlightStatus expectedFlightStatus)
     {
@@ -87,7 +104,7 @@ public class CommBIdentityReplyTest
 
         // Assert
         message.Should().NotBeNull();
-        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
         reply.FlightStatus.Should().Be(expectedFlightStatus, "Both test frames are airborne with no alert or SPI");
     }
 
@@ -96,9 +113,9 @@ public class CommBIdentityReplyTest
     // ========================================
 
     [Theory]
-    [InlineData(RealFrames.CommB_Identity_4D2407, 0)]
-    [InlineData(RealFrames.CommB_Identity_49D414, 0)]
-    public void ParseMessage_DF21_CommB_DownlinkRequest(
+    [InlineData(RealFrames.CommB_Altitude_4D2407, 0)]
+    [InlineData(RealFrames.CommB_Altitude_80073B, 0)]
+    public void ParseMessage_DF20_CommB_DownlinkRequest(
         string hexFrame,
         int expectedDownlinkRequest)
     {
@@ -112,7 +129,7 @@ public class CommBIdentityReplyTest
 
         // Assert
         message.Should().NotBeNull();
-        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
         reply.DownlinkRequest.Should().Be(expectedDownlinkRequest, "No downlink request in test frames");
     }
 
@@ -121,9 +138,9 @@ public class CommBIdentityReplyTest
     // ========================================
 
     [Theory]
-    [InlineData(RealFrames.CommB_Identity_4D2407, 0)]
-    [InlineData(RealFrames.CommB_Identity_49D414, 0)]
-    public void ParseMessage_DF21_CommB_UtilityMessage(
+    [InlineData(RealFrames.CommB_Altitude_4D2407, 0)]
+    [InlineData(RealFrames.CommB_Altitude_80073B, 0)]
+    public void ParseMessage_DF20_CommB_UtilityMessage(
         string hexFrame,
         int expectedUtilityMessage)
     {
@@ -137,7 +154,7 @@ public class CommBIdentityReplyTest
 
         // Assert
         message.Should().NotBeNull();
-        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
         reply.UtilityMessage.Should().Be(expectedUtilityMessage, "No utility message in test frames");
     }
 
@@ -148,5 +165,5 @@ public class CommBIdentityReplyTest
     // NOTE: BdsCode and BdsData are intentionally not tested here.
     // BDS register decoding is a complex, optional feature that would
     // require dedicated test coverage if needed in the future.
-    // These tests focus on core DF 21 message fields only.
+    // These tests focus on core DF 20 message fields only.
 }

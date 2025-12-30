@@ -17,8 +17,6 @@
 using Aeromux.Core.Tests.Builders;
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
-using FluentAssertions;
-using Xunit;
 
 namespace Aeromux.Core.Tests.Tracking;
 
@@ -32,18 +30,18 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
     public void Update_CallsignOnExistingAircraft_UpdatesCallsignAndPreservesPosition()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Create aircraft with ID first
-        _tracker.Update(idFrame);
+        Tracker.Update(idFrame);
 
         // Simpler approach: Just test that updating the same aircraft increments counters
         ProcessedFrame idFrame2 = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
-        _tracker.Update(idFrame2);
+        Tracker.Update(idFrame2);
 
         // Assert
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull();
         aircraft!.Identification.Callsign.Should().Be("WZZ476");
         aircraft.Status.TotalMessages.Should().Be(2);
@@ -54,17 +52,17 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
     public void Update_WithCPRPair_PopulatesCoordinate()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? afterEven = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? afterEven = Tracker.GetAircraft("80073B");
 
-        _tracker.Update(oddFrame);
-        Aircraft? afterOdd = _tracker.GetAircraft("80073B");
+        Tracker.Update(oddFrame);
+        Aircraft? afterOdd = Tracker.GetAircraft("80073B");
 
         // Assert
         afterEven.Should().NotBeNull();
@@ -81,20 +79,20 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
     public void Update_MultipleVelocityFrames_UpdatesVelocityEachTime()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
         ProcessedFrame frame2 = CreateFrame(RealFrames.AirborneVel_39CEAD_Level, "39CEAD");
         ProcessedFrame frame3 = CreateFrame(RealFrames.AirborneVel_4D2407_Level, "4D2407");
 
         // Act - Create 3 different aircraft
-        _tracker.Update(frame1);
-        _tracker.Update(frame2);
-        _tracker.Update(frame3);
+        Tracker.Update(frame1);
+        Tracker.Update(frame2);
+        Tracker.Update(frame3);
 
         // Assert - Each aircraft should exist with its own velocity
-        Aircraft? aircraft1 = _tracker.GetAircraft("4BB027");
-        Aircraft? aircraft2 = _tracker.GetAircraft("39CEAD");
-        Aircraft? aircraft3 = _tracker.GetAircraft("4D2407");
+        Aircraft? aircraft1 = Tracker.GetAircraft("4BB027");
+        Aircraft? aircraft2 = Tracker.GetAircraft("39CEAD");
+        Aircraft? aircraft3 = Tracker.GetAircraft("4D2407");
 
         aircraft1.Should().NotBeNull();
         aircraft2.Should().NotBeNull();
@@ -104,14 +102,14 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
         aircraft2!.Velocity.Speed!.Knots.Should().BeInRange(395, 405);
         aircraft3!.Velocity.Speed!.Knots.Should().BeInRange(478, 488);
 
-        _tracker.Count.Should().Be(3);
+        Tracker.Count.Should().Be(3);
     }
 
     [Fact]
     public void Update_DifferentSignalStrengths_ReflectsLatestSignalStrength()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = new ProcessedFrameBuilder()
             .WithHexData(RealFrames.AircraftId_471DBC)
             .WithIcaoAddress("471DBC")
@@ -125,11 +123,11 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
             .Build();
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? after1 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame1);
+        Aircraft? after1 = Tracker.GetAircraft("471DBC");
 
-        _tracker.Update(frame2);
-        Aircraft? after2 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame2);
+        Aircraft? after2 = Tracker.GetAircraft("471DBC");
 
         // Assert
         after1.Should().NotBeNull();

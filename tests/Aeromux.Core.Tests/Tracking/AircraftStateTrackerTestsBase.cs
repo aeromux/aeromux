@@ -15,7 +15,6 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.Configuration;
-using Aeromux.Core.ModeS;
 using Aeromux.Core.Tests.Builders;
 using Aeromux.Core.Tracking;
 
@@ -28,19 +27,19 @@ namespace Aeromux.Core.Tests.Tracking;
 /// </summary>
 public class AircraftStateTrackerTestsBase : IDisposable
 {
-    public AircraftStateTracker? _tracker;
-    public readonly List<IDisposable> _disposables = [];
+    protected AircraftStateTracker? Tracker;
+    protected readonly List<IDisposable> Disposables = [];
 
     /// <summary>
     /// Helper method to create a test configuration with sensible defaults.
     /// </summary>
-    public static TrackingConfig CreateTestConfig() =>
+    private static TrackingConfig CreateTestConfig() =>
         new TrackingConfigBuilder().Build();
 
     /// <summary>
     /// Helper method to create a ProcessedFrame from hex data and ICAO.
     /// </summary>
-    public static ProcessedFrame CreateFrame(string hexData, string icao) =>
+    protected static ProcessedFrame CreateFrame(string hexData, string icao) =>
         new ProcessedFrameBuilder()
             .WithHexData(hexData)
             .WithIcaoAddress(icao)
@@ -50,7 +49,7 @@ public class AircraftStateTrackerTestsBase : IDisposable
     /// Helper method to create a ProcessedFrame with a shared parser for CPR decoding.
     /// Use this when testing CPR position decoding that requires even/odd frame pairs.
     /// </summary>
-    public static ProcessedFrame CreateFrame(string hexData, string icao, Aeromux.Core.ModeS.MessageParser parser) =>
+    protected static ProcessedFrame CreateFrame(string hexData, string icao, Aeromux.Core.ModeS.MessageParser parser) =>
         new ProcessedFrameBuilder()
             .WithHexData(hexData)
             .WithIcaoAddress(icao)
@@ -60,7 +59,7 @@ public class AircraftStateTrackerTestsBase : IDisposable
     /// <summary>
     /// Helper method to create a tracker with custom timeout (in seconds for fast tests).
     /// </summary>
-    public AircraftStateTracker CreateTrackerWithTimeout(int timeoutSeconds)
+    protected AircraftStateTracker CreateTrackerWithTimeout(int timeoutSeconds)
     {
         TrackingConfig config = CreateTestConfig();
         var tracker = new AircraftStateTracker(config)
@@ -68,17 +67,17 @@ public class AircraftStateTrackerTestsBase : IDisposable
             AircraftTimeout = TimeSpan.FromSeconds(timeoutSeconds),
             CleanupInterval = TimeSpan.FromMilliseconds(100) // Fast cleanup for tests
         };
-        _disposables.Add(tracker);
+        Disposables.Add(tracker);
         return tracker;
     }
 
     /// <summary>
     /// Helper method to create a standard tracker and track it for disposal.
     /// </summary>
-    public AircraftStateTracker CreateTracker()
+    protected AircraftStateTracker CreateTracker()
     {
         var tracker = new AircraftStateTracker(CreateTestConfig());
-        _disposables.Add(tracker);
+        Disposables.Add(tracker);
         return tracker;
     }
 
@@ -99,12 +98,12 @@ public class AircraftStateTrackerTestsBase : IDisposable
     {
         if (disposing)
         {
-            foreach (IDisposable disposable in _disposables)
+            foreach (IDisposable disposable in Disposables)
             {
                 disposable.Dispose();
             }
-            _disposables.Clear();
-            _tracker = null;
+            Disposables.Clear();
+            Tracker = null;
         }
     }
 }

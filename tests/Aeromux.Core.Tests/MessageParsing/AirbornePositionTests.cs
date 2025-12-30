@@ -1,8 +1,23 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
 using Aeromux.Core.Tests.Builders;
-using Aeromux.Core.Tests.Extensions;
 using Aeromux.Core.Tests.TestData;
 
-namespace Aeromux.Core.Tests.MessageParser;
+namespace Aeromux.Core.Tests.MessageParsing;
 
 /// <summary>
 /// Tests for parsing Airborne Position messages (TC 9-18, 20-22).
@@ -11,7 +26,7 @@ namespace Aeromux.Core.Tests.MessageParser;
 /// </summary>
 public class AirbornePositionTests
 {
-    private readonly Aeromux.Core.ModeS.MessageParser _parser = new();
+    private readonly MessageParser _parser = new();
 
     [Theory]
     [InlineData(RealFrames.AirbornePos_73806C_Even, "73806C", 37600, AltitudeType.Barometric)]

@@ -16,9 +16,6 @@
 
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
-using FluentAssertions;
-using Xunit;
-using System.Linq;
 
 namespace Aeromux.Core.Tests.Tracking;
 
@@ -31,10 +28,10 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
     public void GetAircraft_WithUnknownIcao_ReturnsNull()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act
-        Aircraft? aircraft = _tracker.GetAircraft("ABCDEF");
+        Aircraft? aircraft = Tracker.GetAircraft("ABCDEF");
 
         // Assert
         aircraft.Should().BeNull();
@@ -44,15 +41,15 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
     public void GetAircraft_WithKnownIcao_ReturnsCorrectAircraft()
     {
         // Arrange
-        _tracker = CreateTracker();
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3"));
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        Tracker = CreateTracker();
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
 
         // Act
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -64,13 +61,13 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
     public void GetAllAircraft_SortsAircraftByIcao()
     {
         // Arrange
-        _tracker = CreateTracker();
-        _tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        Tracker = CreateTracker();
+        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
 
         // Act
-        IReadOnlyList<Aircraft> aircraft = _tracker.GetAllAircraft();
+        IReadOnlyList<Aircraft> aircraft = Tracker.GetAllAircraft();
 
         // Assert
         aircraft.Should().HaveCount(3);
@@ -83,10 +80,10 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
     public void GetAllAircraft_WithNoAircraft_ReturnsEmptyList()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act
-        IReadOnlyList<Aircraft> aircraft = _tracker.GetAllAircraft();
+        IReadOnlyList<Aircraft> aircraft = Tracker.GetAllAircraft();
 
         // Assert
         aircraft.Should().BeEmpty();
@@ -96,18 +93,18 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
     public void Count_ReflectsCurrentAircraftCount()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act & Assert
-        _tracker.Count.Should().Be(0);
+        Tracker.Count.Should().Be(0);
 
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Count.Should().Be(1);
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Count.Should().Be(1);
 
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        _tracker.Count.Should().Be(2);
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        Tracker.Count.Should().Be(2);
 
-        _tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
-        _tracker.Count.Should().Be(3);
+        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        Tracker.Count.Should().Be(3);
     }
 }

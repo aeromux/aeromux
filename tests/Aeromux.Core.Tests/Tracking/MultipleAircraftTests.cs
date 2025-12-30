@@ -16,9 +16,6 @@
 
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
-using FluentAssertions;
-using System.Linq;
-using Xunit;
 
 namespace Aeromux.Core.Tests.Tracking;
 
@@ -31,19 +28,19 @@ public class MultipleAircraftTests : AircraftStateTrackerTestsBase
     public void Update_FiveAircraftSimultaneously_TracksAllIndependently()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act - Track 5 different aircraft
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3"));
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
 
         // Assert
-        _tracker.Count.Should().Be(5);
+        Tracker.Count.Should().Be(5);
 
-        IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
+        IReadOnlyList<Aircraft> allAircraft = Tracker.GetAllAircraft();
         allAircraft.Should().HaveCount(5);
 
         // Verify each aircraft is tracked correctly
@@ -58,22 +55,22 @@ public class MultipleAircraftTests : AircraftStateTrackerTestsBase
     public void Update_InterleavedUpdates_EachAircraftTrackedIndependently()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act - Interleaved updates: A1, B1, A2, C1, B2, A3
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A1
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));    // B1
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A2
-        _tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));    // C1
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));    // B2
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A3
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A1
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));    // B1
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A2
+        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));    // C1
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));    // B2
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A3
 
         // Assert
-        _tracker.Count.Should().Be(3);
+        Tracker.Count.Should().Be(3);
 
-        Aircraft? aircraftA = _tracker.GetAircraft("471DBC");
-        Aircraft? aircraftB = _tracker.GetAircraft("4D2407");
-        Aircraft? aircraftC = _tracker.GetAircraft("80073B");
+        Aircraft? aircraftA = Tracker.GetAircraft("471DBC");
+        Aircraft? aircraftB = Tracker.GetAircraft("4D2407");
+        Aircraft? aircraftC = Tracker.GetAircraft("80073B");
 
         aircraftA.Should().NotBeNull();
         aircraftB.Should().NotBeNull();

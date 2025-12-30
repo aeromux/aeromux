@@ -16,9 +16,6 @@
 
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
-using FluentAssertions;
-using Xunit;
-using System.Threading;
 
 namespace Aeromux.Core.Tests.Tracking;
 
@@ -31,17 +28,17 @@ public class CounterTests : AircraftStateTrackerTestsBase
     public void Update_TenFramesSameAircraft_TotalMessagesIncrementsCorrectly()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
         for (int i = 0; i < 10; i++)
         {
-            _tracker.Update(frame);
+            Tracker.Update(frame);
         }
 
         // Assert
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull();
         aircraft!.Status.TotalMessages.Should().Be(10);
     }
@@ -50,16 +47,16 @@ public class CounterTests : AircraftStateTrackerTestsBase
     public void Update_MixedMessageTypes_CountersIncrementCorrectly()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         string icao = "80073B";
 
         // Act - 2 position, 1 velocity, 1 ID (simulated with real frames for same ICAO)
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao));  // Position 1
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao));   // Position 2
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao));  // Position 1
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao));   // Position 2
 
         // For velocity and ID, we'd need frames with the same ICAO, which we don't have in RealFrames
         // So let's test with what we have
-        Aircraft? aircraft = _tracker.GetAircraft(icao);
+        Aircraft? aircraft = Tracker.GetAircraft(icao);
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -73,17 +70,17 @@ public class CounterTests : AircraftStateTrackerTestsBase
     public void Update_SeenSeconds_CalculatesTimeSinceFirstSeen()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        DateTime firstSeenTime = _tracker.GetAircraft("471DBC")!.Status.FirstSeen;
+        Tracker.Update(frame);
+        DateTime firstSeenTime = Tracker.GetAircraft("471DBC")!.Status.FirstSeen;
 
         Thread.Sleep(TimeSpan.FromSeconds(2));
-        _tracker.Update(frame);
+        Tracker.Update(frame);
 
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -95,16 +92,16 @@ public class CounterTests : AircraftStateTrackerTestsBase
     public void Update_PositionMessage_ResetsSeenPosSeconds()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B");
 
         // Act
-        _tracker.Update(posFrame);
-        Aircraft? after1 = _tracker.GetAircraft("80073B");
+        Tracker.Update(posFrame);
+        Aircraft? after1 = Tracker.GetAircraft("80073B");
 
         Thread.Sleep(TimeSpan.FromSeconds(2));
-        _tracker.Update(posFrame);
-        Aircraft? after2 = _tracker.GetAircraft("80073B");
+        Tracker.Update(posFrame);
+        Aircraft? after2 = Tracker.GetAircraft("80073B");
 
         // Assert
         after1.Should().NotBeNull();

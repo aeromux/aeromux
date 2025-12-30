@@ -28,7 +28,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_ConcurrentUpdatesToSameAircraft_NoExceptionsAllUpdatesCount()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         const int threadCount = 20;
         const int updatesPerThread = 10;
@@ -41,7 +41,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
             {
                 for (int j = 0; j < updatesPerThread; j++)
                 {
-                    _tracker.Update(frame);
+                    Tracker.Update(frame);
                 }
             });
         }
@@ -49,7 +49,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         await Task.WhenAll(tasks);
 
         // Assert
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull();
         aircraft!.Status.TotalMessages.Should().Be(threadCount * updatesPerThread);
         aircraft.Identification.Icao.Should().Be("471DBC");
@@ -60,7 +60,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_ConcurrentUpdatesToDifferentAircraft_NoContamination()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         const int threadsPerAircraft = 10;
         const int updatesPerThread = 5;
         var tasks = new List<Task>();
@@ -84,7 +84,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                 {
                     for (int j = 0; j < updatesPerThread; j++)
                     {
-                        _tracker.Update(capturedFrame);
+                        Tracker.Update(capturedFrame);
                     }
                 }));
             }
@@ -93,11 +93,11 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         await Task.WhenAll(tasks);
 
         // Assert - 5 aircraft tracked independently
-        _tracker.Count.Should().Be(5);
+        Tracker.Count.Should().Be(5);
 
         foreach (ProcessedFrame frame in frames)
         {
-            Aircraft? aircraft = _tracker.GetAircraft(frame.Frame.IcaoAddress);
+            Aircraft? aircraft = Tracker.GetAircraft(frame.Frame.IcaoAddress);
             aircraft.Should().NotBeNull();
             aircraft!.Status.TotalMessages.Should().Be(threadsPerAircraft * updatesPerThread);
         }
@@ -107,15 +107,15 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_ConcurrentReadsDuringUpdates_NoExceptions()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         bool readersException = false;
         bool updatersException = false;
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Seed with some aircraft
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
 
         // Act - 5 reader threads, 5 updater threads, run for 2 seconds
         var readerTasks = new Task[5];
@@ -127,8 +127,8 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                 {
                     while (!cts.Token.IsCancellationRequested)
                     {
-                        IReadOnlyList<Aircraft> aircraft = _tracker.GetAllAircraft();
-                        int count = _tracker.Count;
+                        IReadOnlyList<Aircraft> aircraft = Tracker.GetAllAircraft();
+                        int count = Tracker.Count;
                     }
                 }
                 catch
@@ -152,7 +152,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
 
                     while (!cts.Token.IsCancellationRequested)
                     {
-                        _tracker.Update(frame);
+                        Tracker.Update(frame);
                         Thread.Sleep(10);
                     }
                 }
@@ -193,17 +193,17 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_ConcurrentGetAircraftLookups_NoExceptions()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Seed with aircraft
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        _tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
 
         bool lookupException = false;
         bool updateException = false;
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Act - 20 lookup threads, 5 update threads
         var lookupTasks = new Task[20];
@@ -220,7 +220,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                     while (!cts.Token.IsCancellationRequested)
                     {
                         string icao = icaos[random.Next(icaos.Length)];
-                        Aircraft? aircraft = _tracker.GetAircraft(icao);
+                        Aircraft? aircraft = Tracker.GetAircraft(icao);
                     }
                 }
                 catch
@@ -247,7 +247,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
 
                     while (!cts.Token.IsCancellationRequested)
                     {
-                        _tracker.Update(frames[index % frames.Length]);
+                        Tracker.Update(frames[index % frames.Length]);
                         Thread.Sleep(10);
                     }
                 }
@@ -288,14 +288,14 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_DuringExpirationCleanup_NoDeadlocks()
     {
         // Arrange
-        _tracker = CreateTrackerWithTimeout(timeoutSeconds: 1);
+        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 1);
         bool updateException = false;
 
         // Create initial aircraft
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Act - Continuous updates while cleanup runs
         var updateTask = Task.Run(() =>
@@ -304,7 +304,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
             {
                 while (!cts.Token.IsCancellationRequested)
                 {
-                    _tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+                    Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
                     Thread.Sleep(50);
                 }
             }
@@ -343,10 +343,10 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_RaceConditionBetweenUpdateAndExpiration_NoCorruption()
     {
         // Arrange
-        _tracker = CreateTrackerWithTimeout(timeoutSeconds: 1);
+        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 1);
 
         // Create aircraft close to expiration
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
         // Wait almost to expiration
         await Task.Delay(TimeSpan.FromMilliseconds(900));
@@ -356,7 +356,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         {
             for (int i = 0; i < 10; i++)
             {
-                _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+                Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
                 Thread.Sleep(50);
             }
         });
@@ -364,7 +364,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         await updateTask;
 
         // Assert - Aircraft should either be alive (if update won race) or cleanly expired
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         // No assertion on null/not-null since race outcome is non-deterministic
         // Key is no exceptions or corrupted state
 
@@ -380,7 +380,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_ConcurrentEventHandlers_NoDataCorruption()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         int addedCount = 0;
         int updatedCount = 0;
         bool eventException = false;
@@ -388,7 +388,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         // 10 event subscribers
         for (int i = 0; i < 10; i++)
         {
-            _tracker.OnAircraftAdded += (sender, args) =>
+            Tracker.OnAircraftAdded += (sender, args) =>
             {
                 try
                 {
@@ -401,7 +401,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                 }
             };
 
-            _tracker.OnAircraftUpdated += (sender, args) =>
+            Tracker.OnAircraftUpdated += (sender, args) =>
             {
                 try
                 {
@@ -423,7 +423,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         {
             tasks[i] = Task.Run(() =>
             {
-                _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+                Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
             });
         }
 
@@ -449,10 +449,10 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     public async Task ThreadSafety_StressTest_1000ConcurrentOperations()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         bool exception = false;
         var cts = new CancellationTokenSource();
-        _disposables.Add(cts);
+        Disposables.Add(cts);
 
         // Act - 50 threads performing mixed operations for 10 seconds
         var tasks = new Task[50];
@@ -479,16 +479,16 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                         switch (operation)
                         {
                             case 0: // Update
-                                _tracker.Update(frames[random.Next(frames.Length)]);
+                                Tracker.Update(frames[random.Next(frames.Length)]);
                                 break;
                             case 1: // GetAircraft
-                                _tracker.GetAircraft(frames[random.Next(frames.Length)].Frame.IcaoAddress);
+                                Tracker.GetAircraft(frames[random.Next(frames.Length)].Frame.IcaoAddress);
                                 break;
                             case 2: // GetAllAircraft
-                                _tracker.GetAllAircraft();
+                                Tracker.GetAllAircraft();
                                 break;
                             case 3: // Count
-                                int count = _tracker.Count;
+                                int count = Tracker.Count;
                                 break;
                         }
 
@@ -527,8 +527,8 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         exception.Should().BeFalse("stress test should not throw exceptions");
 
         // Verify final state is consistent
-        IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
-        allAircraft.Should().HaveCount(_tracker.Count);
+        IReadOnlyList<Aircraft> allAircraft = Tracker.GetAllAircraft();
+        allAircraft.Should().HaveCount(Tracker.Count);
 
         foreach (Aircraft aircraft in allAircraft)
         {

@@ -34,12 +34,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationFromAircraftIdMessage_PopulatesCallsignAndCategory()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert - Fields populated by TC 1-4
         aircraft.Should().NotBeNull();
@@ -58,12 +58,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationWithEmergencyAndSquawk_UpdatesFromTC28()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.EmergencyStatus_4D2407, "4D2407");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("4D2407");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("4D2407");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -80,12 +80,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationFlightStatusFromSurveillance_PopulatesFromDF5()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.Surveillance_Identity_80073B, "80073B");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -98,14 +98,14 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationCompleteState_AllFieldsPopulated()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         string icao = "80073B";
 
         // Act - Sequence: TC 28 → DF 5
-        _tracker.Update(CreateFrame(RealFrames.EmergencyStatus_80073B, icao));
-        _tracker.Update(CreateFrame(RealFrames.Surveillance_Identity_80073B, icao));
+        Tracker.Update(CreateFrame(RealFrames.EmergencyStatus_80073B, icao));
+        Tracker.Update(CreateFrame(RealFrames.Surveillance_Identity_80073B, icao));
 
-        Aircraft? aircraft = _tracker.GetAircraft(icao);
+        Aircraft? aircraft = Tracker.GetAircraft(icao);
 
         // Assert - After sequence, identification should be well-populated
         aircraft.Should().NotBeNull();
@@ -120,17 +120,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationEmergencyStateValues_CorrectEnumMapping()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act - Different emergency frames
-        _tracker.Update(CreateFrame(RealFrames.EmergencyStatus_4D2407, "4D2407"));
-        _tracker.Update(CreateFrame(RealFrames.EmergencyStatus_503D74, "503D74"));
-        _tracker.Update(CreateFrame(RealFrames.EmergencyStatus_80073B, "80073B"));
+        Tracker.Update(CreateFrame(RealFrames.EmergencyStatus_4D2407, "4D2407"));
+        Tracker.Update(CreateFrame(RealFrames.EmergencyStatus_503D74, "503D74"));
+        Tracker.Update(CreateFrame(RealFrames.EmergencyStatus_80073B, "80073B"));
 
         // Assert - Each should have an emergency state
-        Aircraft? aircraft1 = _tracker.GetAircraft("4D2407");
-        Aircraft? aircraft2 = _tracker.GetAircraft("503D74");
-        Aircraft? aircraft3 = _tracker.GetAircraft("80073B");
+        Aircraft? aircraft1 = Tracker.GetAircraft("4D2407");
+        Aircraft? aircraft2 = Tracker.GetAircraft("503D74");
+        Aircraft? aircraft3 = Tracker.GetAircraft("80073B");
 
         aircraft1.Should().NotBeNull();
         aircraft2.Should().NotBeNull();
@@ -151,17 +151,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationCategoryMapping_CorrectAircraftCategory()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
 
         // Act - Different aircraft with different categories
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A3 - Large
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3")); // A5 - Heavy
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0")); // Category varies
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // A3 - Large
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3")); // A5 - Heavy
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0")); // Category varies
 
         // Assert
-        Aircraft? large = _tracker.GetAircraft("471DBC");
-        Aircraft? heavy = _tracker.GetAircraft("8965F3");
-        Aircraft? other = _tracker.GetAircraft("8964A0");
+        Aircraft? large = Tracker.GetAircraft("471DBC");
+        Aircraft? heavy = Tracker.GetAircraft("8965F3");
+        Aircraft? other = Tracker.GetAircraft("8964A0");
 
         large.Should().NotBeNull();
         heavy.Should().NotBeNull();
@@ -177,12 +177,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void IdentificationWithVersionFromOperationalStatus_PopulatesAdsbVersion()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.OperationalStatus_80073B, "80073B");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -197,15 +197,15 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionFromCPRPair_PopulatesCoordinateAndBarometricAltitude()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        _tracker.Update(oddFrame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Tracker.Update(oddFrame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -220,12 +220,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionFromSurveillanceAltitudeReply_PopulatesAltitudeOnly()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.Surveillance_Altitude_49D414, "49D414");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("49D414");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("49D414");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -238,15 +238,15 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionAntennaFlag_PopulatedFromAirbornePosition()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        _tracker.Update(oddFrame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Tracker.Update(oddFrame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -257,7 +257,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionCompleteState_AllPositionFieldsPopulated()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         string icao = "80073B";
 
@@ -266,11 +266,11 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser);
         ProcessedFrame opStatusFrame = CreateFrame(RealFrames.OperationalStatus_80073B, icao);
 
-        _tracker.Update(evenFrame);
-        _tracker.Update(oddFrame);
-        _tracker.Update(opStatusFrame);
+        Tracker.Update(evenFrame);
+        Tracker.Update(oddFrame);
+        Tracker.Update(opStatusFrame);
 
-        Aircraft? aircraft = _tracker.GetAircraft(icao);
+        Aircraft? aircraft = Tracker.GetAircraft(icao);
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -286,12 +286,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionNullFieldsWhenNotReceived_OnlyIdentification()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert - No position messages, so position fields should be null
         aircraft.Should().NotBeNull();
@@ -305,12 +305,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionQualityFromOperationalStatus_PopulatesNACpSIL()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.OperationalStatus_80073B, "80073B");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -322,13 +322,13 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionIsOnGround_FalseForAirborneMessages()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -339,18 +339,18 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionLastUpdate_ReflectsLatestPositionMessage()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? afterEven = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? afterEven = Tracker.GetAircraft("80073B");
         DateTime? firstUpdate = afterEven!.Position.LastUpdate;
 
-        _tracker.Update(oddFrame);
-        Aircraft? afterOdd = _tracker.GetAircraft("80073B");
+        Tracker.Update(oddFrame);
+        Aircraft? afterOdd = Tracker.GetAircraft("80073B");
         DateTime? secondUpdate = afterOdd!.Position.LastUpdate;
 
         // Assert
@@ -368,12 +368,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityFromGroundSpeedMessage_PopulatesTrackNotHeading()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
 
         // Assert - TC 19 subtype 1-2 (ground speed)
         aircraft.Should().NotBeNull();
@@ -388,12 +388,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityNACvFromTC19_PopulatesAccuracyCategory()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -404,12 +404,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityNullFieldsWhenNotReceived_OnlyIdentification()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert - No velocity messages
         aircraft.Should().NotBeNull();
@@ -424,12 +424,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityVerticalRateSignConvention_NegativeIsDescending()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
 
         // Assert - Descending should have negative vertical rate
         aircraft.Should().NotBeNull();
@@ -441,17 +441,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityFromMultipleFrames_UpdatesCorrectly()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
         ProcessedFrame frame2 = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? after1 = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame1);
+        Aircraft? after1 = Tracker.GetAircraft("4BB027");
         DateTime? firstUpdate = after1!.Velocity.LastUpdate;
 
-        _tracker.Update(frame2);
-        Aircraft? after2 = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame2);
+        Aircraft? after2 = Tracker.GetAircraft("4BB027");
         DateTime? secondUpdate = after2!.Velocity.LastUpdate;
 
         // Assert
@@ -464,12 +464,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocitySpeed_PopulatedWithReasonableValue()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -482,12 +482,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityLastUpdate_ReflectsLatestVelocityMessage()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? aircraft = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame1);
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -502,12 +502,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void StatusAlwaysPresent_NonNullWithCounters()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -521,18 +521,18 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void StatusCountersIncrement_CorrectlyByMessageType()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         string icao = "80073B";
 
         // Act - 2 ID, 3 position, 1 velocity
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // ID for different ICAO
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser));
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser));
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser));
-        _tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027")); // Velocity for different ICAO
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // ID for different ICAO
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027")); // Velocity for different ICAO
 
-        Aircraft? aircraft = _tracker.GetAircraft(icao);
+        Aircraft? aircraft = Tracker.GetAircraft(icao);
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -544,20 +544,20 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void StatusFirstSeenImmutable_LastSeenUpdates()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame frame2 = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? after1 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame1);
+        Aircraft? after1 = Tracker.GetAircraft("471DBC");
         DateTime firstSeen1 = after1!.Status.FirstSeen;
         DateTime lastSeen1 = after1.Status.LastSeen;
 
         Thread.Sleep(100); // Small delay
 
-        _tracker.Update(frame2);
-        Aircraft? after2 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame2);
+        Aircraft? after2 = Tracker.GetAircraft("471DBC");
         DateTime firstSeen2 = after2!.Status.FirstSeen;
         DateTime lastSeen2 = after2.Status.LastSeen;
 
@@ -570,17 +570,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void StatusSeenPosSecondsTracking_ResetsAfterPositionUpdate()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? after1 = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? after1 = Tracker.GetAircraft("80073B");
 
-        _tracker.Update(oddFrame);
-        Aircraft? after2 = _tracker.GetAircraft("80073B");
+        Tracker.Update(oddFrame);
+        Aircraft? after2 = Tracker.GetAircraft("80073B");
 
         // Assert
         after1.Should().NotBeNull();
@@ -596,12 +596,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void StatusSeenPosSecondsNull_WhenNoPositionReceived()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert - No position messages, so SeenPosSeconds should be null
         aircraft.Should().NotBeNull();
@@ -616,19 +616,19 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void HistoryEnabledByDefault_BuffersCreatedWithEntries()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
         ProcessedFrame velFrame = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(evenFrame);
-        _tracker.Update(oddFrame);
-        Aircraft? posAircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Tracker.Update(oddFrame);
+        Aircraft? posAircraft = Tracker.GetAircraft("80073B");
 
-        _tracker.Update(velFrame);
-        Aircraft? velAircraft = _tracker.GetAircraft("4BB027");
+        Tracker.Update(velFrame);
+        Aircraft? velAircraft = Tracker.GetAircraft("4BB027");
 
         // Assert - Position history
         posAircraft.Should().NotBeNull();
@@ -647,14 +647,14 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
         TrackingConfig config = new TrackingConfigBuilder()
             .WithHistoryDisabled()
             .Build();
-        _tracker = new AircraftStateTracker(config);
-        _disposables.Add(_tracker);
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -667,12 +667,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void HistoryEmptyWhenNoDataReceived_OnlyIdentification()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert - Buffers created but empty
         aircraft.Should().NotBeNull();
@@ -694,17 +694,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void AutopilotNullByDefault_UntilTC29Received()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
-        _tracker.Update(idFrame);
-        _tracker.Update(posFrame);
+        Tracker.Update(idFrame);
+        Tracker.Update(posFrame);
 
-        Aircraft? aircraft1 = _tracker.GetAircraft("471DBC");
-        Aircraft? aircraft2 = _tracker.GetAircraft("80073B");
+        Aircraft? aircraft1 = Tracker.GetAircraft("471DBC");
+        Aircraft? aircraft2 = Tracker.GetAircraft("80073B");
 
         // Assert - No TC 29, so Autopilot should be null
         aircraft1.Should().NotBeNull();
@@ -718,12 +718,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void AutopilotFromTC29_PopulatesAutopilotFields()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.TargetStateStatus_49D414, "49D414");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("49D414");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("49D414");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -736,17 +736,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void AcasNullByDefault_UntilAcasMessageReceived()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
-        _tracker.Update(idFrame);
-        _tracker.Update(posFrame);
+        Tracker.Update(idFrame);
+        Tracker.Update(posFrame);
 
-        Aircraft? aircraft1 = _tracker.GetAircraft("471DBC");
-        Aircraft? aircraft2 = _tracker.GetAircraft("80073B");
+        Aircraft? aircraft1 = Tracker.GetAircraft("471DBC");
+        Aircraft? aircraft2 = Tracker.GetAircraft("80073B");
 
         // Assert - No ACAS messages
         aircraft1.Should().NotBeNull();
@@ -760,12 +760,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void AcasFromTC29_PopulatesTcasFields()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.TargetStateStatus_49D414, "49D414");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("49D414");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("49D414");
 
         // Assert - TC 29 may populate TCAS operational fields
         aircraft.Should().NotBeNull();
@@ -776,12 +776,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void CapabilitiesNullByDefault_UntilCapabilityMessageReceived()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -792,12 +792,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void CapabilitiesFromDF11_PopulatesTransponderLevel()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AllCall_471F87, "471F87");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471F87");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471F87");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -809,12 +809,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void CapabilitiesFromTC31_PopulatesMultipleFields()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.OperationalStatus_80073B, "80073B");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -826,12 +826,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void DataQualityNullByDefault_UntilTC31OrTC29V2()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -842,12 +842,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void DataQualityFromTC31_PopulatesQualityFields()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.OperationalStatus_80073B, "80073B");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("80073B");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -858,12 +858,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void OperationalModeNullByDefault_UntilTC31()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
@@ -878,12 +878,12 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void MinimalAircraftState_OnlyIdentification()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame);
-        Aircraft? aircraft = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame);
+        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert - Minimal state
         aircraft.Should().NotBeNull();
@@ -899,18 +899,18 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void TypicalAircraftState_FullSequence()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         string icao = "80073B";
 
         // Act - Full sequence: ID → Position → Velocity → Status → TC 31
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // Different ICAO for ID
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser));
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser));
-        _tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027")); // Different ICAO for velocity
-        _tracker.Update(CreateFrame(RealFrames.OperationalStatus_80073B, icao));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")); // Different ICAO for ID
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027")); // Different ICAO for velocity
+        Tracker.Update(CreateFrame(RealFrames.OperationalStatus_80073B, icao));
 
-        Aircraft? aircraft = _tracker.GetAircraft(icao);
+        Aircraft? aircraft = Tracker.GetAircraft(icao);
 
         // Assert - Rich state
         aircraft.Should().NotBeNull();
@@ -925,19 +925,19 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void AircraftStateImmutability_UpdatesCreateNewRecords()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
-        _tracker.Update(idFrame);
-        Aircraft? original = _tracker.GetAircraft("471DBC");
+        Tracker.Update(idFrame);
+        Aircraft? original = Tracker.GetAircraft("471DBC");
         string originalIcao = original!.Identification.Icao;
         DateTime originalFirstSeen = original.Status.FirstSeen;
 
-        _tracker.Update(idFrame); // Second update
-        Aircraft? updated = _tracker.GetAircraft("471DBC");
+        Tracker.Update(idFrame); // Second update
+        Aircraft? updated = Tracker.GetAircraft("471DBC");
 
         // Assert - Immutability
         original.Should().NotBeSameAs(updated); // Different instances
@@ -950,17 +950,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void NullGroupsRemainNullWhenNotTriggered_NoOptionalMessages()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
 
         // Act - Full sequence WITHOUT TC 29, TC 31, DF 16
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
-        _tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
 
-        Aircraft? aircraft1 = _tracker.GetAircraft("471DBC");
-        Aircraft? aircraft2 = _tracker.GetAircraft("80073B");
-        Aircraft? aircraft3 = _tracker.GetAircraft("4BB027");
+        Aircraft? aircraft1 = Tracker.GetAircraft("471DBC");
+        Aircraft? aircraft2 = Tracker.GetAircraft("80073B");
+        Aircraft? aircraft3 = Tracker.GetAircraft("4BB027");
 
         // Assert - Optional groups remain null
         aircraft1.Should().NotBeNull();
@@ -980,7 +980,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void SignalStrengthTracking_ReflectsLatestFrame()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = new ProcessedFrameBuilder()
             .WithHexData(RealFrames.AircraftId_471DBC)
             .WithIcaoAddress("471DBC")
@@ -993,11 +993,11 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
             .Build();
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? after1 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame1);
+        Aircraft? after1 = Tracker.GetAircraft("471DBC");
 
-        _tracker.Update(frame2);
-        Aircraft? after2 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame2);
+        Aircraft? after2 = Tracker.GetAircraft("471DBC");
 
         // Assert
         after1.Should().NotBeNull();
@@ -1015,17 +1015,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void CPRDecodingRequiresEvenOddPair_CoordinatePopulatedAfterPair()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? afterEven = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? afterEven = Tracker.GetAircraft("80073B");
 
-        _tracker.Update(oddFrame);
-        Aircraft? afterOdd = _tracker.GetAircraft("80073B");
+        Tracker.Update(oddFrame);
+        Aircraft? afterOdd = Tracker.GetAircraft("80073B");
 
         // Assert - After even frame, coordinate may or may not be populated (depends on CPR state)
         afterEven.Should().NotBeNull();
@@ -1039,20 +1039,20 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void TimestampProgression_FirstSeenImmutableLastSeenUpdates()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame frame2 = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? after1 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame1);
+        Aircraft? after1 = Tracker.GetAircraft("471DBC");
         DateTime firstSeenT0 = after1!.Status.FirstSeen;
         DateTime lastSeenT0 = after1.Status.LastSeen;
 
         Thread.Sleep(100);
 
-        _tracker.Update(frame2);
-        Aircraft? after2 = _tracker.GetAircraft("471DBC");
+        Tracker.Update(frame2);
+        Aircraft? after2 = Tracker.GetAircraft("471DBC");
         DateTime firstSeenT1 = after2!.Status.FirstSeen;
         DateTime lastSeenT1 = after2.Status.LastSeen;
 
@@ -1065,18 +1065,18 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void PositionLastUpdate_ReflectsLatestPositionTimestamp()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
         // Act
-        _tracker.Update(evenFrame);
-        Aircraft? after1 = _tracker.GetAircraft("80073B");
+        Tracker.Update(evenFrame);
+        Aircraft? after1 = Tracker.GetAircraft("80073B");
         DateTime? posUpdate1 = after1!.Position.LastUpdate;
 
-        _tracker.Update(oddFrame);
-        Aircraft? after2 = _tracker.GetAircraft("80073B");
+        Tracker.Update(oddFrame);
+        Aircraft? after2 = Tracker.GetAircraft("80073B");
         DateTime? posUpdate2 = after2!.Position.LastUpdate;
 
         // Assert
@@ -1089,17 +1089,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void VelocityLastUpdate_ReflectsLatestVelocityTimestamp()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         ProcessedFrame frame1 = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
         ProcessedFrame frame2 = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
 
         // Act
-        _tracker.Update(frame1);
-        Aircraft? after1 = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame1);
+        Aircraft? after1 = Tracker.GetAircraft("4BB027");
         DateTime? velUpdate1 = after1!.Velocity.LastUpdate;
 
-        _tracker.Update(frame2);
-        Aircraft? after2 = _tracker.GetAircraft("4BB027");
+        Tracker.Update(frame2);
+        Aircraft? after2 = Tracker.GetAircraft("4BB027");
         DateTime? velUpdate2 = after2!.Velocity.LastUpdate;
 
         // Assert
@@ -1112,17 +1112,17 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void MultipleAircraft_IndependentStateTracking()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
 
         // Act - Track 3 different aircraft with different messages
-        _tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
-        _tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
 
-        Aircraft? aircraft1 = _tracker.GetAircraft("471DBC");
-        Aircraft? aircraft2 = _tracker.GetAircraft("80073B");
-        Aircraft? aircraft3 = _tracker.GetAircraft("4BB027");
+        Aircraft? aircraft1 = Tracker.GetAircraft("471DBC");
+        Aircraft? aircraft2 = Tracker.GetAircraft("80073B");
+        Aircraft? aircraft3 = Tracker.GetAircraft("4BB027");
 
         // Assert - Each has independent state
         aircraft1.Should().NotBeNull();
@@ -1142,16 +1142,16 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     public void CountersAccurate_AfterMixedMessageTypes()
     {
         // Arrange
-        _tracker = CreateTracker();
+        Tracker = CreateTracker();
         var parser = new Aeromux.Core.ModeS.MessageParser();
         string icao = "80073B";
 
         // Act - Mixed messages for same aircraft
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser)); // Position 1
-        _tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser)); // Position 2
-        _tracker.Update(CreateFrame(RealFrames.OperationalStatus_80073B, icao)); // Operational status
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, icao, parser)); // Position 1
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, icao, parser)); // Position 2
+        Tracker.Update(CreateFrame(RealFrames.OperationalStatus_80073B, icao)); // Operational status
 
-        Aircraft? aircraft = _tracker.GetAircraft(icao);
+        Aircraft? aircraft = Tracker.GetAircraft(icao);
 
         // Assert
         aircraft.Should().NotBeNull();
