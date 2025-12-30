@@ -227,6 +227,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         // Update message counters based on message type
         aircraft = UpdateMessageCounters(aircraft, frame, isFirstMessage: true);
 
+        // Update history buffers with first frame data
+        aircraft = aircraft with { History = UpdateHistory(aircraft.History, frame, aircraft.Position, aircraft.Velocity, now) };
+
         // Notify listeners of new aircraft
         OnAircraftAdded?.Invoke(this, new AircraftEventArgs { Aircraft = aircraft });
 
@@ -299,6 +302,10 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// </summary>
     private static Aircraft UpdateCommonStatus(Aircraft aircraft, ProcessedFrame frame, DateTime now)
     {
+        // Update message counters first
+        aircraft = UpdateMessageCounters(aircraft, frame, isFirstMessage: false);
+
+        // Then update common status fields (preserving counter updates from above)
         TrackedStatus status = aircraft.Status with
         {
             SignalStrength = frame.Frame.SignalStrength,
@@ -309,9 +316,6 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
                 ? (now - aircraft.Position.LastUpdate.Value).TotalSeconds
                 : aircraft.Status.SeenPosSeconds
         };
-
-        // Update message counters
-        aircraft = UpdateMessageCounters(aircraft, frame, isFirstMessage: false);
 
         return aircraft with { Status = status };
     }
