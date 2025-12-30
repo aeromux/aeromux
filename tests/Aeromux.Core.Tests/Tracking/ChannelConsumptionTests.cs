@@ -31,19 +31,20 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         // Arrange
         _tracker = CreateTracker();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
+        var cts = new CancellationTokenSource();
+        _disposables.Add(cts);
 
         // Write 3 frames to channel
-        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
+        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"), cts.Token);
+        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_80073B, "80073B"), cts.Token);
         channel.Writer.Complete();
 
         // Act
-        var cts = new CancellationTokenSource();
         _tracker.StartConsuming(channel.Reader, cts.Token);
 
         // Wait for consumption to complete
-        await Task.Delay(500);
+        await Task.Delay(500, cts.Token);
 
         // Assert
         _tracker.Count.Should().Be(3);
@@ -60,6 +61,7 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         var channel1 = Channel.CreateUnbounded<ProcessedFrame>();
         var channel2 = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
+        _disposables.Add(cts);
 
         // Act
         _tracker.StartConsuming(channel1.Reader, cts.Token);
@@ -80,21 +82,22 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         _tracker = CreateTracker();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
+        _disposables.Add(cts);
 
         // Write initial frames
-        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
 
         // Act
         _tracker.StartConsuming(channel.Reader, cts.Token);
-        await Task.Delay(100);
+        await Task.Delay(100, cts.Token);
 
         // Cancel
-        cts.Cancel();
-        await Task.Delay(100);
+        await cts.CancelAsync();
+        await Task.Delay(100, CancellationToken.None);
 
-        // Write more frames after cancellation
-        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        await Task.Delay(100);
+        // Write more frames after cancellation (use CancellationToken.None since we expect this to work after cancellation)
+        await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"), CancellationToken.None);
+        await Task.Delay(100, CancellationToken.None);
 
         // Assert - Only first frame should be processed
         _tracker.Count.Should().Be(1);
@@ -111,6 +114,7 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         _tracker = CreateTracker();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
+        _disposables.Add(cts);
 
         // Act - Start consuming
         _tracker.StartConsuming(channel.Reader, cts.Token);
@@ -118,12 +122,12 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         // Write frames gradually
         for (int i = 0; i < 100; i++)
         {
-            await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-            await Task.Delay(1);
+            await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
+            await Task.Delay(1, cts.Token);
         }
 
         channel.Writer.Complete();
-        await Task.Delay(500); // Wait for all frames to be consumed
+        await Task.Delay(500, cts.Token); // Wait for all frames to be consumed
 
         // Assert
         Aircraft? aircraft = _tracker.GetAircraft("471DBC");

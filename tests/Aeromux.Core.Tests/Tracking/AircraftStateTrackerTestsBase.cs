@@ -87,13 +87,24 @@ public class AircraftStateTrackerTestsBase : IDisposable
     /// </summary>
     public void Dispose()
     {
-        foreach (IDisposable disposable in _disposables)
-        {
-            disposable.Dispose();
-        }
-        _disposables.Clear();
-        _tracker = null;
-
+        Dispose(true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected implementation of Dispose pattern.
+    /// </summary>
+    /// <param name="disposing">True if disposing managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (IDisposable disposable in _disposables)
+            {
+                disposable.Dispose();
+            }
+            _disposables.Clear();
+            _tracker = null;
+        }
     }
 }
