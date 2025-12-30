@@ -35,7 +35,7 @@ public class HistoryTests : AircraftStateTrackerTestsBase
             .Build();
         Tracker = new AircraftStateTracker(config);
         Disposables.Add(Tracker);
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
 
         // Act - Send 150 position frame pairs (exceeds buffer size of 100)
         // Need both even and odd frames to decode position coordinates

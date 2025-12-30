@@ -198,7 +198,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
@@ -239,7 +239,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
@@ -258,7 +258,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         string icao = "80073B";
 
         // Act - TC 9-18 (position) → TC 31 (quality metrics)
@@ -323,7 +323,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
@@ -340,7 +340,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
@@ -522,7 +522,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         string icao = "80073B";
 
         // Act - 2 ID, 3 position, 1 velocity
@@ -571,7 +571,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
@@ -617,7 +617,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
         ProcessedFrame velFrame = CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027");
@@ -649,7 +649,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
             .Build();
         Tracker = new AircraftStateTracker(config);
         Disposables.Add(Tracker);
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
         // Act
@@ -695,7 +695,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
@@ -737,7 +737,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
@@ -900,7 +900,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         string icao = "80073B";
 
         // Act - Full sequence: ID → Position → Velocity → Status → TC 31
@@ -926,7 +926,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame idFrame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
 
@@ -951,7 +951,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
 
         // Act - Full sequence WITHOUT TC 29, TC 31, DF 16
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
@@ -1016,7 +1016,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
@@ -1066,7 +1066,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
@@ -1113,7 +1113,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
 
         // Act - Track 3 different aircraft with different messages
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
@@ -1143,7 +1143,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         string icao = "80073B";
 
         // Act - Mixed messages for same aircraft

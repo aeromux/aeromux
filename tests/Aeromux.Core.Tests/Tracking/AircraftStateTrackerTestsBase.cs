@@ -49,7 +49,7 @@ public class AircraftStateTrackerTestsBase : IDisposable
     /// Helper method to create a ProcessedFrame with a shared parser for CPR decoding.
     /// Use this when testing CPR position decoding that requires even/odd frame pairs.
     /// </summary>
-    protected static ProcessedFrame CreateFrame(string hexData, string icao, Aeromux.Core.ModeS.MessageParser parser) =>
+    protected static ProcessedFrame CreateFrame(string hexData, string icao, MessageParser parser) =>
         new ProcessedFrameBuilder()
             .WithHexData(hexData)
             .WithIcaoAddress(icao)

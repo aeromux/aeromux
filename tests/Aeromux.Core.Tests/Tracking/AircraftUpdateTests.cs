@@ -53,7 +53,7 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        var parser = new Aeromux.Core.ModeS.MessageParser();
+        var parser = new MessageParser();
         ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
         ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
 
