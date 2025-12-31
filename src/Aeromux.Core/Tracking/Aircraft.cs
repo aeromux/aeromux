@@ -44,14 +44,14 @@ public sealed record Aircraft
 
     /// <summary>
     /// Aircraft position information (coordinates, altitude, accuracy).
-    /// Optional - may be null or empty until first position message received.
+    /// Initially empty until first position message received.
     /// Sources: TC 9-18 (airborne position), TC 20-22 (surface position), DF 4 (altitude reply).
     /// </summary>
     public TrackedPosition Position { get; init; } = new();
 
     /// <summary>
     /// Aircraft velocity information (speed, heading, track, vertical rate).
-    /// Optional - may be null or empty until first velocity message received.
+    /// Initially empty until first velocity message received.
     /// Source: TC 19 (airborne velocity).
     /// </summary>
     public TrackedVelocity Velocity { get; init; } = new();
@@ -66,7 +66,7 @@ public sealed record Aircraft
     /// <summary>
     /// Aircraft historical data (position, altitude, velocity over time).
     /// Circular buffers for time-series data, used for trail visualization and graphs.
-    /// Buffers may be null if history tracking disabled in configuration.
+    /// Individual buffers within History may be null if history tracking disabled in configuration.
     /// </summary>
     public TrackedHistory History { get; init; } = new();
 
@@ -145,11 +145,11 @@ public sealed record Aircraft
     /// Checks if this aircraft has expired (not seen within timeout period).
     /// Used by tracker to determine when to remove stale aircraft entries.
     /// </summary>
-    /// <param name="timeout">Expiration timeout duration (typically 60 seconds)</param>
+    /// <param name="timeout">Expiration timeout duration (default: 60 seconds)</param>
     /// <returns>True if time since LastSeen exceeds the timeout period</returns>
     /// <example>
     /// <code>
-    /// if (aircraft.IsExpired(TimeSpan.FromMinutes(1)))
+    /// if (aircraft.IsExpired(TimeSpan.FromSeconds(60)))
     /// {
     ///     // Remove from tracking
     /// }

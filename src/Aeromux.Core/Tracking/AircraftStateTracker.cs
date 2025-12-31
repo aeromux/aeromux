@@ -59,9 +59,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <summary>
     /// Gets or sets the aircraft timeout duration.
     /// Aircraft not seen within this time are considered expired and removed during cleanup.
-    /// Default: 60 seconds (matches readsb default)
+    /// Default: 60 seconds
     /// </summary>
-    public TimeSpan AircraftTimeout { get; set; } = TimeSpan.FromMinutes(60);
+    public TimeSpan AircraftTimeout { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// Gets or sets the cleanup interval for expired aircraft removal.
@@ -347,10 +347,10 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// Old entries are automatically overwritten when buffers reach capacity.
     /// </summary>
     /// <param name="history">Existing history record with buffers</param>
-    /// <param name="frame">Processed frame (unused currently, reserved for future)</param>
-    /// <param name="position">Extracted position data</param>
-    /// <param name="velocity">Extracted velocity data</param>
-    /// <param name="now">Current timestamp</param>
+    /// <param name="frame">Processed frame (currently unused but passed for potential future extensions)</param>
+    /// <param name="position">Extracted position data to add to history</param>
+    /// <param name="velocity">Extracted velocity data to add to history</param>
+    /// <param name="now">Current timestamp for the snapshot</param>
     /// <returns>Same history record (buffers are mutated in place)</returns>
     private TrackedHistory UpdateHistory(
         TrackedHistory history,

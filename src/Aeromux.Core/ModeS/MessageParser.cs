@@ -34,6 +34,16 @@ namespace Aeromux.Core.ModeS;
 /// - MessageParser.CommB.cs: DF 20/21/24 (Comm-B + BDS registers)
 /// - MessageParser.Helpers.cs: Utility and decoding methods
 ///
+/// Supported ADS-B Type Codes (TC) for DF 17/18:
+/// - TC 1-4: Aircraft identification and category (callsign)
+/// - TC 5-8: Surface position (CPR encoded, requires local decoding)
+/// - TC 9-18: Airborne position (barometric altitude, CPR encoded)
+/// - TC 19: Airborne velocity (ground speed, heading, vertical rate)
+/// - TC 20-22: Airborne position (GNSS altitude, CPR encoded)
+/// - TC 28: Aircraft status (emergency/priority, TCAS RA)
+/// - TC 29: Target state and status (selected altitude, autopilot modes)
+/// - TC 31: Operational status (version, capabilities, NIC/NACp/SIL)
+///
 /// Statistics are exposed via properties and logged by the coordinator (DeviceWorker).
 /// This class focuses on parsing and counting; logging is the coordinator's responsibility.
 /// Uses Serilog for structured logging (ADR-007).
@@ -85,7 +95,7 @@ public sealed partial class MessageParser
     /// Parses a validated frame into a structured message.
     /// </summary>
     /// <param name="frame">Validated frame from ValidatedFrameFactory.</param>
-    /// <returns>Parsed message, or null if parsing failed or message type is unsupported (DF 24).</returns>
+    /// <returns>Parsed message, or <see langword="null"/> if parsing failed or message type is unsupported (DF 24).</returns>
     public ModeSMessage? ParseMessage(ValidatedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
@@ -170,7 +180,7 @@ public sealed partial class MessageParser
     public long MessagesParsed => _messagesParsed;
 
     /// <summary>
-    /// Total number of validation failures (parser returned null due to invalid data).
+    /// Total number of validation failures (parser returned <see langword="null"/> due to invalid data).
     /// Expected failures include: invalid field values, corrupt data, unsupported messages.
     /// High count is normal in noisy RF environments.
     /// </summary>

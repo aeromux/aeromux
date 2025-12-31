@@ -157,7 +157,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
                 if (positionChanged || velocityChanged)
                 {
-                    Log.Information("Aircraft update: ICAO={Icao}, Position={Position}, Alt={Altitude}, Speed={Velocity}",
+                    Log.Debug("Aircraft update: ICAO={Icao}, Position={Position}, Alt={Altitude}, Speed={Velocity}",
                         curr.Identification.Icao,
                         curr.Position.Coordinate,
                         curr.Position.BarometricAltitude,

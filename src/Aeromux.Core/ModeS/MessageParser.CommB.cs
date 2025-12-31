@@ -25,6 +25,25 @@ namespace Aeromux.Core.ModeS;
 /// MessageParser partial class: Comm-B messages (DF 20/21/24) and BDS register parsers.
 /// Handles Comm-B altitude/identity replies with BDS inference for all 10 register types.
 /// </summary>
+/// <remarks>
+/// Supported BDS codes (10 total):
+///
+/// Elementary Surveillance (ELS):
+/// - BDS 1,0: Data link capability report
+/// - BDS 1,7: Common usage GICB capability report
+/// - BDS 2,0: Aircraft identification
+/// - BDS 3,0: ACAS active resolution advisory
+///
+/// Enhanced Surveillance (EHS):
+/// - BDS 4,0: Selected vertical intention
+/// - BDS 4,4: Meteorological routine air report
+/// - BDS 4,5: Meteorological hazard report
+/// - BDS 5,0: Track and turn report
+/// - BDS 5,3: Air-referenced state vector
+/// - BDS 6,0: Heading and speed report
+///
+/// See InferBdsCode method for BDS inference strategy and validation rules.
+/// </remarks>
 public sealed partial class MessageParser
 {
     /// <summary>
@@ -69,14 +88,9 @@ public sealed partial class MessageParser
         Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
 
         // Extract MB field (Message, Comm-B) - bits 33-88 (56 bits = 7 bytes)
+        // Note: The bit alignment is handled by ExtractBits function within BDS parsers
         byte[] mb = new byte[7];
         Array.Copy(frame.Data, 4, mb, 0, 7);
-        // Shift left by 1 bit to align MB field (bit 33 starts in the middle of byte 4)
-        /*for (int i = 0; i < 6; i++)
-        {
-            mb[i] = (byte)((mb[i] << 1) | ((mb[i + 1] & 0x80) >> 7));
-        }
-        mb[6] = (byte)(mb[6] << 1);*/
 
         // Infer BDS code and parse data
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
@@ -137,14 +151,9 @@ public sealed partial class MessageParser
         string squawkCode = DecodeSquawkCode(identityCode);
 
         // Extract MB field (Message, Comm-B) - bits 33-88 (56 bits = 7 bytes)
+        // Note: The bit alignment is handled by ExtractBits function within BDS parsers
         byte[] mb = new byte[7];
         Array.Copy(frame.Data, 4, mb, 0, 7);
-        // Shift left by 1 bit to align MB field (bit 33 starts in the middle of byte 4)
-        /*for (int i = 0; i < 6; i++)
-        {
-            mb[i] = (byte)((mb[i] << 1) | ((mb[i + 1] & 0x80) >> 7));
-        }
-        mb[6] = (byte)(mb[6] << 1);*/
 
         // Infer BDS code and parse data
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
@@ -167,7 +176,7 @@ public sealed partial class MessageParser
     /// Parses Comm-D extended length message from Downlink Format 24.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Always null - DF 24 is intentionally not implemented.</returns>
+    /// <returns>Always <see langword="null"/> - DF 24 is intentionally not implemented.</returns>
     /// <remarks>
     /// DF 24 (Comm-D Extended Length Message) is intentionally not implemented because:
     /// 1. Ground-to-ground communication only (not aircraft surveillance)
@@ -194,7 +203,7 @@ public sealed partial class MessageParser
     /// Uses pattern matching against all 10 Comm-B BDS registers.
     /// </summary>
     /// <param name="mb">56-bit MB field (7 bytes).</param>
-    /// <returns>Tuple of (BdsCode enum, parsed BdsData or null).</returns>
+    /// <returns>Tuple of (BdsCode enum, parsed BdsData or <see langword="null"/>).</returns>
     /// <remarks>
     /// BDS inference strategy (standard pattern matching approach):
     /// 1. Check for all-zeros (empty response)
@@ -322,6 +331,7 @@ public sealed partial class MessageParser
         }
 
         // Reserved bits 10-14 must be 0 (per pyModeS line 30 and readsb line 113)
+        // Extract reserved field - bits 10-14 (5 bits)
         int reserved = ExtractBits(mb, 10, 5);
         if (reserved != 0)
         {
@@ -357,7 +367,8 @@ public sealed partial class MessageParser
     {
         // BDS 1,7 validation per readsb lines 132-134:
         // Reserved bits 25-56 must all be zero
-        int reserved = ExtractBits(mb, 25, 32); // bits 25-56 (32 bits)
+        // Extract reserved field - bits 25-56 (32 bits)
+        int reserved = ExtractBits(mb, 25, 32);
         if (reserved != 0)
         {
             return null;
@@ -459,20 +470,20 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds40SelectedVerticalIntention? TryParseBds40(byte[] mb)
     {
-        // BDS 4,0: No fixed identifier, use status bits and range checks
+        // BDS 4,0: No fixed identifier, use status bits and range checks (per ICAO Annex 10 Vol IV)
         // Structure:
         // - Bit 1: MCP/FCU selected altitude status
-        // - Bits 2-13: MCP/FCU selected altitude (12 bits)
+        // - Bits 2-13: MCP/FCU selected altitude (12 bits, range: 0-65,520 ft, resolution: 16 ft)
         // - Bit 14: FMS selected altitude status
-        // - Bits 15-26: FMS selected altitude (12 bits)
+        // - Bits 15-26: FMS selected altitude (12 bits, range: 0-65,520 ft, resolution: 16 ft)
         // - Bit 27: Barometric pressure setting status
-        // - Bits 28-39: Barometric pressure (12 bits)
+        // - Bits 28-39: Barometric pressure (12 bits, range: 0-204.775 inHg or 0-6931 mb, resolution: 0.05 inHg or 0.8 mb)
         // - Bits 40-47: Reserved (should be 0)
         // - Bit 48: Mode status
-        // - Bits 49-51: Mode (VNAV, ALT HOLD, APPROACH)
+        // - Bits 49-51: Mode (3 bits, values: 0=Unknown, 1=VNAV, 2=ALT HOLD, 3=APPROACH, 4=Reserved)
         // - Bits 52-53: Reserved (should be 0)
         // - Bit 54: Source status
-        // - Bits 55-56: Source (Unknown, Aircraft, MCP, FMS)
+        // - Bits 55-56: Source (2 bits, values: 0=Unknown, 1=Aircraft, 2=MCP/FCU, 3=FMS)
 
         int mcpStatus = ExtractBits(mb, 1, 1);
         int mcpAltRaw = ExtractBits(mb, 2, 12);
@@ -502,60 +513,66 @@ public sealed partial class MessageParser
         int sourceStatus = ExtractBits(mb, 54, 1);
         int sourceRaw = ExtractBits(mb, 55, 2);
 
-        // Range validation
+        // Decode MCP/FCU selected altitude
         int? mcpAlt = null;
         if (mcpStatus == 1 && mcpAltRaw != 0)
         {
-            mcpAlt = mcpAltRaw * 16; // 16 ft resolution
+            // 16 ft resolution, range 0-65520 ft
+            mcpAlt = mcpAltRaw * 16;
             if (mcpAlt is < 0 or > 65520)
             {
-                return null; // Reasonable range
+                return null; // Outside valid range
             }
         }
 
+        // Decode FMS selected altitude
         int? fmsAlt = null;
         if (fmsStatus == 1 && fmsAltRaw != 0)
         {
-            fmsAlt = fmsAltRaw * 16; // 16 ft resolution
+            // 16 ft resolution, range 0-65520 ft
+            fmsAlt = fmsAltRaw * 16;
             if (fmsAlt is < 0 or > 65520)
             {
-                return null;
+                return null; // Outside valid range
             }
         }
 
+        // Decode barometric pressure setting
         double? baro = null;
         if (baroStatus == 1 && baroRaw != 0)
         {
-            baro = 800.0 + (baroRaw * 0.1); // 0.1 mbar resolution, range 800-1209.4 mbar
+            // 0.1 mbar resolution, offset 800 mbar, range 800-1209.4 mbar
+            baro = 800.0 + (baroRaw * 0.1);
             if (baro is < 800 or > 1200)
             {
-                return null; // Reasonable range
+                return null; // Outside reasonable atmospheric pressure range
             }
         }
 
-        // Decode navigation mode (bits 48-51): per readsb lines 482-488
+        // Decode navigation mode (VNAV, ALT HOLD, APPROACH flags)
         Bds40NavigationMode? navMode = null;
         if (modeStatus == 1)
         {
+            // 3-bit field represents active navigation modes as flags
             navMode = (Bds40NavigationMode)modeRaw;
-            // Valid values: 0-7 (3-bit field, all combinations valid as flags)
         }
 
-        // Decode altitude source (bits 54-56): per readsb lines 490-510
+        // Decode altitude source (Unknown, Aircraft, MCP/FCU, FMS)
         Bds40AltitudeSource? altSource = null;
         if (sourceStatus == 1)
         {
+            // Only decode if value maps to a defined enum member
             if (Enum.IsDefined(typeof(Bds40AltitudeSource), sourceRaw))
             {
                 altSource = (Bds40AltitudeSource)sourceRaw;
             }
-            // If not a valid enum value, leave as null
         }
 
-        // At least one field must be valid for BDS 4,0
+        // BDS 4,0 requires at least one valid field to be considered a match
+        // This prevents false positives when trying to infer the BDS code
         if (mcpAlt == null && fmsAlt == null && baro == null && navMode == null && altSource == null)
         {
-            return null;
+            return null; // No valid data found
         }
 
         return new Bds40SelectedVerticalIntention(mcpAlt, fmsAlt, baro, navMode, altSource);
@@ -566,19 +583,19 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds44MeteorologicalRoutine? TryParseBds44(byte[] mb)
     {
-        // BDS 4,4 structure (per 1090MHz Riddle & readsb):
-        // - Bits 1-4: Figure of Merit / Source (4 bits, 0-15, no status bit)
+        // BDS 4,4 structure (per ICAO Annex 10 Vol IV, 1090MHz Riddle, readsb):
+        // - Bits 1-4: Figure of Merit / Source (4 bits, range: 0-6, no status bit)
         // - Bit 5: Wind valid (applies to BOTH speed and direction)
-        // - Bits 6-14: Wind speed (9 bits, knots)
-        // - Bits 15-23: Wind direction (9 bits, 180/256 deg, NO separate status bit)
+        // - Bits 6-14: Wind speed (9 bits, range: 0-511 kt, resolution: 1 kt)
+        // - Bits 15-23: Wind direction (9 bits, range: 0-360°, resolution: 180/256 deg, NO separate status bit)
         // - Bit 24: Temperature sign (1=negative, part of temp field, NOT a status bit)
-        // - Bits 25-34: Temperature (10 bits total with sign, 0.25°C)
+        // - Bits 25-34: Temperature (10 bits total with sign, range: -128 to +128°C, resolution: 0.25°C)
         // - Bit 35: Pressure status
-        // - Bits 36-46: Pressure (11 bits, hPa)
+        // - Bits 36-46: Pressure (11 bits, range: 0-2048 hPa, resolution: 1 hPa)
         // - Bit 47: Turbulence status
-        // - Bits 48-49: Turbulence (2 bits, 0-3: NIL/Light/Moderate/Severe)
+        // - Bits 48-49: Turbulence (2 bits, values: 0=NIL, 1=Light, 2=Moderate, 3=Severe)
         // - Bit 50: Humidity status
-        // - Bits 51-56: Humidity (6 bits, percentage = raw * 100/64)
+        // - Bits 51-56: Humidity (6 bits, range: 0-100%, resolution: 100/64 = 1.5625%)
 
         int fomRaw = ExtractBits(mb, 1, 4);
         int windValid = ExtractBits(mb, 5, 1);
@@ -593,62 +610,70 @@ public sealed partial class MessageParser
         int humidityStatus = ExtractBits(mb, 50, 1);
         int humidityRaw = ExtractBits(mb, 51, 6);
 
-        int? fom = fomRaw; // Always present, 0-6 are valid per readsb line 862
-        if (fom is < 0 or > 6) // Per readsb line 862
+        // Decode Figure of Merit (data quality/source indicator)
+        // Always present (no status bit), valid range 0-6
+        if (fomRaw is < 0 or > 6)
         {
-            return null;
+            return null; // Invalid FOM value
         }
+        int? fom = fomRaw;
 
+        // Decode wind speed and direction (both controlled by single status bit)
         int? windSpeed = null;
         double? windDir = null;
         if (windValid == 1)
         {
+            // Wind speed in knots, range 0-511 kt
             windSpeed = windSpeedRaw;
-            if (windSpeed is < 0 or > 511) // Per readsb line 870
+            if (windSpeed is < 0 or > 511)
             {
-                return null;
+                return null; // Unrealistic wind speed
             }
 
-            windDir = windDirRaw * (180.0 / 256.0); // 180/256 deg resolution
-            if (windDir is < 0 or > 360) // Per readsb line 877 (note: <= 360)
+            // Wind direction with 180/256 degree resolution (0.703125°/LSB)
+            windDir = windDirRaw * (180.0 / 256.0);
+            if (windDir is < 0 or > 360)
             {
-                return null;
+                return null; // Invalid direction
             }
         }
         else if (windSpeedRaw != 0)
         {
-            return null; // If wind not valid, speed should be 0
-        }
-
-        double? temp = null;
-        // Temperature is always decoded; bit 24 is sign, bits 25-34 are magnitude
-        // Sign-magnitude representation (per readsb): if sign=1, subtract 2^10
-        int tempValue = tempSign == 1 ? ((int)tempRaw - 1024) : (int)tempRaw;
-        temp = tempValue * 0.25;
-        if (temp is < -128 or > 128) // Per readsb line 893
-        {
+            // Validation: if wind not valid, raw speed must be zero
             return null;
         }
 
+        // Decode static air temperature (always present, no status bit)
+        // Sign-magnitude representation: bit 24 is sign, bits 25-34 are magnitude
+        double? temp = null;
+        int tempValue = tempSign == 1 ? tempRaw - 1024 : tempRaw;
+        temp = tempValue * 0.25; // 0.25°C resolution
+        if (temp is < -128 or > 128)
+        {
+            return null; // Outside reasonable temperature range (-128°C to +128°C)
+        }
+
+        // Decode static pressure
         double? pressure = null;
         if (pressureStatus == 1)
         {
-            pressure = pressureRaw; // hPa
-            if (pressure is < 0 or > 2048) // Per readsb line 901
+            // Direct value in hPa (millibars), range 0-2048 hPa
+            pressure = pressureRaw;
+            if (pressure is < 0 or > 2048)
             {
-                return null;
+                return null; // Outside valid pressure range
             }
         }
         else if (pressureRaw != 0)
         {
-            return null; // If pressure not valid, raw value should be 0
+            // Validation: if pressure not valid, raw value must be zero
+            return null;
         }
 
-        // Turbulence (bits 47-49): per pyModeS turb44() and readsb lines 843-844, 911-918
+        // Decode turbulence severity (0=Nil, 1=Light, 2=Moderate, 3=Severe)
         Severity? turbulence = null;
         if (turbulenceStatus == 1)
         {
-            // Validate as Severity enum (0=Nil, 1=Light, 2=Moderate, 3=Severe)
             if (!Enum.IsDefined(typeof(Severity), turbulenceRaw))
             {
                 return null; // Invalid severity value
@@ -657,29 +682,32 @@ public sealed partial class MessageParser
         }
         else if (turbulenceRaw != 0)
         {
-            return null; // If turbulence not valid, raw value should be 0
+            // Validation: if turbulence not valid, raw value must be zero
+            return null;
         }
 
-        // Humidity (bits 50-56): per pyModeS hum44() and readsb lines 846-847, 923-930
+        // Decode relative humidity
         double? humidity = null;
         if (humidityStatus == 1)
         {
-            humidity = humidityRaw * (100.0 / 64.0); // Percentage
+            // Convert 6-bit value to percentage: raw * (100/64) = raw * 1.5625%
+            humidity = humidityRaw * (100.0 / 64.0);
             if (humidity is < 0 or > 100)
             {
-                return null;
+                return null; // Invalid percentage
             }
         }
         else if (humidityRaw != 0)
         {
-            return null; // If humidity not valid, raw value should be 0
+            // Validation: if humidity not valid, raw value must be zero
+            return null;
         }
 
-        // At least one field must be valid
+        // BDS 4,4 requires at least one valid field to be considered a match
         if (fom == null && windSpeed == null && windDir == null && temp == null &&
             pressure == null && turbulence == null && humidity == null)
         {
-            return null;
+            return null; // No valid data found
         }
 
         return new Bds44MeteorologicalRoutine(fom, windSpeed, windDir, temp, pressure, turbulence, humidity);
@@ -726,7 +754,8 @@ public sealed partial class MessageParser
         int rhStatus = ExtractBits(mb, 39, 1);
         int rhRaw = ExtractBits(mb, 40, 12);
 
-        // Validate Severity enums (valid: 0-3, 2-bit fields)
+        // Validate all severity enums before decoding (valid: 0-3, 2-bit fields)
+        // This prevents invalid enum casts that could cause runtime errors
         if (turbStatus == 1 && !Enum.IsDefined(typeof(Severity), turb))
         {
             return null; // Invalid turbulence severity
@@ -748,12 +777,14 @@ public sealed partial class MessageParser
             return null; // Invalid wake vortex severity
         }
 
+        // Decode hazard severity levels (only if status bit indicates presence)
         Severity? turbulence = turbStatus == 1 ? (Severity)turb : null;
         Severity? windShear = wsStatus == 1 ? (Severity)ws : null;
         Severity? microburst = mbStatus == 1 ? (Severity)mburst : null;
         Severity? icing = iceStatus == 1 ? (Severity)ice : null;
         Severity? wakeVortex = wvStatus == 1 ? (Severity)wv : null;
 
+        // Decode static air temperature
         double? temp = null;
         if (tempStatus == 1)
         {
@@ -762,36 +793,40 @@ public sealed partial class MessageParser
             temp = value * 0.25;
             if (temp is < -80 or > 60)
             {
-                return null;
+                return null; // Outside reasonable atmospheric temperature range
             }
         }
 
+        // Decode static pressure
         double? pressure = null;
         if (pressStatus == 1)
         {
+            // Direct value in hPa (millibars), range 100-1200 hPa
             pressure = pressRaw;
             if (pressure is < 100 or > 1200)
             {
-                return null;
+                return null; // Outside valid pressure range
             }
         }
 
+        // Decode radio altimeter height
         int? radioHeight = null;
         if (rhStatus == 1)
         {
-            radioHeight = rhRaw * 16; // 16 ft resolution
+            // 16 ft resolution, measures height above ground
+            radioHeight = rhRaw * 16;
             if (radioHeight is < 0 or > 65520)
             {
-                return null;
+                return null; // Outside valid range
             }
         }
 
-        // At least one field must be valid
+        // BDS 4,5 requires at least one valid field to be considered a match
         if (turbulence == null && windShear == null && microburst == null &&
             icing == null && wakeVortex == null && temp == null &&
             pressure == null && radioHeight == null)
         {
-            return null;
+            return null; // No valid data found
         }
 
         return new Bds45MeteorologicalHazard(
@@ -803,17 +838,17 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds50TrackAndTurn? TryParseBds50(byte[] mb)
     {
-        // BDS 5,0 structure:
+        // BDS 5,0 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Roll angle status
-        // - Bits 2-11: Roll angle (10 bits, signed, 45/256 deg)
+        // - Bits 2-11: Roll angle (10 bits, signed, range: -90 to +90°, resolution: 45/256 deg = 0.176°)
         // - Bit 12: Track angle status
-        // - Bits 13-23: Track angle (11 bits, signed, 90/512 deg)
+        // - Bits 13-23: Track angle (11 bits, signed, range: -180 to +180°, resolution: 90/512 deg = 0.176°)
         // - Bit 24: Ground speed status
-        // - Bits 25-34: Ground speed (10 bits, 2 kt resolution)
+        // - Bits 25-34: Ground speed (10 bits, range: 0-2046 kt, resolution: 2 kt)
         // - Bit 35: Track angle rate status
-        // - Bits 36-45: Track angle rate (10 bits, signed)
+        // - Bits 36-45: Track angle rate (10 bits, signed, range: -16 to +16 deg/s, resolution: 8/256 deg/s)
         // - Bit 46: True airspeed status
-        // - Bits 47-56: True airspeed (10 bits, 2 kt resolution)
+        // - Bits 47-56: True airspeed (10 bits, range: 0-2046 kt, resolution: 2 kt)
 
         int rollStatus = ExtractBits(mb, 1, 1);
         int rollRaw = ExtractBits(mb, 2, 10);
@@ -826,30 +861,36 @@ public sealed partial class MessageParser
         int tasStatus = ExtractBits(mb, 46, 1);
         int tasRaw = ExtractBits(mb, 47, 10);
 
-        // Per readsb line 539: ALL fields must be valid for BDS 5,0
+        // BDS 5,0 validation: ALL four primary fields must have valid status bits
+        // This is a key discriminator for BDS 5,0 vs other registers
         if (rollStatus == 0 || trackStatus == 0 || gsStatus == 0 || tasStatus == 0)
         {
-            return null;
+            return null; // Missing required status bits
         }
 
+        // Decode roll angle
         double? roll = null;
         if (rollStatus == 1)
         {
             // Two's complement for 10-bit signed value
+            // Resolution: 45/256 = 0.175781 degrees per LSB
             int value = (rollRaw & 0x200) != 0 ? rollRaw - 1024 : rollRaw;
             roll = value * (45.0 / 256.0);
             if (Math.Abs(roll.Value) > 50)
             {
-                return null;
+                return null; // Unrealistic roll angle
             }
         }
 
+        // Decode track angle (true track over ground)
         double? track = null;
         if (trackStatus == 1)
         {
             // Two's complement for 11-bit signed value
+            // Resolution: 90/512 = 0.175781 degrees per LSB
             int value = (trackRaw & 0x400) != 0 ? trackRaw - 2048 : trackRaw;
             track = value * (90.0 / 512.0);
+            // Normalize negative angles to 0-360 range
             if (track < 0)
             {
                 track += 360;
@@ -857,61 +898,66 @@ public sealed partial class MessageParser
 
             if (track is < 0 or >= 360)
             {
-                return null;
+                return null; // Invalid track angle
             }
         }
 
+        // Decode ground speed
         int? gs = null;
         if (gsStatus == 1)
         {
-            gs = gsRaw * 2; // 2 kt resolution
+            // 2 knot resolution, range 0-2046 kt
+            gs = gsRaw * 2;
             if (gs is < 0 or > 2046)
             {
-                return null;
+                return null; // Unrealistic ground speed
             }
         }
 
-        // Track Rate (bits 35-45): Rate of change of ground track angle
+        // Decode track angle rate of change
         double? trackRate = null;
         if (trackRateStatus == 1)
         {
-            // Two's complement for 10-bit signed value with 8/256 deg/s resolution
+            // Two's complement for 10-bit signed value
+            // Resolution: 8/256 = 0.03125 degrees per second per LSB
             int value = (trackRateRaw & 0x200) != 0 ? trackRateRaw - 1024 : trackRateRaw;
-            trackRate = value * (8.0 / 256.0); // 8/256 degree/second resolution per book spec
+            trackRate = value * (8.0 / 256.0);
 
-            // Range validation: typical aircraft turn rates are within ±10 deg/s
-            // Standard rate turn (3°/s) is most common, but military aircraft can exceed this
+            // Typical aircraft turn rates: ±10 deg/s maximum
+            // Standard rate turn is 3°/s, tight turns up to 10°/s
             if (Math.Abs(trackRate.Value) > 10)
             {
-                return null; // Reject unreasonable values (likely corrupted data)
+                return null; // Unrealistic turn rate
             }
         }
 
+        // Decode true airspeed
         int? tas = null;
         if (tasStatus == 1)
         {
-            tas = tasRaw * 2; // 2 kt resolution
+            // 2 knot resolution, range 0-2046 kt
+            tas = tasRaw * 2;
             if (tas is < 0 or > 2046)
             {
-                return null;
+                return null; // Unrealistic airspeed
             }
         }
 
-        // Validate GS-TAS difference (per readsb comm_b.c lines 624-630)
-        // Ground speed and true airspeed should be reasonably close
+        // Cross-field validation: ground speed and true airspeed should be reasonably close
+        // Difference is due to wind; excessive difference indicates corrupt data
         if (gs != null && tas != null)
         {
             int delta = Math.Abs(gs.Value - tas.Value);
             if (delta > 200)
             {
-                return null; // Unreasonable difference between GS and TAS
+                return null; // Unrealistic GS-TAS difference (>200 kt wind)
             }
         }
 
-        // At least one field must be valid
+        // BDS 5,0 requires at least one valid field to be considered a match
         if (roll == null && track == null && gs == null && trackRate == null && tas == null)
         {
-            return null;
+            return null; // No valid data found
         }
 
         return new Bds50TrackAndTurn(roll, track, gs, tas, trackRate);
@@ -922,18 +968,18 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds53AirReferencedState? TryParseBds53(byte[] mb)
     {
-        // BDS 5,3 structure:
+        // BDS 5,3 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Magnetic heading status
-        // - Bits 2-12: Magnetic heading (11 bits sign-magnitude, 90/512 deg)
+        // - Bits 2-12: Magnetic heading (11 bits sign-magnitude, range: 0-360°, resolution: 90/512 deg = 0.176°)
         // - Bit 13: IAS status
-        // - Bits 14-23: IAS (10 bits, 1 kt resolution)
+        // - Bits 14-23: IAS (10 bits, range: 0-1023 kt, resolution: 1 kt)
         // - Bit 24: Mach status
-        // - Bits 25-33: Mach (9 bits, 0.008 resolution)
+        // - Bits 25-33: Mach (9 bits, range: 0.0-4.088, resolution: 0.008 Mach)
         // - Bit 34: TAS status
-        // - Bits 35-46: TAS (12 bits, 0.5 kt resolution)
+        // - Bits 35-46: TAS (12 bits, range: 0-2047.5 kt, resolution: 0.5 kt)
         // - Bit 47: Vertical rate status
-        // - Bit 48: Vertical rate sign
-        // - Bits 49-56: Vertical rate magnitude (8 bits, 64 ft/min resolution)
+        // - Bit 48: Vertical rate sign (1=descending, 0=climbing)
+        // - Bits 49-56: Vertical rate magnitude (8 bits, range: 0-16,320 ft/min, resolution: 64 ft/min)
 
         int hdgStatus = ExtractBits(mb, 1, 1);
         int hdgRaw = ExtractBits(mb, 2, 11);
@@ -947,73 +993,81 @@ public sealed partial class MessageParser
         int vrSign = ExtractBits(mb, 48, 1);
         int vrRaw = ExtractBits(mb, 49, 8);
 
+        // Decode magnetic heading
         double? hdg = null;
         if (hdgStatus == 1)
         {
+            // Resolution: 90/512 = 0.175781 degrees per LSB
             hdg = hdgRaw * (90.0 / 512.0);
             if (hdg is < 0 or >= 360)
             {
-                return null;
+                return null; // Invalid heading
             }
         }
 
+        // Decode indicated airspeed
         int? ias = null;
         if (iasStatus == 1)
         {
+            // 1 knot resolution, range 0-500 kt
             ias = iasRaw;
             if (ias is < 0 or > 500)
             {
-                return null;
+                return null; // Unrealistic IAS
             }
         }
 
+        // Decode Mach number
         double? mach = null;
         if (machStatus == 1)
         {
+            // Resolution: 0.008 Mach per LSB
             mach = machRaw * 0.008;
             if (mach is < 0 or > 1.0)
             {
-                return null;
+                return null; // Unrealistic Mach (subsonic aircraft limit)
             }
         }
 
+        // Decode true airspeed
         int? tas = null;
         if (tasStatus == 1)
         {
-            tas = (int)(tasRaw * 0.5); // 0.5 kt resolution
+            // 0.5 knot resolution, range 0-2000 kt
+            tas = (int)(tasRaw * 0.5);
             if (tas is < 0 or > 500)
             {
-                return null;
+                return null; // Unrealistic TAS
             }
         }
 
-        // Vertical rate (bits 47-56): per pyModeS vr53() function
+        // Decode inertial vertical rate
         int? vr = null;
         if (vrStatus == 1)
         {
-            // Special case: all zeros or all ones means 0 ft/min
+            // Special encoding: all zeros (0) or all ones (255) means 0 ft/min
             if (vrRaw == 0 || vrRaw == 255)
             {
                 vr = 0;
             }
             else
             {
-                // Sign-magnitude encoding: if sign bit is 1, negate the value
+                // Sign-magnitude encoding: sign bit determines positive/negative
                 int value = vrSign == 1 ? -vrRaw : vrRaw;
                 vr = value * 64; // 64 ft/min resolution
 
-                // Range validation per pyModeS is53() line 57-58
+                // Typical aircraft vertical rates: ±8000 ft/min
                 if (Math.Abs(vr.Value) > 8000)
                 {
-                    return null;
+                    return null; // Unrealistic climb/descent rate
                 }
             }
         }
 
-        // At least one field must be valid
+        // BDS 5,3 requires at least one valid field to be considered a match
         if (hdg == null && ias == null && mach == null && tas == null && vr == null)
         {
-            return null;
+            return null; // No valid data found
         }
 
         return new Bds53AirReferencedState(hdg, ias, mach, tas, vr);
@@ -1024,17 +1078,17 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds60HeadingAndSpeed? TryParseBds60(byte[] mb)
     {
-        // BDS 6,0 structure:
+        // BDS 6,0 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Magnetic heading status
-        // - Bits 2-12: Magnetic heading (11 bits, 90/512 deg)
+        // - Bits 2-12: Magnetic heading (11 bits, range: 0-360°, resolution: 90/512 deg = 0.176°)
         // - Bit 13: IAS status
-        // - Bits 14-23: IAS (10 bits, 1 kt resolution)
+        // - Bits 14-23: IAS (10 bits, range: 0-1023 kt, resolution: 1 kt)
         // - Bit 24: Mach status
-        // - Bits 25-34: Mach (10 bits, 0.008 resolution)
+        // - Bits 25-34: Mach (10 bits, range: 0.0-8.184, resolution: 0.008 Mach)
         // - Bit 35: Barometric vertical rate status
-        // - Bits 36-45: Baro VR (10 bits, signed, 32 ft/min resolution)
+        // - Bits 36-45: Baro VR (10 bits, signed, range: ±16,320 ft/min, resolution: 32 ft/min)
         // - Bit 46: Inertial vertical rate status
-        // - Bits 47-56: Inertial VR (10 bits, signed, 32 ft/min resolution)
+        // - Bits 47-56: Inertial VR (10 bits, signed, range: ±16,320 ft/min, resolution: 32 ft/min)
 
         int hdgStatus = ExtractBits(mb, 1, 1);
         int hdgRaw = ExtractBits(mb, 2, 11);
@@ -1047,65 +1101,74 @@ public sealed partial class MessageParser
         int inerVrStatus = ExtractBits(mb, 46, 1);
         int inerVrRaw = ExtractBits(mb, 47, 10);
 
+        // Decode magnetic heading
         double? hdg = null;
         if (hdgStatus == 1)
         {
-            // Magnetic heading is unsigned (0-360 degrees)
+            // Unsigned value, resolution: 90/512 = 0.175781 degrees per LSB
             hdg = hdgRaw * (90.0 / 512.0);
             if (hdg is < 0 or >= 360)
             {
-                return null;
+                return null; // Invalid heading
             }
         }
 
+        // Decode indicated airspeed
         int? ias = null;
         if (iasStatus == 1)
         {
+            // 1 knot resolution, range 0-500 kt
             ias = iasRaw;
             if (ias is < 0 or > 500)
             {
-                return null;
+                return null; // Unrealistic IAS
             }
         }
 
+        // Decode Mach number
         double? mach = null;
         if (machStatus == 1)
         {
-            mach = machRaw * 0.004; // BDS 6,0 uses 0.004 LSB (different from BDS 5,3's 0.008)
+            // Resolution: 0.004 Mach per LSB (BDS 6,0 uses 0.004, BDS 5,3 uses 0.008)
+            mach = machRaw * 0.004;
             if (mach is < 0 or > 1.0)
             {
-                return null;
+                return null; // Unrealistic Mach (subsonic aircraft limit)
             }
         }
 
+        // Decode barometric vertical rate
         int? baroVr = null;
         if (baroVrStatus == 1)
         {
             // Two's complement for 10-bit signed value
+            // Resolution: 32 ft/min per LSB
             int value = (baroVrRaw & 0x200) != 0 ? baroVrRaw - 1024 : baroVrRaw;
-            baroVr = value * 32; // 32 ft/min resolution
+            baroVr = value * 32;
             if (Math.Abs(baroVr.Value) > 6000)
             {
-                return null;
+                return null; // Unrealistic climb/descent rate
             }
         }
 
+        // Decode inertial vertical rate
         int? inerVr = null;
         if (inerVrStatus == 1)
         {
             // Two's complement for 10-bit signed value
+            // Resolution: 32 ft/min per LSB
             int value = (inerVrRaw & 0x200) != 0 ? inerVrRaw - 1024 : inerVrRaw;
-            inerVr = value * 32; // 32 ft/min resolution
+            inerVr = value * 32;
             if (Math.Abs(inerVr.Value) > 6000)
             {
-                return null;
+                return null; // Unrealistic climb/descent rate
             }
         }
 
-        // At least one field must be valid
+        // BDS 6,0 requires at least one valid field to be considered a match
         if (hdg == null && ias == null && mach == null && baroVr == null && inerVr == null)
         {
-            return null;
+            return null; // No valid data found
         }
 
         return new Bds60HeadingAndSpeed(hdg, ias, mach, baroVr, inerVr);

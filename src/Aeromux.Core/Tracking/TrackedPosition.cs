@@ -71,7 +71,7 @@ public sealed record TrackedPosition
     public SurfaceMovement? MovementCategory { get; init; }
 
     /// <summary>
-    /// /Represents the Single Antenna (SA) flag in ADS-B airborne position messages.
+    /// Represents the Single Antenna (SA) flag in ADS-B airborne position messages.
     /// Indicates whether the aircraft is equipped with diversity antenna capability.
     /// </summary>
     public AntennaFlag? Antenna { get; init; }

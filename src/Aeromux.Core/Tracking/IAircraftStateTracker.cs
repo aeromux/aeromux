@@ -66,9 +66,8 @@ public interface IAircraftStateTracker
 
     /// <summary>
     /// Fired when an aircraft's state is updated with new data.
-    /// Provides both previous and updated state, plus set of changed field names.
-    /// Only fired when actual field changes occur (not on every frame).
-    /// Example changed fields: "Position", "Identification.Callsign", "Velocity"
+    /// Provides both previous and updated state for comparison.
+    /// Fired on EVERY frame update - subscribers should compare Previous vs Updated to filter changes.
     /// </summary>
     event EventHandler<AircraftUpdateEventArgs>? OnAircraftUpdated;
 

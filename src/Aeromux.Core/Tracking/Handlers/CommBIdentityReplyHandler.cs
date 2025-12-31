@@ -49,6 +49,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
 
         var msg = (CommBIdentityReply)message;
 
+        // === OPERATIONAL MODE: DF 21 metadata ===
         // Extract DF 21 metadata for ATC coordination tracking
         // DownlinkRequest and UtilityMessage indicate interrogator communication patterns
         TrackedOperationalMode? operationalMode = aircraft.OperationalMode ?? new();
@@ -61,6 +62,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
 
         aircraft = aircraft with { OperationalMode = operationalMode };
 
+        // === BDS DATA ROUTING: Route to appropriate BDS handler ===
         // Route to appropriate handler based on BDS data type
         return msg.BdsData switch
         {
@@ -182,7 +184,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         bool? approachMode = null;
         if (data.NavigationModes.HasValue)
         {
-            var modes = data.NavigationModes.Value;
+            Bds40NavigationMode modes = data.NavigationModes.Value;
             vnavMode = modes.HasFlag(Bds40NavigationMode.Vnav);
             altitudeHoldMode = modes.HasFlag(Bds40NavigationMode.AltitudeHold);
             approachMode = modes.HasFlag(Bds40NavigationMode.Approach);

@@ -107,7 +107,7 @@ public class ProcessedFrameBuilder
         }
 
         // Create ValidatedFrame using existing builder
-        var validatedFrame = new ValidatedFrameBuilder()
+        ValidatedFrame validatedFrame = new ValidatedFrameBuilder()
             .WithHexData(_hexData)
             .WithIcaoAddress(_icaoAddress)
             .WithSignalStrength(_signalStrength)
@@ -115,7 +115,7 @@ public class ProcessedFrameBuilder
             .Build();
 
         // Parse message using shared parser (for CPR state) or create new one
-        var parser = _parser ?? new Aeromux.Core.ModeS.MessageParser();
+        MessageParser parser = _parser ?? new Aeromux.Core.ModeS.MessageParser();
         ModeSMessage? message = parser.ParseMessage(validatedFrame);
 
         // Create and return ProcessedFrame

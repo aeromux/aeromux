@@ -74,7 +74,8 @@ public sealed class LongAirAirSurveillanceHandler : ITrackingHandler
         var msg = (LongAirAirSurveillance)message;
         TrackedAcas? existing = aircraft.Acas;
 
-        // === Update ACAS state with DF 16 fields ===
+        // === ACAS: DF 16 Resolution Advisory data ===
+        // Update ACAS state with DF 16 fields
         // Field-level merging: preserve TC 29 and DF 0 fields not provided by DF 16
 
         var acas = new TrackedAcas
@@ -105,7 +106,8 @@ public sealed class LongAirAirSurveillanceHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        // === Update altitude if available ===
+        // === POSITION: Barometric altitude ===
+        // Update altitude if available
         // DF 16 altitude is critical for TCAS vertical separation calculations
         TrackedPosition position = aircraft.Position with
         {

@@ -28,13 +28,16 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// essential for airport surface tracking and taxi operations.
 /// </summary>
 /// <remarks>
-/// Updated fields:
-/// - Position.Coordinate: Geographic position decoded from surface CPR
-/// - Position.IsOnGround: Always set to true for surface messages
-/// - Position.LastUpdate: Timestamp when position was updated
-/// - Velocity.GroundSpeed: Surface movement speed (0-199 knots with non-linear quantization)
-/// - Velocity.GroundTrack: Surface movement direction (0-360° with 2.8125° resolution)
-/// - Velocity.LastUpdate: Timestamp when velocity was updated
+/// <para><strong>Updated fields:</strong></para>
+/// <list type="bullet">
+/// <item>Position.Coordinate: Geographic position decoded from surface CPR</item>
+/// <item>Position.IsOnGround: Always set to true for surface messages</item>
+/// <item>Position.MovementCategory: Surface movement speed category for taxi operations</item>
+/// <item>Position.LastUpdate: Timestamp when position was updated</item>
+/// <item>Velocity.GroundSpeed: Surface movement speed (0-199 knots with non-linear quantization)</item>
+/// <item>Velocity.GroundTrack: Surface movement direction (0-360° with 2.8125° resolution)</item>
+/// <item>Velocity.LastUpdate: Timestamp when velocity was updated</item>
+/// </list>
 /// </remarks>
 public sealed class SurfacePositionHandler : ITrackingHandler
 {

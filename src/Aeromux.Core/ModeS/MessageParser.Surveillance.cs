@@ -55,7 +55,7 @@ public sealed partial class MessageParser
 
         var flightStatus = (FlightStatus)flightStatusRaw;
 
-        // Extract Altitude Code (AC) field from bits 20-32
+        // Extract Altitude Code (AC) field - bits 20-32 (13 bits)
         int altitudeCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode altitude (null if invalid or unavailable)
@@ -76,7 +76,7 @@ public sealed partial class MessageParser
     /// Extracts transponder capability field from bits 6-8.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>All-call reply message with capability, or null if invalid.</returns>
+    /// <returns>All-call reply message with capability, or <see langword="null"/> if invalid.</returns>
     /// <remarks>
     /// All-call replies are transmitted in response to Mode S all-call interrogations.
     /// They announce the aircraft's presence and ICAO address with basic capability information.
@@ -103,7 +103,7 @@ public sealed partial class MessageParser
 
         var capability = (TransponderCapability)capabilityRaw;
 
-        // Extract ICAO from AA field (bit 9-32)
+        // Extract ICAO from AA field - bits 9-32 (24 bits)
         int extractedRawIcao = ExtractBits(frame.Data, 9, 24);
         string extractedIcao = $"{extractedRawIcao:X6}";
 
@@ -140,7 +140,7 @@ public sealed partial class MessageParser
 
         var flightStatus = (FlightStatus)flightStatusRaw;
 
-        // Extract Identity Code (ID) field from bits 20-32
+        // Extract Identity Code (ID) field - bits 20-32 (13 bits)
         int identityCode = ExtractBits(frame.Data, 20, 13);
 
         // Decode squawk code (4-digit octal string)

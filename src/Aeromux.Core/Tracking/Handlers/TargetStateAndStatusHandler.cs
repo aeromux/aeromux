@@ -58,6 +58,7 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
         TrackedAutopilot? existingAutopilot = aircraft.Autopilot;
         TrackedAcas? existingAcas = aircraft.Acas;
 
+        // === AUTOPILOT: FMS/MCP intent and modes ===
         // Create updated autopilot state with field-level merging
         // Only update fields present in this message, preserve others from existing state
         // Note: TCAS fields have been moved to TrackedAcas category
@@ -84,6 +85,7 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
+        // === ACAS: TCAS operational status ===
         // Create updated ACAS state with TC 29 TCAS fields
         // Preserve DF 0/DF 16 fields that TC 29 doesn't provide
         var acas = new TrackedAcas
@@ -106,6 +108,7 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
+        // === DATA QUALITY: TC 29 V2 quality indicators ===
         // TC 29 V2: Extract data quality indicators
         // These fields provide redundancy to TC 31 quality indicators, useful for cross-validation
         TrackedDataQuality? dataQuality = aircraft.DataQuality;

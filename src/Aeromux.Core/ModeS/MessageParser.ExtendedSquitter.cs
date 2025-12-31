@@ -140,7 +140,7 @@ public sealed partial class MessageParser
         int altRaw = ExtractBits(frame.Data, 41, 12);
         Altitude? altitude = DecodeAltitude(altRaw, isGnss ? AltitudeType.Geometric : AltitudeType.Barometric);
 
-        // Extract CPR format (F bit) - bit 54 (0=even, 1=odd)
+        // Extract CPR format (F bit) - bit 54 (1 bit, 0=even, 1=odd)
         int cprFormatRaw = ExtractBits(frame.Data, 54, 1);
         if (!Enum.IsDefined(typeof(CprFormat), cprFormatRaw))
         {
@@ -197,7 +197,7 @@ public sealed partial class MessageParser
 
         var subtype = (VelocitySubtype)subtypeRaw;
 
-        // Extract NACv (Navigation Accuracy Category - Velocity, bits 43-45, 3 bits)
+        // Extract NACv (Navigation Accuracy Category - Velocity) - bits 43-45 (3 bits)
         int nacvRaw = ExtractBits(frame.Data, 43, 3);
         NavigationAccuracyCategoryVelocity? nacv = null;
         if (Enum.IsDefined(typeof(NavigationAccuracyCategoryVelocity), nacvRaw))
@@ -224,12 +224,14 @@ public sealed partial class MessageParser
     /// </summary>
     private ModeSMessage? ParseGroundSpeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate, NavigationAccuracyCategoryVelocity? nacv)
     {
-        // Extract EW direction and velocity - bits 46 and 47-56
+        // Extract EW direction (S_ew) - bit 46 (1 bit)
         int sew = ExtractBits(frame.Data, 46, 1);
+        // Extract EW velocity (V_ew) - bits 47-56 (10 bits)
         int vew = ExtractBits(frame.Data, 47, 10);
 
-        // Extract NS direction and velocity - bits 57 and 58-67
+        // Extract NS direction (S_ns) - bit 57 (1 bit)
         int sns = ExtractBits(frame.Data, 57, 1);
+        // Extract NS velocity (V_ns) - bits 58-67 (10 bits)
         int vns = ExtractBits(frame.Data, 58, 10);
 
         // Check for "no data" (all zeros)
@@ -268,12 +270,14 @@ public sealed partial class MessageParser
     /// </summary>
     private ModeSMessage? ParseAirspeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate, NavigationAccuracyCategoryVelocity? nacv)
     {
-        // Extract heading status and value - bit 46 and bits 47-56
+        // Extract heading status (SH) - bit 46 (1 bit)
         int sh = ExtractBits(frame.Data, 46, 1);
+        // Extract heading value (HDG) - bits 47-56 (10 bits)
         int hdg = ExtractBits(frame.Data, 47, 10);
 
-        // Extract airspeed type and value - bit 57 and bits 58-67
+        // Extract airspeed type (T) - bit 57 (1 bit, 0=IAS, 1=TAS)
         int asType = ExtractBits(frame.Data, 57, 1);
+        // Extract airspeed value (AS) - bits 58-67 (10 bits)
         int asRaw = ExtractBits(frame.Data, 58, 10);
 
         // Calculate heading (0-360°)
@@ -315,13 +319,13 @@ public sealed partial class MessageParser
     /// </summary>
     private int? ParseVerticalRate(ValidatedFrame frame)
     {
-        // VrSrc (bit 68): 0=GNSS, 1=Barometric
+        // Extract VrSrc (vertical rate source) - bit 68 (1 bit, 0=GNSS, 1=Barometric)
         int vrSrc = ExtractBits(frame.Data, 68, 1);  // Not used currently
 
-        // SVr (bit 69): 0=climb, 1=descent
+        // Extract SVr (vertical rate sign) - bit 69 (1 bit, 0=climb, 1=descent)
         int svr = ExtractBits(frame.Data, 69, 1);
 
-        // VR (bits 70-78): 9-bit value
+        // Extract VR (vertical rate magnitude) - bits 70-78 (9 bits)
         int vr = ExtractBits(frame.Data, 70, 9);
 
         // Check for "no data" (all zeros)
@@ -386,7 +390,7 @@ public sealed partial class MessageParser
         // Extract Time flag (T) - bit 53 (1 bit)
         // (currently unused - indicates time synchronization)
 
-        // Extract CPR format (F bit) - bit 54 (0=even, 1=odd)
+        // Extract CPR format (F bit) - bit 54 (1 bit, 0=even, 1=odd)
         int cprFormatRaw = ExtractBits(frame.Data, 54, 1);
         if (!Enum.IsDefined(typeof(CprFormat), cprFormatRaw))
         {
@@ -425,7 +429,7 @@ public sealed partial class MessageParser
     /// Uses non-linear quantization table from ICAO Annex 10, Volume IV, Table 2-14.
     /// </summary>
     /// <param name="movementRaw">Raw movement value (0-127).</param>
-    /// <returns>Ground speed in knots (midpoint of range), or null if no information.</returns>
+    /// <returns>Ground speed in knots (midpoint of range), or <see langword="null"/> if no information.</returns>
     private static int? DecodeMovement(int movementRaw)
     {
         return movementRaw switch
@@ -465,7 +469,7 @@ public sealed partial class MessageParser
     /// Handles emergency/priority status (subtype 1) and TCAS RA (subtype 2).
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Aircraft status message, or null if subtype not supported.</returns>
+    /// <returns>Aircraft status message, or <see langword="null"/> if subtype not supported.</returns>
     private ModeSMessage? ParseAircraftStatus(ValidatedFrame frame)
     {
         // Extract subtype from bits 38-40 (3 bits)
@@ -534,7 +538,7 @@ public sealed partial class MessageParser
     /// Based on ADS-B Version 1/2 specification (DO-260A/B).
     /// </remarks>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Operational status message, or null if subtype not supported.</returns>
+    /// <returns>Operational status message, or <see langword="null"/> if subtype not supported.</returns>
     private ModeSMessage? ParseAircraftOperationStatus(ValidatedFrame frame)
     {
         // Extract subtype from bits 38-40 (3 bits)
@@ -550,7 +554,7 @@ public sealed partial class MessageParser
 
         var subtype = (OperationalStatusSubtype)subtypeRaw;
 
-        // Version number (bits 73-75, 3 bits)
+        // Extract version number - bits 73-75 (3 bits)
         int versionRaw = ExtractBits(frame.Data, 73, 3);
         if (!Enum.IsDefined(typeof(AdsbVersion), versionRaw))
         {
@@ -603,6 +607,7 @@ public sealed partial class MessageParser
         {
             // Version 0
             case AdsbVersion.DO260:
+                // Extract Capability Class content - bits 41-42 (2 bits)
                 ccContent = ExtractBits(frame.Data, 41, 2);
                 if (subtype == OperationalStatusSubtype.Airborne && ccContent == 0)
                 {
@@ -622,10 +627,10 @@ public sealed partial class MessageParser
 
             // Version 1
             case AdsbVersion.DO260A:
-                // Get Capability Class content bits (only 0,0 applies)
+                // Extract Capability Class content - bits 41-42 (2 bits, only 0,0 applies)
                 ccContent = ExtractBits(frame.Data, 41, 2);
 
-                // Get Operational Mode content bits (only O,O applies)
+                // Extract Operational Mode content - bits 57-58 (2 bits, only 0,0 applies)
                 omContent = ExtractBits(frame.Data, 57, 2);
 
                 // CC - Airborne
@@ -882,10 +887,10 @@ public sealed partial class MessageParser
 
             // Version 2
             case AdsbVersion.DO260B:
-                // Get Capability Class content bits (only 0,0 applies)
+                // Extract Capability Class content - bits 41-42 (2 bits, only 0,0 applies)
                 ccContent = ExtractBits(frame.Data, 41, 2);
 
-                // Get Operational Mode content bits (only O,O applies)
+                // Extract Operational Mode content - bits 57-58 (2 bits, only 0,0 applies)
                 omContent = ExtractBits(frame.Data, 57, 2);
 
                 // CC - Airborne
@@ -1184,7 +1189,7 @@ public sealed partial class MessageParser
     /// FULL implementation of all fields for both Version 1 and Version 2.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Target state and status message, or null if subtype not supported.</returns>
+    /// <returns>Target state and status message, or <see langword="null"/> if subtype not supported.</returns>
     private ModeSMessage? ParseTargetStateAndStatus(ValidatedFrame frame)
     {
         // Extract subtype from bits 38-39 (2 bits)
@@ -1236,7 +1241,8 @@ public sealed partial class MessageParser
                         _ => AltitudeSource.FmsRnav
                     };
 
-                    // Target altitude (bits 48-57, 10 bits)
+                    // Extract target altitude - bits 48-57 (10 bits)
+                    // Formula: -1000 + (raw * 100) allows range -1000 to +101300 feet
                     int altRaw = ExtractBits(frame.Data, 48, 10);
                     int altitudeFeet = -1000 + (altRaw * 100);
                     targetAltitude = Altitude.FromFeet(altitudeFeet, AltitudeType.Barometric);
@@ -1351,10 +1357,11 @@ public sealed partial class MessageParser
                     barometricPressure = 800.0 + ((baroRaw - 1) * 0.8);
                 }
 
-                // Selected heading (bits 63-72, 10 bits total: status + sign + value)
+                // Extract heading status - bit 62 (1 bit)
                 int headingStatus = ExtractBits(frame.Data, 62, 1);
                 if (headingStatus == 1)
                 {
+                    // Extract heading value - bits 63-71 (9 bits)
                     int hdgRaw = ExtractBits(frame.Data, 63, 9);
                     targetHeading = hdgRaw * (180.0 / 256.0);
                 }

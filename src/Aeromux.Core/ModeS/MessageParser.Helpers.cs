@@ -38,7 +38,7 @@ public sealed partial class MessageParser
     /// - Mode 4: Q=0 (Gillham/Gray code, 100-foot increments)
     /// </summary>
     /// <param name="ac13">13-bit altitude code field</param>
-    /// <returns>Decoded altitude, or null if invalid or unavailable</returns>
+    /// <returns>Decoded altitude, or <see langword="null"/> if invalid or unavailable.</returns>
     /// <remarks>
     /// Implements all four encoding modes per ICAO Annex 10 specification.
     /// Gillham (Gray code) decoding handles extreme altitudes above 50,187 feet.
@@ -51,13 +51,14 @@ public sealed partial class MessageParser
             return null;
         }
 
-        int mBit = (ac13 >> 6) & 0x01;  // Bit 26 (position 7 in 13-bit field)
-        int qBit = (ac13 >> 4) & 0x01;  // Bit 28 (position 9 in 13-bit field)
+        int mBit = (ac13 >> 6) & 0x01;  // bit 26 (position 7 in 13-bit field)
+        int qBit = (ac13 >> 4) & 0x01;  // bit 28 (position 9 in 13-bit field)
 
         // Mode 2: M=1 (metric altitude)
         if (mBit == 1)
         {
-            int altitudeMeters = ac13 & 0x0FFF;  // Lower 12 bits
+            // Extract altitude value - bits 20-31 (12 bits, lower 12 bits of AC field)
+            int altitudeMeters = ac13 & 0x0FFF;
             return Altitude.FromMeters(altitudeMeters, AltitudeType.Barometric);
         }
 
@@ -212,7 +213,9 @@ public sealed partial class MessageParser
             oneHundreds ^= 0x001;  // C4
         }
 
-        // Remove 7s from oneHundreds (make 7→5 and 5→7)
+        // Gray code hundreds encoding only supports values 1-5 (100-500 ft increments).
+        // ICAO Annex 10: Invalid decoded values 6 or 7 must be corrected (7→5, 5→7).
+        // This bit manipulation performs the swap: if bit pattern is ...101, flip bit 1.
         if ((oneHundreds & 5) == 5)
         {
             oneHundreds ^= 2;
@@ -359,7 +362,7 @@ public sealed partial class MessageParser
     /// </summary>
     /// <param name="altRaw">12-bit altitude field (bits 41-52).</param>
     /// <param name="altitudeType">Altitude type (Barometric or Geometric).</param>
-    /// <returns>Decoded altitude, or null if unavailable.</returns>
+    /// <returns>Decoded altitude, or <see langword="null"/> if unavailable.</returns>
     private static Altitude? DecodeAltitude(int altRaw, AltitudeType altitudeType)
     {
         // Special case: all zeros means altitude unavailable

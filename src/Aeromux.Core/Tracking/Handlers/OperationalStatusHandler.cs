@@ -61,17 +61,13 @@ public sealed class OperationalStatusHandler : ITrackingHandler
 
         var msg = (OperationalStatus)message;
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // IDENTIFICATION: ADS-B Version (moved from Status per user requirement)
-        // ═══════════════════════════════════════════════════════════════════════════
+        // === IDENTIFICATION: ADS-B Version ===
         TrackedIdentification identification = aircraft.Identification with
         {
             Version = msg.Version
         };
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // CAPABILITIES: CapabilityClass fields (11 fields) + Dimensions
-        // ═══════════════════════════════════════════════════════════════════════════
+        // === CAPABILITIES: CapabilityClass fields + Dimensions ===
         TrackedCapabilities? capabilities = aircraft.Capabilities ?? new();
 
         // Extract all CapabilityClass fields if available
@@ -100,9 +96,7 @@ public sealed class OperationalStatusHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // OPERATIONAL MODE: OperationalMode fields (7 fields)
-        // ═══════════════════════════════════════════════════════════════════════════
+        // === OPERATIONAL MODE: Runtime operational status ===
         TrackedOperationalMode? operationalMode = aircraft.OperationalMode ?? new();
 
         // Extract all OperationalMode fields if available
@@ -121,9 +115,7 @@ public sealed class OperationalStatusHandler : ITrackingHandler
             };
         }
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // DATA QUALITY: Quality indicators and integrity levels
-        // ═══════════════════════════════════════════════════════════════════════════
+        // === DATA QUALITY: Quality indicators and integrity levels ===
         TrackedDataQuality? dataQuality = aircraft.DataQuality ?? new();
         dataQuality = dataQuality with
         {
@@ -135,9 +127,7 @@ public sealed class OperationalStatusHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        // ═══════════════════════════════════════════════════════════════════════════
-        // POSITION: Data quality metrics (preserved for backward compatibility)
-        // ═══════════════════════════════════════════════════════════════════════════
+        // === POSITION: Data quality metrics ===
         // NACp: Navigation Accuracy Category for Position (horizontal GPS accuracy)
         //       Scale 0-11: 11=<3m, 10=<10m, 9=<30m, 8=<92.6m, ..., 0=unknown
         // NICbaro: Barometric Altitude Integrity Code (1-bit, indicates cross-check status)

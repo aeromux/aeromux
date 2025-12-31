@@ -32,7 +32,7 @@ public sealed partial class MessageParser
     /// ACAS coordination message containing altitude and ACAS status fields.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Short air-air surveillance message with ACAS data, or null if invalid.</returns>
+    /// <returns>Short air-air surveillance message with ACAS data, or <see langword="null"/> if invalid.</returns>
     /// <remarks>
     /// DF 0 structure (56 bits total, per ICAO Annex 10 Vol IV):
     /// - Bits 1-5: DF (Downlink Format)
@@ -51,12 +51,12 @@ public sealed partial class MessageParser
     /// </remarks>
     private ModeSMessage? ParseShortAirAirSurveillance(ValidatedFrame frame)
     {
-        // Extract Vertical Status (VS) - bit 6
+        // Extract Vertical Status (VS) - bit 6 (1 bit, 0=airborne, 1=ground)
         VerticalStatus verticalStatus = ExtractBits(frame.Data, 6, 1) == 0
             ? VerticalStatus.Airborne
             : VerticalStatus.Ground;
 
-        // Extract Cross-link Capability (CC) - bit 7
+        // Extract Cross-link Capability (CC) - bit 7 (1 bit)
         bool crossLinkCapability = ExtractBits(frame.Data, 7, 1) != 0;
 
         // Extract Sensitivity Level (SL) - bits 9-11 (3 bits)
@@ -96,10 +96,10 @@ public sealed partial class MessageParser
 
     /// <summary>
     /// Parses long air-air surveillance from Downlink Format 16.
-    /// ACAS coordination message with middle ground MV decoding (VDS validation, RAC, RAT, MTE).
+    /// ACAS coordination message with partial MV decoding (extracts VDS, RAC, RAT, MTE only).
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>Long air-air surveillance message with ACAS data, or null if invalid.</returns>
+    /// <returns>Long air-air surveillance message with ACAS data, or <see langword="null"/> if invalid.</returns>
     /// <remarks>
     /// DF 16 structure (112 bits total, per ICAO Annex 10 Vol IV):
     /// - Bits 1-5: DF (Downlink Format)
@@ -121,16 +121,19 @@ public sealed partial class MessageParser
     /// - Bit 60: MTE (Multiple Threat Encounter)
     /// - Bits 61-88: Reserved
     ///
-    /// Middle ground MV decoding approach:
+    /// Partial MV decoding approach:
+    /// This implementation decodes essential ACAS fields but skips the complex ARA field (bits 41-54)
+    /// which requires conditional parsing based on threat encounter flags and context.
     /// - Extract VDS field (bits 33-40), validate it's 0x30 for valid ACAS
     /// - Extract RAC (Resolution Advisory Complement, bits 55-58)
     /// - Extract RAT (Resolution Advisory Terminated, bit 59)
     /// - Extract MTE (Multiple Threat Encounter, bit 60)
-    /// - Skip ARA field (bits 41-54) due to complex conditional decoding
+    /// - ARA field decoding requires interpreting MB:9 and MB:28 threat types and contexts
+    /// - See ICAO Annex 10 Vol IV, 3.1.2.6.10 for full ARA decoding specification
     /// </remarks>
     private ModeSMessage? ParseLongAirAirSurveillance(ValidatedFrame frame)
     {
-        // Extract Vertical Status (VS) - bit 6
+        // Extract Vertical Status (VS) - bit 6 (1 bit, 0=airborne, 1=ground)
         VerticalStatus verticalStatus = ExtractBits(frame.Data, 6, 1) == 0
             ? VerticalStatus.Airborne
             : VerticalStatus.Ground;
@@ -158,7 +161,7 @@ public sealed partial class MessageParser
         var replyInformation = (AcasReplyInformation)riRaw;
 
         // Extract MV field (Message Vertical, bits 33-88, 56 bits)
-        // VDS (Vertical Data Source) is bits 33-40 (VDS1 + VDS2 = 8 bits)
+        // Extract VDS (Vertical Data Source) - bits 33-40 (8 bits, VDS1+VDS2)
         int vds = ExtractBits(frame.Data, 33, 8);
 
         // Check if VDS indicates valid ACAS data (VDS = 0x30 = binary 0011 0000)
@@ -174,7 +177,7 @@ public sealed partial class MessageParser
 
         if (acasValid)
         {
-            // Extract RAC (Resolution Advisory Complement, bits 55-58, 4 bits)
+            // Extract RAC (Resolution Advisory Complement) - bits 55-58 (4 bits)
             int rac = ExtractBits(frame.Data, 55, 4);
             racNotBelow = (rac & 0x08) != 0;   // bit 55
             racNotAbove = (rac & 0x04) != 0;   // bit 56

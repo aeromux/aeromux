@@ -61,6 +61,7 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
         var msg = (ShortAirAirSurveillance)message;
         TrackedAcas? existingAcas = aircraft.Acas;
 
+        // === IDENTIFICATION: Flight status from VerticalStatus ===
         // Map VerticalStatus to FlightStatus for tracking purposes
         // DF 0 (ACAS) uses VerticalStatus, but tracking system uses FlightStatus for consistency
         // No alert or SPI information available in DF 0, so map to "Normal" states
@@ -73,11 +74,13 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
             FlightStatus = mappedFlightStatus
         };
 
+        // === POSITION: Barometric altitude ===
         TrackedPosition position = aircraft.Position with
         {
             BarometricAltitude = msg.Altitude ?? aircraft.Position.BarometricAltitude
         };
 
+        // === ACAS: DF 0 ACAS coordination fields ===
         // Update ACAS state with DF 0 fields
         // Preserve TC 29 and DF 16 fields that DF 0 doesn't provide
         var acas = new TrackedAcas
