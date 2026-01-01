@@ -41,13 +41,14 @@ public sealed partial class MessageParser
     /// - Bit 8: Reserved
     /// - Bits 9-11: Sensitivity Level (SL)
     /// - Bits 12-13: Reserved
-    /// - Bits 14-17: Reply Information (RI)
+    /// - Bits 14-17: Reply Information (RI) - ACAS status or maximum airspeed
     /// - Bits 18-19: Reserved
     /// - Bits 20-32: Altitude Code (AC)
     /// - Bits 33-56: Address Parity (AP)
     ///
-    /// DF 0 is used for ACAS coordination between aircraft (aircraft-to-aircraft).
-    /// Unlike DF 4 (ground surveillance), DF 0 contains ACAS-specific fields (VS, CC, SL, RI).
+    /// DF 0 is used for air-air surveillance (aircraft-to-aircraft).
+    /// Unlike DF 4 (ground surveillance), DF 0 contains air-air specific fields (VS, CC, SL, RI).
+    /// The RI field indicates either ACAS operational capabilities (0,2,3,4) or maximum airspeed (8-14).
     /// </remarks>
     private ModeSMessage? ParseShortAirAirSurveillance(ValidatedFrame frame)
     {
@@ -63,12 +64,13 @@ public sealed partial class MessageParser
         int sensitivityLevel = ExtractBits(frame.Data, 9, 3);
 
         // Extract Reply Information (RI) - bits 14-17 (4 bits)
+        // RI indicates either ACAS operational status (0,2,3,4) or maximum airspeed capability (8-14)
         int riRaw = ExtractBits(frame.Data, 14, 4);
 
-        // Validate RI field (only 0, 2, 3, 7 are valid ACAS values)
+        // Validate RI field (valid values: 0, 2, 3, 4, 8-14; reserved: 1, 5, 6, 7, 15)
         if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
         {
-            Log.Debug("Invalid ACAS reply information {RI} in DF 0 from {Icao} (valid: 0,2,3,7), frame: {Frame}",
+            Log.Debug("Reserved RI value {RI} in DF 0 from {Icao} (valid: 0,2,3,4,8-14), frame: {Frame}",
                 riRaw, frame.IcaoAddress, frame.Data);
             return null;
         }
@@ -107,7 +109,7 @@ public sealed partial class MessageParser
     /// - Bits 7-8: Reserved
     /// - Bits 9-11: Sensitivity Level (SL)
     /// - Bits 12-13: Reserved
-    /// - Bits 14-17: Reply Information (RI)
+    /// - Bits 14-17: Reply Information (RI) - ACAS status or maximum airspeed
     /// - Bits 18-19: Reserved
     /// - Bits 20-32: Altitude Code (AC)
     /// - Bits 33-88: Message Vertical (MV) - ACAS data (56 bits)
@@ -148,12 +150,13 @@ public sealed partial class MessageParser
         Altitude? altitude = DecodeAltitudeAC13(altitudeCode);
 
         // Extract Reply Information (RI) - bits 14-17 (4 bits)
+        // RI indicates either ACAS operational status (0,2,3,4) or maximum airspeed capability (8-14)
         int riRaw = ExtractBits(frame.Data, 14, 4);
 
-        // Validate RI field (only 0, 2, 3, 7 are valid ACAS values)
+        // Validate RI field (valid values: 0, 2, 3, 4, 8-14; reserved: 1, 5, 6, 7, 15)
         if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
         {
-            Log.Debug("Invalid ACAS reply information {RI} in DF 16 from {Icao} (valid: 0,2,3,7), frame: {Frame}",
+            Log.Debug("Reserved RI value {RI} in DF 16 from {Icao} (valid: 0,2,3,4,8-14), frame: {Frame}",
                 riRaw, frame.IcaoAddress, frame.Data);
             return null;
         }

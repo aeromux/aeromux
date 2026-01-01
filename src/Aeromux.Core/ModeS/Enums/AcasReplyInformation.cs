@@ -17,12 +17,14 @@
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
-/// ACAS Reply Information (RI) from DF 0 and DF 16 messages.
-/// Indicates the type of reply to interrogating aircraft and ACAS operational capabilities.
+/// Reply Information (RI) from DF 0 and DF 16 messages.
+/// Indicates either ACAS operational capabilities or maximum airspeed capability.
 /// </summary>
 /// <remarks>
-/// Reference: https://mode-s.org/1090mhz/content/mode-s/4-acas.html
-/// Only values 0, 2, 3, 7 are valid ACAS values. Other values are not part of ACAS.
+/// The RI field serves dual purposes:
+/// - Values 0, 2, 3, 4: ACAS operational status
+/// - Values 8-14: Maximum airspeed capability
+/// Values 1, 5, 6, 7, 15 are reserved/undefined.
 /// </remarks>
 public enum AcasReplyInformation
 {
@@ -45,10 +47,45 @@ public enum AcasReplyInformation
     VerticalOnlyResolutionCapability = 3,
 
     /// <summary>
-    /// ACAS with vertical and horizontal resolution capability (value 7, binary 0111).
+    /// ACAS with vertical and horizontal resolution capability (value 4, binary 0100).
     /// ACAS can issue both vertical and horizontal resolution advisories.
     /// </summary>
-    VerticalAndHorizontalResolutionCapability = 7
+    VerticalAndHorizontalResolutionCapability = 4,
 
-    // Values 1, 4, 5, 6, 8-15: Not part of ACAS specification
+    /// <summary>
+    /// No maximum airspeed data available (value 8, binary 1000).
+    /// </summary>
+    NoMaximumAirspeedData = 8,
+
+    /// <summary>
+    /// Maximum airspeed less than 75 knots (value 9, binary 1001).
+    /// </summary>
+    MaximumAirspeedLessThan75Knots = 9,
+
+    /// <summary>
+    /// Maximum airspeed 75-150 knots (value 10, binary 1010).
+    /// </summary>
+    MaximumAirspeed75To150Knots = 10,
+
+    /// <summary>
+    /// Maximum airspeed 150-300 knots (value 11, binary 1011).
+    /// </summary>
+    MaximumAirspeed150To300Knots = 11,
+
+    /// <summary>
+    /// Maximum airspeed 300-600 knots (value 12, binary 1100).
+    /// </summary>
+    MaximumAirspeed300To600Knots = 12,
+
+    /// <summary>
+    /// Maximum airspeed 600-1200 knots (value 13, binary 1101).
+    /// </summary>
+    MaximumAirspeed600To1200Knots = 13,
+
+    /// <summary>
+    /// Maximum airspeed greater than 1200 knots (value 14, binary 1110).
+    /// </summary>
+    MaximumAirspeedGreaterThan1200Knots = 14
+
+    // Values 1, 5, 6, 7, 15: Reserved/undefined
 }
