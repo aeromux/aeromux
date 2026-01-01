@@ -78,4 +78,23 @@ public class DeviceConfig
     /// Default: true
     /// </summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the deduplication time window in milliseconds.
+    /// Filters duplicate frames caused by FRUIT (False Replies Unsynchronized to Interrogator Transmissions),
+    /// multipath propagation, and multiple interrogator responses.
+    /// Frames with identical content received within this window are considered duplicates.
+    /// Default: 50ms (legitimate Mode S retransmissions occur at 400-600ms intervals)
+    /// Valid range: 1 to 1000ms
+    /// </summary>
+    public int DeduplicationWindow { get; set; } = 50;
+
+    /// <summary>
+    /// Gets or sets the maximum number of unique frames to track for deduplication.
+    /// When this limit is exceeded, least recently used (LRU) frames are evicted from the cache.
+    /// Higher values = better deduplication coverage but more memory usage (~20 bytes per tracked frame).
+    /// Default: 1000 frames (~20 KB memory)
+    /// Valid range: 100 to 10000
+    /// </summary>
+    public int MaxTrackedFrames { get; set; } = 1000;
 }

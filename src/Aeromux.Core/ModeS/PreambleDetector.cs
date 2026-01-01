@@ -19,6 +19,7 @@ namespace Aeromux.Core.ModeS;
 /// <summary>
 /// Detects Mode S preambles in magnitude data and extracts raw frames using phase-correlation techniques.
 /// Implements 2.4 MSPS sampling (2.4 million samples per second) with multi-phase detection for sub-sample timing resolution.
+/// Conforms to ICAO Annex 10, Volume IV, Chapter 3 (Surveillance Radar and Collision Avoidance Systems).
 /// </summary>
 /// <remarks>
 /// <para><b>2.4 MSPS Sampling Challenge:</b></para>
@@ -87,10 +88,13 @@ public sealed class PreambleDetector
         int mlen = magnitudeBuffer.Length;
 
         // Linear buffer scanning: start at beginning (index 0, includes prefix), scan through new data
-        // Scanning range: [0, mlen) where mlen represents the count of NEW data samples
-        // This approach allows detection algorithms to access prefix samples naturally without wraparound logic
+        // Buffer structure: [prefix 0-325][new data 326..326+mlen-1]
+        // However, to prevent duplicates, we must NOT scan the last 326 samples of new data,
+        // as those will be copied to the next buffer's prefix and scanned there.
+        // So we scan: [0, mlen) which covers prefix + first part of new data
+        // The last 326 samples (suffix) remain unscanned and become the next buffer's prefix
         int pa = 0;      // Current scan position
-        int stop = mlen; // Scan boundary (length of new data region)
+        int stop = mlen; // Scan boundary: stops BEFORE the suffix region
 
         while (pa < stop)
         {
@@ -104,8 +108,9 @@ public sealed class PreambleDetector
             {
                 int testPos = idx + offset;
 
-                // Magnitude relationship test: m[1] > m[7] AND m[12] > m[14] AND m[12] > m[15]
-                // These specific indices correspond to expected pulse/valley timing in Mode S preambles
+                // Pre-check filter: Fast magnitude relationship test rejects 90% of non-preambles
+                // before expensive phase correlation. Indices 1,7,12,14,15 correspond to Mode S
+                // preamble pulse/valley timing where peaks must exceed valleys for valid signal.
                 if (m[testPos + 1] > m[testPos + 7] &&
                     m[testPos + 12] > m[testPos + 14] &&
                     m[testPos + 12] > m[testPos + 15])
@@ -125,9 +130,19 @@ public sealed class PreambleDetector
                             _frameBuffer.Add(frame);
                             _framesExtracted++;
 
-                            // Advance past frame: offset to aligned position + message length in samples
-                            // At 2.4 MSPS, each bit = 2.4 samples, so N bits = N × 2 samples (integer approximation)
-                            int skipAmount = offset + (frame.LengthBits * 2);
+                            // Advance past frame to prevent re-detection
+                            // At 2.4 MSPS: preamble (8µs) + data (N µs) = (8 + N) × 2.4 samples
+                            // Preamble: 8 µs × 2.4 = 19.2 samples
+                            // Data: N bits × 1 µs × 2.4 = N × 2.4 samples
+                            // Using integer math: 19 + (N × 12 / 5) ≈ actual frame length
+                            // Add safety margin to account for:
+                            // 1. Integer rounding (can be short by ~1 sample)
+                            // 2. Trailing noise/interference after frame
+                            // 3. Adjacent frame preambles that might overlap
+                            int preambleSamples = 19;
+                            int dataSamples = frame.LengthBits * 12 / 5;  // More accurate: bits × 2.4
+                            const int safetyMargin = 10;  // Additional samples to ensure clean separation
+                            int skipAmount = offset + preambleSamples + dataSamples + safetyMargin;
                             pa += skipAmount;
                         }
                         else

@@ -33,23 +33,17 @@ public class TrackingConfig
     /// Gets or sets the ICAO timeout in seconds (global setting for all devices).
     /// ICAOs not seen within this time are removed from confidence tracking.
     /// Prevents memory growth and removes departed aircraft/noise.
+    /// Based on ICAO Doc 9871 (Technical Provisions for Mode S Services and Extended Squitter).
     /// Default: 30 seconds
     /// </summary>
     public int IcaoTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
-    /// Gets or sets the aircraft timeout in minutes.
+    /// Gets or sets the aircraft timeout in seconds.
     /// Aircraft that haven't sent messages within this time are removed from tracking.
-    /// Default: 60 minutes
+    /// Default: 60 seconds
     /// </summary>
-    public int AircraftTimeoutMinutes { get; set; } = 60;
-
-    /// <summary>
-    /// Gets or sets the maximum number of position reports to store per aircraft.
-    /// Used for track history and velocity calculations.
-    /// Default: 1000 positions
-    /// </summary>
-    public int PositionHistorySize { get; set; } = 1000;
+    public int AircraftTimeoutSeconds { get; set; } = 60;
 
     /// <summary>
     /// Enable position history tracking (circular buffer).

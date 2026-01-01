@@ -22,7 +22,10 @@ devices:                                  # List of SDR devices to use (multiple
     gainMode: manual                      # Gain mode: manual (use tunerGain) | agc (automatic gain control)
     tunerGain: 49.6                       # Tuner gain in dB (default: 49.6 dB max sensitivity, reduce if near airport)
     ppmCorrection: 0                      # Frequency correction in parts per million
+    # preambleThreshold: 1.8125           # Preamble detection sensitivity (default: 1.8125, range: 1.5-10.0)
     enabled: true                         # Enable/disable this device
+    # deduplicationWindow: 50             # Deduplication time window in milliseconds (default: 50ms)
+    # maxTrackedFrames: 1000              # Maximum frames to track for deduplication (default: 1000)
 
 # Network ports and binding
 network:                                  # Network server configuration
@@ -36,10 +39,13 @@ network:                                  # Network server configuration
 tracking:                                 # Aircraft state tracking configuration
   confidenceLevel: medium                 # ICAO confidence filter: low (5), medium (10), high (15) detections required
   icaoTimeoutSeconds: 30                  # Remove ICAOs not seen within this many seconds (prevents memory growth)
-  # aircraftTimeoutMinutes: 60            # TODO: Phase 5+ - Remove aircraft after this many minutes of no messages
-  # positionHistorySize: 1000             # TODO: Phase 5+ - Maximum number of position reports to keep per aircraft
+  # aircraftTimeoutSeconds: 60            # Remove aircraft after this many seconds of no messages
+  # maxHistorySize: 1000                  # History buffer size for all tracking histories (position/altitude/velocity)
+  # enablePositionHistory: true           # Enable position history tracking (circular buffer)
+  # enableAltitudeHistory: true           # Enable altitude history tracking (circular buffer)
+  # enableVelocityHistory: true           # Enable velocity history tracking (circular buffer)
 
-# Receiver station location (optional, required for TC 5-8 surface position decoding)
+# Receiver station location (optional)
 receiver:
   latitude: 46.907982                     # Receiver latitude in decimal degrees (-90 to +90)
   longitude: 19.693172                    # Receiver longitude in decimal degrees (-180 to +180)

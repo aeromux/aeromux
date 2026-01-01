@@ -26,7 +26,7 @@ public class TrackingConfigBuilder
 {
     private ConfidenceLevel _confidenceLevel = ConfidenceLevel.Medium;
     private int _icaoTimeoutSeconds = 30;
-    private int _aircraftTimeoutMinutes = 60;
+    private int _aircraftTimeoutSeconds = 60;
     private int _maxHistorySize = 100;  // Smaller than default (1000) for faster tests
     private bool _enablePositionHistory = true;
     private bool _enableAltitudeHistory = true;
@@ -52,7 +52,7 @@ public class TrackingConfigBuilder
     /// <returns>This builder for fluent chaining</returns>
     public TrackingConfigBuilder WithAircraftTimeout(int minutes)
     {
-        _aircraftTimeoutMinutes = minutes;
+        _aircraftTimeoutSeconds = minutes;
         return this;
     }
 
@@ -120,7 +120,7 @@ public class TrackingConfigBuilder
         {
             ConfidenceLevel = _confidenceLevel,
             IcaoTimeoutSeconds = _icaoTimeoutSeconds,
-            AircraftTimeoutMinutes = _aircraftTimeoutMinutes,
+            AircraftTimeoutSeconds = _aircraftTimeoutSeconds,
             MaxHistorySize = _maxHistorySize,
             EnablePositionHistory = _enablePositionHistory,
             EnableAltitudeHistory = _enableAltitudeHistory,

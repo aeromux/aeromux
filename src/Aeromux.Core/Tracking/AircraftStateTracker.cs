@@ -48,6 +48,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
         _handlerRegistry = new TrackingHandlerRegistry();
 
+        // Initialize timeout from config (convert seconds to TimeSpan)
+        AircraftTimeout = TimeSpan.FromSeconds(trackingConfig.AircraftTimeoutSeconds);
+
         // Start background cleanup timer (runs every CleanupInterval to remove expired aircraft)
         _cleanupTimer = new Timer(
             _ => CleanupExpiredAircraft(),
@@ -59,9 +62,10 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <summary>
     /// Gets or sets the aircraft timeout duration.
     /// Aircraft not seen within this time are considered expired and removed during cleanup.
+    /// Initialized from TrackingConfig.AircraftTimeoutSeconds in constructor.
     /// Default: 60 seconds
     /// </summary>
-    public TimeSpan AircraftTimeout { get; set; } = TimeSpan.FromSeconds(60);
+    public TimeSpan AircraftTimeout { get; set; }
 
     /// <summary>
     /// Gets or sets the cleanup interval for expired aircraft removal.
@@ -73,7 +77,10 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <summary>
     /// Fired when an aircraft's state is updated with new data.
     /// Provides both previous and updated state for comparison.
-    /// Fired on EVERY frame update - subscribers should compare Previous vs Updated to filter changes.
+    /// Fired on EVERY frame update regardless of whether data actually changed.
+    /// Subscribers MUST compare Previous vs Updated properties to detect actual state changes
+    /// and avoid redundant processing. Use this pattern instead of multiple specialized events
+    /// for better performance and simpler event model.
     /// </summary>
     public event EventHandler<AircraftUpdateEventArgs>? OnAircraftUpdated;
 

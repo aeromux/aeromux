@@ -121,8 +121,8 @@ public class ConfigurationBuilder
             },
             Tracking = new TrackingConfig
             {
-                AircraftTimeoutMinutes = 60,
-                PositionHistorySize = 1000
+                AircraftTimeoutSeconds = 60,
+                MaxHistorySize = 1000
             }
         };
     }

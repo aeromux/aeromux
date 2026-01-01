@@ -145,4 +145,162 @@ public class HistoryTests : AircraftStateTrackerTestsBase
             aircraft.History.VelocityHistory.Count.Should().Be(0);
         }
     }
+
+    [Fact]
+    public void Update_PositionHistoryDisabled_OtherHistoriesStillWork()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithPositionHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+        var parser = new MessageParser();
+
+        // Act - Send position frames (for altitude) and velocity frame
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+
+        // Assert
+        Aircraft? aircraft1 = Tracker.GetAircraft("80073B");
+        aircraft1.Should().NotBeNull();
+        aircraft1!.History.PositionHistory.Should().BeNull(); // Position disabled
+        aircraft1.History.AltitudeHistory.Should().NotBeNull(); // Altitude enabled
+        aircraft1.History.AltitudeHistory!.Count.Should().BeGreaterThan(0);
+
+        Aircraft? aircraft2 = Tracker.GetAircraft("4BB027");
+        aircraft2.Should().NotBeNull();
+        aircraft2!.History.VelocityHistory.Should().NotBeNull(); // Velocity enabled
+        aircraft2.History.VelocityHistory!.Count.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Update_AltitudeHistoryDisabled_OtherHistoriesStillWork()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithAltitudeHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+        var parser = new MessageParser();
+
+        // Act - Send position frames and velocity frame
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+
+        // Assert
+        Aircraft? aircraft1 = Tracker.GetAircraft("80073B");
+        aircraft1.Should().NotBeNull();
+        aircraft1!.History.AltitudeHistory.Should().BeNull(); // Altitude disabled
+        aircraft1.History.PositionHistory.Should().NotBeNull(); // Position enabled
+        aircraft1.History.PositionHistory!.Count.Should().BeGreaterThan(0);
+
+        Aircraft? aircraft2 = Tracker.GetAircraft("4BB027");
+        aircraft2.Should().NotBeNull();
+        aircraft2!.History.VelocityHistory.Should().NotBeNull(); // Velocity enabled
+        aircraft2.History.VelocityHistory!.Count.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Update_VelocityHistoryDisabled_OtherHistoriesStillWork()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithVelocityHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+        var parser = new MessageParser();
+
+        // Act - Send position frames and velocity frame
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+
+        // Assert
+        Aircraft? aircraft1 = Tracker.GetAircraft("80073B");
+        aircraft1.Should().NotBeNull();
+        aircraft1!.History.PositionHistory.Should().NotBeNull(); // Position enabled
+        aircraft1.History.PositionHistory!.Count.Should().BeGreaterThan(0);
+        aircraft1.History.AltitudeHistory.Should().NotBeNull(); // Altitude enabled
+        aircraft1.History.AltitudeHistory!.Count.Should().BeGreaterThan(0);
+
+        Aircraft? aircraft2 = Tracker.GetAircraft("4BB027");
+        aircraft2.Should().NotBeNull();
+        aircraft2!.History.VelocityHistory.Should().BeNull(); // Velocity disabled
+    }
+
+    [Fact]
+    public void Update_OnlyPositionEnabled_WorksCorrectly()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithAltitudeHistoryDisabled()
+            .WithVelocityHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+        var parser = new MessageParser();
+
+        // Act - Send position frames
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.PositionHistory.Should().NotBeNull(); // Only position enabled
+        aircraft.History.PositionHistory!.Count.Should().BeGreaterThan(0);
+        aircraft.History.AltitudeHistory.Should().BeNull(); // Disabled
+        aircraft.History.VelocityHistory.Should().BeNull(); // Disabled
+    }
+
+    [Fact]
+    public void Update_OnlyAltitudeEnabled_WorksCorrectly()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithPositionHistoryDisabled()
+            .WithVelocityHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+
+        // Act - Send position frame with altitude data
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B"));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.AltitudeHistory.Should().NotBeNull(); // Only altitude enabled
+        aircraft.History.AltitudeHistory!.Count.Should().BeGreaterThan(0);
+        aircraft.History.PositionHistory.Should().BeNull(); // Disabled
+        aircraft.History.VelocityHistory.Should().BeNull(); // Disabled
+    }
+
+    [Fact]
+    public void Update_OnlyVelocityEnabled_WorksCorrectly()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithPositionHistoryDisabled()
+            .WithAltitudeHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+
+        // Act - Send velocity frame
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.VelocityHistory.Should().NotBeNull(); // Only velocity enabled
+        aircraft.History.VelocityHistory!.Count.Should().BeGreaterThan(0);
+        aircraft.History.PositionHistory.Should().BeNull(); // Disabled
+        aircraft.History.AltitudeHistory.Should().BeNull(); // Disabled
+    }
 }
