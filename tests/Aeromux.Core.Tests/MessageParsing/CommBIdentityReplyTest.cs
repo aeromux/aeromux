@@ -168,6 +168,32 @@ public class CommBIdentityReplyTest
     }
 
     // ========================================
+    // Callsign (BDS 2,0)
+    // ========================================
+
+    [Theory]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7_WithCallsign, "DLH755")]
+    public void ParseMessage_DF21_CommB_Callsign(
+        string hexFrame,
+        string expectedCallsign)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        reply.BdsData.Should().NotBeNull();
+        Bds20AircraftIdentification? bds20 = reply.BdsData.Should().BeOfType<Bds20AircraftIdentification>().Subject;
+        bds20.Callsign.Should().Be(expectedCallsign, "Callsign is encoded in BDS 2,0 register");
+    }
+
+    // ========================================
     // BDS Fields (Not Tested - Out of Scope)
     // ========================================
 
