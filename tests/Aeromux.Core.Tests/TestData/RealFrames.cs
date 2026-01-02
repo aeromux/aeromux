@@ -312,6 +312,53 @@ public static class RealFrames
     // DF 17: Extended Squitter (ADS-B)
     // ========================================
 
+    // TC 0: No Position Information
+
+    /// <summary>
+    /// No Position Information (TC 0): ICAO 89642D at 36000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 89642D
+    /// TC: 0 (No position information)
+    /// Altitude: 36000 ft barometric
+    /// Air/Ground: airborne
+    /// DF: 17
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -23.6 dBFS
+    /// </remarks>
+    public const string NoPosition_89642D_36000 = "8D89642D00B9800000000019A3F8";
+
+    /// <summary>
+    /// No Position Information (TC 0): ICAO 89642D at 36025 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 89642D
+    /// TC: 0 (No position information)
+    /// Altitude: 36025 ft barometric
+    /// Air/Ground: airborne
+    /// DF: 17
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -20.5 dBFS
+    /// </remarks>
+    public const string NoPosition_89642D_36025 = "8D89642D00B99000000000290F18";
+
+    /// <summary>
+    /// No Position Information (TC 0): ICAO 89642D at 35975 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 89642D
+    /// TC: 0 (No position information)
+    /// Altitude: 35975 ft barometric
+    /// Air/Ground: airborne
+    /// DF: 17
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -19.2 dBFS
+    /// </remarks>
+    public const string NoPosition_89642D_35975 = "8D89642D00B97000000000F07651";
+
     // TC 1-4: Aircraft Identification and Category
 
     /// <summary>

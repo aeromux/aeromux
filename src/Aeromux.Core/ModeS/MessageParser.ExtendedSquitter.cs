@@ -41,6 +41,9 @@ public sealed partial class MessageParser
 
         return tc switch
         {
+            // No position information (reserved)
+            0 => ParseNoPositionInformation(frame),                             // No Position Information
+
             // Essential ADS-B messages
             >= 1 and <= 4 => ParseAircraftIdentification(frame, tc),            // Aircraft ID & Category
             >= 9 and <= 18 => ParseAirbornePosition(frame, tc, false),    // Airborne Position (Barometric)
@@ -61,6 +64,26 @@ public sealed partial class MessageParser
             // Not implemented
             _ => LogUnsupportedTC(frame, tc)
         };
+    }
+
+    /// <summary>
+    /// Parses no position information message from Type Code 0.
+    /// TC 0 is a reserved code indicating no position information is available.
+    /// </summary>
+    /// <param name="frame">Validated frame to parse.</param>
+    /// <returns>NoPositionInformation message containing only base fields.</returns>
+    /// <remarks>
+    /// TC 0 messages contain no additional data beyond the standard Mode S header.
+    /// This method simply constructs a NoPositionInformation message with base fields.
+    /// </remarks>
+    private ModeSMessage ParseNoPositionInformation(ValidatedFrame frame)
+    {
+        return new NoPositionInformation(
+            frame.IcaoAddress,
+            frame.Timestamp,
+            frame.DownlinkFormat,
+            frame.SignalStrength,
+            frame.WasCorrected);
     }
 
     // ========================================
