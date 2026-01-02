@@ -37,7 +37,7 @@ public class EventTests : AircraftStateTrackerTestsBase
 
         // Assert
         addedAircraft.Should().NotBeNull();
-        addedAircraft!.Identification.Icao.Should().Be("471DBC");
+        addedAircraft!.Identification.ICAO.Should().Be("471DBC");
         addedAircraft.Identification.Callsign.Should().Be("WZZ476");
     }
 
@@ -47,7 +47,7 @@ public class EventTests : AircraftStateTrackerTestsBase
         // Arrange
         Tracker = CreateTracker();
         var addedIcaos = new List<string>();
-        Tracker.OnAircraftAdded += (sender, args) => addedIcaos.Add(args.Aircraft.Identification.Icao);
+        Tracker.OnAircraftAdded += (sender, args) => addedIcaos.Add(args.Aircraft.Identification.ICAO);
 
         // Act
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));

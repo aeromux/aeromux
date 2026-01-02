@@ -33,7 +33,7 @@ public sealed record TrackedOperationalMode
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// Note: This is different from RA information in DF 16 (Long Air-Air Surveillance) and BDS 3,0 (ACAS RA).
     /// </summary>
-    public bool? TcasRaActive { get; init; }
+    public bool? TCASRAActive { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft's IDENT switch is currently active (TC 31 OperationalMode).
@@ -79,7 +79,7 @@ public sealed record TrackedOperationalMode
     /// Range: -6 meters (left) to +6 meters (right) of aircraft centerline.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
-    public LateralGpsAntennaOffset? GpsLateralOffset { get; init; }
+    public LateralGpsAntennaOffset? GPSLateralOffset { get; init; }
 
     /// <summary>
     /// Longitudinal offset of the GPS antenna from the aircraft reference point (TC 31 OperationalMode).
@@ -88,7 +88,7 @@ public sealed record TrackedOperationalMode
     /// Range: 0 to 62 meters aft of the nose.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
-    public LongitudinalGpsAntennaOffset? GpsLongitudinalOffset { get; init; }
+    public LongitudinalGpsAntennaOffset? GPSLongitudinalOffset { get; init; }
 
     /// <summary>
     /// Downlink request field from Comm-B replies (DF 20/21).

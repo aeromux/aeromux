@@ -43,7 +43,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
 
         // Assert - Fields populated by TC 1-4
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("471DBC");
+        aircraft!.Identification.ICAO.Should().Be("471DBC");
         aircraft.Identification.Callsign.Should().Be("WZZ476");
         aircraft.Identification.Category.Should().NotBeNull();
         aircraft.Identification.EmergencyState.Should().Be(EmergencyState.NoEmergency);
@@ -67,7 +67,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
 
         // Assert
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("4D2407");
+        aircraft!.Identification.ICAO.Should().Be("4D2407");
         aircraft.Identification.Squawk.Should().NotBeNullOrEmpty();
         // Emergency state is accessible (value depends on frame content)
         EmergencyState _ = aircraft.Identification.EmergencyState; // Verify it's accessible
@@ -89,7 +89,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
 
         // Assert
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("80073B");
+        aircraft!.Identification.ICAO.Should().Be("80073B");
         aircraft.Identification.FlightStatus.Should().NotBeNull();
         aircraft.Identification.Squawk.Should().NotBeNullOrEmpty(); // DF 5 provides squawk
     }
@@ -109,7 +109,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
 
         // Assert - After sequence, identification should be well-populated
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be(icao);
+        aircraft!.Identification.ICAO.Should().Be(icao);
         aircraft.Identification.Squawk.Should().NotBeNullOrEmpty();
         // Emergency state is accessible (value depends on frame content)
         EmergencyState _ = aircraft.Identification.EmergencyState;
@@ -887,7 +887,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
 
         // Assert - Minimal state
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("471DBC");
+        aircraft!.Identification.ICAO.Should().Be("471DBC");
         aircraft.Identification.Callsign.Should().Be("WZZ476");
         aircraft.Position.Coordinate.Should().BeNull();
         aircraft.Velocity.Speed.Should().BeNull();
@@ -933,7 +933,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
         // Act
         Tracker.Update(idFrame);
         Aircraft? original = Tracker.GetAircraft("471DBC");
-        string originalIcao = original!.Identification.Icao;
+        string originalIcao = original!.Identification.ICAO;
         DateTime originalFirstSeen = original.Status.FirstSeen;
 
         Tracker.Update(idFrame); // Second update
@@ -941,7 +941,7 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
 
         // Assert - Immutability
         original.Should().NotBeSameAs(updated); // Different instances
-        updated!.Identification.Icao.Should().Be(originalIcao); // Same ICAO
+        updated!.Identification.ICAO.Should().Be(originalIcao); // Same ICAO
         updated.Status.FirstSeen.Should().Be(originalFirstSeen); // FirstSeen preserved
         updated.Status.TotalMessages.Should().Be(2); // Counter incremented
     }

@@ -50,7 +50,7 @@ public sealed record TrackedAcas
     /// False if TCAS is inoperative or not installed.
     /// Null if TC 29 message not received yet.
     /// </summary>
-    public bool? TcasOperational { get; init; }
+    public bool? TCASOperational { get; init; }
 
     /// <summary>
     /// ACAS sensitivity level (from DF 0, DF 16).
@@ -93,7 +93,7 @@ public sealed record TrackedAcas
     /// Sources: TC 29 Version 1 (TcasRaActive field) or derived from DF 16 MV field (ResolutionAdvisoryTerminated=false).
     /// Null if neither TC 29 V1 nor DF 16 received.
     /// </summary>
-    public bool? TcasRaActive { get; init; }
+    public bool? TCASRAActive { get; init; }
 
     /// <summary>
     /// Resolution Advisory terminated flag (from DF 16 only, MV field bit 59).
@@ -124,7 +124,7 @@ public sealed record TrackedAcas
     /// Only valid when DF 16 MV field is valid (AcasValid = true).
     /// Null if DF 16 not received or MV field invalid.
     /// </summary>
-    public bool? RacNotBelow { get; init; }
+    public bool? RACNotBelow { get; init; }
 
     /// <summary>
     /// RAC: Do not pass above threat altitude (from DF 16 only, MV field bit 56).
@@ -133,7 +133,7 @@ public sealed record TrackedAcas
     /// Only valid when DF 16 MV field is valid (AcasValid = true).
     /// Null if DF 16 not received or MV field invalid.
     /// </summary>
-    public bool? RacNotAbove { get; init; }
+    public bool? RACNotAbove { get; init; }
 
     /// <summary>
     /// RAC: Do not turn left of threat (from DF 16 only, MV field bit 57).
@@ -142,7 +142,7 @@ public sealed record TrackedAcas
     /// Only valid when DF 16 MV field is valid (AcasValid = true).
     /// Null if DF 16 not received or MV field invalid.
     /// </summary>
-    public bool? RacNotLeft { get; init; }
+    public bool? RACNotLeft { get; init; }
 
     /// <summary>
     /// RAC: Do not turn right of threat (from DF 16 only, MV field bit 58).
@@ -151,7 +151,7 @@ public sealed record TrackedAcas
     /// Only valid when DF 16 MV field is valid (AcasValid = true).
     /// Null if DF 16 not received or MV field invalid.
     /// </summary>
-    public bool? RacNotRight { get; init; }
+    public bool? RACNotRight { get; init; }
 
     // ========================================
     // Timestamp

@@ -139,7 +139,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             {
                 Aircraft aircraft = e.Aircraft;
                 Log.Information("New aircraft: ICAO={Icao}, Callsign={Callsign}",
-                    aircraft.Identification.Icao,
+                    aircraft.Identification.ICAO,
                     aircraft.Identification.Callsign ?? "Unknown");
             };
 
@@ -158,7 +158,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 if (positionChanged || velocityChanged)
                 {
                     Log.Debug("Aircraft update: ICAO={Icao}, Position={Position}, Alt={Altitude}, Speed={Velocity}",
-                        curr.Identification.Icao,
+                        curr.Identification.ICAO,
                         curr.Position.Coordinate,
                         curr.Position.BarometricAltitude,
                         curr.Velocity.GroundSpeed ?? curr.Velocity.Speed);

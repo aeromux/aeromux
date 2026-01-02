@@ -53,7 +53,7 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
 
         // Assert
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("471DBC");
+        aircraft!.Identification.ICAO.Should().Be("471DBC");
         aircraft.Identification.Callsign.Should().Be("WZZ476");
     }
 
@@ -71,9 +71,9 @@ public class GetMethodsTests : AircraftStateTrackerTestsBase
 
         // Assert
         aircraft.Should().HaveCount(3);
-        aircraft[0].Identification.Icao.Should().Be("471DBC");
-        aircraft[1].Identification.Icao.Should().Be("4D2407");
-        aircraft[2].Identification.Icao.Should().Be("80073B");
+        aircraft[0].Identification.ICAO.Should().Be("471DBC");
+        aircraft[1].Identification.ICAO.Should().Be("4D2407");
+        aircraft[2].Identification.ICAO.Should().Be("80073B");
     }
 
     [Fact]

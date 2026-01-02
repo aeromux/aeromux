@@ -118,7 +118,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         TrackedCapabilities? capabilities = aircraft.Capabilities ?? new();
         capabilities = capabilities with
         {
-            SupportedBdsRegisters = data.CapabilityMask,
+            SupportedBDSRegisters = data.CapabilityMask,
             LastUpdate = timestamp
         };
 
@@ -202,8 +202,8 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
             VerticalMode = existing?.VerticalMode,                                    // From TC 29 V1
             HorizontalMode = existing?.HorizontalMode,                                // From TC 29 V1
             AutopilotEngaged = existing?.AutopilotEngaged,                            // From TC 29 V2
-            VnavMode = vnavMode ?? existing?.VnavMode,
-            LnavMode = existing?.LnavMode,                                            // From TC 29 V2
+            VNAVMode = vnavMode ?? existing?.VNAVMode,
+            LNAVMode = existing?.LNAVMode,                                            // From TC 29 V2
             AltitudeHoldMode = altitudeHoldMode ?? existing?.AltitudeHoldMode,
             ApproachMode = approachMode ?? existing?.ApproachMode,
             LastUpdate = timestamp

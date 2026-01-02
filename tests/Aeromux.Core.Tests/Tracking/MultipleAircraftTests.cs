@@ -44,11 +44,11 @@ public class MultipleAircraftTests : AircraftStateTrackerTestsBase
         allAircraft.Should().HaveCount(5);
 
         // Verify each aircraft is tracked correctly
-        allAircraft.Should().Contain(a => a.Identification.Icao == "471DBC");
-        allAircraft.Should().Contain(a => a.Identification.Icao == "8965F3");
-        allAircraft.Should().Contain(a => a.Identification.Icao == "8964A0");
-        allAircraft.Should().Contain(a => a.Identification.Icao == "4D2407");
-        allAircraft.Should().Contain(a => a.Identification.Icao == "80073B");
+        allAircraft.Should().Contain(a => a.Identification.ICAO == "471DBC");
+        allAircraft.Should().Contain(a => a.Identification.ICAO == "8965F3");
+        allAircraft.Should().Contain(a => a.Identification.ICAO == "8964A0");
+        allAircraft.Should().Contain(a => a.Identification.ICAO == "4D2407");
+        allAircraft.Should().Contain(a => a.Identification.ICAO == "80073B");
     }
 
     [Fact]

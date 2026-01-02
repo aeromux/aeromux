@@ -28,9 +28,10 @@ namespace Aeromux.Core.ModeS;
 /// Complete DF/TC routing skeleton with statistics.
 /// All parsers implemented across partial classes:
 /// - MessageParser.cs: Core routing and statistics
-/// - MessageParser.ExtendedSquitter.cs: DF 17/18/19 (ADS-B)
-/// - MessageParser.Surveillance.cs: DF 0/4/5/11 (Basic surveillance)
-/// - MessageParser.Acas.cs: DF 16 (ACAS coordination)
+/// - MessageParser.ExtendedSquitter.cs: DF 17/18/19 (ADS-B, Extended Squitter)
+/// - MessageParser.Surveillance.cs: DF 4/5 (Surveillance)
+/// - MessageParser.AllCall.cs: DF 11 (All-Call reply)
+/// - MessageParser.Acas.cs: DF 0/16 (ACAS coordination)
 /// - MessageParser.CommB.cs: DF 20/21/24 (Comm-B + BDS registers)
 /// - MessageParser.Helpers.cs: Utility and decoding methods
 ///

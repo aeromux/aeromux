@@ -38,7 +38,7 @@ public class AircraftCreationTests : AircraftStateTrackerTestsBase
         // Assert
         Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("471DBC");
+        aircraft!.Identification.ICAO.Should().Be("471DBC");
         aircraft.Identification.Callsign.Should().Be("WZZ476");
         aircraft.Status.TotalMessages.Should().Be(1);
         aircraft.Status.IdentificationMessages.Should().Be(1);
@@ -59,7 +59,7 @@ public class AircraftCreationTests : AircraftStateTrackerTestsBase
         // Assert
         Aircraft? aircraft = Tracker.GetAircraft("80073B");
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("80073B");
+        aircraft!.Identification.ICAO.Should().Be("80073B");
         aircraft.Position.BarometricAltitude.Should().NotBeNull();
         aircraft.Position.BarometricAltitude!.Feet.Should().BeInRange(39950, 40000);
         aircraft.Status.TotalMessages.Should().Be(1);
@@ -80,7 +80,7 @@ public class AircraftCreationTests : AircraftStateTrackerTestsBase
         // Assert
         Aircraft? aircraft = Tracker.GetAircraft("4BB027");
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("4BB027");
+        aircraft!.Identification.ICAO.Should().Be("4BB027");
         aircraft.Velocity.Speed.Should().NotBeNull();
         aircraft.Velocity.Speed!.Knots.Should().BeInRange(384, 394);
         aircraft.Velocity.Track.Should().BeInRange(292.0, 296.0);
@@ -102,7 +102,7 @@ public class AircraftCreationTests : AircraftStateTrackerTestsBase
         // Assert
         Aircraft? aircraft = Tracker.GetAircraft("49D414");
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("49D414");
+        aircraft!.Identification.ICAO.Should().Be("49D414");
         aircraft.Position.BarometricAltitude.Should().NotBeNull();
         aircraft.Position.BarometricAltitude!.Feet.Should().BeInRange(34975, 35025);
         aircraft.Status.TotalMessages.Should().Be(1);
@@ -121,7 +121,7 @@ public class AircraftCreationTests : AircraftStateTrackerTestsBase
         // Assert
         Aircraft? aircraft = Tracker.GetAircraft("471F87");
         aircraft.Should().NotBeNull();
-        aircraft!.Identification.Icao.Should().Be("471F87");
+        aircraft!.Identification.ICAO.Should().Be("471F87");
         aircraft.Status.TotalMessages.Should().Be(1);
         Tracker.Count.Should().Be(1);
     }

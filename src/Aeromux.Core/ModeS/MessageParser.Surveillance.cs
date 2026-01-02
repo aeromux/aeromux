@@ -22,8 +22,8 @@ using Serilog;
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
-/// MessageParser partial class: Basic surveillance messages (DF 0/4/5/11).
-/// Handles short air-air surveillance, altitude/identity replies, and all-call messages.
+/// MessageParser partial class: Basic surveillance messages (DF 4/5).
+/// Handles altitude/identity replies.
 /// </summary>
 public sealed partial class MessageParser
 {
@@ -69,52 +69,6 @@ public sealed partial class MessageParser
             frame.WasCorrected,
             altitude,
             flightStatus);
-    }
-
-    /// <summary>
-    /// Parses All-Call Reply message (DF 11).
-    /// Extracts transponder capability field from bits 6-8.
-    /// </summary>
-    /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>All-call reply message with capability, or <see langword="null"/> if invalid.</returns>
-    /// <remarks>
-    /// All-call replies are transmitted in response to Mode S all-call interrogations.
-    /// They announce the aircraft's presence and ICAO address with basic capability information.
-    /// Capability values:
-    ///   0 = Level 1 transponder (basic Mode S)
-    ///   1-3 = Reserved (not assigned, rejected if encountered)
-    ///   4 = Level 2+ transponder, on-ground
-    ///   5 = Level 2+ transponder, airborne
-    ///   6 = Level 2+ transponder, on-ground or airborne status uncertain
-    ///   7 = Downlink Request value is 0, or Flight Status is 2, 3, 4, or 5 (alert/SPI/emergency condition)
-    /// </remarks>
-    private ModeSMessage? ParseAllCallReply(ValidatedFrame frame)
-    {
-        // Extract Capability (CA) field from bits 6-8 (byte 0, bits 0-2)
-        int capabilityRaw = ExtractBits(frame.Data, 6, 3);
-
-        // Validate capability value (0-7 are defined in TransponderCapability enum)
-        if (!Enum.IsDefined(typeof(TransponderCapability), capabilityRaw))
-        {
-            Log.Debug("Invalid capability value {Capability} in DF 11 from {Icao}",
-                capabilityRaw, frame.IcaoAddress);
-            return null;
-        }
-
-        var capability = (TransponderCapability)capabilityRaw;
-
-        // Extract ICAO from AA field - bits 9-32 (24 bits)
-        int extractedRawIcao = ExtractBits(frame.Data, 9, 24);
-        string extractedIcao = $"{extractedRawIcao:X6}";
-
-        return new AllCallReply(
-            frame.IcaoAddress,
-            frame.Timestamp,
-            frame.DownlinkFormat,
-            frame.SignalStrength,
-            frame.WasCorrected,
-            extractedIcao,
-            capability);
     }
 
     /// <summary>

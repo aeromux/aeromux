@@ -30,7 +30,7 @@ public sealed record TrackedIdentification
     /// Format: 6-character uppercase hex string (e.g., "440CF8").
     /// This is the primary key for aircraft tracking.
     /// </summary>
-    public required string Icao { get; init; }
+    public required string ICAO { get; init; }
 
     /// <summary>
     /// Flight identification / callsign (TC 1-4).

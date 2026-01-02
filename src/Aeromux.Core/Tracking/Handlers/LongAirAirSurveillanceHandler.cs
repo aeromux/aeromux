@@ -81,7 +81,7 @@ public sealed class LongAirAirSurveillanceHandler : ITrackingHandler
         var acas = new TrackedAcas
         {
             // Operational status
-            TcasOperational = existing?.TcasOperational,  // From TC 29 (preserve)
+            TCASOperational = existing?.TCASOperational,  // From TC 29 (preserve)
             SensitivityLevel = msg.SensitivityLevel,      // From DF 16 (update)
             CrossLinkCapability = existing?.CrossLinkCapability,  // From DF 0 (preserve)
 
@@ -91,17 +91,17 @@ public sealed class LongAirAirSurveillanceHandler : ITrackingHandler
             // Derive TcasRaActive from MV field data
             // RA is active if MV field is valid and RA is not terminated
             // Note: ResolutionAdvisoryTerminated is only populated when MV field is valid (msg.AcasValid=true)
-            TcasRaActive = msg.ResolutionAdvisoryTerminated == false,
+            TCASRAActive = msg.ResolutionAdvisoryTerminated == false,
 
             ResolutionAdvisoryTerminated = msg.ResolutionAdvisoryTerminated,  // From DF 16 MV field (null if invalid)
             MultipleThreatEncounter = msg.MultipleThreatEncounter,  // From DF 16 MV field
 
             // Resolution Advisory Complement (RAC) - only valid when msg.AcasValid = true
             // These fields specify prohibited maneuvers during collision avoidance
-            RacNotBelow = msg.RacNotBelow,  // Do not descend below threat
-            RacNotAbove = msg.RacNotAbove,  // Do not climb above threat
-            RacNotLeft = msg.RacNotLeft,    // Do not turn left
-            RacNotRight = msg.RacNotRight,  // Do not turn right
+            RACNotBelow = msg.RacNotBelow,  // Do not descend below threat
+            RACNotAbove = msg.RacNotAbove,  // Do not climb above threat
+            RACNotLeft = msg.RacNotLeft,    // Do not turn left
+            RACNotRight = msg.RacNotRight,  // Do not turn right
 
             LastUpdate = timestamp
         };

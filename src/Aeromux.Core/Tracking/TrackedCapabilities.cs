@@ -41,7 +41,7 @@ public sealed record TrackedCapabilities
     /// True if TCAS is installed and operational, false if not operational or not installed.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
-    public bool? TcasCapability { get; init; }
+    public bool? TCASCapability { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft has CDTI (Cockpit Display of Traffic Information) capability (TC 31 CapabilityClass).
@@ -56,7 +56,7 @@ public sealed record TrackedCapabilities
     /// True if 1090ES transmission is supported, false if not.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
-    public bool? Adsb1090ES { get; init; }
+    public bool? ADSB1090ES { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft has ARV (Air-Referenced Velocity) reporting capability (TC 31 CapabilityClass).
@@ -90,7 +90,7 @@ public sealed record TrackedCapabilities
     /// True if UAT transmission is supported, false if not.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field (Version 0 does not include UAT).
     /// </summary>
-    public bool? Uat978Support { get; init; }
+    public bool? UAT978Support { get; init; }
 
     /// <summary>
     /// Position Offset Applied (POA) flag (TC 31 CapabilityClass).
@@ -141,7 +141,7 @@ public sealed record TrackedCapabilities
     /// enabling intelligent interrogation strategies.
     /// Null if BDS 1,7 not yet received (requires ground interrogation for Comm-B replies).
     /// </summary>
-    public ulong? SupportedBdsRegisters { get; init; }
+    public ulong? SupportedBDSRegisters { get; init; }
 
     /// <summary>
     /// Aircraft/vehicle physical dimensions (TC 31 Operational Status, surface subtype only).

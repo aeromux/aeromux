@@ -72,8 +72,8 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
             // V2-only fields
             BarometricPressureSetting = msg.BarometricPressure ?? existingAutopilot?.BarometricPressureSetting,
             AutopilotEngaged = msg.AutopilotEngaged ?? existingAutopilot?.AutopilotEngaged,
-            VnavMode = msg.VNAVMode ?? existingAutopilot?.VnavMode,
-            LnavMode = msg.LNAVMode ?? existingAutopilot?.LnavMode,
+            VNAVMode = msg.VNAVMode ?? existingAutopilot?.VNAVMode,
+            LNAVMode = msg.LNAVMode ?? existingAutopilot?.LNAVMode,
             AltitudeHoldMode = msg.AltitudeHoldMode ?? existingAutopilot?.AltitudeHoldMode,
             ApproachMode = msg.ApproachMode ?? existingAutopilot?.ApproachMode,
 
@@ -91,8 +91,8 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
         var acas = new TrackedAcas
         {
             // TC 29 TCAS fields
-            TcasOperational = msg.TCASOperational ?? existingAcas?.TcasOperational,
-            TcasRaActive = msg.TCASRaActive ?? existingAcas?.TcasRaActive,
+            TCASOperational = msg.TCASOperational ?? existingAcas?.TCASOperational,
+            TCASRAActive = msg.TCASRaActive ?? existingAcas?.TCASRAActive,
 
             // Preserve DF 0/DF 16 fields
             SensitivityLevel = existingAcas?.SensitivityLevel,
@@ -100,10 +100,10 @@ public sealed class TargetStateAndStatusHandler : ITrackingHandler
             ReplyInformation = existingAcas?.ReplyInformation,
             ResolutionAdvisoryTerminated = existingAcas?.ResolutionAdvisoryTerminated,
             MultipleThreatEncounter = existingAcas?.MultipleThreatEncounter,
-            RacNotBelow = existingAcas?.RacNotBelow,
-            RacNotAbove = existingAcas?.RacNotAbove,
-            RacNotLeft = existingAcas?.RacNotLeft,
-            RacNotRight = existingAcas?.RacNotRight,
+            RACNotBelow = existingAcas?.RACNotBelow,
+            RACNotAbove = existingAcas?.RACNotAbove,
+            RACNotLeft = existingAcas?.RACNotLeft,
+            RACNotRight = existingAcas?.RACNotRight,
 
             LastUpdate = timestamp
         };

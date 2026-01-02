@@ -154,7 +154,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     {
         return _aircraft.Values
             .Where(a => !a.IsExpired(AircraftTimeout))
-            .OrderBy(a => a.Identification.Icao)
+            .OrderBy(a => a.Identification.ICAO)
             .ToList();
     }
 
@@ -196,7 +196,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         {
             Identification = new TrackedIdentification
             {
-                Icao = icao,
+                ICAO = icao,
                 Callsign = null,
                 Squawk = null,
                 Category = null,

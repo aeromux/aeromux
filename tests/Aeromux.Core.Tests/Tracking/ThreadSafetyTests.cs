@@ -52,7 +52,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull();
         aircraft!.Status.TotalMessages.Should().Be(threadCount * updatesPerThread);
-        aircraft.Identification.Icao.Should().Be("471DBC");
+        aircraft.Identification.ICAO.Should().Be("471DBC");
         aircraft.Identification.Callsign.Should().Be("WZZ476");
     }
 
@@ -371,7 +371,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
         // If aircraft exists, it should be valid
         if (aircraft != null)
         {
-            aircraft.Identification.Icao.Should().Be("471DBC");
+            aircraft.Identification.ICAO.Should().Be("471DBC");
             aircraft.Status.TotalMessages.Should().BeGreaterThan(0);
         }
     }
@@ -393,7 +393,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                 try
                 {
                     Interlocked.Increment(ref addedCount);
-                    args.Aircraft.Identification.Icao.Should().NotBeNullOrEmpty();
+                    args.Aircraft.Identification.ICAO.Should().NotBeNullOrEmpty();
                 }
                 catch
                 {
@@ -532,7 +532,7 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
 
         foreach (Aircraft aircraft in allAircraft)
         {
-            aircraft.Identification.Icao.Should().NotBeNullOrEmpty();
+            aircraft.Identification.ICAO.Should().NotBeNullOrEmpty();
             aircraft.Status.TotalMessages.Should().BeGreaterThan(0);
         }
     }

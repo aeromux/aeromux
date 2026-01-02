@@ -49,7 +49,7 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
         // Arrange
         Tracker = CreateTrackerWithTimeout(timeoutSeconds: 2);
         var expiredIcaos = new List<string>();
-        Tracker.OnAircraftExpired += (sender, args) => expiredIcaos.Add(args.Aircraft.Identification.Icao);
+        Tracker.OnAircraftExpired += (sender, args) => expiredIcaos.Add(args.Aircraft.Identification.ICAO);
 
         // Create 5 aircraft at different times
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));

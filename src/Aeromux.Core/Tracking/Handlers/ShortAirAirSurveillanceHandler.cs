@@ -91,16 +91,16 @@ public sealed class ShortAirAirSurveillanceHandler : ITrackingHandler
             ReplyInformation = msg.ReplyInformation,
 
             // Preserve TC 29 fields (TcasOperational, TcasRaActive)
-            TcasOperational = existingAcas?.TcasOperational,
-            TcasRaActive = existingAcas?.TcasRaActive,
+            TCASOperational = existingAcas?.TCASOperational,
+            TCASRAActive = existingAcas?.TCASRAActive,
 
             // Preserve DF 16 fields (RAC, MTE, RAT)
             ResolutionAdvisoryTerminated = existingAcas?.ResolutionAdvisoryTerminated,
             MultipleThreatEncounter = existingAcas?.MultipleThreatEncounter,
-            RacNotBelow = existingAcas?.RacNotBelow,
-            RacNotAbove = existingAcas?.RacNotAbove,
-            RacNotLeft = existingAcas?.RacNotLeft,
-            RacNotRight = existingAcas?.RacNotRight,
+            RACNotBelow = existingAcas?.RACNotBelow,
+            RACNotAbove = existingAcas?.RACNotAbove,
+            RACNotLeft = existingAcas?.RACNotLeft,
+            RACNotRight = existingAcas?.RACNotRight,
 
             LastUpdate = timestamp
         };

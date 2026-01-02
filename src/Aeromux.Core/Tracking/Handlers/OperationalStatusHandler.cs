@@ -75,13 +75,13 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         {
             capabilities = capabilities with
             {
-                TcasCapability = msg.CapabilityClass.TCASOperational,
+                TCASCapability = msg.CapabilityClass.TCASOperational,
                 CockpitDisplayTraffic = msg.CapabilityClass.CDTICapability,
-                Adsb1090ES = msg.CapabilityClass.ADSB1090ESCapability,
+                ADSB1090ES = msg.CapabilityClass.ADSB1090ESCapability,
                 AirReferencedVelocity = msg.CapabilityClass.ARVCapability,
                 TargetStateReporting = msg.CapabilityClass.TSCapability,
                 TrajectoryChangeLevel = msg.CapabilityClass.TCCapabilityLevel,
-                Uat978Support = msg.CapabilityClass.UATCapability,
+                UAT978Support = msg.CapabilityClass.UATCapability,
                 PositionOffsetApplied = msg.CapabilityClass.POA,
                 LowPower1090ES = msg.CapabilityClass.B2Low,
                 NACv = msg.CapabilityClass.NACv,
@@ -104,13 +104,13 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         {
             operationalMode = operationalMode with
             {
-                TcasRaActive = msg.OperationalMode.TCASRAActive,
+                TCASRAActive = msg.OperationalMode.TCASRAActive,
                 IdentSwitchActive = msg.OperationalMode.IdentSwitchActive,
                 ReceivingATCServices = msg.OperationalMode.ATCServices,
                 SingleAntenna = msg.OperationalMode.SingleAntenna,
                 SystemDesignAssurance = msg.OperationalMode.SDA,
-                GpsLateralOffset = msg.OperationalMode.GPSLatOffset,
-                GpsLongitudinalOffset = msg.OperationalMode.GPSLongOffset,
+                GPSLateralOffset = msg.OperationalMode.GPSLatOffset,
+                GPSLongitudinalOffset = msg.OperationalMode.GPSLongOffset,
                 LastUpdate = timestamp
             };
         }

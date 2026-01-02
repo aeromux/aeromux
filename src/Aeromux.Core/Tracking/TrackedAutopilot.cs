@@ -93,14 +93,14 @@ public sealed record TrackedAutopilot
     /// True if VNAV active (FMS vertical guidance).
     /// Null if TC 29 V2 not received.
     /// </summary>
-    public bool? VnavMode { get; init; }
+    public bool? VNAVMode { get; init; }
 
     /// <summary>
     /// LNAV (Lateral Navigation) mode engaged (TC 29 V2).
     /// True if LNAV active (FMS lateral guidance).
     /// Null if TC 29 V2 not received.
     /// </summary>
-    public bool? LnavMode { get; init; }
+    public bool? LNAVMode { get; init; }
 
     /// <summary>
     /// Altitude hold mode engaged (TC 29 V2).
