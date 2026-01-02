@@ -95,6 +95,9 @@ public sealed partial class MessageParser
         // Infer BDS code and parse data
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
 
+        // Track BDS code statistics
+        _messagesByBDS[bdsCode]++;
+
         return new CommBAltitudeReply(
             frame.IcaoAddress,
             frame.Timestamp,
@@ -157,6 +160,9 @@ public sealed partial class MessageParser
 
         // Infer BDS code and parse data
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
+
+        // Track BDS code statistics
+        _messagesByBDS[bdsCode]++;
 
         return new CommBIdentityReply(
             frame.IcaoAddress,

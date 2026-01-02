@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.ValueObjects;
 using Serilog;
@@ -71,6 +72,7 @@ public sealed partial class MessageParser
     private long _unsupportedMessages;  // Unsupported DF/TC (DF 24 Comm-D, rare formats)
     private readonly Dictionary<DownlinkFormat, long> _messagesByDF = new();
     private readonly Dictionary<int, long> _messagesByTC = new();
+    private readonly Dictionary<BdsCode, long> _messagesByBDS = new();
 
     public MessageParser(string? deviceName = null, int? deviceIndex = null)
     {
@@ -81,6 +83,12 @@ public sealed partial class MessageParser
         foreach (DownlinkFormat df in Enum.GetValues<DownlinkFormat>())
         {
             _messagesByDF[df] = 0;
+        }
+
+        // Initialize all BDS counters to 0
+        foreach (BdsCode bds in Enum.GetValues<BdsCode>())
+        {
+            _messagesByBDS[bds] = 0;
         }
     }
 
@@ -208,4 +216,9 @@ public sealed partial class MessageParser
     /// Message count by Type Code (for DF 17/18 only).
     /// </summary>
     public IReadOnlyDictionary<int, long> MessagesByTC => _messagesByTC;
+
+    /// <summary>
+    /// Message count by BDS Code (for DF 20/21 Comm-B only).
+    /// </summary>
+    public IReadOnlyDictionary<BdsCode, long> MessagesByBDS => _messagesByBDS;
 }

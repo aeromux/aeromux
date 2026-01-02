@@ -20,6 +20,7 @@ using RtlSdrManager.Modes;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.SignalProcessing;
 using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 
 namespace Aeromux.Infrastructure.Sdr;
@@ -555,6 +556,22 @@ public sealed class DeviceWorker : IDisposable
                         string.Join(", ", tcBreakdown));
                 }
 
+                // === BDS (Binary Data Subsystem) Breakdown ===
+                // Shows Comm-B (DF 20/21) register type distribution
+                var bdsBreakdown = _messageParser.MessagesByBDS
+                    .Where(kvp => kvp.Value > 0)
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Select(kvp => $"{kvp.Key.ToFormattedString()}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
+                    .ToList();
+
+                if (bdsBreakdown.Any())
+                {
+                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) BDS breakdown: {BDSBreakdown}",
+                        _config.Name,
+                        _config.DeviceIndex,
+                        string.Join(", ", bdsBreakdown));
+                }
+
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;
             }
@@ -658,7 +675,7 @@ public sealed class DeviceWorker : IDisposable
             foreach (KeyValuePair<DownlinkFormat, long> kvp in dfBreakdown)
             {
                 double percentage = msgParsed > 0 ? kvp.Value * 100.0 / msgParsed : 0.0;
-                Log.Information("  - DF {DF,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                Log.Information("  - DF {DF,-5}: {Count,8:N0} messages ({Percentage,5:F1}%)",
                     (int)kvp.Key, kvp.Value, percentage);
             }
         }
@@ -676,8 +693,26 @@ public sealed class DeviceWorker : IDisposable
             foreach (KeyValuePair<int, long> kvp in tcBreakdown)
             {
                 double percentage = totalTcMessages > 0 ? kvp.Value * 100.0 / totalTcMessages : 0.0;
-                Log.Information("  - TC {TC,2}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                Log.Information("  - TC {TC,-5}: {Count,8:N0} messages ({Percentage,5:F1}%)",
                     kvp.Key, kvp.Value, percentage);
+            }
+        }
+
+        // BDS (Binary Data Subsystem) breakdown for Comm-B messages (DF 20/21)
+        var bdsBreakdown = _messageParser.MessagesByBDS
+            .Where(kvp => kvp.Value > 0)
+            .OrderByDescending(kvp => kvp.Value)
+            .ToList();
+
+        if (bdsBreakdown.Any())
+        {
+            long totalBdsMessages = bdsBreakdown.Sum(kvp => kvp.Value);
+            Log.Information("BDS Code Breakdown (DF 20/21 Comm-B only):");
+            foreach (KeyValuePair<BdsCode, long> kvp in bdsBreakdown)
+            {
+                double percentage = totalBdsMessages > 0 ? kvp.Value * 100.0 / totalBdsMessages : 0.0;
+                Log.Information("  - {BDS,-8}: {Count,8:N0} messages ({Percentage,5:F1}%)",
+                    kvp.Key.ToFormattedString(), kvp.Value, percentage);
             }
         }
 
