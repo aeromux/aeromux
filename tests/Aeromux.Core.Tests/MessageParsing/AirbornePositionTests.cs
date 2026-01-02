@@ -33,6 +33,8 @@ public class AirbornePositionTests
     [InlineData(RealFrames.AirbornePos_73806C_Odd, "73806C",37600, AltitudeType.Barometric)]
     [InlineData(RealFrames.AirbornePos_80073B_Even, "80073B",39975, AltitudeType.Barometric)]
     [InlineData(RealFrames.AirbornePos_80073B_Odd, "80073B",39975, AltitudeType.Barometric)]
+    [InlineData(RealFrames.AirbornePos_3C4AD7_Even, "3C4AD7",40000, AltitudeType.Barometric)]
+    [InlineData(RealFrames.AirbornePos_3C4AD7_Odd, "3C4AD7",40000, AltitudeType.Barometric)]
     public void ParseMessage_DF17_TC12_AirbornePosition_Altitude(
         string hexFrame,
         string expectedIcao,
@@ -61,6 +63,8 @@ public class AirbornePositionTests
     [InlineData(RealFrames.AirbornePos_73806C_Odd, "73806C")]
     [InlineData(RealFrames.AirbornePos_80073B_Even, "80073B")]
     [InlineData(RealFrames.AirbornePos_80073B_Odd, "80073B")]
+    [InlineData(RealFrames.AirbornePos_3C4AD7_Even, "3C4AD7")]
+    [InlineData(RealFrames.AirbornePos_3C4AD7_Odd, "3C4AD7")]
     public void ParseMessage_DF17_AirbornePosition_Position_NullIfSingleFrame(
         string hexFrame,
         string expectedIcao)
@@ -91,6 +95,12 @@ public class AirbornePositionTests
         RealFrames.AirbornePos_80073B_Even,
         RealFrames.AirbornePos_80073B_Odd,
         "80073B",
+        46.0, 47.0,   // Latitude range
+        19.0, 20.0)]  // Longitude range
+    [InlineData(
+        RealFrames.AirbornePos_3C4AD7_Even,
+        RealFrames.AirbornePos_3C4AD7_Odd,
+        "3C4AD7",
         46.0, 47.0,   // Latitude range
         19.0, 20.0)]  // Longitude range
     public void ParseMessage_DF17_AirbornePosition_BothFrames_DecodesPosition(
@@ -142,6 +152,8 @@ public class AirbornePositionTests
     [InlineData(RealFrames.AirbornePos_80073B_Odd, AntennaFlag.DiversityAntenna)]
     [InlineData(RealFrames.AirbornePos_73806C_Even, AntennaFlag.DiversityAntenna)]
     [InlineData(RealFrames.AirbornePos_73806C_Odd, AntennaFlag.DiversityAntenna)]
+    [InlineData(RealFrames.AirbornePos_3C4AD7_Even, AntennaFlag.DiversityAntenna)]
+    [InlineData(RealFrames.AirbornePos_3C4AD7_Odd, AntennaFlag.DiversityAntenna)]
     public void ParseMessage_DF17_AirbornePosition_AntennaField(
         string hexFrame,
         AntennaFlag expectedAntennaFlag)

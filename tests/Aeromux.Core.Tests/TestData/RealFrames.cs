@@ -85,6 +85,23 @@ public static class RealFrames
     /// </remarks>
     public const string ShortAirAir_8418B4 = "02E197B0CE7989";
 
+    /// <summary>
+    /// Short Air-Air Surveillance (DF 0): ICAO 3C4AD7 at 39975 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7 (extracted from CRC)
+    /// Altitude: 39975 ft barometric
+    /// Vertical Status (VS): 0 (airborne)
+    /// Cross-link Capability (CC): 1 (DF 16 coordination supported)
+    /// Sensitivity Level (SL): 7 (maximum sensitivity)
+    /// Reply Information (RI): 3 (Vertical-only Resolution Advisory)
+    /// Altitude Code (AC): 6551 (Gillham coded)
+    /// DF: 0 (ACAS coordination message)
+    /// RSSI: -22.7 dBFS
+    /// </remarks>
+    public const string ShortAirAir_3C4AD7 = "02E19997DC7B7E";
+
     // ========================================
     // DF 4: Surveillance Altitude Reply
     // ========================================
@@ -156,6 +173,22 @@ public static class RealFrames
     /// RSSI: -21.4 dBFS
     /// </remarks>
     public const string Surveillance_Identity_49D414 = "28000C0221EAC1";
+
+    /// <summary>
+    /// Surveillance Identity Reply (DF 5): ICAO 3C4AD7, Squawk 3205
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7 (extracted from CRC)
+    /// Squawk: 3205 (Mode A identity code)
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Identity Code (ID): 2585 (Gillham coded)
+    /// DF: 5
+    /// RSSI: -23.2 dBFS
+    /// </remarks>
+    public const string Surveillance_Identity_3C4AD7 = "28000A198F21A4";
 
     // ========================================
     // DF 11: All-Call Reply
@@ -257,6 +290,23 @@ public static class RealFrames
     /// RSSI: -25.8 dBFS
     /// </remarks>
     public const string LongAirAir_440C8E = "80E1969058B506959A8ECB8C687B";
+
+    /// <summary>
+    /// Long Air-Air Surveillance (DF 16): ICAO 3C4AD7 at 40000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7 (extracted from CRC)
+    /// Altitude: 40000 ft barometric
+    /// Vertical Status (VS): 0 (airborne)
+    /// Sensitivity Level (SL): 7
+    /// Reply Information (RI): 3
+    /// Altitude Code (AC): 6552 (Gillham coded)
+    /// Message, ACAS (MV): 58CD830CAC7784
+    /// DF: 16
+    /// RSSI: -16.6 dBFS
+    /// </remarks>
+    public const string LongAirAir_3C4AD7 = "80E1999858CD830CAC7784F47446";
 
     // ========================================
     // DF 17: Extended Squitter (ADS-B)
@@ -393,6 +443,46 @@ public static class RealFrames
     /// </remarks>
     public const string AirbornePos_73806C_Odd = "8D73806C60C1871F9C5A043E868F";
 
+    /// <summary>
+    /// Airborne Position (TC 11, Barometric, Even): ICAO 3C4AD7 at 40000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7
+    /// Altitude: 40000 ft barometric
+    /// CPR Format: Even (F=0)
+    /// CPR Lat: 99947 (0x1866B)
+    /// CPR Lon: 30557 (0x775D)
+    /// CPR NUCp/NIC: 7
+    /// Decoded Position: 46.57521°N, 19.60798°E
+    /// Pairs with AirbornePos_3C4AD7_Odd for global decode
+    /// DF: 17
+    /// TC: 11
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -18.6 dBFS
+    /// </remarks>
+    public const string AirbornePos_3C4AD7_Even = "8D3C4AD758CD830CD6775D02D1E6";
+
+    /// <summary>
+    /// Airborne Position (TC 11, Barometric, Odd): ICAO 3C4AD7 at 40000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7
+    /// Altitude: 40000 ft barometric
+    /// CPR Format: Odd (F=1)
+    /// CPR Lat: 83007 (0x1443F)
+    /// CPR Lon: 23385 (0x5B59)
+    /// CPR NUCp/NIC: 7
+    /// Decoded Position: 46.57603°N, 19.60572°E
+    /// Pairs with AirbornePos_3C4AD7_Even for global decode
+    /// DF: 17
+    /// TC: 11
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -20.8 dBFS
+    /// </remarks>
+    public const string AirbornePos_3C4AD7_Odd = "8D3C4AD758CD86887E5B59147C88";
+
     // TC 19: Airborne Velocity
 
     /// <summary>
@@ -466,6 +556,24 @@ public static class RealFrames
     /// RSSI: -21.2 dBFS
     /// </remarks>
     public const string AirborneVel_73806C_Climbing = "8D73806C990D1E25B03C8E";
+
+    /// <summary>
+    /// Airborne Velocity (TC 19, Subtype 1): Ground speed 404 kts, Heading 299°, Level
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7
+    /// Subtype: 1 (Ground speed, subsonic)
+    /// Velocity: 404 kts ground speed
+    /// Heading: 299° (track angle)
+    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// GNSS delta: -1300 ft
+    /// DF: 17
+    /// TC: 19
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -24.7 dBFS
+    /// </remarks>
+    public const string AirborneVel_3C4AD7_Level = "8D3C4AD7990D6617F004B54E6FF0";
 
     // TC 28: Emergency/Priority Status
 
@@ -890,6 +998,23 @@ public static class RealFrames
     /// </remarks>
     public const string CommB_Altitude_80073B = "A0001997CE200030A40180DD14CF";
 
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20): ICAO 3C4AD7 at 40000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7 (extracted from CRC)
+    /// Altitude: 40000 ft barometric
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6552 (Gillham coded)
+    /// Message, Comm-B (MB): CE200030AA0000
+    /// DF: 20
+    /// RSSI: -21.1 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_3C4AD7 = "A0001998CE200030AA0000A4C208";
+
     // ========================================
     // DF 21: Comm-B Identity Reply
     // ========================================
@@ -927,4 +1052,39 @@ public static class RealFrames
     /// RSSI: -21.1 dBFS
     /// </remarks>
     public const string CommB_Identity_49D414 = "A8000C02C4662330A8000003FC60";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21): ICAO 3C4AD7, Squawk 3205
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7 (extracted from CRC)
+    /// Squawk: 3205 (Mode A identity code)
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Identity Code (ID): 2585 (Gillham coded)
+    /// Message, Comm-B (MB): CE200030AA0000
+    /// DF: 21
+    /// RSSI: -22.6 dBFS
+    /// </remarks>
+    public const string CommB_Identity_3C4AD7 = "A8000A19CE200030AA00006E6FC0";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21): ICAO 3C4AD7, Squawk 3205, Callsign "DLH755"
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 3C4AD7 (extracted from CRC)
+    /// Squawk: 3205 (Mode A identity code)
+    /// Callsign: "DLH755" (Lufthansa flight, encoded in Comm-B message)
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Identity Code (ID): 2585 (Gillham coded)
+    /// Message, Comm-B (MB): 2010C237D75820
+    /// DF: 21
+    /// RSSI: -21.3 dBFS
+    /// </remarks>
+    public const string CommB_Identity_3C4AD7_WithCallsign = "A8000A192010C237D7582024F33E";
 }

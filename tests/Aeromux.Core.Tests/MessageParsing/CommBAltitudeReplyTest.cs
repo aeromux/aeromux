@@ -35,6 +35,7 @@ public class CommBAltitudeReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Altitude_4D2407, "4D2407", DownlinkFormat.CommBAltitudeReply)]
     [InlineData(RealFrames.CommB_Altitude_80073B, "80073B", DownlinkFormat.CommBAltitudeReply)]
+    [InlineData(RealFrames.CommB_Altitude_3C4AD7, "3C4AD7", DownlinkFormat.CommBAltitudeReply)]
     public void ParseMessage_DF20_CommB_BasicFields(
         string hexFrame,
         string expectedIcao,
@@ -63,6 +64,7 @@ public class CommBAltitudeReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Altitude_4D2407, 33000)]
     [InlineData(RealFrames.CommB_Altitude_80073B, 39975)]
+    [InlineData(RealFrames.CommB_Altitude_3C4AD7, 40000)]
     public void ParseMessage_DF20_CommB_Altitude(
         string hexFrame,
         int expectedAltitude)
@@ -90,6 +92,7 @@ public class CommBAltitudeReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Altitude_4D2407, FlightStatus.AirborneNormal)]
     [InlineData(RealFrames.CommB_Altitude_80073B, FlightStatus.AirborneNormal)]
+    [InlineData(RealFrames.CommB_Altitude_3C4AD7, FlightStatus.AirborneNormal)]
     public void ParseMessage_DF20_CommB_FlightStatus(
         string hexFrame,
         FlightStatus expectedFlightStatus)
@@ -115,6 +118,7 @@ public class CommBAltitudeReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Altitude_4D2407, 0)]
     [InlineData(RealFrames.CommB_Altitude_80073B, 0)]
+    [InlineData(RealFrames.CommB_Altitude_3C4AD7, 0)]
     public void ParseMessage_DF20_CommB_DownlinkRequest(
         string hexFrame,
         int expectedDownlinkRequest)
@@ -140,6 +144,7 @@ public class CommBAltitudeReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Altitude_4D2407, 0)]
     [InlineData(RealFrames.CommB_Altitude_80073B, 0)]
+    [InlineData(RealFrames.CommB_Altitude_3C4AD7, 0)]
     public void ParseMessage_DF20_CommB_UtilityMessage(
         string hexFrame,
         int expectedUtilityMessage)

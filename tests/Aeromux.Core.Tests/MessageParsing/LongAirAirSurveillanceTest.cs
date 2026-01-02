@@ -30,6 +30,7 @@ public class LongAirAirSurveillanceTest
     [InlineData(RealFrames.LongAirAir_71C011, "71C011", 31000, AltitudeType.Barometric)]
     [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", 35000, AltitudeType.Barometric)]
     [InlineData(RealFrames.LongAirAir_80073B, "80073B", 39975, AltitudeType.Barometric)]
+    [InlineData(RealFrames.LongAirAir_3C4AD7, "3C4AD7", 40000, AltitudeType.Barometric)]
     public void ParseMessage_DF16_LongAirAirSurveillance_Altitude(
         string hexFrame,
         string expectedIcao,
@@ -57,6 +58,7 @@ public class LongAirAirSurveillanceTest
     [InlineData(RealFrames.LongAirAir_71C011, "71C011", VerticalStatus.Airborne)]
     [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", VerticalStatus.Airborne)]
     [InlineData(RealFrames.LongAirAir_80073B, "80073B", VerticalStatus.Airborne)]
+    [InlineData(RealFrames.LongAirAir_3C4AD7, "3C4AD7", VerticalStatus.Airborne)]
     public void ParseMessage_DF16_LongAirAirSurveillance_VerticalStatus(
         string hexFrame,
         string expectedIcao,
@@ -81,6 +83,7 @@ public class LongAirAirSurveillanceTest
     [InlineData(RealFrames.LongAirAir_71C011, "71C011", 7)]
     [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", 7)]
     [InlineData(RealFrames.LongAirAir_80073B, "80073B", 7)]
+    [InlineData(RealFrames.LongAirAir_3C4AD7, "3C4AD7", 7)]
     public void ParseMessage_DF16_LongAirAirSurveillance_SensitivityLevel(
         string hexFrame,
         string expectedIcao,
@@ -105,6 +108,7 @@ public class LongAirAirSurveillanceTest
     [InlineData(RealFrames.LongAirAir_71C011, "71C011", AcasReplyInformation.VerticalOnlyResolutionCapability)]
     [InlineData(RealFrames.LongAirAir_440C8E, "440C8E", AcasReplyInformation.VerticalOnlyResolutionCapability)]
     [InlineData(RealFrames.LongAirAir_80073B, "80073B", AcasReplyInformation.VerticalOnlyResolutionCapability)]
+    [InlineData(RealFrames.LongAirAir_3C4AD7, "3C4AD7", AcasReplyInformation.VerticalOnlyResolutionCapability)]
     public void ParseMessage_DF16_LongAirAirSurveillance_ReplyInformation(
         string hexFrame,
         string expectedIcao,
@@ -129,6 +133,7 @@ public class LongAirAirSurveillanceTest
     [InlineData(RealFrames.LongAirAir_71C011, "71C011")]
     [InlineData(RealFrames.LongAirAir_440C8E, "440C8E")]
     [InlineData(RealFrames.LongAirAir_80073B, "80073B")]
+    [InlineData(RealFrames.LongAirAir_3C4AD7, "3C4AD7")]
     public void ParseMessage_DF16_LongAirAirSurveillance_AcasInvalid_WhenVdsIsNot0x30(
         string hexFrame,
         string expectedIcao)

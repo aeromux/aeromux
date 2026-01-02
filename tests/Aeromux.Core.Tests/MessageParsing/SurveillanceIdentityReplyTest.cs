@@ -29,6 +29,7 @@ public class SurveillanceIdentityReplyTest
     [Theory]
     [InlineData(RealFrames.Surveillance_Identity_49D414, "4D2407", "1420")]
     [InlineData(RealFrames.Surveillance_Identity_80073B, "80073B", "3205")]
+    [InlineData(RealFrames.Surveillance_Identity_3C4AD7, "3C4AD7", "3205")]
     public void ParseMessage_DF5_Surveillance_IdentityReply_Squawk(
         string hexFrame,
         string expectedIcao,

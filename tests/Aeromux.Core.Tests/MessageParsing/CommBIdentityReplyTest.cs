@@ -35,6 +35,8 @@ public class CommBIdentityReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Identity_4D2407, "4D2407", DownlinkFormat.CommBIdentityReply)]
     [InlineData(RealFrames.CommB_Identity_49D414, "49D414", DownlinkFormat.CommBIdentityReply)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7, "3C4AD7", DownlinkFormat.CommBIdentityReply)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7_WithCallsign, "3C4AD7", DownlinkFormat.CommBIdentityReply)]
     public void ParseMessage_DF21_CommB_BasicFields(
         string hexFrame,
         string expectedIcao,
@@ -63,6 +65,8 @@ public class CommBIdentityReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Identity_4D2407, "6415")]
     [InlineData(RealFrames.CommB_Identity_49D414, "1420")]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7, "3205")]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7_WithCallsign, "3205")]
     public void ParseMessage_DF21_CommB_SquawkCode(
         string hexFrame,
         string expectedSquawk)
@@ -89,6 +93,8 @@ public class CommBIdentityReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Identity_4D2407, FlightStatus.AirborneNormal)]
     [InlineData(RealFrames.CommB_Identity_49D414, FlightStatus.AirborneNormal)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7, FlightStatus.AirborneNormal)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7_WithCallsign, FlightStatus.AirborneNormal)]
     public void ParseMessage_DF21_CommB_FlightStatus(
         string hexFrame,
         FlightStatus expectedFlightStatus)
@@ -114,6 +120,8 @@ public class CommBIdentityReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Identity_4D2407, 0)]
     [InlineData(RealFrames.CommB_Identity_49D414, 0)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7, 0)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7_WithCallsign, 0)]
     public void ParseMessage_DF21_CommB_DownlinkRequest(
         string hexFrame,
         int expectedDownlinkRequest)
@@ -139,6 +147,8 @@ public class CommBIdentityReplyTest
     [Theory]
     [InlineData(RealFrames.CommB_Identity_4D2407, 0)]
     [InlineData(RealFrames.CommB_Identity_49D414, 0)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7, 0)]
+    [InlineData(RealFrames.CommB_Identity_3C4AD7_WithCallsign, 0)]
     public void ParseMessage_DF21_CommB_UtilityMessage(
         string hexFrame,
         int expectedUtilityMessage)

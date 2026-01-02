@@ -35,6 +35,8 @@ public class AirborneVelocityTests
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
     [InlineData(RealFrames.AirborneVel_39CEAD_Level, "39CEAD", 400,
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
+    [InlineData(RealFrames.AirborneVel_3C4AD7_Level, "3C4AD7", 404,
+        VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
     public void ParseMessage_DF17_TC19_AirborneVelocity_Velocity(
         string hexFrame,
         string expectedIcao,
@@ -65,6 +67,7 @@ public class AirborneVelocityTests
     [InlineData(RealFrames.AirborneVel_73806C_Climbing, "73806C", 896)]
     [InlineData(RealFrames.AirborneVel_4D2407_Level, "4D2407", 0)]
     [InlineData(RealFrames.AirborneVel_39CEAD_Level, "39CEAD", 0)]
+    [InlineData(RealFrames.AirborneVel_3C4AD7_Level, "3C4AD7", 0)]
     public void ParseMessage_DF17_TC19_AirborneVelocity_VerticalRate(
         string hexFrame,
         string expectedIcao,
@@ -91,6 +94,7 @@ public class AirborneVelocityTests
     [InlineData(RealFrames.AirborneVel_73806C_Climbing, "73806C", 317)]
     [InlineData(RealFrames.AirborneVel_4D2407_Level, "4D2407", 117)]
     [InlineData(RealFrames.AirborneVel_39CEAD_Level, "39CEAD", 276)]
+    [InlineData(RealFrames.AirborneVel_3C4AD7_Level, "3C4AD7", 299)]
     public void ParseMessage_DF17_TC19_AirborneVelocity_Heading(
         string hexFrame,
         string expectedIcao,
