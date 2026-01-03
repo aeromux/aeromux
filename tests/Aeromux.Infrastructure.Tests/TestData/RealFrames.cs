@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-namespace Aeromux.Core.Tests.TestData;
+namespace Aeromux.Infrastructure.Tests.TestData;
 
 /// <summary>
 /// Real Mode-S frames captured from live aircraft or from ADS-B specifications.

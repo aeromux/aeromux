@@ -34,13 +34,40 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// Any 0x1A byte in the frame data must be doubled (0x1A 0x1A) to prevent
 /// confusion with frame start markers. This is transparent to the receiver
 /// which undoes the escaping during parsing.
+///
+/// Timestamp Encoding:
+/// Timestamps are encoded as relative 12 MHz counters from the encoder's reference time (creation time).
+/// This avoids year-wrapping issues when masking to 48 bits for wire protocol.
+/// The 48-bit limitation is acceptable: wraps every ~271 days, sufficient for real-time operation.
 /// </remarks>
-public static class BeastEncoder
+public class BeastEncoder
 {
     /// <summary>
     /// Escape byte used for frame delimiting in Beast protocol.
     /// </summary>
     private const byte ESC = 0x1A;
+
+    /// <summary>
+    /// Reference time for relative timestamp calculations (typically encoder creation time).
+    /// </summary>
+    private readonly DateTime _referenceTime;
+
+    /// <summary>
+    /// Creates a new BeastEncoder with current UTC time as reference.
+    /// </summary>
+    public BeastEncoder()
+    {
+        _referenceTime = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Creates a new BeastEncoder with a specific reference time (for testing).
+    /// </summary>
+    /// <param name="referenceTime">Reference time for timestamp calculations</param>
+    public BeastEncoder(DateTime referenceTime)
+    {
+        _referenceTime = referenceTime;
+    }
 
     /// <summary>
     /// Writes a byte to the output buffer, escaping it if it equals the ESC byte (0x1A).
@@ -69,7 +96,7 @@ public static class BeastEncoder
     /// Output format: [ESC][Type][Timestamp:6][Signal:1][Data:7/14]
     /// Actual size may be larger than minimal due to escape byte doubling in data.
     /// </remarks>
-    public static byte[] Encode(ValidatedFrame frame)
+    public byte[] Encode(ValidatedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
 
@@ -90,16 +117,20 @@ public static class BeastEncoder
         // Write message type indicator ('2' for short 56-bit frames, '3' for long 112-bit frames)
         output[pos++] = isLong ? (byte)'3' : (byte)'2';
 
-        // Write 48-bit timestamp as 12 MHz counter (big-endian encoding, with escaping)
-        // Convert .NET DateTime ticks (100ns resolution) to 12 MHz counter
-        // Calculation: ticks * 12 MHz / 10 MHz = ticks * 1.2
-        // Each timestamp byte must be escaped if it equals 0x1A to maintain frame boundaries
-        ulong timestamp12MHz = (ulong)(frame.Timestamp.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        // Calculate relative timestamp from encoder's reference time (creation time)
+        // This avoids year-wrapping issues when masking to 48 bits for wire protocol
+        // The 48-bit limitation is acceptable: wraps every ~271 days, sufficient for real-time operation
+        TimeSpan elapsed = frame.Timestamp - _referenceTime;
+        long timestamp12MHz = (long)(elapsed.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+
+        // Mask to 48 bits (natural protocol limitation)
+        ulong timestamp48bit = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;
+
         for (int i = 0; i < 6; i++)
         {
             // Extract bytes from MSB to LSB (big-endian)
             // Shift: 40, 32, 24, 16, 8, 0 bits
-            byte timestampByte = (byte)(timestamp12MHz >> (40 - (i * 8)));
+            byte timestampByte = (byte)(timestamp48bit >> (40 - (i * 8)));
             pos = WriteEscapedByte(output, pos, timestampByte);
         }
 
@@ -123,7 +154,7 @@ public static class BeastEncoder
             pos = WriteEscapedByte(output, pos, b);
         }
 
-        // Return slice of actual used bytes (may be less than maxLength if no ESC bytes present)
+        // Return slice of actual used bytes (might be less than maxLength if no ESC bytes present)
         return output[..pos];
     }
 
@@ -144,9 +175,8 @@ public static class BeastEncoder
     /// </remarks>
     public static byte[] EncodeReceiverId(Guid receiverUuid)
     {
-        // Extract first 64 bits of UUID
+        // Extract first 8 bytes of UUID directly to avoid endianness issues
         byte[] uuidBytes = receiverUuid.ToByteArray();
-        ulong receiverId = BitConverter.ToUInt64(uuidBytes, 0);
 
         // Beast receiver ID message: ESC 0xe3 [8 bytes with escaping]
         byte[] buffer = new byte[18]; // Worst case: all 8 bytes escaped
@@ -155,14 +185,14 @@ public static class BeastEncoder
         buffer[pos++] = ESC;
         buffer[pos++] = 0xe3;
 
-        // Write 8-byte receiver ID with escaping (big-endian)
-        for (int i = 7; i >= 0; i--)
+        // Write first 8 bytes of UUID directly with escaping
+        // This matches readsb's approach of sending the receiver ID bytes as-is
+        for (int i = 0; i < 8; i++)
         {
-            byte idByte = (byte)((receiverId >> (i * 8)) & 0xFF);
-            pos = WriteEscapedByte(buffer, pos, idByte);
+            pos = WriteEscapedByte(buffer, pos, uuidBytes[i]);
         }
 
-        // Return actual length (may be less than 18 if no escaping needed)
-        return buffer[0..pos];
+        // Return actual length (might be less than 18 if no escaping needed)
+        return buffer[..pos];
     }
 }

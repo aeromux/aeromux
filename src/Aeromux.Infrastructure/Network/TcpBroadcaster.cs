@@ -62,6 +62,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     private readonly IFrameStream _frameStream;
     private readonly BroadcastFormat _format;
     private readonly Guid? _receiverUuid;
+    private readonly BeastEncoder? _beastEncoder;
     private ChannelReader<ProcessedFrame>? _dataReader;
     private bool _receiverIdSent;  // Track at broadcaster level (one subscription per broadcaster)
 
@@ -95,6 +96,12 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         _frameStream = frameStream;
         _format = format;
         _receiverUuid = receiverUuid;
+
+        // Create encoder once with reference time = TcpBroadcaster creation time
+        if (format == BroadcastFormat.Beast)
+        {
+            _beastEncoder = new BeastEncoder();
+        }
     }
 
     /// <summary>
@@ -224,7 +231,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
             // This is where format selection happens (controlled by constructor parameter)
             byte[]? encoded = _format switch
             {
-                BroadcastFormat.Beast => BeastEncoder.Encode(data.Frame),
+                BroadcastFormat.Beast => _beastEncoder!.Encode(data.Frame),
                 BroadcastFormat.Json => JsonEncoder.Encode(data.ParsedMessage),
                 BroadcastFormat.Sbs => SbsEncoder.Encode(data.ParsedMessage),
                 _ => throw new InvalidOperationException($"Unknown format: {_format}")

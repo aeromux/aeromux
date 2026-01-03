@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-namespace Aeromux.Core.Tests.Builders;
+namespace Aeromux.Infrastructure.Tests.Builders;
 
 /// <summary>
 /// Fluent builder for constructing ValidatedFrame instances for testing.
@@ -22,11 +22,11 @@ namespace Aeromux.Core.Tests.Builders;
 /// </summary>
 public class ValidatedFrameBuilder
 {
-    private byte[] _data = Array.Empty<byte>();
+    private byte[] _data = [];
     private DateTime _timestamp = DateTime.UtcNow;
     private string _icaoAddress = "000000";
     private byte _signalStrength = 255;
-    private bool _wasCorrected = false;
+    private bool _wasCorrected;
 
     /// <summary>
     /// Sets the frame data from a hex string.
