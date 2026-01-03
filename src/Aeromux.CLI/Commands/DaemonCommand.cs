@@ -45,13 +45,25 @@ public class DaemonSettings : GlobalSettings
     [Description("SBS protocol port (default: 30104, VRS-compatible)")]
     public int? SbsPort { get; set; }
 
+    [CommandOption("--beast-output-enabled")]
+    [Description("Enable Beast binary protocol output (default: true)")]
+    public bool? BeastOutputEnabled { get; set; }
+
+    [CommandOption("--json-output-enabled")]
+    [Description("Enable JSON streaming output (default: false)")]
+    public bool? JsonOutputEnabled { get; set; }
+
+    [CommandOption("--sbs-output-enabled")]
+    [Description("Enable SBS BaseStation protocol output (default: false)")]
+    public bool? SbsOutputEnabled { get; set; }
+
     [CommandOption("--bind-address")]
     [Description(
-        "IP address to bind to (default: 0.0.0.0 for all interfaces, examples: 127.0.0.1, 192.168.1.100, 10.2.25.1)")]
+        "IP address to bind to (default: 0.0.0.0 for all interfaces)")]
     public string? BindAddress { get; set; } // CLI uses string, parsed to IPAddress in validation
 
     [CommandOption("--receiver-uuid")]
-    [Description("Receiver UUID for MLAT triangulation (overrides YAML config, RFC 4122 format)")]
+    [Description("Receiver UUID for MLAT triangulation (format: RFC 4122)")]
     public string? ReceiverUuid { get; set; }
 }
 
@@ -97,9 +109,6 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // Get configuration loaded by ConfigurationInterceptor
             AeromuxConfig config = ConfigurationProvider.Current;
 
-            // Check daemon-specific preconditions (business logic validation)
-            CheckDaemonPreconditions(config);
-
             Log.Information("Starting device stream for all enabled devices");
 
             // Validate and resolve network configuration (priority: CLI > YAML > Default)
@@ -109,9 +118,23 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
             Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
 
+            // Validate and resolve output enabled flags (priority: CLI > YAML > Default)
+            bool beastEnabled = ValidateOutputEnabled(
+                settings.BeastOutputEnabled, config.Network.BeastOutputEnabled, "Beast");
+            bool jsonEnabled = ValidateOutputEnabled(
+                settings.JsonOutputEnabled, config.Network.JsonOutputEnabled, "JSON");
+            bool sbsEnabled = ValidateOutputEnabled(
+                settings.SbsOutputEnabled, config.Network.SbsOutputEnabled, "SBS");
+
             Log.Information(
-                "Network configuration: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
-                beastPort, jsonPort, sbsPort, bindAddress);
+                "Network configuration: Beast={BeastPort} ({BeastStatus}), JSON={JsonPort} ({JsonStatus}), SBS={SbsPort} ({SbsStatus}), Bind={BindAddress}",
+                beastPort, beastEnabled ? "enabled" : "disabled",
+                jsonPort, jsonEnabled ? "enabled" : "disabled",
+                sbsPort, sbsEnabled ? "enabled" : "disabled",
+                bindAddress);
+
+            // Check daemon-specific preconditions (business logic validation)
+            CheckDaemonPreconditions(config, beastEnabled, jsonEnabled, sbsEnabled);
 
             // Create DeviceStream (uninitialized - devices not opened yet)
             var enabledDevices = config.Devices!.Where(d => d.Enabled).ToList();
@@ -168,7 +191,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             aircraftTracker.StartConsuming(deviceStream.Subscribe(), cancellationToken);
             Log.Information("Aircraft state tracker started");
 
-            // Now create and start TCP broadcasters
+            // Create and start TCP broadcasters conditionally based on enabled flags
             // Each TcpBroadcaster.StartAsync() will call Subscribe() on the device stream
             // This gives each broadcaster its own channel reader for independent consumption
             // Receiver UUID passed to Beast broadcaster enables MLAT identification (sent as 0xe3 message)
@@ -176,33 +199,52 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // IMPORTANT: Staggered startup with 50ms delays between broadcasters
             // This prevents a race condition in .NET's Socket.ValidateBlockingMode() on macOS ARM64
             // where concurrent socket initialization can corrupt internal state fields, causing AccessViolationException
-            var beastBroadcaster = new TcpBroadcaster(
-                beastPort,
-                bindAddress,
-                deviceStream,
-                BroadcastFormat.Beast,
-                receiverUuid);
-            await beastBroadcaster.StartAsync(cancellationToken);
-            await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+            TcpBroadcaster? beastBroadcaster = null;
+            TcpBroadcaster? jsonBroadcaster = null;
+            TcpBroadcaster? sbsBroadcaster = null;
 
-            var jsonBroadcaster = new TcpBroadcaster(
-                jsonPort,
-                bindAddress,
-                deviceStream,
-                BroadcastFormat.Json);
-            await jsonBroadcaster.StartAsync(cancellationToken);
-            await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+            if (beastEnabled)
+            {
+                beastBroadcaster = new TcpBroadcaster(
+                    beastPort,
+                    bindAddress,
+                    deviceStream,
+                    BroadcastFormat.Beast,
+                    receiverUuid);
+                await beastBroadcaster.StartAsync(cancellationToken);
+                Log.Information("Beast broadcaster started on {BindAddress}:{Port}", bindAddress, beastPort);
+                await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+            }
 
-            var sbsBroadcaster = new TcpBroadcaster(
-                sbsPort,
-                bindAddress,
-                deviceStream,
-                BroadcastFormat.Sbs);
-            await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+            if (jsonEnabled)
+            {
+                jsonBroadcaster = new TcpBroadcaster(
+                    jsonPort,
+                    bindAddress,
+                    deviceStream,
+                    BroadcastFormat.Json);
+                await jsonBroadcaster.StartAsync(cancellationToken);
+                Log.Information("JSON broadcaster started on {BindAddress}:{Port}", bindAddress, jsonPort);
+                await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+            }
 
-            Log.Information(
-                "TCP broadcasters started: Beast={BeastPort}, JSON={JsonPort}, SBS={SbsPort}, Bind={BindAddress}",
-                beastPort, jsonPort, sbsPort, bindAddress);
+            if (sbsEnabled)
+            {
+                sbsBroadcaster = new TcpBroadcaster(
+                    sbsPort,
+                    bindAddress,
+                    deviceStream,
+                    BroadcastFormat.Sbs);
+                await sbsBroadcaster.StartAsync(cancellationToken);
+                Log.Information("SBS broadcaster started on {BindAddress}:{Port}", bindAddress, sbsPort);
+            }
+
+            int enabledCount = (beastEnabled ? 1 : 0) + (jsonEnabled ? 1 : 0) + (sbsEnabled ? 1 : 0);
+            if (enabledCount == 0)
+            {
+                Log.Warning("All TCP output formats disabled - no broadcasters started");
+            }
+            Log.Information("TCP broadcasters started: {Count} format(s) enabled", enabledCount);
 
             // Create linked CTS to handle both interactive (CTRL+C) and service (SIGTERM) shutdown
             using var shutdownCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -255,12 +297,23 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 Console.WriteLine("Shutting down TCP broadcasters, tracker, and device stream...");
                 Log.Information("Shutting down TCP broadcasters, tracker, and device stream...");
 
-                // Step 1: Stop TCP broadcasters first
+                // Step 1: Stop TCP broadcasters first (null-safe disposal)
                 // Each DisposeAsync waits for background tasks then disposes clients
                 // This unsubscribes from device stream and stops consuming data
-                await beastBroadcaster.DisposeAsync();
-                await jsonBroadcaster.DisposeAsync();
-                await sbsBroadcaster.DisposeAsync();
+                if (beastBroadcaster != null)
+                {
+                    await beastBroadcaster.DisposeAsync();
+                }
+
+                if (jsonBroadcaster != null)
+                {
+                    await jsonBroadcaster.DisposeAsync();
+                }
+
+                if (sbsBroadcaster != null)
+                {
+                    await sbsBroadcaster.DisposeAsync();
+                }
 
                 // Step 2: Stop device stream
                 // Closes RTL-SDR devices and completes internal broadcast channel
@@ -436,6 +489,26 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
     }
 
     /// <summary>
+    /// Validates and resolves output enabled flag from CLI parameter or config value.
+    /// Priority order: CLI parameter > YAML config > Default value.
+    ///
+    /// ENABLE/DISABLE SEMANTICS:
+    /// - true: Broadcaster is created, started, and listens on configured port
+    /// - false: Broadcaster is NOT created, port is not listened on, clients cannot connect
+    /// - Used to selectively enable output formats based on deployment requirements
+    /// </summary>
+    /// <param name="cliEnabled">Optional enabled flag from CLI parameter.</param>
+    /// <param name="configEnabled">Enabled flag from configuration file.</param>
+    /// <param name="formatName">Name of the format for logging (e.g., "Beast", "JSON").</param>
+    /// <returns>Validated enabled flag.</returns>
+    private static bool ValidateOutputEnabled(bool? cliEnabled, bool configEnabled, string formatName)
+    {
+        bool enabled = cliEnabled ?? configEnabled;
+        Log.Debug("{Format} output {Status}", formatName, enabled ? "enabled" : "disabled");
+        return enabled;
+    }
+
+    /// <summary>
     /// Checks daemon-specific preconditions (high-level business logic validation).
     /// Verifies that the daemon can operate with the loaded configuration.
     /// Device-specific validation (frequencies, gains, etc.) is done in DeviceWorker.OpenDevice().
@@ -443,12 +516,20 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
     /// VALIDATION STRATEGY:
     /// - Devices: At least one must be enabled
     /// - Ports: Must be 1024-65535 (non-privileged, OS will detect conflicts on bind)
+    /// - Only validates ports for ENABLED output formats
     /// - Receiver location: Optional, but if provided, lat/lon must both be specified
     /// Port conflict detection is deferred to OS (bind will fail if port is in use).
     /// </summary>
     /// <param name="config">The configuration to check.</param>
+    /// <param name="beastEnabled">Whether Beast output is enabled.</param>
+    /// <param name="jsonEnabled">Whether JSON output is enabled.</param>
+    /// <param name="sbsEnabled">Whether SBS output is enabled.</param>
     /// <exception cref="InvalidOperationException">Thrown when daemon preconditions are not met.</exception>
-    private static void CheckDaemonPreconditions(AeromuxConfig config)
+    private static void CheckDaemonPreconditions(
+        AeromuxConfig config,
+        bool beastEnabled,
+        bool jsonEnabled,
+        bool sbsEnabled)
     {
         // Check SDR devices - at least one device must be enabled to run daemon
         if (config.Devices?.Any(d => d.Enabled) != true)
@@ -457,27 +538,28 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 "Cannot start daemon: At least one SDR device must be enabled in configuration");
         }
 
-        // Check network ports - All TCP ports must be in valid range
+        // Check network ports - Only validate ports for ENABLED outputs
         // Ports below 1024 require root/admin privileges, and 65535 is the maximum port number
         // Note: Port conflict validation is deferred to the OS (bind will fail if port is in use)
-        if (config.Network?.BeastPort is < 1024 or > 65535)
+        if (beastEnabled && config.Network?.BeastPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
                 $"Cannot start daemon: Beast port must be between 1024 and 65535, but was {config.Network?.BeastPort}");
         }
 
-        if (config.Network?.JsonPort is < 1024 or > 65535)
+        if (jsonEnabled && config.Network?.JsonPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
                 $"Cannot start daemon: JSON port must be between 1024 and 65535, but was {config.Network?.JsonPort}");
         }
 
-        if (config.Network?.SbsPort is < 1024 or > 65535)
+        if (sbsEnabled && config.Network?.SbsPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
                 $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {config.Network?.SbsPort}");
         }
 
+        // HttpPort always validated (not part of this feature)
         if (config.Network?.HttpPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(

@@ -55,6 +55,27 @@ public class NetworkConfig
     public int HttpPort { get; set; } = 8080;
 
     /// <summary>
+    /// Gets or sets whether Beast binary protocol output is enabled.
+    /// When disabled, the Beast broadcaster is not started and the port is not listened on.
+    /// Default: true (Beast output enabled).
+    /// </summary>
+    public bool BeastOutputEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether JSON streaming output is enabled.
+    /// When disabled, the JSON broadcaster is not started and the port is not listened on.
+    /// Default: false (JSON output disabled by default).
+    /// </summary>
+    public bool JsonOutputEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether SBS BaseStation protocol output is enabled.
+    /// When disabled, the SBS broadcaster is not started and the port is not listened on.
+    /// Default: false (SBS output disabled by default).
+    /// </summary>
+    public bool SbsOutputEnabled { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets the network interface IP address to bind all servers to.
     /// IPAddress.Any (0.0.0.0): Bind to all network interfaces (accessible remotely).
     /// IPAddress.Loopback (127.0.0.1): Bind to localhost only (local access only).

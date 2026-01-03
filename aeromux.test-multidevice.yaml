@@ -39,8 +39,11 @@ devices:                                  # List of SDR devices to use (multiple
 # Network ports and binding
 network:                                  # Network server configuration
   beastPort: 30005                        # Beast binary protocol port (default: 30005, dump1090-compatible)
+  beastOutputEnabled: true                # Enable Beast output (default: true)
   jsonPort: 30006                         # JSON streaming port (default: 30006, web-friendly)
+  jsonOutputEnabled: false                # Enable JSON output (default: false)
   sbsPort: 30104                          # SBS BaseStation text protocol port (default: 30104, VRS-compatible)
+  sbsOutputEnabled: false                 # Enable SBS output (default: false)
   httpPort: 8080                          # HTTP API and web interface port (Phase 7)
   bindAddress: "0.0.0.0"                  # Network interface to bind (0.0.0.0 = all interfaces, 127.0.0.1 = localhost only)
 

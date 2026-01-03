@@ -117,7 +117,10 @@ public class ConfigurationBuilder
                 JsonPort = 30006,
                 SbsPort = 30104,
                 HttpPort = 8080,
-                BindAddress = System.Net.IPAddress.Any
+                BindAddress = System.Net.IPAddress.Any,
+                BeastOutputEnabled = true,
+                JsonOutputEnabled = false,
+                SbsOutputEnabled = false
             },
             Tracking = new TrackingConfig
             {
