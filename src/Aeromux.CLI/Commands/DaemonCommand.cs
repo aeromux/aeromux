@@ -42,7 +42,7 @@ public class DaemonSettings : GlobalSettings
     public int? JsonPort { get; set; }
 
     [CommandOption("--sbs-port")]
-    [Description("SBS protocol port (default: 30104, VRS-compatible)")]
+    [Description("SBS protocol port (default: 30003, VRS-compatible)")]
     public int? SbsPort { get; set; }
 
     [CommandOption("--beast-output-enabled")]
@@ -234,7 +234,9 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     sbsPort,
                     bindAddress,
                     deviceStream,
-                    BroadcastFormat.Sbs);
+                    BroadcastFormat.Sbs,
+                    receiverUuid: null, // SBS doesn't use receiver UUID (Beast only)
+                    aircraftTracker: aircraftTracker); // Required for SBS format
                 await sbsBroadcaster.StartAsync(cancellationToken);
                 Log.Information("SBS broadcaster started on {BindAddress}:{Port}", bindAddress, sbsPort);
             }

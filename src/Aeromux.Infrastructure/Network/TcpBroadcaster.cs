@@ -18,6 +18,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using Aeromux.Core.ModeS;
+using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Network.Enums;
 using Aeromux.Infrastructure.Streaming;
 using Aeromux.Infrastructure.Network.Protocols;
@@ -33,7 +34,7 @@ namespace Aeromux.Infrastructure.Network;
 /// </summary>
 /// <remarks>
 /// ARCHITECTURE:
-/// - One TcpBroadcaster instance per format/port (e.g., Beast on 30005, JSON on 30006, SBS on 30104)
+/// - One TcpBroadcaster instance per format/port (e.g., Beast on 30005, JSON on 30006, SBS on 30003)
 /// - Each instance accepts multiple concurrent clients
 /// - All clients receive the same data stream from IFrameStream via Subscribe()
 /// - Client disconnections are detected and cleaned up automatically
@@ -63,6 +64,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     private readonly BroadcastFormat _format;
     private readonly Guid? _receiverUuid;
     private readonly BeastEncoder? _beastEncoder;
+    private readonly SbsEncoder? _sbsEncoder;
     private ChannelReader<ProcessedFrame>? _dataReader;
     private bool _receiverIdSent;  // Track at broadcaster level (one subscription per broadcaster)
 
@@ -79,17 +81,19 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     /// <summary>
     /// Creates a new TCP broadcaster for the specified format and port.
     /// </summary>
-    /// <param name="port">TCP port to listen on (e.g., 30005 for Beast, 30006 for JSON)</param>
+    /// <param name="port">TCP port to listen on (e.g., 30005 for Beast, 30006 for JSON, 30003 for SBS)</param>
     /// <param name="bindAddress">IP address to bind to (IPAddress.Any, Loopback, or specific interface)</param>
     /// <param name="frameStream">Frame stream providing processed frames to broadcast</param>
     /// <param name="format">Broadcast format (determines which encoder is used)</param>
     /// <param name="receiverUuid">Optional receiver UUID for MLAT triangulation (Beast format only)</param>
+    /// <param name="aircraftTracker">Aircraft state tracker (required for SBS format, optional for others)</param>
     public TcpBroadcaster(
         int port,
         IPAddress bindAddress,
         IFrameStream frameStream,
         BroadcastFormat format,
-        Guid? receiverUuid = null)
+        Guid? receiverUuid = null,
+        IAircraftStateTracker? aircraftTracker = null)
     {
         _port = port;
         _bindAddress = bindAddress;
@@ -97,10 +101,28 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         _format = format;
         _receiverUuid = receiverUuid;
 
-        // Create encoder once with reference time = TcpBroadcaster creation time
-        if (format == BroadcastFormat.Beast)
+        switch (format)
         {
-            _beastEncoder = new BeastEncoder();
+            // Create encoder instances based on format
+            // Beast and SBS encoders are stateful (reference time, aircraft state tracking)
+            // JSON encoder is stateless (static methods only)
+            case BroadcastFormat.Beast:
+                _beastEncoder = new BeastEncoder();
+                break;
+            case BroadcastFormat.Sbs:
+            {
+                if (aircraftTracker == null)
+                {
+                    throw new ArgumentNullException(nameof(aircraftTracker),
+                        "Aircraft state tracker is required for SBS format");
+                }
+                _sbsEncoder = new SbsEncoder(aircraftTracker);
+                break;
+            }
+            case BroadcastFormat.Json:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(format), format, null);
         }
     }
 
@@ -228,18 +250,45 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         {
             // Step 1: Encode frame based on broadcaster's format
             // Beast uses raw ValidatedFrame, JSON/SBS use parsed ModeSMessage
-            // This is where format selection happens (controlled by constructor parameter)
-            byte[]? encoded = _format switch
-            {
-                BroadcastFormat.Beast => _beastEncoder!.Encode(data.Frame),
-                BroadcastFormat.Json => JsonEncoder.Encode(data.ParsedMessage),
-                BroadcastFormat.Sbs => SbsEncoder.Encode(data.ParsedMessage),
-                _ => throw new InvalidOperationException($"Unknown format: {_format}")
-            };
+            // SBS encoder returns List<byte[]> (may contain AIR, ID, and MSG messages)
+            // Beast and JSON encoders return single byte[]? (or null for unparseable)
+            List<byte[]> messagesToBroadcast = [];
 
-            // Step 2: Skip if encoder returned null
+            switch (_format)
+            {
+                case BroadcastFormat.Beast:
+                {
+                    byte[]? encoded = _beastEncoder!.Encode(data.Frame);
+                    if (encoded != null)
+                    {
+                        messagesToBroadcast.Add(encoded);
+                    }
+
+                    break;
+                }
+                case BroadcastFormat.Json:
+                {
+                    byte[]? encoded = JsonEncoder.Encode(data.ParsedMessage);
+                    if (encoded != null)
+                    {
+                        messagesToBroadcast.Add(encoded);
+                    }
+
+                    break;
+                }
+                case BroadcastFormat.Sbs:
+                {
+                    List<byte[]> encoded = _sbsEncoder!.Encode(data);
+                    messagesToBroadcast.AddRange(encoded);
+                    break;
+                }
+                default:
+                    throw new InvalidOperationException($"Unknown format: {_format}");
+            }
+
+            // Step 2: Skip if no messages to broadcast
             // Happens for unparseable frames (JSON/SBS) or unsupported message types (SBS)
-            if (encoded == null)
+            if (messagesToBroadcast.Count == 0)
             {
                 continue;
             }
@@ -285,25 +334,33 @@ public sealed class TcpBroadcaster : IAsyncDisposable
             // Track clients that fail during write (for cleanup)
             var disconnected = new List<TcpClient>();
 
-            // Step 5: Write encoded data to all clients
-            foreach (TcpClient client in clientsSnapshot)
+            // Step 5: Write encoded messages to all clients
+            // SBS format may have multiple messages (AIR, ID, MSG) for a single frame
+            // Beast and JSON formats have single message per frame
+            foreach (byte[] message in messagesToBroadcast)
             {
-                try
+                foreach (TcpClient client in clientsSnapshot)
                 {
-                    // Write encoded frame to client's network stream
-                    await client.GetStream().WriteAsync(encoded, ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Propagate cancellation to stop broadcast loop immediately
-                    throw;
-                }
-                catch (Exception)
-                {
-                    // Client disconnected or write failed (network error, buffer full, etc.)
-                    // Don't log here - will be logged at Information level when cleaned up below
-                    // This avoids noisy Debug logs with stack traces for normal disconnections
-                    disconnected.Add(client);
+                    try
+                    {
+                        // Write encoded message to client's network stream
+                        await client.GetStream().WriteAsync(message, ct);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Propagate cancellation to stop broadcast loop immediately
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        // Client disconnected or write failed (network error, buffer full, etc.)
+                        // Don't log here - will be logged at Information level when cleaned up below
+                        // This avoids noisy Debug logs with stack traces for normal disconnections
+                        if (!disconnected.Contains(client))
+                        {
+                            disconnected.Add(client);
+                        }
+                    }
                 }
             }
 
@@ -402,13 +459,16 @@ public sealed class TcpBroadcaster : IAsyncDisposable
             _clients.Clear();
         }
 
-        // Step 6: Unsubscribe from frame stream
+        // Step 6: Dispose encoders
+        _sbsEncoder?.Dispose();
+
+        // Step 7: Unsubscribe from frame stream
         if (_dataReader != null)
         {
             _frameStream.Unsubscribe(_dataReader);
         }
 
-        // Step 7: Dispose cancellation token source
+        // Step 8: Dispose cancellation token source
         _cts?.Dispose();
     }
 

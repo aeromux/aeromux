@@ -43,9 +43,9 @@ public class NetworkConfig
     /// Gets or sets the SBS BaseStation text protocol port number.
     /// SBS format: CSV text format compatible with Kinetic's BaseStation application.
     /// Used for compatibility with legacy ADS-B applications.
-    /// Default: 30104.
+    /// Default: 30003.
     /// </summary>
-    public int SbsPort { get; set; } = 30104;
+    public int SbsPort { get; set; } = 30003;
 
     /// <summary>
     /// Gets or sets the HTTP API and web interface port number.

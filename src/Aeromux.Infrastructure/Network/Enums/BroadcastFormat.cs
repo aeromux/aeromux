@@ -34,7 +34,7 @@ public enum BroadcastFormat
     Json,
 
     /// <summary>
-    /// SBS/BaseStation format (Virtual Radar Server compatible, port 30104).
+    /// SBS/BaseStation format (Virtual Radar Server compatible, port 30003).
     /// Transmits parsed messages as CSV.
     /// </summary>
     Sbs

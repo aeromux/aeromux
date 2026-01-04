@@ -115,7 +115,7 @@ public class ConfigurationBuilder
             {
                 BeastPort = 30005,
                 JsonPort = 30006,
-                SbsPort = 30104,
+                SbsPort = 30003,
                 HttpPort = 8080,
                 BindAddress = System.Net.IPAddress.Any,
                 BeastOutputEnabled = true,
