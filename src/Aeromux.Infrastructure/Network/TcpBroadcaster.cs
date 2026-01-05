@@ -30,7 +30,7 @@ namespace Aeromux.Infrastructure.Network;
 /// TCP broadcaster that sends processed frames to multiple clients.
 /// Supports Beast, JSON, and SBS formats (dump1090/readsb/tar1090 compatible).
 /// Broadcasts ProcessedFrame data from IFrameStream to all connected clients.
-/// Beast encoder uses raw ValidatedFrame, JSON/SBS encoders use parsed ModeSMessage.
+/// Beast encoder uses raw ValidatedFrame, JSON/SBS encoders use Aircraft state from tracker.
 /// </summary>
 /// <remarks>
 /// ARCHITECTURE:
@@ -42,8 +42,8 @@ namespace Aeromux.Infrastructure.Network;
 /// FORMAT SELECTION:
 /// The BroadcastFormat enum determines which encoder is used:
 /// - Beast: BeastEncoder.Encode(data.Frame) - binary protocol for raw frames
-/// - JSON: JsonEncoder.Encode(data.ParsedMessage) - line-delimited JSON for web apps
-/// - SBS: SbsEncoder.Encode(data.ParsedMessage) - BaseStation CSV for VRS compatibility
+/// - JSON: JsonEncoder.Encode(data) - full Aircraft state JSON with rate limiting
+/// - SBS: SbsEncoder.Encode(data) - BaseStation CSV with Aircraft state for VRS compatibility
 ///
 /// THREADING MODEL:
 /// - AcceptClientsAsync: Background task accepting new connections (synchronous accept with polling)
@@ -65,8 +65,9 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     private readonly Guid? _receiverUuid;
     private readonly BeastEncoder? _beastEncoder;
     private readonly SbsEncoder? _sbsEncoder;
+    private readonly JsonEncoder? _jsonEncoder;
     private ChannelReader<ProcessedFrame>? _dataReader;
-    private bool _receiverIdSent;  // Track at broadcaster level (one subscription per broadcaster)
+    private bool _receiverIdSent;  // Prevents duplicate receiver ID broadcasts when multiple frames are sent
 
     // Client management (thread-safe via Lock)
     private readonly List<TcpClient> _clients = [];
@@ -86,7 +87,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     /// <param name="frameStream">Frame stream providing processed frames to broadcast</param>
     /// <param name="format">Broadcast format (determines which encoder is used)</param>
     /// <param name="receiverUuid">Optional receiver UUID for MLAT triangulation (Beast format only)</param>
-    /// <param name="aircraftTracker">Aircraft state tracker (required for SBS format, optional for others)</param>
+    /// <param name="aircraftTracker">Aircraft state tracker (required for SBS and JSON formats)</param>
     public TcpBroadcaster(
         int port,
         IPAddress bindAddress,
@@ -104,8 +105,8 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         switch (format)
         {
             // Create encoder instances based on format
-            // Beast and SBS encoders are stateful (reference time, aircraft state tracking)
-            // JSON encoder is stateless (static methods only)
+            // Beast encoder is stateful (reference time)
+            // SBS and JSON encoders are stateful (aircraft state tracking, rate limiting)
             case BroadcastFormat.Beast:
                 _beastEncoder = new BeastEncoder();
                 break;
@@ -120,7 +121,16 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 break;
             }
             case BroadcastFormat.Json:
+            {
+                // JSON format REQUIRES aircraft tracker (like SBS)
+                if (aircraftTracker == null)
+                {
+                    throw new ArgumentNullException(nameof(aircraftTracker),
+                        "Aircraft state tracker is required for JSON format");
+                }
+                _jsonEncoder = new JsonEncoder(aircraftTracker);
                 break;
+            }
             default:
                 throw new ArgumentOutOfRangeException(nameof(format), format, null);
         }
@@ -268,7 +278,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 }
                 case BroadcastFormat.Json:
                 {
-                    byte[]? encoded = JsonEncoder.Encode(data.ParsedMessage);
+                    byte[]? encoded = _jsonEncoder!.Encode(data);
                     if (encoded != null)
                     {
                         messagesToBroadcast.Add(encoded);
@@ -461,6 +471,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
 
         // Step 6: Dispose encoders
         _sbsEncoder?.Dispose();
+        _jsonEncoder?.Dispose();
 
         // Step 7: Unsubscribe from frame stream
         if (_dataReader != null)
@@ -473,8 +484,9 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the current number of connected clients.
-    /// Thread-safe property.
+    /// Gets the current number of connected TCP clients for this broadcaster.
+    /// Thread-safe: Uses lock to safely read client count from concurrent collection.
+    /// Useful for monitoring active connections and debugging connectivity issues.
     /// </summary>
     public int ClientCount
     {

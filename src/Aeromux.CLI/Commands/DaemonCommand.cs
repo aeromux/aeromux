@@ -157,7 +157,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // Tracks aircraft across multiple RTL-SDR devices (automatic deduplication by ICAO)
             var aircraftTracker = new AircraftStateTracker(config.Tracking!);
 
-            // Subscribe to aircraft lifecycle events for logging
+            // Subscribe to aircraft lifecycle events for operational visibility
+            // Logs new aircraft to track what's being received and help diagnose coverage issues
             aircraftTracker.OnAircraftAdded += (sender, e) =>
             {
                 Aircraft aircraft = e.Aircraft;
@@ -172,7 +173,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 Aircraft prev = e.Previous;
                 Aircraft curr = e.Updated;
 
-                // Only log if position or velocity actually changed
+                // Only log if position or velocity actually changed to reduce log noise
+                // OnAircraftUpdated fires on EVERY frame, but we only care about significant state changes
                 bool positionChanged = prev.Position.Coordinate != curr.Position.Coordinate ||
                                       prev.Position.BarometricAltitude != curr.Position.BarometricAltitude;
                 bool velocityChanged = prev.Velocity.GroundSpeed != curr.Velocity.GroundSpeed ||
@@ -213,7 +215,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     receiverUuid);
                 await beastBroadcaster.StartAsync(cancellationToken);
                 Log.Information("Beast broadcaster started on {BindAddress}:{Port}", bindAddress, beastPort);
-                await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+                await Task.Delay(50, cancellationToken); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition (AccessViolationException)
             }
 
             if (jsonEnabled)
@@ -222,10 +224,12 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     jsonPort,
                     bindAddress,
                     deviceStream,
-                    BroadcastFormat.Json);
+                    BroadcastFormat.Json,
+                    receiverUuid: null, // JSON doesn't use receiver UUID (Beast only)
+                    aircraftTracker: aircraftTracker); // Required for JSON format
                 await jsonBroadcaster.StartAsync(cancellationToken);
-                Log.Information("JSON broadcaster started on {BindAddress}:{Port}", bindAddress, jsonPort);
-                await Task.Delay(50, cancellationToken); // Prevent concurrent socket initialization
+                Log.Information("JSON broadcaster started on {BindAddress}:{Port} (aircraft mode, 1s rate limit)", bindAddress, jsonPort);
+                await Task.Delay(50, cancellationToken); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition (AccessViolationException)
             }
 
             if (sbsEnabled)
@@ -239,6 +243,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     aircraftTracker: aircraftTracker); // Required for SBS format
                 await sbsBroadcaster.StartAsync(cancellationToken);
                 Log.Information("SBS broadcaster started on {BindAddress}:{Port}", bindAddress, sbsPort);
+                await Task.Delay(50, cancellationToken); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition (AccessViolationException)
             }
 
             int enabledCount = (beastEnabled ? 1 : 0) + (jsonEnabled ? 1 : 0) + (sbsEnabled ? 1 : 0);
