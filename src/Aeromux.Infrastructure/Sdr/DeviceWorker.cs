@@ -65,6 +65,8 @@ public sealed class DeviceWorker : IDisposable
         ReceiverConfig? receiverConfig,
         Action<ValidatedFrame, ModeSMessage?>? onDataParsed = null)
     {
+        RtlSdrDeviceManager.SuppressLibraryConsoleOutput = false;
+
         _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
         _onDataParsed = onDataParsed;
@@ -203,7 +205,7 @@ public sealed class DeviceWorker : IDisposable
     /// Starts receiving IQ samples asynchronously from the RTL-SDR device.
     /// Subscribes to sample events and starts a background statistics logging task.
     /// </summary>
-    /// <param name="cancellationToken">Token to signal shutdown. When cancelled, stops sample reception.</param>
+    /// <param name="cancellationToken">Token to signal shutdown. When canceled, stops sample reception.</param>
     /// <exception cref="InvalidOperationException">Thrown when OpenDevice() has not been called first.</exception>
     /// <remarks>
     /// This method starts async sample reading with 131,072 samples (8 buffers × 16384).

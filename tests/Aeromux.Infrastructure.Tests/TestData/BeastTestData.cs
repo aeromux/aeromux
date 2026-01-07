@@ -106,6 +106,7 @@ public static class BeastTestData
     /// </summary>
     public static byte[] HexToBytes(string hex)
     {
+        ArgumentNullException.ThrowIfNull(hex);
         hex = hex.Replace(" ", "").Replace("-", "");
         byte[] bytes = new byte[hex.Length / 2];
         for (int i = 0; i < bytes.Length; i++)
@@ -150,6 +151,9 @@ public static class BeastTestData
         byte[] data,
         bool applyEscaping = true)
     {
+        ArgumentNullException.ThrowIfNull(timestamp);
+        ArgumentNullException.ThrowIfNull(data);
+
         var buffer = new List<byte>();
 
         // Frame start marker

@@ -22,6 +22,7 @@ using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
 using Aeromux.Infrastructure.Network;
 using Aeromux.Infrastructure.Network.Enums;
+using RtlSdrManager.Exceptions;
 using Serilog;
 using Spectre.Console.Cli;
 
@@ -373,6 +374,16 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             // Daemon precondition checks failed
             Log.Error(ex, "Daemon preconditions not met");
             Console.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (RtlSdrLibraryExecutionException ex)
+        {
+            Log.Error(ex, "RTL-SDR device already in use");
+            Console.WriteLine("Error: Cannot open RTL-SDR device (already in use)");
+            Console.WriteLine("This usually means another instance is running.");
+            Console.WriteLine("Try:");
+            Console.WriteLine("  1. Connect to daemon: aeromux live --connect localhost:30005");
+            Console.WriteLine("  2. Stop daemon: aeromux daemon stop");
             return 1;
         }
         catch (Exception ex) when (ex.GetType().Name.Contains("RtlSdr") && ex.Message.Contains("not found"))

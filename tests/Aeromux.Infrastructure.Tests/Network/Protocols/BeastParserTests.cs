@@ -57,11 +57,6 @@ public class BeastParserTests(ITestOutputHelper output)
         frames.Should().HaveCount(1, "one frame should be parsed");
         ValidatedFrame parsedFrame = frames[0];
 
-        // Verify timestamp was reconstructed correctly (with 0x1A in first byte)
-        // Reconstruct expected timestamp value
-        ulong expectedTimestamp = 0x1A00000000005DUL;
-        ulong parsedTimestamp = 0;
-
         // We can't directly access the timestamp bytes, but we can verify the frame was parsed
         parsedFrame.Should().NotBeNull("frame should be successfully parsed despite ESC in timestamp");
     }
@@ -447,7 +442,7 @@ public class BeastParserTests(ITestOutputHelper output)
         }
         stream.Position = 0;
 
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
         var frames = new List<ValidatedFrame>();
 
         // Act: Parse and cancel after first frame
