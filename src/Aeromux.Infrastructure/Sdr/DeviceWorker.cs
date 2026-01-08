@@ -65,6 +65,11 @@ public sealed class DeviceWorker : IDisposable
         ReceiverConfig? receiverConfig,
         Action<ValidatedFrame, ModeSMessage?>? onDataParsed = null)
     {
+        // TODO: Investigate why setting this to false fixes Spectre.Console terminal corruption
+        // Counterintuitively, false (which should enable output) prevents the library from
+        // corrupting terminal state. Without this line, Console.WindowWidth/Height detection fails
+        // and causes table rendering to wrap incorrectly. This suggests the default/uninitialized
+        // state of this property corrupts the console, not the output itself.
         RtlSdrDeviceManager.SuppressLibraryConsoleOutput = false;
 
         _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
