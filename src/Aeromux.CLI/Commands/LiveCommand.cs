@@ -32,33 +32,59 @@ namespace Aeromux.CLI.Commands;
 
 /// <summary>
 /// Optional connection string that supports both flag usage (--connect) and value usage (--connect HOST:PORT).
-/// When used as flag, defaults to empty string which ParseConnectionString interprets as localhost:30005.
 /// </summary>
+/// <remarks>
+/// When used as flag, defaults to empty string which ParseConnectionString interprets as localhost:30005.
+/// Implements IFlagValue to enable Spectre.Console.Cli's flag parsing behavior.
+/// </remarks>
 public sealed class OptionalConnectionString : IFlagValue
 {
     private string _value = string.Empty;
     private bool _isSet;
 
+    /// <summary>
+    /// Gets or sets the connection string value.
+    /// </summary>
     public object? Value
     {
         get => _value;
         set => _value = value?.ToString() ?? string.Empty;
     }
 
+    /// <summary>
+    /// Gets or sets whether the flag was explicitly set by the user.
+    /// </summary>
     public bool IsSet
     {
         get => _isSet;
         set => _isSet = value;
     }
 
+    /// <summary>
+    /// Gets the underlying type of the value (always string).
+    /// </summary>
     public Type Type => typeof(string);
 
+    /// <summary>
+    /// Creates an instance for flag usage without a value (--connect).
+    /// </summary>
+    /// <returns>An OptionalConnectionString with empty value and IsSet=true.</returns>
     public static OptionalConnectionString FromFlag() =>
         new() { _value = string.Empty, _isSet = true };
 
+    /// <summary>
+    /// Creates an instance with a specific connection string value (--connect HOST:PORT).
+    /// </summary>
+    /// <param name="value">The connection string value.</param>
+    /// <returns>An OptionalConnectionString with the specified value and IsSet=true.</returns>
     public static OptionalConnectionString FromValue(string value) =>
         new() { _value = value, _isSet = true };
 
+    /// <summary>
+    /// Implicitly converts OptionalConnectionString to string for convenient usage.
+    /// </summary>
+    /// <param name="connection">The OptionalConnectionString to convert.</param>
+    /// <returns>The connection string value, or null if connection is null.</returns>
     public static implicit operator string?(OptionalConnectionString? connection) =>
         connection?._value;
 }
@@ -68,10 +94,16 @@ public sealed class OptionalConnectionString : IFlagValue
 /// </summary>
 public sealed class LiveSettings : GlobalSettings
 {
+    /// <summary>
+    /// Gets or sets whether to run in standalone mode with direct RTL-SDR access.
+    /// </summary>
     [CommandOption("--standalone")]
     [Description("Run in standalone mode (process RTL-SDR directly)")]
     public bool Standalone { get; set; }
 
+    /// <summary>
+    /// Gets or sets the connection string for Beast-compatible source.
+    /// </summary>
     [CommandOption("--connect [ADDRESS]")]
     [Description("Connect to Beast-compatible source (default: localhost:30005)")]
     public OptionalConnectionString? Connect { get; set; }
@@ -205,6 +237,8 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
 
         try
         {
+            // DeviceStream implements IAsyncDisposable to ensure RTL-SDR device cleanup
+            // Async using ensures StopAsync is called even on exceptions, releasing hardware
             await using var stream = new DeviceStream(
                 enabledDevices,
                 config.Tracking!,
@@ -300,7 +334,9 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
 
         try
         {
-            // Create BeastStream with TrackingConfig for confidence filtering
+            // BeastStream includes IcaoConfidenceTracker to filter noise from real aircraft
+            // TrackingConfig.ConfidenceLevel determines how many messages required to accept ICAO
+            // This prevents displaying spurious aircraft from corrupted frames or interference
             await using var stream = new BeastStream(host, port, config.Tracking!);
             await stream.StartAsync(ct);
 
@@ -412,11 +448,15 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         string? selectedIcao = null; // Track selected aircraft by ICAO (not row index)
         int selectedRow;
         bool showingDetails = false;
+        int detailViewSelectedRow = 0;  // Track scroll position in detail view
+        List<DetailRow>? currentDetailRows = null;  // Store for keyboard navigation
         DistanceUnit distanceUnit = DistanceUnit.Miles;
         AltitudeUnit altitudeUnit = AltitudeUnit.Feet;
         SpeedUnit speedUnit = SpeedUnit.Knots;
 
         // Track terminal size for resize detection (workaround for Spectre.Console bug)
+        // Spectre.Console Live display gets corrupted on resize, requiring restart
+        // Store size at Live display start, check each iteration for changes
         int lastWidth;
         int lastHeight;
 
@@ -459,7 +499,9 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                                 .OrderBy(a => a.Identification.ICAO)
                                 .ToList();
 
-                            // Find selected aircraft by ICAO and update row index
+                            // Track selection by ICAO (not row index) to maintain selection stability
+                            // Aircraft list changes every second (timeouts, new aircraft), so row indices shift
+                            // ICAO remains constant for each aircraft, ensuring selection persists across refreshes
                             if (selectedIcao != null)
                             {
                                 int foundIndex = sortedAircraft.FindIndex(a => a.Identification.ICAO == selectedIcao);
@@ -469,7 +511,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                                 }
                                 else
                                 {
-                                    // Selected aircraft expired, select first available
+                                    // Selected aircraft expired (timeout), select first available
                                     selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
                                     selectedRow = 0;
                                 }
@@ -494,7 +536,16 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                             // Update display with current view (flicker-free for normal updates)
                             if (showingDetails && sortedAircraft.Count > 0)
                             {
-                                ctx.UpdateTarget(BuildDetailView(sortedAircraft[selectedRow], distanceUnit, altitudeUnit, speedUnit, receiverConfig));
+                                (Table detailTable, List<DetailRow> detailRows) = BuildDetailView(
+                                    sortedAircraft[selectedRow],
+                                    distanceUnit,
+                                    altitudeUnit,
+                                    speedUnit,
+                                    receiverConfig,
+                                    detailViewSelectedRow);
+
+                                currentDetailRows = detailRows;  // Store for keyboard handling
+                                ctx.UpdateTarget(detailTable);
                             }
                             else
                             {
@@ -513,20 +564,19 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                                     if (showingDetails)
                                     {
                                         // Detail view keyboard handling
-                                        switch (key.Key)
+                                        if (currentDetailRows != null)
                                         {
-                                            case ConsoleKey.Escape:
-                                                showingDetails = false;
-                                                break;
-                                            case ConsoleKey.Q:
+                                            if (!HandleDetailKeyboard(key, currentDetailRows, ref detailViewSelectedRow, ref showingDetails))
+                                            {
                                                 shouldQuit = true;
-                                                return; // Exit Live display
+                                                return;  // Quit
+                                            }
                                         }
                                     }
                                     else
                                     {
                                         // Table view keyboard handling
-                                        if (!HandleTableKeyboard(key, sortedAircraft, ref selectedIcao, ref selectedRow, ref showingDetails, ref distanceUnit, ref altitudeUnit, ref speedUnit))
+                                        if (!HandleTableKeyboard(key, sortedAircraft, ref selectedIcao, ref selectedRow, ref showingDetails, ref detailViewSelectedRow, ref distanceUnit, ref altitudeUnit, ref speedUnit))
                                         {
                                             shouldQuit = true;
                                             return; // Exit Live display
@@ -601,6 +651,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     /// <param name="selectedIcao">Currently selected aircraft ICAO (updated on navigation).</param>
     /// <param name="selectedRow">Currently selected row index (updated on navigation).</param>
     /// <param name="showingDetails">Detail view toggle (set true when Enter is pressed).</param>
+    /// <param name="detailViewSelectedRow">Detail view selected row index (reset to 1 when entering detail view).</param>
     /// <param name="distanceUnit">Distance unit setting (toggled by D key).</param>
     /// <param name="altitudeUnit">Altitude unit setting (toggled by A key).</param>
     /// <param name="speedUnit">Speed unit setting (cycled by S key).</param>
@@ -611,15 +662,18 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         ref string? selectedIcao,
         ref int selectedRow,
         ref bool showingDetails,
+        ref int detailViewSelectedRow,
         ref DistanceUnit distanceUnit,
         ref AltitudeUnit altitudeUnit,
         ref SpeedUnit speedUnit)
     {
-        // Calculate available rows dynamically based on terminal height
-        const int headerLines = 0;
-        const int footerLines = 2;
-        const int tableHeaderLines = 1;
-        const int padding = 3;
+        // Calculate available viewport rows based on terminal height
+        // Layout: title (0) + table header (1) + data rows + footer (2) + padding (3)
+        // Minimum 5 rows ensures usable display even in very small terminals
+        const int headerLines = 0;        // No title row in main table
+        const int footerLines = 2;        // Two-line footer with navigation hints
+        const int tableHeaderLines = 1;   // Column header row
+        const int padding = 3;            // Border and spacing overhead
 
         int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
 
@@ -650,6 +704,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                 if (sortedAircraft.Count > 0)
                 {
                     showingDetails = true;
+                    detailViewSelectedRow = 1;  // Start at first data row (row 0 is always a header)
                 }
                 break;
             case ConsoleKey.D:
@@ -687,6 +742,102 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     }
 
     /// <summary>
+    /// Handles keyboard input for detail view.
+    /// </summary>
+    /// <param name="key">The console key information.</param>
+    /// <param name="allRows">All detail rows (needed to check for section headers).</param>
+    /// <param name="selectedRow">Currently selected row (updated on navigation).</param>
+    /// <param name="showingDetails">Detail view toggle (set false when Escape pressed).</param>
+    /// <returns>False if user pressed Q (quit), true to continue.</returns>
+    private bool HandleDetailKeyboard(
+        ConsoleKeyInfo key,
+        List<DetailRow> allRows,
+        ref int selectedRow,
+        ref bool showingDetails)
+    {
+        int totalRows = allRows.Count;
+
+        // Calculate available viewport rows based on terminal height
+        // Layout: title (1) + table header (1) + data rows + footer (2) + padding (3)
+        // Minimum 5 rows ensures usable display even in very small terminals
+        const int headerLines = 1;        // Title row with ICAO
+        const int footerLines = 2;        // Two-line footer with navigation hints
+        const int tableHeaderLines = 1;   // Column header row
+        const int padding = 3;            // Border and spacing overhead
+        int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
+
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                // Move to previous non-header row
+                int prevRow = selectedRow - 1;
+                while (prevRow >= 0 && allRows[prevRow].IsSectionHeader)
+                {
+                    prevRow--;
+                }
+                // Only update if we found a valid non-header row
+                if (prevRow >= 0)
+                {
+                    selectedRow = prevRow;
+                }
+                break;
+
+            case ConsoleKey.DownArrow:
+                // Move to next non-header row
+                int nextRow = selectedRow + 1;
+                while (nextRow < totalRows && allRows[nextRow].IsSectionHeader)
+                {
+                    nextRow++;
+                }
+                // Only update if we found a valid non-header row
+                if (nextRow < totalRows)
+                {
+                    selectedRow = nextRow;
+                }
+                break;
+
+            case ConsoleKey.LeftArrow:
+            case ConsoleKey.PageUp:
+                // Jump up by viewport, then find nearest non-header
+                int targetUp = Math.Max(0, selectedRow - availableRows);
+                while (targetUp < selectedRow && allRows[targetUp].IsSectionHeader)
+                {
+                    targetUp++;
+                }
+                // Only update if we found a valid non-header row before current position
+                if (targetUp < selectedRow && !allRows[targetUp].IsSectionHeader)
+                {
+                    selectedRow = targetUp;
+                }
+                break;
+
+            case ConsoleKey.RightArrow:
+            case ConsoleKey.PageDown:
+                // Jump down by viewport, then find nearest non-header
+                int targetDown = Math.Min(totalRows - 1, selectedRow + availableRows);
+                while (targetDown > selectedRow && allRows[targetDown].IsSectionHeader)
+                {
+                    targetDown--;
+                }
+                // Only update if we found a valid non-header row after current position
+                if (targetDown > selectedRow && !allRows[targetDown].IsSectionHeader)
+                {
+                    selectedRow = targetDown;
+                }
+                break;
+
+            case ConsoleKey.Escape:
+                showingDetails = false;
+                break;
+
+            case ConsoleKey.Q:
+                return false;  // Quit
+        }
+
+        return true;  // Continue
+    }
+
+    /// <summary>
     /// Builds aircraft table with dynamic viewport.
     /// </summary>
     /// <param name="sortedAircraft">Aircraft list sorted by ICAO for stable display order.</param>
@@ -706,11 +857,13 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         SpeedUnit speedUnit,
         ReceiverConfig? receiverConfig)
     {
-        // Calculate available rows dynamically based on terminal height
-        const int headerLines = 1;
-        const int footerLines = 2;
-        const int tableHeaderLines = 1;
-        const int padding = 3;
+        // Calculate available viewport rows based on terminal height
+        // Layout: title (1) + table header (1) + data rows + footer (2) + padding (3)
+        // Minimum 5 rows ensures usable display even in very small terminals
+        const int headerLines = 1;        // Title row "AIRCRAFT LIST - Aeromux"
+        const int footerLines = 2;        // Two-line footer with navigation hints
+        const int tableHeaderLines = 1;   // Column header row
+        const int padding = 3;            // Border and spacing overhead
 
         int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
         int halfViewport = availableRows / 2;
@@ -948,6 +1101,11 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     }
 
     /// <summary>
+    /// Represents a row in the aircraft detail view.
+    /// </summary>
+    private record DetailRow(string Field, string Value, bool IsSectionHeader = false);
+
+    /// <summary>
     /// Builds detailed view for a single aircraft as a table (matching main table width).
     /// </summary>
     /// <param name="aircraft">Aircraft to display detailed information for.</param>
@@ -955,143 +1113,143 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     /// <param name="altitudeUnit">Unit to display altitudes (feet or meters).</param>
     /// <param name="speedUnit">Unit to display speeds (knots, km/h, or mph).</param>
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
+    /// <param name="selectedRow">Currently selected row index for highlighting (0-based, validated to skip headers).</param>
     /// <returns>Spectre.Console Table with detailed aircraft information and fixed 120-character width.</returns>
-    private Table BuildDetailView(
+    private (Table, List<DetailRow>) BuildDetailView(
         Aircraft aircraft,
         DistanceUnit distanceUnit,
         AltitudeUnit altitudeUnit,
         SpeedUnit speedUnit,
-        ReceiverConfig? receiverConfig)
+        ReceiverConfig? receiverConfig,
+        int selectedRow = 0)
     {
-        // Calculate available rows dynamically based on terminal height
-        const int headerLines = 1;
-        const int footerLines = 2;
-        const int tableHeaderLines = 1;
-        const int padding = 3;
+        // Calculate available viewport rows based on terminal height
+        // Layout: title (1) + table header (1) + data rows + footer (2) + padding (3)
+        // Minimum 5 rows ensures usable display even in very small terminals
+        const int headerLines = 1;        // Title row with ICAO
+        const int footerLines = 2;        // Two-line footer with navigation hints
+        const int tableHeaderLines = 1;   // Column header row (Field | Value | Scrollbar)
+        const int padding = 3;            // Border and spacing overhead
 
         int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
-        int usedRows = 0;
 
-        // Create table with same fixed 98 character width as main table
-        Table table = new Table()
-            .Border(TableBorder.Rounded)
-            .Width(100)
-            .Title($"AIRCRAFT DETAIL ({aircraft.Identification.ICAO}) - Aeromux")
-            .AddColumn(new TableColumn("[bold]Field[/]").NoWrap())
-            .AddColumn(new TableColumn("[bold]Value[/]").NoWrap());
+        // Collect all detail rows first (for viewport windowing)
+        var allRows = new List<DetailRow>();
 
         // === IDENTIFICATION ===
-        table.AddRow("[bold]IDENTIFICATION[/]", "");
-        table.AddRow("ICAO Address", aircraft.Identification.ICAO);
-        table.AddRow("Callsign", aircraft.Identification.Callsign ?? "N/A");
-        table.AddRow("Category", aircraft.Identification.Category?.ToString() ?? "N/A");
-        table.AddRow("Squawk", aircraft.Identification.Squawk ?? "N/A");
-        table.AddRow("Emergency", aircraft.Identification.EmergencyState.ToString());
-        table.AddRow("Flight Status", aircraft.Identification.FlightStatus?.ToString() ?? "N/A");
-        table.AddRow("ADS-B Version", aircraft.Identification.Version?.ToString() ?? "N/A");
-        table.AddRow("", "");
-        usedRows += 9;
+        allRows.Add(new DetailRow("[bold]=== IDENTIFICATION =====================[/]", "", IsSectionHeader: true));
+        allRows.Add(new DetailRow("ICAO Address", aircraft.Identification.ICAO));
+        allRows.Add(new DetailRow("Callsign", aircraft.Identification.Callsign ?? "N/A"));
+        allRows.Add(new DetailRow("Category", aircraft.Identification.Category?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("Squawk", aircraft.Identification.Squawk ?? "N/A"));
+        allRows.Add(new DetailRow("Emergency", aircraft.Identification.EmergencyState.ToString()));
+        allRows.Add(new DetailRow("Flight Status", aircraft.Identification.FlightStatus?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("ADS-B Version", aircraft.Identification.Version?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
 
         // === STATUS ===
-        table.AddRow("[bold]STATUS[/]", "");
-        table.AddRow("First Seen", aircraft.Status.FirstSeen.ToString("HH:mm:ss"));
-        table.AddRow("Last Seen", $"{(DateTime.UtcNow - aircraft.Status.LastSeen).TotalSeconds:F1}s ago");
-        table.AddRow("Total Messages", aircraft.Status.TotalMessages.ToString());
-        table.AddRow("Position Msgs", aircraft.Status.PositionMessages.ToString());
-        table.AddRow("Velocity Msgs", aircraft.Status.VelocityMessages.ToString());
-        table.AddRow("ID Messages", aircraft.Status.IdentificationMessages.ToString());
-        if (aircraft.Status.SignalStrength.HasValue && aircraft.Status.SignalStrengthDecibel.HasValue)
-        {
-            table.AddRow("Signal Strength",
-                $"{aircraft.Status.SignalStrengthDecibel.Value:F1} dBFS (RSSI: {aircraft.Status.SignalStrength.Value:F1})");
-        }
-        else
-        {
-            table.AddRow("Signal Strength", "N/A");
-        }
-        table.AddRow("", "");
-        usedRows += 9;
+        allRows.Add(new DetailRow("[bold]=== STATUS =============================[/]", "", IsSectionHeader: true));
+        allRows.Add(new DetailRow("First Seen", aircraft.Status.FirstSeen.ToString("HH:mm:ss")));
+        allRows.Add(new DetailRow("Last Seen", $"{(DateTime.UtcNow - aircraft.Status.LastSeen).TotalSeconds:F1}s ago"));
+        allRows.Add(new DetailRow("Total Messages", aircraft.Status.TotalMessages.ToString()));
+        allRows.Add(new DetailRow("Position Msgs", aircraft.Status.PositionMessages.ToString()));
+        allRows.Add(new DetailRow("Velocity Msgs", aircraft.Status.VelocityMessages.ToString()));
+        allRows.Add(new DetailRow("ID Messages", aircraft.Status.IdentificationMessages.ToString()));
+
+        string signalStrength = (aircraft.Status.SignalStrength.HasValue && aircraft.Status.SignalStrengthDecibel.HasValue)
+            ? $"{aircraft.Status.SignalStrengthDecibel.Value:F1} dBFS (RSSI: {aircraft.Status.SignalStrength.Value:F1})"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Signal Strength", signalStrength));
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
 
         // === POSITION ===
-        table.AddRow("[bold]POSITION[/]", "");
-        usedRows += 1;
-        if (aircraft.Position.Coordinate != null)
+        allRows.Add(new DetailRow("[bold]=== POSITION ===========================[/]", "", IsSectionHeader: true));
+
+        string latitude = aircraft.Position.Coordinate != null
+            ? $"{aircraft.Position.Coordinate.Latitude:F6}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Latitude", latitude));
+
+        string longitude = aircraft.Position.Coordinate != null
+            ? $"{aircraft.Position.Coordinate.Longitude:F6}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Longitude", longitude));
+
+        // Distance
+        string distance;
+        if (aircraft.Position.Coordinate != null && receiverConfig?.Latitude.HasValue == true && receiverConfig?.Longitude.HasValue == true)
         {
-            table.AddRow("Latitude", $"{aircraft.Position.Coordinate.Latitude:F6}°");
-            table.AddRow("Longitude", $"{aircraft.Position.Coordinate.Longitude:F6}°");
+            var receiverLocation = new GeographicCoordinate(
+                receiverConfig.Latitude.Value,
+                receiverConfig.Longitude.Value);
 
-            // Distance
-            if (receiverConfig?.Latitude.HasValue == true && receiverConfig?.Longitude.HasValue == true)
-            {
-                var receiverLocation = new GeographicCoordinate(
-                    receiverConfig.Latitude.Value,
-                    receiverConfig.Longitude.Value);
+            double dist = distanceUnit == DistanceUnit.Miles
+                ? receiverLocation.DistanceToMiles(aircraft.Position.Coordinate)
+                : receiverLocation.DistanceToKilometers(aircraft.Position.Coordinate);
 
-                double dist = distanceUnit == DistanceUnit.Miles
-                    ? receiverLocation.DistanceToMiles(aircraft.Position.Coordinate)
-                    : receiverLocation.DistanceToKilometers(aircraft.Position.Coordinate);
-
-                string unitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
-                table.AddRow("Distance", $"{dist:F1} {unitLabel}");
-            }
-            else
-            {
-                table.AddRow("Distance", "N/A (no receiver location)");
-            }
-
-            usedRows += 3;
+            string unitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
+            distance = $"{dist:F1} {unitLabel}";
+        }
+        else if (aircraft.Position.Coordinate != null)
+        {
+            distance = "N/A (no receiver location)";
         }
         else
         {
-            table.AddRow("Position", "N/A");
-
-            usedRows += 1;
+            distance = "N/A (no data yet)";
         }
+        allRows.Add(new DetailRow("Distance", distance));
 
         // Barometric altitude
+        string baroAlt;
         if (aircraft.Position.BarometricAltitude != null)
         {
             if (altitudeUnit == AltitudeUnit.Feet)
             {
-                table.AddRow("Baro Altitude", $"{aircraft.Position.BarometricAltitude.Feet:F0} ft");
+                baroAlt = $"{aircraft.Position.BarometricAltitude.Feet:F0} ft";
             }
             else
             {
                 double meters = aircraft.Position.BarometricAltitude.Feet * 0.3048;
-                table.AddRow("Baro Altitude", $"{meters:F0} m");
+                baroAlt = $"{meters:F0} m";
             }
         }
         else
         {
-            table.AddRow("Baro Altitude", "N/A");
+            baroAlt = "N/A (no data yet)";
         }
-        usedRows += 1;
+        allRows.Add(new DetailRow("Barometric Altitude", baroAlt));
 
         // Geometric altitude
+        string geoAlt;
         if (aircraft.Position.GeometricAltitude != null)
         {
             if (altitudeUnit == AltitudeUnit.Feet)
             {
-                table.AddRow("Geo Altitude", $"{aircraft.Position.GeometricAltitude.Feet:F0} ft");
+                geoAlt = $"{aircraft.Position.GeometricAltitude.Feet:F0} ft";
             }
             else
             {
                 double meters = aircraft.Position.GeometricAltitude.Feet * 0.3048;
-                table.AddRow("Geo Altitude", $"{meters:F0} m");
+                geoAlt = $"{meters:F0} m";
             }
         }
-        usedRows += 1;
+        else
+        {
+            geoAlt = "N/A (no data yet)";
+        }
+        allRows.Add(new DetailRow("Geo Altitude", geoAlt));
 
-        table.AddRow("On Ground", aircraft.Position.IsOnGround.ToString());
-        table.AddRow("NACp", aircraft.Position.NACp?.ToString() ?? "N/A");
-        table.AddRow("SIL", aircraft.Position.SIL?.ToString() ?? "N/A");
-        table.AddRow("", "");
-        usedRows += 3;
+        allRows.Add(new DetailRow("On Ground", aircraft.Position.IsOnGround.ToString()));
+        allRows.Add(new DetailRow("NACp", aircraft.Position.NACp?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("SIL", aircraft.Position.SIL?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
 
         // === VELOCITY ===
-        table.AddRow("[bold]VELOCITY[/]", "");
-        usedRows += 1;
+        allRows.Add(new DetailRow("[bold]=== VELOCITY ===========================[/]", "", IsSectionHeader: true));
+
         Velocity? speedValue = aircraft.Velocity.Speed ?? aircraft.Velocity.GroundSpeed;
+        string speed;
         if (speedValue != null)
         {
             double displaySpeed = speedUnit switch
@@ -1117,44 +1275,135 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                 _ => "Unknown"
             };
 
-            table.AddRow("Speed", $"{displaySpeed:F0} {unitLabel} ({velocityTypeStr})");
+            speed = $"{displaySpeed:F0} {unitLabel} ({velocityTypeStr})";
         }
         else
         {
-            table.AddRow("Speed", "N/A");
+            speed = "N/A (no data yet)";
         }
-        usedRows += 1;
+        allRows.Add(new DetailRow("Speed", speed));
 
-        if (aircraft.Velocity.Heading != null)
+        string heading = aircraft.Velocity.Heading != null
+            ? $"{aircraft.Velocity.Heading:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Heading", heading));
+
+        string track = aircraft.Velocity.Track != null
+            ? $"{aircraft.Velocity.Track:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Track", track));
+
+        string groundTrack = aircraft.Velocity.GroundTrack != null
+            ? $"{aircraft.Velocity.GroundTrack:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Ground Track", groundTrack));
+
+        string verticalRate = aircraft.Velocity.VerticalRate != null
+            ? $"{aircraft.Velocity.VerticalRate:F0} ft/min"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Vertical Rate", verticalRate));
+
+        // Calculate viewport (same logic as BuildTable)
+        int totalRows = allRows.Count;
+
+        // Ensure selectedRow is not on a section header
+        if (selectedRow < totalRows && allRows[selectedRow].IsSectionHeader)
         {
-            table.AddRow("Heading", $"{aircraft.Velocity.Heading:F1}°");
-            usedRows += 1;
+            // Find next non-header row
+            int nextRow = selectedRow + 1;
+            while (nextRow < totalRows && allRows[nextRow].IsSectionHeader)
+            {
+                nextRow++;
+            }
+            selectedRow = nextRow < totalRows ? nextRow : selectedRow;
         }
 
+        int viewportStart;
+        int viewportEnd;
 
-        if (aircraft.Velocity.Track != null)
+        // If all rows fit on screen, don't apply viewport scrolling
+        if (totalRows <= availableRows)
         {
-            table.AddRow("Track", $"{aircraft.Velocity.Track:F1}°");
-            usedRows += 1;
+            viewportStart = 0;
+            viewportEnd = totalRows;
         }
-
-        if (aircraft.Velocity.GroundTrack != null)
+        else
         {
-            table.AddRow("Ground Track", $"{aircraft.Velocity.GroundTrack:F1}°");
-            usedRows += 1;
+            // Apply viewport scrolling logic when rows exceed available height
+            int halfViewport = availableRows / 2;
+            viewportStart = Math.Max(0, selectedRow - halfViewport);
+            viewportEnd = Math.Min(totalRows, viewportStart + availableRows);
+
+            // Adjust if at end of list
+            if (viewportEnd - viewportStart < availableRows)
+            {
+                viewportStart = Math.Max(0, viewportEnd - availableRows);
+            }
         }
 
-        if (aircraft.Velocity.VerticalRate != null)
+        // Calculate scrollbar parameters
+        bool showScrollbar = totalRows > availableRows;
+        int thumbSize = 1;
+        int thumbStart = 0;
+
+        if (showScrollbar)
         {
-            table.AddRow("Vertical Rate", $"{aircraft.Velocity.VerticalRate:F0} ft/min");
-            usedRows += 1;
+            thumbSize = Math.Max(1, (int)Math.Floor((double)availableRows * availableRows / totalRows));
+            int scrollableRange = totalRows - availableRows;
+            if (scrollableRange > 0)
+            {
+                double scrollProgress = (double)viewportStart / scrollableRange;
+                thumbStart = (int)Math.Floor(scrollProgress * (availableRows - thumbSize));
+            }
         }
 
-        // Fill remaining rows with empty content to always use full terminal height
-        int emptyRowsNeeded = availableRows - usedRows;
+        // Create table with scrollbar column
+        Table table = new Table()
+            .Border(TableBorder.Square)
+            .Title($"AIRCRAFT DETAIL ({aircraft.Identification.ICAO}) - Aeromux", new Style(decoration:Decoration.Bold))
+            .AddColumn(new TableColumn("[bold]Field[/]").Width(40).NoWrap().PadLeft(1).PadRight(1))
+            .AddColumn(new TableColumn("[bold]Value[/]").Width(53).NoWrap().PadLeft(1).PadRight(1))
+            .AddColumn(new TableColumn("[bold] [/]").Width(1).Centered().NoWrap());
+
+        // Render rows in viewport
+        for (int i = viewportStart; i < viewportEnd; i++)
+        {
+            DetailRow row = allRows[i];
+            bool isSelected = i == selectedRow;
+
+            // Calculate scrollbar character for this row
+            string scrollbarChar;
+            if (showScrollbar)
+            {
+                int rowInViewport = i - viewportStart;
+                scrollbarChar = (rowInViewport >= thumbStart && rowInViewport < thumbStart + thumbSize)
+                    ? "█" : "░";
+            }
+            else
+            {
+                scrollbarChar = "░";  // Always show track
+            }
+
+            // Apply highlighting to selected row (but not scrollbar or section headers)
+            if (isSelected && !row.IsSectionHeader)
+            {
+                table.AddRow(
+                    $"[black on white]{row.Field,-40}[/]",
+                    $"[black on white]{row.Value,-53}[/]",
+                    scrollbarChar);  // Scrollbar keeps normal styling
+            }
+            else
+            {
+                table.AddRow(row.Field, row.Value, scrollbarChar);
+            }
+        }
+
+        // Fill remaining rows
+        int rowsRendered = viewportEnd - viewportStart;
+        int emptyRowsNeeded = availableRows - rowsRendered;
         for (int i = 0; i < emptyRowsNeeded; i++)
         {
-            table.AddRow("", "");
+            table.AddRow("", "", "░");
         }
 
         // Build footer (2 rows with left/right alignment)
@@ -1169,26 +1418,26 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         };
 
         // Footer row 1: left and right sections
-        string footerRow1Left = $"[bold]Aircraft:[/] {aircraft.Identification.ICAO}";
+        string footerRow1Left = $"[bold]Row:[/] {selectedRow + 1}/{totalRows}";
         string footerRow1Right = $"[bold]Dist:[/] {distUnitLabel} | [bold]Alt:[/] {altUnitLabel} | [bold]Spd:[/] {speedUnitLabel}";
 
         // Footer row 2: left and right sections
-        string footerRow2Left = "[bold]ESC[/]: Return to the table view";
-        string footerRow2Right = "[bold]Q[/]: Quit";
+        string footerRow2Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page";
+        string footerRow2Right = "[bold]ESC[/]: Back, [bold]Q[/]: Quit";
 
         // Calculate spacing for right alignment (100 chars total width - border chars)
-        // Table width is 100, but caption appears inside borders, so usable width is 96
-        int usableWidth = 96;
+        // Table width is 104, but caption appears inside borders, so usable width is 100
+        int usableWidth = 100;
 
         string footerRow1 = footerRow1Left + new string(' ', Math.Max(1, usableWidth - footerRow1Left.Length + 9 - footerRow1Right.Length + 27)) + footerRow1Right;
-        string footerRow2 = footerRow2Left + new string(' ', Math.Max(1, usableWidth - footerRow2Left.Length + 9 - footerRow2Right.Length + 9)) + footerRow2Right;
+        string footerRow2 = footerRow2Left + new string(' ', Math.Max(1, usableWidth - footerRow2Left.Length + 18 - footerRow2Right.Length + 18)) + footerRow2Right;
 
         string footer = footerRow1 + "\n" + footerRow2;
 
         table.Caption(footer, new Style(foreground: Color.Grey));
 
-        // Return table for Live display
-        return table;
+        // Return table and allRows for navigation
+        return (table, allRows);
     }
 
     /// <summary>
