@@ -148,7 +148,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         DateTime sessionStart = DateTime.UtcNow;
 
         // Validate mutual exclusivity
-        if (settings.Standalone && settings.Connect?.IsSet == true)
+        if (settings is { Standalone: true, Connect.IsSet: true })
         {
             Log.Error("Both --standalone and --connect specified (mutually exclusive)");
             Console.WriteLine("Error: Cannot use both --standalone and --connect");
@@ -866,16 +866,28 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         const int padding = 3;            // Border and spacing overhead
 
         int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
-        int halfViewport = availableRows / 2;
 
-        // Calculate viewport (centered on selection)
-        int viewportStart = Math.Max(0, selectedRow - halfViewport);
-        int viewportEnd = Math.Min(sortedAircraft.Count, viewportStart + availableRows);
+        int viewportStart;
+        int viewportEnd;
 
-        // Adjust if at end of list (show full viewport)
-        if (viewportEnd - viewportStart < availableRows && sortedAircraft.Count >= availableRows)
+        // If all aircraft fit on screen, don't apply viewport scrolling
+        if (sortedAircraft.Count <= availableRows)
         {
-            viewportStart = Math.Max(0, viewportEnd - availableRows);
+            viewportStart = 0;
+            viewportEnd = sortedAircraft.Count;
+        }
+        else
+        {
+            // Apply viewport scrolling logic when aircraft exceed available height
+            int halfViewport = availableRows / 2;
+            viewportStart = Math.Max(0, selectedRow - halfViewport);
+            viewportEnd = Math.Min(sortedAircraft.Count, viewportStart + availableRows);
+
+            // Adjust if at end of list (show full viewport)
+            if (viewportEnd - viewportStart < availableRows)
+            {
+                viewportStart = Math.Max(0, viewportEnd - availableRows);
+            }
         }
 
         // Calculate scrollbar parameters
@@ -1156,7 +1168,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         allRows.Add(new DetailRow("Velocity Msgs", aircraft.Status.VelocityMessages.ToString()));
         allRows.Add(new DetailRow("ID Messages", aircraft.Status.IdentificationMessages.ToString()));
 
-        string signalStrength = (aircraft.Status.SignalStrength.HasValue && aircraft.Status.SignalStrengthDecibel.HasValue)
+        string signalStrength = aircraft.Status is { SignalStrength: not null, SignalStrengthDecibel: not null }
             ? $"{aircraft.Status.SignalStrengthDecibel.Value:F1} dBFS (RSSI: {aircraft.Status.SignalStrength.Value:F1})"
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Signal Strength", signalStrength));
