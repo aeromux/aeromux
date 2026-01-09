@@ -34,6 +34,18 @@ public sealed record TrackedStatus
     public double? SignalStrength { get; init; }
 
     /// <summary>
+    /// Signal strength in dBFS (decibels relative to full scale).
+    /// Calculated from SignalStrength using: 10 * log10(SignalStrength / 255.0).
+    /// Returns null if SignalStrength is null or zero.
+    /// Range: -∞ to 0 dBFS (0 = maximum signal, negative values = weaker signals).
+    /// Typical values: -45 to -10 dBFS for aircraft signals.
+    /// </summary>
+    public double? SignalStrengthDecibel =>
+        SignalStrength.HasValue && SignalStrength.Value > 0
+            ? 10.0 * Math.Log10(SignalStrength.Value / 255.0)
+            : null;
+
+    /// <summary>
     /// Total count of all messages received from this aircraft.
     /// Incremented on every frame, regardless of message type.
     /// Used for tracking reception quality and coverage.

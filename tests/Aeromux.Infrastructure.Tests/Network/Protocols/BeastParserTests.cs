@@ -154,7 +154,7 @@ public class BeastParserTests(ITestOutputHelper output)
         ValidatedFrame parsedFrame = frames[0];
 
         // Verify reverse transform: (encodedSignal/255.0)^2 * 255.0
-        int actualSignal = parsedFrame.SignalStrength;
+        double actualSignal = parsedFrame.SignalStrength;
         actualSignal.Should().BeInRange(expectedDecoded - tolerance, expectedDecoded + tolerance,
             $"encoded {encodedSignal} should decode to ~{expectedDecoded}");
     }
@@ -697,8 +697,8 @@ public class BeastParserTests(ITestOutputHelper output)
 
         // Calculate signal strength statistics
         double avgSignal = frames.Average(f => f.SignalStrength);
-        byte minSignal = frames.Min(f => f.SignalStrength);
-        byte maxSignal = frames.Max(f => f.SignalStrength);
+        double minSignal = frames.Min(f => f.SignalStrength);
+        double maxSignal = frames.Max(f => f.SignalStrength);
 
         // Log detailed analysis
         output.WriteLine("=== Beast Binary Data Analysis ===");

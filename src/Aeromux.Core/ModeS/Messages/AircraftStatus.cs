@@ -25,7 +25,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
 /// <param name="DownlinkFormat">Downlink format (DF 17 or 18).</param>
-/// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
+/// <param name="SignalStrength">Signal strength in RSSI (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Subtype">Status subtype (NoInformation, EmergencyPriority, or TcasResolutionAdvisory).</param>
 /// <param name="EmergencyState">Emergency state (null if subtype != EmergencyPriority).</param>
@@ -34,7 +34,7 @@ public sealed record AircraftStatus(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     AircraftStatusSubtype Subtype,
     EmergencyState? EmergencyState,

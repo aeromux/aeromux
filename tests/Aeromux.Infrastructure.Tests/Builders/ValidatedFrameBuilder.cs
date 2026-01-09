@@ -25,7 +25,7 @@ public class ValidatedFrameBuilder
     private byte[] _data = [];
     private DateTime _timestamp = DateTime.UtcNow;
     private string _icaoAddress = "000000";
-    private byte _signalStrength = 255;
+    private double _signalStrength = 255.0;
     private bool _wasCorrected;
 
     /// <summary>
@@ -61,8 +61,8 @@ public class ValidatedFrameBuilder
     /// <summary>
     /// Sets the signal strength.
     /// </summary>
-    /// <param name="strength">Signal strength (0-255)</param>
-    public ValidatedFrameBuilder WithSignalStrength(byte strength)
+    /// <param name="strength">Signal strength (0.0-255.0)</param>
+    public ValidatedFrameBuilder WithSignalStrength(double strength)
     {
         _signalStrength = strength;
         return this;

@@ -247,17 +247,16 @@ public sealed class BeastParser
             // Reception time is appropriate for logging, display, and frame correlation
             DateTime timestamp = DateTime.UtcNow;
 
-            // Step 7: Decode signal strength with reverse square root transform
-            // BeastEncoder applies: encodedSignal = sqrt(signalStrength / 255.0) * 255.0
-            // We reverse this: signalStrength = (encodedSignal / 255.0)^2 * 255.0
-            // This restores the original signal strength value from the compressed encoding
+            // Step 7: Decode signal strength by reversing Beast encoder's sqrt transform
+            // Beast format uses sqrt(power) for better weak signal resolution in 8-bit encoding
+            // We square it back to restore power value as double with full precision
             double normalized = signalByte / 255.0;
             double squared = normalized * normalized;
-            byte signalStrength = (byte)Math.Round(squared * 255.0);
+            double signalStrength = squared * 255.0;  // Keep as double, no rounding or clamping
 
             // Step 8: Create ValidatedFrame using ValidatedFrameFactory
             // This properly handles both PI mode (ICAO in AA field) and AP mode (ICAO in CRC)
-            var rawFrame = new RawFrame(frameData, timestamp);
+            var rawFrame = new RawFrame(frameData, timestamp, signalStrength);
             ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
 
             // Track parsing statistics

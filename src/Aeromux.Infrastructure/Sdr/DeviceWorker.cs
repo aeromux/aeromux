@@ -332,9 +332,8 @@ public sealed class DeviceWorker : IDisposable
             // Validate frames with CRC and extract ICAO addresses
             foreach (RawFrame rawFrame in frames)
             {
-                // Use peak magnitude from preamble as signal strength indicator
-                // For now, use a placeholder value (will be improved in future phases)
-                byte signalStrength = 128;  // TODO: Extract actual signal strength from preamble
+                // Extract pre-calculated signal strength from frame for validation and tracking
+                double signalStrength = rawFrame.SignalStrength;
 
                 // CRC validation
                 ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);

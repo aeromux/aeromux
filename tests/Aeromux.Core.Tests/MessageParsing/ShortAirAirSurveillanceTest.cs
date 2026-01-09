@@ -162,7 +162,7 @@ public class ShortAirAirSurveillanceTest
         // RI field can indicate either ACAS operational status (0,2,3,4) or maximum airspeed (8-14)
 
         byte[] frameBytes = Convert.FromHexString(RealFrames.ShortAirAir_4BCE08);
-        RawFrame rawFrame = new(frameBytes, DateTime.UtcNow);
+        RawFrame rawFrame = new(frameBytes, DateTime.UtcNow, 128);
 
         // Act - ValidatedFrameFactory accepts the frame (AP mode)
         ValidatedFrame? validatedFrame = _frameFactory.ValidateFrame(rawFrame, 150);

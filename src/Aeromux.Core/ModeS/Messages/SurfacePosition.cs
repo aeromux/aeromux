@@ -34,7 +34,7 @@ public sealed record SurfacePosition(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     GeographicCoordinate? Position,
     int? GroundSpeed,

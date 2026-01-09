@@ -60,9 +60,9 @@ public sealed class ValidatedFrameFactory
     /// Attempts single-bit error correction if frame is initially invalid.
     /// </summary>
     /// <param name="rawFrame">Raw frame from preamble detection</param>
-    /// <param name="signalStrength">Signal strength for this frame (0-255)</param>
+    /// <param name="signalStrength">Signal strength for this frame (0.0-255.0)</param>
     /// <returns>ValidatedFrame if valid or correctable, null if corrupted beyond repair</returns>
-    public ValidatedFrame? ValidateFrame(RawFrame rawFrame, byte signalStrength)
+    public ValidatedFrame? ValidateFrame(RawFrame rawFrame, double signalStrength)
     {
         ArgumentNullException.ThrowIfNull(rawFrame);
 

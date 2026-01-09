@@ -208,6 +208,7 @@ public sealed class PreambleDetector
         const int noPhaseTestedYet = -42;
         int bestScore = noPhaseTestedYet;
         byte[]? bestMessage = null;
+        double bestSignalStrength = 0.0;  // Track signal strength for best phase
 
         // Test phase groups based on magnitude thresholds
         // Each group tests 1-2 phases that share similar preamble characteristics
@@ -216,23 +217,23 @@ public sealed class PreambleDetector
         int paMag1 = common3456 - diff10And11;
         if (paMag1 >= refLevel)
         {
-            TryPhase(m, pos, 4, ref bestScore, ref bestMessage);
-            TryPhase(m, pos, 5, ref bestScore, ref bestMessage);
+            TryPhase(m, pos, 4, ref bestScore, ref bestMessage, ref bestSignalStrength);
+            TryPhase(m, pos, 5, ref bestScore, ref bestMessage, ref bestSignalStrength);
         }
 
         // Group 2: Phases 6 and 7
         int paMag2 = common3456 + diff10And11;
         if (paMag2 >= refLevel)
         {
-            TryPhase(m, pos, 6, ref bestScore, ref bestMessage);
-            TryPhase(m, pos, 7, ref bestScore, ref bestMessage);
+            TryPhase(m, pos, 6, ref bestScore, ref bestMessage, ref bestSignalStrength);
+            TryPhase(m, pos, 7, ref bestScore, ref bestMessage, ref bestSignalStrength);
         }
 
         // Group 3: Phase 8
         int paMag3 = sum1And4 + (2 * diff2And3) + diff10And11 + m[pos + 12];
         if (paMag3 >= refLevel)
         {
-            TryPhase(m, pos, 8, ref bestScore, ref bestMessage);
+            TryPhase(m, pos, 8, ref bestScore, ref bestMessage, ref bestSignalStrength);
         }
 
         // Preamble detection outcome: successful if ANY phase was tested (bestScore changed from initial state)
@@ -242,7 +243,7 @@ public sealed class PreambleDetector
         // Return best message if we found a valid one
         if (bestMessage != null && bestScore > 0)
         {
-            return new RawFrame(bestMessage, DateTime.UtcNow);
+            return new RawFrame(bestMessage, DateTime.UtcNow, bestSignalStrength);
         }
 
         // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)
@@ -258,7 +259,7 @@ public sealed class PreambleDetector
     /// <summary>
     /// Tries to extract a message at a specific phase alignment.
     /// Uses ValidatedFrameFactory to verify the extracted message is valid.
-    /// Updates bestScore/bestMessage if this phase produces a better result.
+    /// Updates bestScore/bestMessage/bestSignalStrength if this phase produces a better result.
     /// Uses direct array access - NO MODULO.
     /// Score meanings:
     ///   > 0: Valid message with known/accepted ICAO
@@ -266,7 +267,7 @@ public sealed class PreambleDetector
     ///   -2: Bad message or invalid CRC
     /// </summary>
     private void TryPhase(ReadOnlySpan<ushort> m, int pos, int tryPhase,
-                          ref int bestScore, ref byte[]? bestMessage)
+                          ref int bestScore, ref byte[]? bestMessage, ref double bestSignalStrength)
     {
         // Calculate data start position and initial phase
         // Direct calculation - NO MODULO (performance optimization)
@@ -299,9 +300,12 @@ public sealed class PreambleDetector
             message[i] = SliceByte(m, ref pPtr, ref phase);
         }
 
+        // Calculate signal strength as average power over message duration
+        double signalStrength = CalculateSignalStrength(m, pos, messageLengthBits);
+
         // Validate message with CRC and score based on quality
-        var rawFrame = new RawFrame(message, DateTime.UtcNow);
-        ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, 128);
+        var rawFrame = new RawFrame(message, DateTime.UtcNow, signalStrength);
+        ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
 
         int score;
         if (validated == null)
@@ -346,6 +350,8 @@ public sealed class PreambleDetector
             bestScore = score;
             // Only save message if score is positive (accepted)
             bestMessage = score > 0 ? message : null;
+            // Track signal strength for best phase
+            bestSignalStrength = signalStrength;
         }
     }
 
@@ -481,6 +487,49 @@ public sealed class PreambleDetector
     /// </summary>
     private int SlicePhase4(ReadOnlySpan<ushort> m, int pos)
         => (4 * m[pos]) + (15 * m[pos + 1]) - (20 * m[pos + 2]) + (1 * m[pos + 3]);
+
+    /// <summary>
+    /// Calculates signal strength (RSSI) as average power over message duration.
+    /// Returns normalized power scaled to 0-255 range for consistent signal quality assessment.
+    /// </summary>
+    /// <param name="m">Magnitude sample buffer</param>
+    /// <param name="pos">Preamble start position</param>
+    /// <param name="messageLengthBits">Message length in bits (56 or 112)</param>
+    /// <returns>Signal strength as POWER value (0.0-255.0, higher = stronger signal)</returns>
+    /// <remarks>
+    /// Uses average power calculation to provide stable signal strength measurement that's
+    /// less sensitive to noise spikes than peak magnitude. Power is stored (not amplitude)
+    /// because BeastEncoder applies sqrt transform for transmission - this maintains the
+    /// full dynamic range when encoding to 8-bit Beast format.
+    ///
+    /// Returns double precision to accurately represent very weak signals that would otherwise
+    /// be lost when quantizing to byte. Only quantized to byte when encoding to Beast format.
+    /// </remarks>
+    private static double CalculateSignalStrength(ReadOnlySpan<ushort> m, int pos, int messageLengthBits)
+    {
+        // Calculate how many samples span the message at 2.4 MSPS sample rate
+        int signalLengthSamples = (messageLengthBits * 12) / 5;
+
+        // Skip preamble and measure only the data portion for cleaner signal assessment
+        int signalStart = pos + 19;
+
+        // Use squared magnitudes to calculate power (not amplitude) for better SNR representation
+        ulong sumSquared = 0;
+        for (int i = 0; i < signalLengthSamples; i++)
+        {
+            ushort mag = m[signalStart + i];
+            sumSquared += (ulong)mag * (ulong)mag;
+        }
+
+        // Normalize by theoretical maximum to get power ratio (0.0 to 1.0)
+        const double maxMagnitude = 65535.0;
+        double normalizedPower = sumSquared / (maxMagnitude * maxMagnitude * signalLengthSamples);
+
+        // Scale to 0-255 range while preserving full precision as double
+        double signalStrength = normalizedPower * 255.0;
+
+        return signalStrength;  // Returns double, no rounding or clamping
+    }
 
     /// <summary>Returns message length in bits based on Downlink Format.</summary>
     private static int GetMessageLength(DownlinkFormat df)

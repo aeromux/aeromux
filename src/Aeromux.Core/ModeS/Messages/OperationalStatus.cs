@@ -38,7 +38,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="IcaoAddress">ICAO aircraft address (24-bit unique identifier).</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
 /// <param name="DownlinkFormat">Downlink format (DF 17 for ADS-B, DF 18 for TIS-B/ADS-R).</param>
-/// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
+/// <param name="SignalStrength">Signal strength in RSSI (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied to the message.</param>
 /// <param name="Subtype">Message subtype: Airborne or Surface operational status (bits 38-40).</param>
 /// <param name="CapabilityClass">Capability Class (CC) codes indicating aircraft capabilities (bits 41-56, version-dependent, nullable).</param>
@@ -57,7 +57,7 @@ public sealed record OperationalStatus(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     OperationalStatusSubtype Subtype,
     AdsbVersion Version,

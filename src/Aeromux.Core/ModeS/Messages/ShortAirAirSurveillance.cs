@@ -32,7 +32,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
 /// <param name="DownlinkFormat">Downlink format (DF 0).</param>
-/// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
+/// <param name="SignalStrength">Signal strength in RSSI (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Altitude">Decoded altitude (null if unavailable or invalid).</param>
 /// <param name="VerticalStatus">Vertical status (Airborne or Ground).</param>
@@ -43,7 +43,7 @@ public sealed record ShortAirAirSurveillance(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     Altitude? Altitude,
     VerticalStatus VerticalStatus,

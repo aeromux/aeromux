@@ -134,17 +134,18 @@ public class BeastEncoder
             pos = WriteEscapedByte(output, pos, timestampByte);
         }
 
-        // Write signal strength with square root transform for better dynamic range
-        // The square root transform compresses strong signals while preserving weak signal resolution
-        // This optimizes the 8-bit range: weak signals (important for edge-of-range reception)
-        // get more precision, while strong signals (already easy to detect) are compressed
-        // Transform: normalize to 0-1 range → apply sqrt → scale back to 0-255
-        // Mathematical rationale: sqrt is a concave function that grows quickly near zero
-        // but slowly at high values, redistributing the available bit space toward weak signals
-        // Example transformations: 255→255, 128→181, 64→128, 16→64, 4→32
-        // Without transform: uniform spacing across full range
-        // With transform: more resolution for signals below 50% strength
-        byte signalByte = (byte)Math.Round(Math.Sqrt(frame.SignalStrength / 255.0) * 255.0);
+        // Convert double signal strength to byte for Beast protocol
+        // Apply sqrt transform for better weak signal resolution in 8-bit encoding
+        // Transform: normalize to 0-1 → sqrt → scale to 0-255 → round to byte
+        // This preserves more precision for weak signals while compressing strong signals
+        double normalized = frame.SignalStrength / 255.0;
+        double amplitude = Math.Sqrt(normalized);
+        byte signalByte = (byte)Math.Round(amplitude * 255.0);
+
+        // Clamp to valid byte range (defensive, should already be in range)
+        if (signalByte < 0) signalByte = 0;
+        if (signalByte > 255) signalByte = 255;
+
         pos = WriteEscapedByte(output, pos, signalByte);
 
         // Write raw Mode S frame data with escape handling

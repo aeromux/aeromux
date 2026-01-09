@@ -31,7 +31,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
 /// <param name="DownlinkFormat">Downlink format (typically DF 17 or 18).</param>
-/// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
+/// <param name="SignalStrength">Signal strength in RSSI (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Position">Decoded geographic position (null if not yet decoded).</param>
 /// <param name="Altitude">Decoded altitude (null if not available).</param>
@@ -41,7 +41,7 @@ public sealed record AirbornePosition(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     GeographicCoordinate? Position,
     Altitude? Altitude,

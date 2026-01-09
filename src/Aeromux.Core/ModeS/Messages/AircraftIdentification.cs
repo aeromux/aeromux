@@ -32,7 +32,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
 /// <param name="DownlinkFormat">Downlink format (typically DF 17 or 18).</param>
-/// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
+/// <param name="SignalStrength">Signal strength in RSSI (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Callsign">Aircraft callsign (flight number), 8 characters, trimmed.</param>
 /// <param name="Category">Aircraft category (wake vortex classification and vehicle type).</param>
@@ -40,7 +40,7 @@ public sealed record AircraftIdentification(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     string Callsign,
     AircraftCategory Category) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

@@ -22,6 +22,7 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <param name="Data">Raw frame bytes (7 bytes for short, 14 bytes for long frames)</param>
 /// <param name="Timestamp">UTC timestamp when frame was detected</param>
+/// <param name="SignalStrength">Signal strength as POWER value (0.0-255.0, higher = stronger signal)</param>
 /// <remarks>
 /// The frame data includes:
 /// - DF field (first 5 bits of byte 0)
@@ -29,8 +30,11 @@ namespace Aeromux.Core.ModeS;
 /// - CRC/Parity field (last 24 bits)
 ///
 /// CRC validation will verify frame integrity and extract ICAO address.
+///
+/// Signal strength stores power (not amplitude) with full double precision to accurately
+/// represent very weak signals. Only quantized to byte when encoding to Beast format.
 /// </remarks>
-public sealed record RawFrame(byte[] Data, DateTime Timestamp)
+public sealed record RawFrame(byte[] Data, DateTime Timestamp, double SignalStrength)
 {
     /// <summary>
     /// Gets the frame length in bits (56 or 112).

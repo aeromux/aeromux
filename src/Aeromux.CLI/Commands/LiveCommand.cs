@@ -822,9 +822,9 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             }
             speed = speed.PadLeft(8);
 
-            // Format signal strength
-            string signal = aircraft.Status.SignalStrength != 0
-                ? $"{aircraft.Status.SignalStrength:F1}"
+            // Use dBFS for table display as it provides intuitive signal quality indication
+            string signal = aircraft.Status.SignalStrengthDecibel.HasValue
+                ? $"{aircraft.Status.SignalStrengthDecibel.Value:F1}"
                 : "  N/A";
             signal = signal.PadLeft(6);
 
@@ -958,7 +958,15 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         table.AddRow("Position Msgs", aircraft.Status.PositionMessages.ToString());
         table.AddRow("Velocity Msgs", aircraft.Status.VelocityMessages.ToString());
         table.AddRow("ID Messages", aircraft.Status.IdentificationMessages.ToString());
-        table.AddRow("Signal Strength", $"{aircraft.Status.SignalStrength:F1} dBFS");
+        if (aircraft.Status.SignalStrength.HasValue && aircraft.Status.SignalStrengthDecibel.HasValue)
+        {
+            table.AddRow("Signal Strength",
+                $"{aircraft.Status.SignalStrengthDecibel.Value:F1} dBFS (RSSI: {aircraft.Status.SignalStrength.Value:F1})");
+        }
+        else
+        {
+            table.AddRow("Signal Strength", "N/A");
+        }
         table.AddRow("", "");
         usedRows += 9;
 

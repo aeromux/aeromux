@@ -27,7 +27,7 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
 /// <param name="Timestamp">UTC timestamp when the message was received.</param>
 /// <param name="DownlinkFormat">Downlink format (DF 17 or 18).</param>
-/// <param name="SignalStrength">Signal strength in dBFS (0-255).</param>
+/// <param name="SignalStrength">Signal strength in RSSI (0-255).</param>
 /// <param name="WasCorrected">True if error correction was applied.</param>
 /// <param name="Subtype">Message version (Version1 or Version2).</param>
 /// <param name="TargetAltitude">Target/selected altitude (null if not available).</param>
@@ -51,7 +51,7 @@ public sealed record TargetStateAndStatus(
     string IcaoAddress,
     DateTime Timestamp,
     DownlinkFormat DownlinkFormat,
-    byte SignalStrength,
+    double SignalStrength,
     bool WasCorrected,
     TargetStateSubtype Subtype,
     Altitude? TargetAltitude,
