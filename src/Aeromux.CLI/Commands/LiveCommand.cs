@@ -1241,8 +1241,33 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         allRows.Add(new DetailRow("Geo Altitude", geoAlt));
 
         allRows.Add(new DetailRow("On Ground", aircraft.Position.IsOnGround.ToString()));
-        allRows.Add(new DetailRow("NACp", aircraft.Position.NACp?.ToString() ?? "N/A"));
-        allRows.Add(new DetailRow("SIL", aircraft.Position.SIL?.ToString() ?? "N/A"));
+
+        // Movement category (ground only)
+        string movementCategory = aircraft.Position.MovementCategory?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Movement Category", movementCategory));
+
+        // Antenna configuration
+        string antenna = aircraft.Position.Antenna.HasValue
+            ? (aircraft.Position.Antenna.Value == AntennaFlag.SingleAntenna ? "Single Antenna" : "Diversity Antenna")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Antenna", antenna));
+
+        allRows.Add(new DetailRow("NACp", aircraft.Position.NACp?.ToString() ?? "N/A (no data yet)"));
+
+        // NICbaro - barometric altitude integrity
+        string nicBaro = aircraft.Position.NICbaro.HasValue
+            ? (aircraft.Position.NICbaro.Value ? "Cross-checked" : "Not cross-checked")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("NICbaro", nicBaro));
+
+        allRows.Add(new DetailRow("SIL", aircraft.Position.SIL?.ToString() ?? "N/A (no data yet)"));
+
+        // Last position update timestamp
+        string posLastUpdate = aircraft.Position.LastUpdate.HasValue
+            ? aircraft.Position.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", posLastUpdate));
+
         allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
 
         // === VELOCITY ===
@@ -1302,6 +1327,565 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             ? $"{aircraft.Velocity.VerticalRate:F0} ft/min"
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Vertical Rate", verticalRate));
+
+        // Indicated Airspeed (IAS from Comm-B)
+        string indicatedAirspeed;
+        if (aircraft.Velocity.IndicatedAirspeed != null)
+        {
+            double displayIAS = speedUnit switch
+            {
+                SpeedUnit.Knots => aircraft.Velocity.IndicatedAirspeed.Knots,
+                SpeedUnit.KilometersPerHour => aircraft.Velocity.IndicatedAirspeed.Knots * 1.852,
+                SpeedUnit.MilesPerHour => aircraft.Velocity.IndicatedAirspeed.Knots * 1.15078,
+                _ => aircraft.Velocity.IndicatedAirspeed.Knots
+            };
+
+            string unitLabel = speedUnit switch
+            {
+                SpeedUnit.Knots => "kts",
+                SpeedUnit.KilometersPerHour => "km/h",
+                SpeedUnit.MilesPerHour => "mph",
+                _ => "kts"
+            };
+
+            indicatedAirspeed = $"{displayIAS:F0} {unitLabel} (IAS)";
+        }
+        else
+        {
+            indicatedAirspeed = "N/A (no data yet)";
+        }
+        allRows.Add(new DetailRow("Indicated Airspeed", indicatedAirspeed));
+
+        // True Airspeed (TAS from Comm-B)
+        string trueAirspeed;
+        if (aircraft.Velocity.TrueAirspeed != null)
+        {
+            double displayTAS = speedUnit switch
+            {
+                SpeedUnit.Knots => aircraft.Velocity.TrueAirspeed.Knots,
+                SpeedUnit.KilometersPerHour => aircraft.Velocity.TrueAirspeed.Knots * 1.852,
+                SpeedUnit.MilesPerHour => aircraft.Velocity.TrueAirspeed.Knots * 1.15078,
+                _ => aircraft.Velocity.TrueAirspeed.Knots
+            };
+
+            string unitLabel = speedUnit switch
+            {
+                SpeedUnit.Knots => "kts",
+                SpeedUnit.KilometersPerHour => "km/h",
+                SpeedUnit.MilesPerHour => "mph",
+                _ => "kts"
+            };
+
+            trueAirspeed = $"{displayTAS:F0} {unitLabel} (TAS)";
+        }
+        else
+        {
+            trueAirspeed = "N/A (no data yet)";
+        }
+        allRows.Add(new DetailRow("True Airspeed", trueAirspeed));
+
+        // Navigation Accuracy Category for Velocity
+        string nacv = aircraft.Velocity.NACv?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("NACv", nacv));
+
+        // Last velocity update timestamp
+        string velLastUpdate = aircraft.Velocity.LastUpdate.HasValue
+            ? aircraft.Velocity.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", velLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === AUTOPILOT ===
+        allRows.Add(new DetailRow("[bold]=== AUTOPILOT ==========================[/]", "", IsSectionHeader: true));
+
+        // Selected Altitude
+        string selectedAltitude;
+        if (aircraft.Autopilot?.SelectedAltitude != null)
+        {
+            if (altitudeUnit == AltitudeUnit.Feet)
+            {
+                selectedAltitude = $"{aircraft.Autopilot.SelectedAltitude.Feet:F0} ft";
+            }
+            else
+            {
+                double meters = aircraft.Autopilot.SelectedAltitude.Feet * 0.3048;
+                selectedAltitude = $"{meters:F0} m";
+            }
+        }
+        else
+        {
+            selectedAltitude = "N/A (no data yet)";
+        }
+        allRows.Add(new DetailRow("Selected Altitude", selectedAltitude));
+
+        // Altitude Source
+        string altitudeSource = aircraft.Autopilot?.AltitudeSource?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Altitude Source", altitudeSource));
+
+        // Selected Heading
+        string selectedHeading = aircraft.Autopilot?.SelectedHeading.HasValue == true
+            ? $"{aircraft.Autopilot.SelectedHeading.Value:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Selected Heading", selectedHeading));
+
+        // Barometric Pressure Setting
+        string barometricPressure = aircraft.Autopilot?.BarometricPressureSetting.HasValue == true
+            ? $"{aircraft.Autopilot.BarometricPressureSetting.Value:F1} hPa"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Barometric Pressure", barometricPressure));
+
+        // Vertical Mode
+        string verticalMode = aircraft.Autopilot?.VerticalMode?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Vertical Mode", verticalMode));
+
+        // Horizontal Mode
+        string horizontalMode = aircraft.Autopilot?.HorizontalMode?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Horizontal Mode", horizontalMode));
+
+        // Autopilot Engaged
+        string autopilotEngaged = aircraft.Autopilot?.AutopilotEngaged.HasValue == true
+            ? (aircraft.Autopilot.AutopilotEngaged.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Autopilot Engaged", autopilotEngaged));
+
+        // VNAV Mode
+        string vnavMode = aircraft.Autopilot?.VNAVMode.HasValue == true
+            ? (aircraft.Autopilot.VNAVMode.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("VNAV Mode", vnavMode));
+
+        // LNAV Mode
+        string lnavMode = aircraft.Autopilot?.LNAVMode.HasValue == true
+            ? (aircraft.Autopilot.LNAVMode.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("LNAV Mode", lnavMode));
+
+        // Altitude Hold Mode
+        string altitudeHoldMode = aircraft.Autopilot?.AltitudeHoldMode.HasValue == true
+            ? (aircraft.Autopilot.AltitudeHoldMode.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Altitude Hold", altitudeHoldMode));
+
+        // Approach Mode
+        string approachMode = aircraft.Autopilot?.ApproachMode.HasValue == true
+            ? (aircraft.Autopilot.ApproachMode.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Approach Mode", approachMode));
+
+        // Last autopilot update timestamp
+        string autopilotLastUpdate = aircraft.Autopilot?.LastUpdate.HasValue == true
+            ? aircraft.Autopilot.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", autopilotLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === ACAS/TCAS ===
+        allRows.Add(new DetailRow("[bold]=== ACAS/TCAS ==========================[/]", "", IsSectionHeader: true));
+
+        // TCAS Operational
+        string tcasOperational = aircraft.Acas?.TCASOperational.HasValue == true
+            ? (aircraft.Acas.TCASOperational.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("TCAS Operational", tcasOperational));
+
+        // Sensitivity Level
+        string sensitivityLevel = aircraft.Acas?.SensitivityLevel.HasValue == true
+            ? (aircraft.Acas.SensitivityLevel.Value == 0 ? "0 (Inoperative)" : aircraft.Acas.SensitivityLevel.Value.ToString())
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Sensitivity Level", sensitivityLevel));
+
+        // Cross-Link Capability
+        string crossLinkCapability = aircraft.Acas?.CrossLinkCapability.HasValue == true
+            ? (aircraft.Acas.CrossLinkCapability.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Cross-Link Capability", crossLinkCapability));
+
+        // Reply Information
+        string replyInformation = aircraft.Acas?.ReplyInformation?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Reply Information", replyInformation));
+
+        // TCAS RA Active
+        string tcasRaActive = aircraft.Acas?.TCASRAActive.HasValue == true
+            ? (aircraft.Acas.TCASRAActive.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("TCAS RA Active", tcasRaActive));
+
+        // RA Terminated
+        string raTerminated = aircraft.Acas?.ResolutionAdvisoryTerminated.HasValue == true
+            ? (aircraft.Acas.ResolutionAdvisoryTerminated.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("RA Terminated", raTerminated));
+
+        // Multiple Threats
+        string multipleThreats = aircraft.Acas?.MultipleThreatEncounter.HasValue == true
+            ? (aircraft.Acas.MultipleThreatEncounter.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Multiple Threats", multipleThreats));
+
+        // RAC: Not Below
+        string racNotBelow = aircraft.Acas?.RACNotBelow.HasValue == true
+            ? (aircraft.Acas.RACNotBelow.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("RAC: Not Below", racNotBelow));
+
+        // RAC: Not Above
+        string racNotAbove = aircraft.Acas?.RACNotAbove.HasValue == true
+            ? (aircraft.Acas.RACNotAbove.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("RAC: Not Above", racNotAbove));
+
+        // RAC: Not Left
+        string racNotLeft = aircraft.Acas?.RACNotLeft.HasValue == true
+            ? (aircraft.Acas.RACNotLeft.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("RAC: Not Left", racNotLeft));
+
+        // RAC: Not Right
+        string racNotRight = aircraft.Acas?.RACNotRight.HasValue == true
+            ? (aircraft.Acas.RACNotRight.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("RAC: Not Right", racNotRight));
+
+        // Last ACAS update timestamp
+        string acasLastUpdate = aircraft.Acas?.LastUpdate.HasValue == true
+            ? aircraft.Acas.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", acasLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === FLIGHT DYNAMICS ===
+        allRows.Add(new DetailRow("[bold]=== FLIGHT DYNAMICS ====================[/]", "", IsSectionHeader: true));
+
+        // Roll Angle
+        string rollAngle = aircraft.FlightDynamics?.RollAngle.HasValue == true
+            ? $"{aircraft.FlightDynamics.RollAngle.Value:F2}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Roll Angle", rollAngle));
+
+        // Magnetic Heading
+        string magneticHeading = aircraft.FlightDynamics?.MagneticHeading.HasValue == true
+            ? $"{aircraft.FlightDynamics.MagneticHeading.Value:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Magnetic Heading", magneticHeading));
+
+        // Barometric Vertical Rate
+        string baroVerticalRate = aircraft.FlightDynamics?.BarometricVerticalRate.HasValue == true
+            ? $"{aircraft.FlightDynamics.BarometricVerticalRate.Value:+0;-#} ft/min"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Barometric Vert Rate", baroVerticalRate));
+
+        // Inertial Vertical Rate
+        string inertialVerticalRate = aircraft.FlightDynamics?.InertialVerticalRate.HasValue == true
+            ? $"{aircraft.FlightDynamics.InertialVerticalRate.Value:+0;-#} ft/min"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Inertial Vert Rate", inertialVerticalRate));
+
+        // Mach Number
+        string machNumber = aircraft.FlightDynamics?.MachNumber.HasValue == true
+            ? $"M {aircraft.FlightDynamics.MachNumber.Value:F3}"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Mach Number", machNumber));
+
+        // Track Rate
+        string trackRate = aircraft.FlightDynamics?.TrackRate.HasValue == true
+            ? $"{aircraft.FlightDynamics.TrackRate.Value:+0.00;-0.00} °/s"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Track Rate", trackRate));
+
+        // Last flight dynamics update timestamp
+        string flightDynamicsLastUpdate = aircraft.FlightDynamics?.LastUpdate.HasValue == true
+            ? aircraft.FlightDynamics.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", flightDynamicsLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === METEOROLOGY ===
+        allRows.Add(new DetailRow("[bold]=== METEOROLOGY ========================[/]", "", IsSectionHeader: true));
+
+        // Wind Speed
+        string windSpeed = aircraft.Meteo?.WindSpeed.HasValue == true
+            ? $"{aircraft.Meteo.WindSpeed.Value} kts"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Wind Speed", windSpeed));
+
+        // Wind Direction
+        string windDirection = aircraft.Meteo?.WindDirection.HasValue == true
+            ? $"{aircraft.Meteo.WindDirection.Value:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Wind Direction", windDirection));
+
+        // Static Air Temperature
+        string staticAirTemp = aircraft.Meteo?.StaticAirTemperature.HasValue == true
+            ? $"{aircraft.Meteo.StaticAirTemperature.Value:F1} °C"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Static Air Temp", staticAirTemp));
+
+        // Pressure
+        string pressure = aircraft.Meteo?.Pressure.HasValue == true
+            ? $"{aircraft.Meteo.Pressure.Value:F1} hPa"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Pressure", pressure));
+
+        // Turbulence
+        string turbulence = aircraft.Meteo?.Turbulence?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Turbulence", turbulence));
+
+        // Wind Shear
+        string windShear = aircraft.Meteo?.WindShear?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Wind Shear", windShear));
+
+        // Microburst
+        string microburst = aircraft.Meteo?.Microburst?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Microburst", microburst));
+
+        // Icing
+        string icing = aircraft.Meteo?.Icing?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Icing", icing));
+
+        // Wake Vortex
+        string wakeVortex = aircraft.Meteo?.WakeVortex?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Wake Vortex", wakeVortex));
+
+        // Radio Height
+        string radioHeight;
+        if (aircraft.Meteo?.RadioHeight.HasValue == true)
+        {
+            if (altitudeUnit == AltitudeUnit.Feet)
+            {
+                radioHeight = $"{aircraft.Meteo.RadioHeight.Value} ft";
+            }
+            else
+            {
+                double meters = aircraft.Meteo.RadioHeight.Value * 0.3048;
+                radioHeight = $"{(int)meters} m";
+            }
+        }
+        else
+        {
+            radioHeight = "N/A (no data yet)";
+        }
+        allRows.Add(new DetailRow("Radio Height", radioHeight));
+
+        // Figure of Merit
+        string figureOfMerit = aircraft.Meteo?.FigureOfMerit.HasValue == true
+            ? aircraft.Meteo.FigureOfMerit.Value.ToString()
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Figure of Merit", figureOfMerit));
+
+        // Humidity
+        string humidity = aircraft.Meteo?.Humidity.HasValue == true
+            ? $"{aircraft.Meteo.Humidity.Value:F1}%"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Humidity", humidity));
+
+        // Last meteorological update timestamp
+        string meteoLastUpdate = aircraft.Meteo?.LastUpdate.HasValue == true
+            ? aircraft.Meteo.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", meteoLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === CAPABILITIES ===
+        allRows.Add(new DetailRow("[bold]=== CAPABILITIES =======================[/]", "", IsSectionHeader: true));
+
+        // Transponder Level
+        string transponderLevel = aircraft.Capabilities?.TransponderLevel?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Transponder Level", transponderLevel));
+
+        // TCAS Capability
+        string tcasCapability = aircraft.Capabilities?.TCASCapability.HasValue == true
+            ? (aircraft.Capabilities.TCASCapability.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("TCAS Capability", tcasCapability));
+
+        // CDTI Available
+        string cdtiAvailable = aircraft.Capabilities?.CockpitDisplayTraffic.HasValue == true
+            ? (aircraft.Capabilities.CockpitDisplayTraffic.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("CDTI Available", cdtiAvailable));
+
+        // ADS-B 1090ES
+        string adsb1090es = aircraft.Capabilities?.ADSB1090ES.HasValue == true
+            ? (aircraft.Capabilities.ADSB1090ES.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("ADS-B 1090ES", adsb1090es));
+
+        // Air Referenced Velocity
+        string airReferencedVelocity = aircraft.Capabilities?.AirReferencedVelocity.HasValue == true
+            ? (aircraft.Capabilities.AirReferencedVelocity.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Air Referenced Velocity", airReferencedVelocity));
+
+        // Target State Reporting
+        string targetStateReporting = aircraft.Capabilities?.TargetStateReporting.HasValue == true
+            ? (aircraft.Capabilities.TargetStateReporting.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Target State Reporting", targetStateReporting));
+
+        // Trajectory Change Level
+        string trajectoryChangeLevel = aircraft.Capabilities?.TrajectoryChangeLevel?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Trajectory Change Level", trajectoryChangeLevel));
+
+        // UAT 978 Support
+        string uat978Support = aircraft.Capabilities?.UAT978Support.HasValue == true
+            ? (aircraft.Capabilities.UAT978Support.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("UAT 978 Support", uat978Support));
+
+        // Position Offset Applied
+        string positionOffsetApplied = aircraft.Capabilities?.PositionOffsetApplied.HasValue == true
+            ? (aircraft.Capabilities.PositionOffsetApplied.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Position Offset Applied", positionOffsetApplied));
+
+        // Low Power 1090ES
+        string lowPower1090ES = aircraft.Capabilities?.LowPower1090ES.HasValue == true
+            ? (aircraft.Capabilities.LowPower1090ES.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Low Power 1090ES", lowPower1090ES));
+
+        // NACv (from Capabilities)
+        string capabilitiesNacv = aircraft.Capabilities?.NACv?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("NACv", capabilitiesNacv));
+
+        // NIC Supplement C
+        string nicSupplementC = aircraft.Capabilities?.NICSupplementC.HasValue == true
+            ? (aircraft.Capabilities.NICSupplementC.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("NIC Supplement C", nicSupplementC));
+
+        // Data Link Capability
+        string dataLinkCapability = aircraft.Capabilities?.DataLinkCapabilityBits.HasValue == true
+            ? $"0x{aircraft.Capabilities.DataLinkCapabilityBits.Value:X4}"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Data Link Capability", dataLinkCapability));
+
+        // Supported BDS Registers
+        string supportedBdsRegisters = aircraft.Capabilities?.SupportedBDSRegisters.HasValue == true
+            ? $"0x{aircraft.Capabilities.SupportedBDSRegisters.Value:X14}"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Supported BDS Registers", supportedBdsRegisters));
+
+        // Aircraft Dimensions
+        string dimensions = aircraft.Capabilities?.Dimensions?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Aircraft Dimensions", dimensions));
+
+        // Last capabilities update timestamp
+        string capabilitiesLastUpdate = aircraft.Capabilities?.LastUpdate.HasValue == true
+            ? aircraft.Capabilities.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", capabilitiesLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === DATA QUALITY ===
+        allRows.Add(new DetailRow("[bold]=== DATA QUALITY =======================[/]", "", IsSectionHeader: true));
+
+        // Geometric Vertical Accuracy
+        string geometricVerticalAccuracy = aircraft.DataQuality?.GeometricVerticalAccuracy?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Geometric Vert Accuracy", geometricVerticalAccuracy));
+
+        // NICbaro (TC 29)
+        string nicBaroTc29 = aircraft.DataQuality?.NICbaro_TC29?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("NICbaro (TC 29)", nicBaroTc29));
+
+        // NIC Supplement A
+        string nicSupplementA = aircraft.DataQuality?.NICSupplementA.HasValue == true
+            ? (aircraft.DataQuality.NICSupplementA.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("NIC Supplement A", nicSupplementA));
+
+        // SIL Supplement
+        string silSupplement = aircraft.DataQuality?.SILSupplement?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("SIL Supplement", silSupplement));
+
+        // SIL (TC 29)
+        string silTc29 = aircraft.DataQuality?.SIL_TC29?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("SIL (TC 29)", silTc29));
+
+        // NACp (TC 29)
+        string nacpTc29 = aircraft.DataQuality?.NACp_TC29?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("NACp (TC 29)", nacpTc29));
+
+        // Horizontal Reference
+        string horizontalReference = aircraft.DataQuality?.HorizontalReference?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Horizontal Reference", horizontalReference));
+
+        // Heading Type
+        string headingType = aircraft.DataQuality?.HeadingType?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Heading Type", headingType));
+
+        // Last data quality update timestamp
+        string dataQualityLastUpdate = aircraft.DataQuality?.LastUpdate.HasValue == true
+            ? aircraft.DataQuality.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", dataQualityLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === OPERATIONAL MODE ===
+        allRows.Add(new DetailRow("[bold]=== OPERATIONAL MODE ===================[/]", "", IsSectionHeader: true));
+
+        // TCAS RA Active
+        string opModeTcasRaActive = aircraft.OperationalMode?.TCASRAActive.HasValue == true
+            ? (aircraft.OperationalMode.TCASRAActive.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("TCAS RA Active", opModeTcasRaActive));
+
+        // IDENT Switch Active
+        string identSwitchActive = aircraft.OperationalMode?.IdentSwitchActive.HasValue == true
+            ? (aircraft.OperationalMode.IdentSwitchActive.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("IDENT Switch Active", identSwitchActive));
+
+        // Receiving ATC Services
+        string receivingAtcServices = aircraft.OperationalMode?.ReceivingATCServices.HasValue == true
+            ? (aircraft.OperationalMode.ReceivingATCServices.Value ? "Yes" : "No")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Receiving ATC Services", receivingAtcServices));
+
+        // Antenna Configuration
+        string antennaConfiguration = aircraft.OperationalMode?.SingleAntenna.HasValue == true
+            ? (aircraft.OperationalMode.SingleAntenna.Value == AntennaFlag.SingleAntenna ? "Single" : "Diversity")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Antenna Configuration", antennaConfiguration));
+
+        // System Design Assurance
+        string systemDesignAssurance = aircraft.OperationalMode?.SystemDesignAssurance?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("System Design Assurance", systemDesignAssurance));
+
+        // GPS Lateral Offset
+        string gpsLateralOffset = aircraft.OperationalMode?.GPSLateralOffset?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("GPS Lateral Offset", gpsLateralOffset));
+
+        // GPS Longitudinal Offset
+        string gpsLongitudinalOffset = aircraft.OperationalMode?.GPSLongitudinalOffset?.ToString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("GPS Longitudinal Offset", gpsLongitudinalOffset));
+
+        // Downlink Request
+        string downlinkRequest = aircraft.OperationalMode?.DownlinkRequest.HasValue == true
+            ? aircraft.OperationalMode.DownlinkRequest.Value.ToString()
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Downlink Request", downlinkRequest));
+
+        // Utility Message
+        string utilityMessage = aircraft.OperationalMode?.UtilityMessage.HasValue == true
+            ? $"0x{aircraft.OperationalMode.UtilityMessage.Value:X2}"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Utility Message", utilityMessage));
+
+        // Last operational mode update timestamp
+        string operationalModeLastUpdate = aircraft.OperationalMode?.LastUpdate.HasValue == true
+            ? aircraft.OperationalMode.LastUpdate.Value.ToString("HH:mm:ss")
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Last Update", operationalModeLastUpdate));
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
 
         // Calculate viewport (same logic as BuildTable)
         int totalRows = allRows.Count;
