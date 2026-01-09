@@ -725,6 +725,26 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             viewportStart = Math.Max(0, viewportEnd - availableRows);
         }
 
+        // Calculate scrollbar parameters
+        int totalAircraft = sortedAircraft.Count;
+        bool showScrollbar = totalAircraft > availableRows;
+        int thumbSize = 1;
+        int thumbStart = 0;
+
+        if (showScrollbar)
+        {
+            // Thumb size: proportional to viewport/total ratio (minimum 1 row)
+            thumbSize = Math.Max(1, (int)Math.Floor((double)availableRows * availableRows / totalAircraft));
+
+            // Thumb position: maps viewport position to track position
+            int scrollableRange = totalAircraft - availableRows;
+            if (scrollableRange > 0)
+            {
+                double scrollProgress = (double)viewportStart / scrollableRange;
+                thumbStart = (int)Math.Floor(scrollProgress * (availableRows - thumbSize));
+            }
+        }
+
         // Create table with dynamic width based on terminal size
         Table table = new Table()
             .Border(TableBorder.Square)
@@ -740,6 +760,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         table.AddColumn("[bold]Messages[/]", col => col.Width(8).RightAligned().NoWrap().PadLeft(1).PadRight(1));
         table.AddColumn("[bold]Signal[/]", col => col.Width(6).RightAligned().NoWrap().PadLeft(1).PadRight(1));
         table.AddColumn("[bold]Last seen[/]", col => col.Width(9).RightAligned().NoWrap().PadLeft(1).PadRight(1));
+        table.AddColumn("[bold] [/]", col => col.Width(1).Centered().NoWrap());
 
         // Render aircraft in viewport
         for (int i = viewportStart; i < viewportEnd; i++)
@@ -747,6 +768,25 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             Aircraft aircraft = sortedAircraft[i];
             TimeSpan age = DateTime.UtcNow - aircraft.Status.LastSeen;
             bool isSelected = i == selectedRow;
+
+            // Calculate scrollbar character for this row
+            string scrollbarChar;
+            if (showScrollbar)
+            {
+                int rowInViewport = i - viewportStart;
+                if (rowInViewport >= thumbStart && rowInViewport < thumbStart + thumbSize)
+                {
+                    scrollbarChar = "█"; // Thumb (full block)
+                }
+                else
+                {
+                    scrollbarChar = "░"; // Track (light shade)
+                }
+            }
+            else
+            {
+                scrollbarChar = "░"; // Full track (all items fit - no scrolling needed)
+            }
 
             // Format callsign (or N/A if not known)
             string callsign = aircraft.Identification.Callsign ?? "N/A";
@@ -846,7 +886,8 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                     $"[black on white]{speed}[/]",
                     $"[black on white]{messages}[/]",
                     $"[black on white]{signal}[/]",
-                    $"[black on white]{lastSeenNumber}[/]");
+                    $"[black on white]{lastSeenNumber}[/]",
+                    scrollbarChar); // Keep scrollbar with normal styling for visibility
             }
             else
             {
@@ -859,7 +900,8 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                     speed,
                     messages,
                     signal,
-                    lastSeenNumber);
+                    lastSeenNumber,
+                    scrollbarChar);
             }
         }
 
@@ -868,7 +910,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         int emptyRowsNeeded = availableRows - rowsRendered;
         for (int i = 0; i < emptyRowsNeeded; i++)
         {
-            table.AddRow("", "", "", "", "", "", "", "", "");
+            table.AddRow("", "", "", "", "", "", "", "", "", "░");
         }
 
         // Build footer (2 rows with left/right alignment)
@@ -891,8 +933,8 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         string footerRow2Right = "[bold]ENTER[/]: Details, [bold]D/A/S[/]: Units, [bold]Q[/]: Quit";
 
         // Calculate spacing for right alignment (100 chars total width - border chars)
-        // Table width is 100, but caption appears inside borders, so usable width is 96
-        int usableWidth = 96;
+        // Table width is 104, but caption appears inside borders, so usable width is 100
+        int usableWidth = 100;
 
         string footerRow1 = footerRow1Left + new string(' ', Math.Max(1, usableWidth - footerRow1Left.Length + 27 - footerRow1Right.Length + 27)) + footerRow1Right;
         string footerRow2 = footerRow2Left + new string(' ', Math.Max(1, usableWidth - footerRow2Left.Length + 18 - footerRow2Right.Length + 27)) + footerRow2Right;
