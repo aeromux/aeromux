@@ -70,17 +70,21 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
             heading = msg.Heading;
         }
 
-        // Update velocity with all fields from TC 19 message
-        // TC 19 messages always contain complete airborne velocity information when present
-        // Note: GroundSpeed and GroundTrack remain unchanged (those come from TC 5-8 surface messages)
-        var velocity = new TrackedVelocity
+        // Update velocity with TC 19 message fields while preserving Comm-B and surface data
+        // TC 19 provides: Speed, Heading/Track, VerticalRate, VelocitySubtype, NACv
+        // Preserve from other handlers: IndicatedAirspeed, TrueAirspeed, TrackAngle (Comm-B BDS 5,0/5,3/6,0)
+        //                                GroundSpeed, GroundTrack (Surface Position TC 5-8)
+        TrackedVelocity velocity = aircraft.Velocity with
         {
-            Speed = msg.Velocity,                                      // Airborne velocity (ground speed or airspeed)
+            Speed = msg.Velocity,                                      // Airborne velocity from TC 19
             Heading = heading,                                         // True heading (subtype 3-4 only)
             Track = track,                                             // Ground track angle (subtype 1-2 only)
-            VerticalRate = msg.VerticalRate,                           // Climb/descent rate
+            VerticalRate = msg.VerticalRate,                           // Climb/descent rate from TC 19
             VelocitySubtype = msg.Subtype,                             // Velocity source and speed range
             NACv = msg.NACv,                                           // Navigation accuracy category for velocity
+            // Preserve existing values from other handlers:
+            // - IndicatedAirspeed, TrueAirspeed, TrackAngle (from Comm-B BDS 5,0/5,3/6,0)
+            // - GroundSpeed, GroundTrack (from Surface Position TC 5-8)
             LastUpdate = msg.Velocity != null ? timestamp : null       // Update timestamp only if velocity present
         };
 
