@@ -1164,8 +1164,8 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         allRows.Add(new DetailRow("First Seen", aircraft.Status.FirstSeen.ToString("HH:mm:ss")));
         allRows.Add(new DetailRow("Last Seen", $"{(DateTime.UtcNow - aircraft.Status.LastSeen).TotalSeconds:F1}s ago"));
         allRows.Add(new DetailRow("Total Messages", aircraft.Status.TotalMessages.ToString()));
-        allRows.Add(new DetailRow("Position Msgs", aircraft.Status.PositionMessages.ToString()));
-        allRows.Add(new DetailRow("Velocity Msgs", aircraft.Status.VelocityMessages.ToString()));
+        allRows.Add(new DetailRow("Position Messages", aircraft.Status.PositionMessages.ToString()));
+        allRows.Add(new DetailRow("Velocity Messages", aircraft.Status.VelocityMessages.ToString()));
         allRows.Add(new DetailRow("ID Messages", aircraft.Status.IdentificationMessages.ToString()));
 
         string signalStrength = aircraft.Status is { SignalStrength: not null, SignalStrengthDecibel: not null }

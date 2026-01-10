@@ -179,15 +179,20 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         }
 
         // Extract navigation mode flags from BDS 4,0
+        // IMPORTANT: Only set to true when flag is present, leave as null when absent
+        // This prevents overwriting TC 29 values when BDS 4,0 doesn't have the flag set
         bool? vnavMode = null;
         bool? altitudeHoldMode = null;
         bool? approachMode = null;
         if (data.NavigationModes.HasValue)
         {
             Bds40NavigationMode modes = data.NavigationModes.Value;
-            vnavMode = modes.HasFlag(Bds40NavigationMode.Vnav);
-            altitudeHoldMode = modes.HasFlag(Bds40NavigationMode.AltitudeHold);
-            approachMode = modes.HasFlag(Bds40NavigationMode.Approach);
+            if (modes.HasFlag(Bds40NavigationMode.Vnav))
+                vnavMode = true;
+            if (modes.HasFlag(Bds40NavigationMode.AltitudeHold))
+                altitudeHoldMode = true;
+            if (modes.HasFlag(Bds40NavigationMode.Approach))
+                approachMode = true;
         }
 
         // Create new autopilot state with field-level merging:
