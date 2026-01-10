@@ -301,18 +301,21 @@ public sealed partial class MessageParser
             return (BdsCode.Bds60, bds60);
         }
 
-        // Try BDS 5,3 (Air-referenced state vector)
-        Bds53AirReferencedState? bds53 = TryParseBds53(mb);
-        if (bds53 != null)
-        {
-            return (BdsCode.Bds53, bds53);
-        }
-
         // Try MRAR registers (4,4/4,5) - meteorological reports
+        // These must be tried before BDS 5,3 because BDS 5,3 has lenient validation
+        // (only requires one field) and can incorrectly match meteorological messages
         Bds44MeteorologicalRoutine? bds44 = TryParseBds44(mb);
         if (bds44 != null)
         {
             return (BdsCode.Bds44, bds44);
+        }
+
+        // Try BDS 5,3 (Air-referenced state vector)
+        // Placed after meteorological registers due to lenient validation
+        Bds53AirReferencedState? bds53 = TryParseBds53(mb);
+        if (bds53 != null)
+        {
+            return (BdsCode.Bds53, bds53);
         }
 
         Bds45MeteorologicalHazard? bds45 = TryParseBds45(mb);
@@ -589,13 +592,13 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds44MeteorologicalRoutine? TryParseBds44(byte[] mb)
     {
-        // BDS 4,4 structure (per ICAO Annex 10 Vol IV, 1090MHz Riddle, readsb):
-        // - Bits 1-4: Figure of Merit / Source (4 bits, range: 0-6, no status bit)
+        // BDS 4,4 Meteorological Routine Air Report structure (per ICAO Annex 10 Vol IV):
+        // - Bits 1-4: Figure of Merit / Source (4 bits, valid range: 0-4, no status bit)
         // - Bit 5: Wind valid (applies to BOTH speed and direction)
-        // - Bits 6-14: Wind speed (9 bits, range: 0-511 kt, resolution: 1 kt)
+        // - Bits 6-14: Wind speed (9 bits, encoding: 0-511 kt, valid range: 0-250 kt, resolution: 1 kt)
         // - Bits 15-23: Wind direction (9 bits, range: 0-360°, resolution: 180/256 deg, NO separate status bit)
         // - Bit 24: Temperature sign (1=negative, part of temp field, NOT a status bit)
-        // - Bits 25-34: Temperature (10 bits total with sign, range: -128 to +128°C, resolution: 0.25°C)
+        // - Bits 25-34: Temperature (10 bits total with sign, valid range: -80 to +60°C, resolution: 0.25°C)
         // - Bit 35: Pressure status
         // - Bits 36-46: Pressure (11 bits, range: 0-2048 hPa, resolution: 1 hPa)
         // - Bit 47: Turbulence status
@@ -616,47 +619,52 @@ public sealed partial class MessageParser
         int humidityStatus = ExtractBits(mb, 50, 1);
         int humidityRaw = ExtractBits(mb, 51, 6);
 
-        // Decode Figure of Merit (data quality/source indicator)
-        // Always present (no status bit), valid range 0-6
-        if (fomRaw is < 0 or > 6)
+        // Decode Figure of Merit (data quality and source indicator)
+        // Indicates the source of meteorological data (INS, GNSS, DME/DME, etc.)
+        // Always present in valid messages (no status bit)
+        if (fomRaw is < 0 or > 4)
         {
-            return null; // Invalid FOM value
+            return null; // Invalid FOM value (valid range: 0-4)
         }
         int? fom = fomRaw;
 
-        // Decode wind speed and direction (both controlled by single status bit)
+        // Decode wind speed and direction
+        // Both fields are controlled by a single status bit
         int? windSpeed = null;
         double? windDir = null;
         if (windValid == 1)
         {
-            // Wind speed in knots, range 0-511 kt
+            // Wind speed range: 0-250 knots (values above 250 kt are physically unrealistic)
+            // Even jet stream winds rarely exceed 200 knots
             windSpeed = windSpeedRaw;
-            if (windSpeed is < 0 or > 511)
+            if (windSpeed is < 0 or > 250)
             {
                 return null; // Unrealistic wind speed
             }
 
-            // Wind direction with 180/256 degree resolution (0.703125°/LSB)
+            // Wind direction with 180/256 degree resolution
+            // Resolution: approximately 0.703°/LSB
             windDir = windDirRaw * (180.0 / 256.0);
             if (windDir is < 0 or > 360)
             {
                 return null; // Invalid direction
             }
         }
-        else if (windSpeedRaw != 0)
+        else if (windSpeedRaw != 0 || windDirRaw != 0)
         {
-            // Validation: if wind not valid, raw speed must be zero
+            // Status bit consistency: if wind status is invalid, both speed and direction must be zero
             return null;
         }
 
-        // Decode static air temperature (always present, no status bit)
-        // Sign-magnitude representation: bit 24 is sign, bits 25-34 are magnitude
+        // Decode static air temperature
+        // Temperature is always present in valid BDS 4,4 messages (no status bit)
+        // Uses sign-magnitude encoding with 0.25°C resolution
         double? temp = null;
         int tempValue = tempSign == 1 ? tempRaw - 1024 : tempRaw;
-        temp = tempValue * 0.25; // 0.25°C resolution
-        if (temp is < -128 or > 128)
+        temp = tempValue * 0.25;
+        if (temp is < -80 or > 60)
         {
-            return null; // Outside reasonable temperature range (-128°C to +128°C)
+            return null; // Outside atmospheric temperature range for aviation (-80°C to +60°C)
         }
 
         // Decode static pressure
@@ -709,11 +717,12 @@ public sealed partial class MessageParser
             return null;
         }
 
-        // BDS 4,4 requires at least one valid field to be considered a match
-        if (fom == null && windSpeed == null && windDir == null && temp == null &&
+        // BDS 4,4 requires at least one meteorological field to be valid
+        // Note: FOM is always present, so we only check weather data fields
+        if (windSpeed == null && windDir == null && temp == null &&
             pressure == null && turbulence == null && humidity == null)
         {
-            return null; // No valid data found
+            return null; // No valid meteorological data found
         }
 
         return new Bds44MeteorologicalRoutine(fom, windSpeed, windDir, temp, pressure, turbulence, humidity);
@@ -759,6 +768,13 @@ public sealed partial class MessageParser
         int pressRaw = ExtractBits(mb, 28, 11);
         int rhStatus = ExtractBits(mb, 39, 1);
         int rhRaw = ExtractBits(mb, 40, 12);
+
+        // Validate reserved bits (bits 52-56 must be zero)
+        int reservedBits = ExtractBits(mb, 52, 5);
+        if (reservedBits != 0)
+        {
+            return null; // Reserved bits must be zero in valid BDS 4,5 messages
+        }
 
         // Validate all severity enums before decoding (valid: 0-3, 2-bit fields)
         // This prevents invalid enum casts that could cause runtime errors
@@ -819,11 +835,13 @@ public sealed partial class MessageParser
         int? radioHeight = null;
         if (rhStatus == 1)
         {
-            // 16 ft resolution, measures height above ground
+            // Radio altimeters measure height above ground with 16 ft resolution
+            // These systems are only accurate and operational below approximately 2,500 feet AGL
+            // Maximum realistic value extended to 5,000 feet to allow for margin
             radioHeight = rhRaw * 16;
-            if (radioHeight is < 0 or > 65520)
+            if (radioHeight is < 0 or > 5000)
             {
-                return null; // Outside valid range
+                return null; // Outside operational range for radio altimeters
             }
         }
 
@@ -1171,7 +1189,20 @@ public sealed partial class MessageParser
             }
         }
 
-        // BDS 6,0 requires at least one valid field to be considered a match
+        // BDS 6,0 validation: ALL three primary status bits (heading, IAS, Mach) must be set,
+        // plus at least one of the vertical rate status bits
+        // This strict requirement prevents false matches with BDS 4,4 (meteorological) messages
+        if (hdgStatus == 0 || iasStatus == 0 || machStatus == 0)
+        {
+            return null; // Missing required primary status bits
+        }
+
+        if (baroVrStatus == 0 && inerVrStatus == 0)
+        {
+            return null; // At least one vertical rate must be valid
+        }
+
+        // Verify that at least one field decoded successfully (status bit set but decode failed)
         if (hdg == null && ias == null && mach == null && baroVr == null && inerVr == null)
         {
             return null; // No valid data found
