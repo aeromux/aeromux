@@ -22,6 +22,7 @@ using Aeromux.Core.SignalProcessing;
 using Aeromux.Core.ModeS;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
+using Aeromux.Core.Timing;
 
 namespace Aeromux.Infrastructure.Sdr;
 
@@ -48,6 +49,7 @@ public sealed class DeviceWorker : IDisposable
     private readonly DeviceConfig _config;
     private readonly TrackingConfig _trackingConfig;
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
+    private readonly ITimeProvider _timeProvider;
     private readonly IQDemodulator _demodulator = new();
     private readonly PreambleDetector _preambleDetector;
     private readonly ValidatedFrameFactory _validatedFrameFactory = new();
@@ -76,13 +78,16 @@ public sealed class DeviceWorker : IDisposable
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
         _onDataParsed = onDataParsed;
 
+        // Initialize high-precision time provider for this device
+        _timeProvider = new StopwatchTimeProvider();
+
         // Initialize confidence tracker first (needed by PreambleDetector for ICAO filtering)
         _confidenceTracker = new IcaoConfidenceTracker(
             trackingConfig.ConfidenceLevel,
             trackingConfig.IcaoTimeoutSeconds);
 
-        // Pass confidence tracker to PreambleDetector for AP mode ICAO filtering
-        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold, _confidenceTracker);
+        // Pass confidence tracker and time provider to PreambleDetector for AP mode ICAO filtering
+        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold, _confidenceTracker, _timeProvider);
 
         // Initialize frame deduplicator with config values
         _frameDeduplicator = new FrameDeduplicator(
@@ -107,7 +112,7 @@ public sealed class DeviceWorker : IDisposable
     // Statistics tracking
     private long _totalSamplesReceived;        // Total IQ samples received since StartReceiving()
     private long _lastLoggedSampleCount;       // Sample count at last statistics log (for delta calculation)
-    private DateTime _startTime;               // When StartReceiving() was called (for rate calculation)
+    private DateTime _receptionStartTime;      // When StartReceiving() was called (tracked via time provider)
 
     /// <summary>
     /// Opens the RTL-SDR device and configures it according to the config.
@@ -228,7 +233,7 @@ public sealed class DeviceWorker : IDisposable
 
         // Create linked token source so we can cancel independently if needed
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _startTime = DateTime.UtcNow;
+        _receptionStartTime = _timeProvider.GetCurrentTimestamp();
 
         // Subscribe to sample availability events from RtlSdrManager
         _device.SamplesAvailable += OnSamplesAvailable;
@@ -415,7 +420,7 @@ public sealed class DeviceWorker : IDisposable
                 // Calculate statistics for this interval
                 long currentTotal = _totalSamplesReceived;
                 long delta = currentTotal - _lastLoggedSampleCount;
-                TimeSpan elapsed = DateTime.UtcNow - _startTime;
+                TimeSpan elapsed = _timeProvider.GetCurrentTimestamp() - _receptionStartTime;
                 double samplesPerSecond = currentTotal / elapsed.TotalSeconds;
 
                 // Convert all statistics to millions for readability (3 decimal places)
@@ -738,7 +743,7 @@ public sealed class DeviceWorker : IDisposable
     // Public properties for session summary (exposed to DaemonCommand for aggregation)
     public string DeviceName => _config.Name;
     public long TotalSamplesReceived => _totalSamplesReceived;
-    public DateTime StartTime => _startTime;
+    public DateTime StartTime => _receptionStartTime;
     public IQDemodulator Demodulator => _demodulator;
     public PreambleDetector PreambleDetector => _preambleDetector;
     public ValidatedFrameFactory ValidatedFrameFactory => _validatedFrameFactory;

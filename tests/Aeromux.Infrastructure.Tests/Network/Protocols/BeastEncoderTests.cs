@@ -29,8 +29,8 @@ public class BeastEncoderTests
 
     public BeastEncoderTests()
     {
-        // Use fixed reference time for deterministic testing
-        _encoder = new BeastEncoder(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        // Encoder uses first frame timestamp as reference (lazy initialization)
+        _encoder = new BeastEncoder();
     }
 
     // ======================================================================================
@@ -269,10 +269,10 @@ public class BeastEncoderTests
     [Fact]
     public void Encode_Timestamp_BigEndianByteOrder()
     {
-        // Arrange: Use encoder's reference time + offset for testing byte order
-        var referenceTime = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var encoder = new BeastEncoder(referenceTime);
-        DateTime knownTimestamp = referenceTime.AddHours(12);  // 12 hours after reference
+        // Arrange: Use encoder with absolute timestamps
+        var encoder = new BeastEncoder();
+        var knownTimestamp = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
         ValidatedFrame frame = _frameBuilder
             .WithHexData(BeastTestData.NoEscapeBytes)  // Use frame without ESC to simplify
             .WithTimestamp(knownTimestamp)
@@ -283,9 +283,8 @@ public class BeastEncoderTests
         byte[] encoded = encoder.Encode(frame);
 
         // Assert: Verify big-endian ordering (MSB first)
-        // Calculate expected relative 12 MHz timestamp (12 hours = 43200 seconds)
-        TimeSpan elapsed = knownTimestamp - referenceTime;
-        long timestamp12MHz = (long)(elapsed.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        // Calculate expected absolute 12 MHz timestamp
+        long timestamp12MHz = (long)(knownTimestamp.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
         ulong timestamp48bit = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;  // Mask to 48 bits
 
         // Extract expected bytes (big-endian, MSB first)

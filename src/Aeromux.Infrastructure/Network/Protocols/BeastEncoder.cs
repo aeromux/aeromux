@@ -36,9 +36,10 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// which undoes the escaping during parsing.
 ///
 /// Timestamp Encoding:
-/// Timestamps are encoded as relative 12 MHz counters from the encoder's reference time (creation time).
-/// This avoids year-wrapping issues when masking to 48 bits for wire protocol.
-/// The 48-bit limitation is acceptable: wraps every ~271 days, sufficient for real-time operation.
+/// Timestamps are encoded as absolute 12 MHz counters from the frame's DateTime.Ticks value.
+/// The high-precision timestamps come from StopwatchTimeProvider in the frame detection pipeline.
+/// Masked to 48 bits for Beast protocol (wraps every ~271 days, acceptable for real-time operation).
+/// Beast receivers handle wrapping automatically during decoding.
 /// </remarks>
 public class BeastEncoder
 {
@@ -46,28 +47,6 @@ public class BeastEncoder
     /// Escape byte used for frame delimiting in Beast protocol.
     /// </summary>
     private const byte ESC = 0x1A;
-
-    /// <summary>
-    /// Reference time for relative timestamp calculations (typically encoder creation time).
-    /// </summary>
-    private readonly DateTime _referenceTime;
-
-    /// <summary>
-    /// Creates a new BeastEncoder with current UTC time as reference.
-    /// </summary>
-    public BeastEncoder()
-    {
-        _referenceTime = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Creates a new BeastEncoder with a specific reference time (for testing).
-    /// </summary>
-    /// <param name="referenceTime">Reference time for timestamp calculations</param>
-    public BeastEncoder(DateTime referenceTime)
-    {
-        _referenceTime = referenceTime;
-    }
 
     /// <summary>
     /// Writes a byte to the output buffer, escaping it if it equals the ESC byte (0x1A).
@@ -117,13 +96,13 @@ public class BeastEncoder
         // Write message type indicator ('2' for short 56-bit frames, '3' for long 112-bit frames)
         output[pos++] = isLong ? (byte)'3' : (byte)'2';
 
-        // Calculate relative timestamp from encoder's reference time (creation time)
-        // This avoids year-wrapping issues when masking to 48 bits for wire protocol
-        // The 48-bit limitation is acceptable: wraps every ~271 days, sufficient for real-time operation
-        TimeSpan elapsed = frame.Timestamp - _referenceTime;
-        long timestamp12MHz = (long)(elapsed.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        // Convert absolute timestamp to 12 MHz counter
+        // Frame timestamp has sub-millisecond precision from StopwatchTimeProvider
+        // DateTime.Ticks is in 100ns units, convert to 12 MHz (1/12,000,000 second units)
+        long timestamp12MHz = (long)(frame.Timestamp.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
 
-        // Mask to 48 bits (natural protocol limitation)
+        // Mask to 48 bits (Beast protocol limitation)
+        // Wraps every ~271 days from an arbitrary point - Beast receivers handle this
         ulong timestamp48bit = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;
 
         for (int i = 0; i < 6; i++)
@@ -141,10 +120,6 @@ public class BeastEncoder
         double normalized = frame.SignalStrength / 255.0;
         double amplitude = Math.Sqrt(normalized);
         byte signalByte = (byte)Math.Round(amplitude * 255.0);
-
-        // Clamp to valid byte range (defensive, should already be in range)
-        if (signalByte < 0) signalByte = 0;
-        if (signalByte > 255) signalByte = 255;
 
         pos = WriteEscapedByte(output, pos, signalByte);
 

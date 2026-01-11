@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.Timing;
+
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
@@ -45,13 +47,24 @@ public sealed class PreambleDetector
     private readonly List<RawFrame> _frameBuffer = [];
     private readonly ValidatedFrameFactory _validatedFrameFactory = new(); // For validating extracted messages
     private readonly IcaoConfidenceTracker? _confidenceTracker; // Optional: for filtering AP mode from unknown aircraft
+    private readonly ITimeProvider _timeProvider; // High-precision timestamp provider
 
     // Statistics
     private long _preambleCandidates;
     private long _framesExtracted;
     private long _framesRejectedDuringExtraction;  // Would have extracted but rejected due to unknown ICAO
 
-    public PreambleDetector(double preambleThreshold = 1.8125, IcaoConfidenceTracker? confidenceTracker = null)
+    /// <summary>
+    /// Creates a new PreambleDetector with specified configuration.
+    /// </summary>
+    /// <param name="preambleThreshold">Signal-to-noise threshold for preamble detection (1.5-10.0, default 1.8125)</param>
+    /// <param name="confidenceTracker">Optional ICAO confidence tracker for filtering unknown aircraft in AP mode</param>
+    /// <param name="timeProvider">Optional time provider for frame timestamps (defaults to StopwatchTimeProvider for high-precision timing)</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when preambleThreshold is outside valid range (1.5-10.0)</exception>
+    public PreambleDetector(
+        double preambleThreshold = 1.8125,
+        IcaoConfidenceTracker? confidenceTracker = null,
+        ITimeProvider? timeProvider = null)
     {
         if (preambleThreshold is < 1.5 or > 10.0)
         {
@@ -61,6 +74,7 @@ public sealed class PreambleDetector
 
         _preambleThreshold = preambleThreshold;
         _confidenceTracker = confidenceTracker;
+        _timeProvider = timeProvider ?? new StopwatchTimeProvider();
     }
 
     /// <summary>
@@ -243,7 +257,7 @@ public sealed class PreambleDetector
         // Return best message if we found a valid one
         if (bestMessage != null && bestScore > 0)
         {
-            return new RawFrame(bestMessage, DateTime.UtcNow, bestSignalStrength);
+            return new RawFrame(bestMessage, _timeProvider.GetCurrentTimestamp(), bestSignalStrength);
         }
 
         // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)
@@ -304,7 +318,7 @@ public sealed class PreambleDetector
         double signalStrength = CalculateSignalStrength(m, pos, messageLengthBits);
 
         // Validate message with CRC and score based on quality
-        var rawFrame = new RawFrame(message, DateTime.UtcNow, signalStrength);
+        var rawFrame = new RawFrame(message, _timeProvider.GetCurrentTimestamp(), signalStrength);
         ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
 
         int score;

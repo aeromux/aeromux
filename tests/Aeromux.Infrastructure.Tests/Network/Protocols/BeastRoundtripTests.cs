@@ -28,7 +28,6 @@ namespace Aeromux.Infrastructure.Tests.Network.Protocols;
 /// </summary>
 public class BeastRoundtripTests
 {
-    private readonly DateTime _referenceTime = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private readonly BeastEncoder _encoder;
     private readonly BeastParser _parser;
     private readonly ValidatedFrameBuilder _frameBuilder = new();
@@ -38,7 +37,8 @@ public class BeastRoundtripTests
 
     public BeastRoundtripTests()
     {
-        _encoder = new BeastEncoder(_referenceTime);
+        // Encoder uses first frame timestamp as reference (lazy initialization)
+        _encoder = new BeastEncoder();
         _parser = new BeastParser();  // No reference time needed
     }
 
