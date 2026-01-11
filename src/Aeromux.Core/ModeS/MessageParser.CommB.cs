@@ -310,18 +310,18 @@ public sealed partial class MessageParser
             return (BdsCode.Bds44, bds44);
         }
 
+        Bds45MeteorologicalHazard? bds45 = TryParseBds45(mb);
+        if (bds45 != null)
+        {
+            return (BdsCode.Bds45, bds45);
+        }
+
         // Try BDS 5,3 (Air-referenced state vector)
         // Placed after meteorological registers due to lenient validation
         Bds53AirReferencedState? bds53 = TryParseBds53(mb);
         if (bds53 != null)
         {
             return (BdsCode.Bds53, bds53);
-        }
-
-        Bds45MeteorologicalHazard? bds45 = TryParseBds45(mb);
-        if (bds45 != null)
-        {
-            return (BdsCode.Bds45, bds45);
         }
 
         // No match found
