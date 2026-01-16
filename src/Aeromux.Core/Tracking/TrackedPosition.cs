@@ -111,4 +111,20 @@ public sealed record TrackedPosition
     /// Used for calculating "seen_pos" (seconds since last position update).
     /// </summary>
     public DateTime? LastUpdate { get; init; }
+
+    /// <summary>
+    /// Source of the most recent position update (Sdr, Beast, or Mlat).
+    /// Indicates where the current Coordinate came from.
+    /// Null if no position data received yet.
+    /// Used by consumers (JSON, UI) to distinguish MLAT-derived positions from direct SDR reception.
+    /// </summary>
+    public FrameSource? PositionSource { get; init; }
+
+    /// <summary>
+    /// True if this aircraft has ever received an MLAT-derived position.
+    /// Used for consistent UI display (e.g., different color for MLAT-capable aircraft)
+    /// without flickering when positions alternate between SDR and MLAT sources.
+    /// Once set to true, this flag is never reset to false during the aircraft's tracking lifetime.
+    /// </summary>
+    public bool HadMlatPosition { get; init; }
 }

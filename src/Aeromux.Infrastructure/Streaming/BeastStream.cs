@@ -18,6 +18,7 @@ using System.Net.Sockets;
 using System.Threading.Channels;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Infrastructure.Network.Protocols;
 using Serilog;
@@ -39,7 +40,7 @@ namespace Aeromux.Infrastructure.Streaming;
 /// readsb/dump1090 broadcast frames before confidence filtering.
 ///
 /// BROADCAST ARCHITECTURE:
-/// Follows same Subscribe/Unsubscribe pattern as DeviceStream.
+/// Follows same Subscribe/Unsubscribe pattern as ReceiverStream.
 /// Multiple consumers can subscribe to receive ALL ProcessedFrames concurrently.
 /// Internal broadcaster task fans out each frame to all registered subscribers.
 /// </summary>
@@ -194,22 +195,26 @@ public sealed class BeastStream : IFrameStream
 
         lock (_subscribersLock)
         {
-            if (_subscribers.Remove(reader, out Channel<ProcessedFrame>? channel))
+            if (!_subscribers.Remove(reader, out Channel<ProcessedFrame>? channel))
             {
-                channel.Writer.TryComplete();
-                Log.Debug("BeastStream: Subscriber removed (remaining: {Count})", _subscribers.Count);
+                return;
             }
+
+            channel.Writer.TryComplete();
+            Log.Debug("BeastStream: Subscriber removed (remaining: {Count})", _subscribers.Count);
         }
     }
 
     /// <summary>
     /// Gets current statistics snapshot.
     /// Returns null because Beast source doesn't expose statistics (only raw frames).
-    /// Statistics are only available in standalone mode (from DeviceStream).
+    /// Statistics are only available in standalone mode (from ReceiverStream).
+    /// Remote Beast source doesn't provide frame counts or MLAT info.
     /// </summary>
     public StreamStatistics? GetStatistics()
     {
         // Client mode: Beast source doesn't expose statistics
+        // Remote Beast source doesn't provide frame counts or MLAT info
         return null;
     }
 
@@ -246,8 +251,8 @@ public sealed class BeastStream : IFrameStream
                 // Parse message for confident frames only
                 ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
 
-                // Construct ProcessedFrame
-                var processedFrame = new ProcessedFrame(validatedFrame, message, DateTime.UtcNow);
+                // Construct ProcessedFrame with Beast source marking
+                var processedFrame = new ProcessedFrame(validatedFrame, message, DateTime.UtcNow, FrameSource.Beast);
 
                 // Fan out to all subscribers
                 List<Channel<ProcessedFrame>> snapshot;

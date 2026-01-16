@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 
 namespace Aeromux.Core.ModeS;
@@ -43,16 +44,25 @@ namespace Aeromux.Core.ModeS;
 ///
 /// CONSTRUCTION:
 /// No factory needed - simple record construction at callback sites:
-/// new ProcessedFrame(validatedFrame, parsedMessage, DateTime.UtcNow)
+/// new ProcessedFrame(validatedFrame, parsedMessage, DateTime.UtcNow, FrameSource.Sdr)
 ///
 /// This is intentionally lightweight compared to ValidatedFrameFactory which handles
 /// complex CRC validation, error correction, and ICAO extraction.
+///
+/// FRAME SOURCE TRACKING:
+/// The Source parameter identifies where the frame originated:
+/// - Sdr: Local RTL-SDR device (default)
+/// - Beast: Remote Beast-compatible server (--connect mode)
+/// - Mlat: MLAT-computed position from mlat-client
+/// This enables UI to distinguish MLAT aircraft and JSON output to include source metadata.
 /// </remarks>
 /// <param name="Frame">The validated frame (raw binary data with ICAO and signal strength)</param>
 /// <param name="ParsedMessage">The parsed message (null if unparseable or unsupported format)</param>
 /// <param name="Timestamp">When this frame was processed (UTC)</param>
+/// <param name="Source">Origin of this frame (Sdr, Beast, or Mlat). Defaults to Sdr for backward compatibility.</param>
 public record ProcessedFrame(
     ValidatedFrame Frame,
     ModeSMessage? ParsedMessage,
-    DateTime Timestamp
+    DateTime Timestamp,
+    FrameSource Source = FrameSource.Sdr
 );

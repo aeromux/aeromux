@@ -49,4 +49,10 @@ public class AeromuxConfig
     /// Required for TC 5-8 surface position decoding.
     /// </summary>
     public ReceiverConfig? Receiver { get; set; }
+
+    /// <summary>
+    /// Gets or sets the MLAT input configuration (optional).
+    /// Enables receiving MLAT-computed positions from mlat-client.
+    /// </summary>
+    public MlatConfig? Mlat { get; set; }
 }

@@ -65,6 +65,7 @@ public sealed class DeviceWorker : IDisposable
         DeviceConfig deviceConfig,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig,
+        IcaoConfidenceTracker? confidenceTracker = null,
         Action<ValidatedFrame, ModeSMessage?>? onDataParsed = null)
     {
         // TODO: Investigate why setting this to false fixes Spectre.Console terminal corruption
@@ -81,8 +82,9 @@ public sealed class DeviceWorker : IDisposable
         // Initialize high-precision time provider for this device
         _timeProvider = new StopwatchTimeProvider();
 
-        // Initialize confidence tracker first (needed by PreambleDetector for ICAO filtering)
-        _confidenceTracker = new IcaoConfidenceTracker(
+        // Initialize confidence tracker (shared across devices + MLAT, or create new for standalone)
+        // Shared tracker enables MLAT to mark ICAOs as confident for all SDR workers
+        _confidenceTracker = confidenceTracker ?? new IcaoConfidenceTracker(
             trackingConfig.ConfidenceLevel,
             trackingConfig.IcaoTimeoutSeconds);
 

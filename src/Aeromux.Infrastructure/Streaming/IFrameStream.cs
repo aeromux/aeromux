@@ -21,7 +21,7 @@ namespace Aeromux.Infrastructure.Streaming;
 
 /// <summary>
 /// Abstraction for streaming processed Mode S frames from any source.
-/// Implementations: DeviceStream (local RTL-SDR devices), DaemonStream (TCP client), FileStream (future replay).
+/// Implementations: ReceiverStream (local RTL-SDR devices), BeastStream (TCP client), FileStream (future replay).
 ///
 /// LIFECYCLE PATTERN:
 /// 1. StartAsync() - Initializes resources and begins internal data production
@@ -76,6 +76,7 @@ public interface IFrameStream : IAsyncDisposable
 public record StreamStatistics(
     long TotalFrames,
     long ValidFrames,
+    long MlatFrames,
     long CorrectedFrames,
     long ParsedMessages,
     TimeSpan Uptime);

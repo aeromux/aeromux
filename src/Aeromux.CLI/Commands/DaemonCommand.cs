@@ -63,6 +63,14 @@ public class DaemonSettings : GlobalSettings
         "IP address to bind to (default: 0.0.0.0 for all interfaces)")]
     public string? BindAddress { get; set; } // CLI uses string, parsed to IPAddress in validation
 
+    [CommandOption("--mlat-enabled")]
+    [Description("Enable MLAT input from mlat-client (default: true)")]
+    public bool? MlatEnabled { get; set; }
+
+    [CommandOption("--mlat-input-port")]
+    [Description("MLAT Beast input port (default: 30104)")]
+    public int? MlatInputPort { get; set; }
+
     [CommandOption("--receiver-uuid")]
     [Description("Receiver UUID for MLAT triangulation (format: RFC 4122)")]
     public string? ReceiverUuid { get; set; }
@@ -118,6 +126,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             int sbsPort = ValidatePort(settings.SbsPort, config.Network.SbsPort, "SbsPort");
             IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
             Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
+            var mlatConfig = MlatConfig.Validate(settings.MlatEnabled, settings.MlatInputPort, config.Mlat);
 
             // Validate and resolve output enabled flags (priority: CLI > YAML > Default)
             bool beastEnabled = ValidateOutputEnabled(
@@ -128,30 +137,32 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 settings.SbsOutputEnabled, config.Network.SbsOutputEnabled, "SBS");
 
             Log.Information(
-                "Network configuration: Beast={BeastPort} ({BeastStatus}), JSON={JsonPort} ({JsonStatus}), SBS={SbsPort} ({SbsStatus}), Bind={BindAddress}",
+                "Network configuration: Beast={BeastPort} ({BeastStatus}), JSON={JsonPort} ({JsonStatus}), SBS={SbsPort} ({SbsStatus}), Bind={BindAddress}, MLAT Input={MlatPort} ({MlatStatus})",
                 beastPort, beastEnabled ? "enabled" : "disabled",
                 jsonPort, jsonEnabled ? "enabled" : "disabled",
                 sbsPort, sbsEnabled ? "enabled" : "disabled",
-                bindAddress);
+                bindAddress,
+                mlatConfig.InputPort, mlatConfig.Enabled ? "enabled" : "disabled");
 
             // Check daemon-specific preconditions (business logic validation)
             CheckDaemonPreconditions(config, beastEnabled, jsonEnabled, sbsEnabled);
 
-            // Create DeviceStream (uninitialized - devices not opened yet)
+            // Create ReceiverStream (uninitialized - devices not opened yet)
             var enabledDevices = config.Devices!.Where(d => d.Enabled).ToList();
 
-            var deviceStream = new DeviceStream(
+            var receiverStream = new ReceiverStream(
                 enabledDevices,
                 config.Tracking!,
-                config.Receiver);
+                config.Receiver,
+                mlatConfig);
 
             Log.Information("Device stream created. Devices={DeviceCount}", enabledDevices.Count);
 
             // CRITICAL STARTUP ORDER:
-            // Start DeviceStream FIRST (opens RTL-SDR devices and begins internal broadcasting)
+            // Start ReceiverStream FIRST (opens RTL-SDR devices and begins internal broadcasting)
             // This MUST complete before TcpBroadcasters call Subscribe()
-            // DeviceStream.StartAsync() initializes the internal broadcaster task and makes Subscribe() available
-            await deviceStream.StartAsync(cancellationToken);
+            // ReceiverStream.StartAsync() initializes the internal broadcaster task and makes Subscribe() available
+            await receiverStream.StartAsync(cancellationToken);
             Log.Information("Device stream started");
 
             // Create centralized aircraft state tracker for all devices
@@ -191,7 +202,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 }
             };
 
-            aircraftTracker.StartConsuming(deviceStream.Subscribe(), cancellationToken);
+            aircraftTracker.StartConsuming(receiverStream.Subscribe(), cancellationToken);
             Log.Information("Aircraft state tracker started");
 
             // Create and start TCP broadcasters conditionally based on enabled flags
@@ -211,7 +222,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 beastBroadcaster = new TcpBroadcaster(
                     beastPort,
                     bindAddress,
-                    deviceStream,
+                    receiverStream,
                     BroadcastFormat.Beast,
                     receiverUuid);
                 await beastBroadcaster.StartAsync(cancellationToken);
@@ -224,7 +235,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 jsonBroadcaster = new TcpBroadcaster(
                     jsonPort,
                     bindAddress,
-                    deviceStream,
+                    receiverStream,
                     BroadcastFormat.Json,
                     receiverUuid: null, // JSON doesn't use receiver UUID (Beast only)
                     aircraftTracker: aircraftTracker); // Required for JSON format
@@ -238,7 +249,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 sbsBroadcaster = new TcpBroadcaster(
                     sbsPort,
                     bindAddress,
-                    deviceStream,
+                    receiverStream,
                     BroadcastFormat.Sbs,
                     receiverUuid: null, // SBS doesn't use receiver UUID (Beast only)
                     aircraftTracker: aircraftTracker); // Required for SBS format
@@ -326,7 +337,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 // Step 2: Stop device stream
                 // Closes RTL-SDR devices and completes internal broadcast channel
                 // This will complete the trackerChannel, causing the tracker's consumer task to finish
-                await deviceStream.DisposeAsync();
+                await receiverStream.DisposeAsync();
 
                 // Step 3: Dispose aircraft tracker
                 // Tracker.Dispose() waits for consumer task to complete, then disposes cleanup timer
@@ -338,7 +349,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
 
                 // Display session summary with aggregated statistics from all devices
                 TimeSpan sessionDuration = DateTime.UtcNow - sessionStart;
-                StreamStatistics? stats = deviceStream.GetStatistics();
+                StreamStatistics? stats = receiverStream.GetStatistics();
                 if (stats != null)
                 {
                     Log.Information("═══════════════════════════════════════════════════════════════");
@@ -349,6 +360,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                     Log.Information("Valid frames: {ValidFrames:N0}", stats.ValidFrames);
                     Log.Information("Corrected frames: {CorrectedFrames:N0}", stats.CorrectedFrames);
                     Log.Information("Messages parsed: {ParsedMessages:N0}", stats.ParsedMessages);
+                    Log.Information("MLAT frames: {MlatFrames:N0}", stats.MlatFrames);
                     Log.Information("═══════════════════════════════════════════════════════════════");
                 }
 

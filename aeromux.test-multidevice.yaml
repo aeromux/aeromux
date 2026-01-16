@@ -67,3 +67,8 @@ receiver:
   # IMPORTANT: Each receiver MUST have a unique UUID. Do NOT reuse UUIDs across multiple receivers.
   # Generate a new UUID with: uuidgen (macOS/Linux), [guid]::NewGuid() (PowerShell), or https://www.uuidgenerator.net/
   # receiverUuid: "00000000-0000-0000-0000-000000000000"  # Replace with YOUR unique UUID
+
+# MLAT (Multilateration) input configuration
+mlat:
+  enabled: true                           # Enable MLAT input from mlat-client (default: true, daemon mode only)
+  inputPort: 30104                        # TCP port to receive MLAT positions from mlat-client (default: 30104)

@@ -196,7 +196,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     /// <exception cref="InvalidOperationException">Thrown when RTL-SDR device is already in use.</exception>
     /// <exception cref="Exception">Thrown when no RTL-SDR devices are found.</exception>
     /// <remarks>
-    /// Creates DeviceStream for direct RTL-SDR access. Provides helpful error messages
+    /// Creates ReceiverStream for direct RTL-SDR access. Provides helpful error messages
     /// suggesting connection to daemon if device is busy.
     /// </remarks>
     private async Task<int> RunStandaloneModeAsync(LiveSettings settings, DateTime sessionStart, CancellationToken ct)
@@ -237,9 +237,9 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
 
         try
         {
-            // DeviceStream implements IAsyncDisposable to ensure RTL-SDR device cleanup
+            // ReceiverStream implements IAsyncDisposable to ensure RTL-SDR device cleanup
             // Async using ensures StopAsync is called even on exceptions, releasing hardware
-            await using var stream = new DeviceStream(
+            await using var stream = new ReceiverStream(
                 enabledDevices,
                 config.Tracking!,
                 config.Receiver);
@@ -379,7 +379,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     /// <summary>
     /// Displays frames with TUI (Terminal User Interface).
     /// </summary>
-    /// <param name="stream">Frame stream (DeviceStream or BeastStream) providing ProcessedFrame data.</param>
+    /// <param name="stream">Frame stream (ReceiverStream or BeastStream) providing ProcessedFrame data.</param>
     /// <param name="settings">Command settings (not currently used).</param>
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
     /// <param name="sessionStart">Session start time for summary statistics.</param>
@@ -841,7 +841,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     /// Builds aircraft table with dynamic viewport.
     /// </summary>
     /// <param name="sortedAircraft">Aircraft list sorted by ICAO for stable display order.</param>
-    /// <param name="stats">Stream statistics from DeviceStream, or null in client mode.</param>
+    /// <param name="stats">Stream statistics from ReceiverStream, or null in client mode.</param>
     /// <param name="selectedRow">Index of currently selected row for highlighting.</param>
     /// <param name="distanceUnit">Unit to display distances (miles or kilometers).</param>
     /// <param name="altitudeUnit">Unit to display altitudes (feet or meters).</param>
@@ -1279,6 +1279,16 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             ? aircraft.Position.LastUpdate.Value.ToString("HH:mm:ss")
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Last Update", posLastUpdate));
+
+        // Position source (shows where the current position came from)
+        string positionSource = aircraft.Position.PositionSource.HasValue
+            ? aircraft.Position.PositionSource.Value.ToString()
+            : "N/A (no position yet)";
+        allRows.Add(new DetailRow("Position Source", positionSource));
+
+        // MLAT history (shows if aircraft ever had MLAT position)
+        string hadMlatPosition = aircraft.Position.HadMlatPosition ? "Yes" : "No";
+        allRows.Add(new DetailRow("Had MLAT Position", hadMlatPosition));
 
         allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
 

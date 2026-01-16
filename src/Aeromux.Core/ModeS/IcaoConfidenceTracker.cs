@@ -197,6 +197,23 @@ public sealed class IcaoConfidenceTracker
 
     /// <summary>Gets the set of all tracked ICAO addresses for deduplication across devices</summary>
     public IEnumerable<string> GetTrackedIcaoAddresses() => _icaoRecords.Keys;
+
+    /// <summary>
+    /// Marks an ICAO as confident immediately without requiring detection threshold.
+    /// Used for MLAT frames where the ICAO has been pre-validated by the MLAT network.
+    /// This enables SDR workers to immediately trust frames from MLAT-known aircraft.
+    /// </summary>
+    /// <param name="icaoAddress">ICAO address to mark as confident (e.g., "4BC889")</param>
+    /// <param name="timestamp">Timestamp to use for record creation/update</param>
+    public void MarkAsConfident(string icaoAddress, DateTime timestamp)
+    {
+        if (!_icaoRecords.TryGetValue(icaoAddress, out IcaoRecord? record))
+        {
+            record = new IcaoRecord(icaoAddress, timestamp, (int)_requiredConfidence);
+            _icaoRecords[icaoAddress] = record;
+        }
+        record.ForceConfident(timestamp);
+    }
 }
 
 /// <summary>
@@ -242,5 +259,19 @@ internal sealed class IcaoRecord
         {
             APCount++;
         }
+    }
+
+    /// <summary>
+    /// Forces this ICAO to confident status immediately (for MLAT pre-validated frames).
+    /// Sets detection count to threshold if not already confident, and updates last seen time.
+    /// </summary>
+    /// <param name="timestamp">Timestamp to use for last seen update</param>
+    public void ForceConfident(DateTime timestamp)
+    {
+        if (!IsConfident)
+        {
+            DetectionCount = _confidenceThreshold;
+        }
+        LastSeen = timestamp;
     }
 }

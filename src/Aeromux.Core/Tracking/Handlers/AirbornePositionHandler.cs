@@ -55,6 +55,7 @@ public sealed class AirbornePositionHandler : ITrackingHandler
     {
         ArgumentNullException.ThrowIfNull(aircraft);
         ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(frame);
 
         var msg = (AirbornePosition)message;
         TrackedPosition position = aircraft.Position;
@@ -85,6 +86,8 @@ public sealed class AirbornePositionHandler : ITrackingHandler
         // Coordinate from CPR decoding (if successfully decoded)
         // Single Antenna flag from bit 40
         // IsOnGround always false for airborne messages
+        // PositionSource tracks where the position came from (Sdr, Beast, or Mlat)
+        // HadMlatPosition is set to true if this is an MLAT position or was previously true
         position = position with
         {
             Coordinate = msg.Position ?? position.Coordinate,
@@ -92,7 +95,9 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             GeometricAltitude = geometricAltitude,
             Antenna = msg.Antenna ?? position.Antenna,
             IsOnGround = false,
-            LastUpdate = timestamp
+            LastUpdate = timestamp,
+            PositionSource = frame.Source,
+            HadMlatPosition = position.HadMlatPosition || frame.Source == ModeS.Enums.FrameSource.Mlat
         };
 
         return aircraft with { Position = position };

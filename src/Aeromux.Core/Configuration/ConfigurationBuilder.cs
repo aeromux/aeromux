@@ -126,6 +126,11 @@ public class ConfigurationBuilder
             {
                 AircraftTimeoutSeconds = 60,
                 MaxHistorySize = 1000
+            },
+            Mlat = new MlatConfig
+            {
+                Enabled = true,
+                InputPort = 30104
             }
         };
     }
@@ -143,7 +148,8 @@ public class ConfigurationBuilder
             Devices = yamlConfig.Devices ?? baseConfig.Devices,
             Network = yamlConfig.Network ?? baseConfig.Network,
             Tracking = yamlConfig.Tracking ?? baseConfig.Tracking,
-            Receiver = yamlConfig.Receiver ?? baseConfig.Receiver
+            Receiver = yamlConfig.Receiver ?? baseConfig.Receiver,
+            Mlat = yamlConfig.Mlat ?? baseConfig.Mlat
         };
     }
 

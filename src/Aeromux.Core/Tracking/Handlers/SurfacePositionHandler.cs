@@ -51,6 +51,7 @@ public sealed class SurfacePositionHandler : ITrackingHandler
     {
         ArgumentNullException.ThrowIfNull(aircraft);
         ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(frame);
 
         var msg = (SurfacePosition)message;
 
@@ -58,12 +59,16 @@ public sealed class SurfacePositionHandler : ITrackingHandler
         // Surface CPR uses modified NL functions different from airborne CPR
         // Surface messages always indicate ground
         // MovementCategory: Non-linear speed categories optimized for ground operations
+        // PositionSource tracks where the position came from (Sdr, Beast, or Mlat)
+        // HadMlatPosition is set to true if this is an MLAT position or was previously true
         TrackedPosition position = aircraft.Position with
         {
             Coordinate = msg.Position ?? aircraft.Position.Coordinate,
             IsOnGround = true,
             MovementCategory = msg.Movement,
-            LastUpdate = timestamp
+            LastUpdate = timestamp,
+            PositionSource = frame.Source,
+            HadMlatPosition = aircraft.Position.HadMlatPosition || frame.Source == FrameSource.Mlat
         };
 
         // Update velocity with ground movement data

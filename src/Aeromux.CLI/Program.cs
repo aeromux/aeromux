@@ -57,6 +57,9 @@ internal abstract class Program
             {
                 config.SetApplicationName("aeromux");
 
+                // Enable strict parsing to reject unknown options (typos like --connects instead of --connect)
+                config.Settings.StrictParsing = true;
+
                 // Use custom help provider (configures plain styles and adds header)
                 config.SetHelpProvider(new AeromuxHelpProvider(config.Settings));
 

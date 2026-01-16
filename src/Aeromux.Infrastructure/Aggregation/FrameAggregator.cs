@@ -21,7 +21,7 @@ namespace Aeromux.Infrastructure.Aggregation;
 
 /// <summary>
 /// Aggregates processed frames from multiple DeviceWorkers into a single stream.
-/// Used internally by DeviceStream for multi-device scenarios only.
+/// Used internally by ReceiverStream for multi-device scenarios.
 /// Simple pass-through with no deduplication (intentional design decision).
 /// Deduplication deferred for later.
 /// </summary>
@@ -50,7 +50,7 @@ public sealed class FrameAggregator : IDisposable
 
     private readonly Channel<ProcessedFrame> _dataChannel = Channel.CreateUnbounded<ProcessedFrame>(new UnboundedChannelOptions
     {
-        SingleReader = false,  // Multiple readers: DeviceStream broadcaster task
+        SingleReader = false,  // Multiple readers: ReceiverStream broadcaster task
         AllowSynchronousContinuations = false
     });
 
@@ -66,7 +66,7 @@ public sealed class FrameAggregator : IDisposable
 
     /// <summary>
     /// Gets aggregated frames as async enumerable.
-    /// Used by DeviceStream's internal broadcaster task for multi-device scenarios.
+    /// Used by ReceiverStream's internal broadcaster task for multi-device scenarios.
     /// </summary>
     public IAsyncEnumerable<ProcessedFrame> GetDataAsync(CancellationToken ct = default) =>
         _dataChannel.Reader.ReadAllAsync(ct);

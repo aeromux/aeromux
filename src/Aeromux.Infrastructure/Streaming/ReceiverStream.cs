@@ -14,25 +14,30 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Net;
 using System.Threading.Channels;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Aggregation;
+using Aeromux.Infrastructure.Mlat;
 using Aeromux.Infrastructure.Sdr;
 using Serilog;
 
 namespace Aeromux.Infrastructure.Streaming;
 
 /// <summary>
-/// Streams processed frames from local RTL-SDR device(s).
-/// Handles both single-device and multi-device configurations automatically.
-/// Single device: Direct streaming without aggregator overhead.
-/// Multiple devices: Uses FrameAggregator for lazy aggregation.
+/// Streams processed frames from local RTL-SDR device(s) and optional MLAT input.
+/// Uses FrameAggregator to merge all sources (SDR devices + MLAT).
 /// Used by 'aeromux live' standalone mode and 'aeromux daemon'.
 ///
-/// PROCESSING PIPELINE:
+/// PROCESSING PIPELINE (SDR):
 /// RTL-SDR → IQ Samples → Demodulator → PreambleDetector → ValidatedFrameFactory → ValidatedFrame
-/// → MessageParser → ProcessedFrame (frame + parsed message + timestamp)
+/// → MessageParser → ProcessedFrame (frame + parsed message + timestamp + Source=Sdr)
+///
+/// PROCESSING PIPELINE (MLAT):
+/// mlat-client → Beast (port 30104) → BeastParser → ValidatedFrame → MessageParser
+/// → ProcessedFrame (frame + parsed message + timestamp + Source=Mlat)
 ///
 /// BROADCAST ARCHITECTURE:
 /// Supports multiple concurrent consumers (e.g., 3 TcpBroadcasters for Beast/JSON/SBS).
@@ -46,14 +51,16 @@ namespace Aeromux.Infrastructure.Streaming;
 /// corrupting the async state machine memory and causing AccessViolationException.
 /// The Subscribe pattern ensures thread-safe fan-out via simple channel writes.
 /// </summary>
-public sealed class DeviceStream : IFrameStream
+public sealed class ReceiverStream : IFrameStream
 {
     private readonly List<DeviceConfig> _deviceConfigs;
     private readonly TrackingConfig _trackingConfig;
     private readonly ReceiverConfig? _receiverConfig;
-    private FrameAggregator? _aggregator;  // Only created for multi-device
-    private Channel<ProcessedFrame>? _singleDeviceChannel;  // Only created for single device
+    private readonly MlatConfig? _mlatConfig;
+    private FrameAggregator? _aggregator;  // Always created (for SDR devices + MLAT)
     private readonly List<DeviceWorker> _workers = [];
+    private MlatWorker? _mlatWorker;  // Created if MLAT is enabled
+    private IcaoConfidenceTracker? _confidenceTracker;  // Shared across all workers
     private volatile bool _started;  // Volatile ensures visibility across threads
     private readonly SemaphoreSlim _startLock = new(1, 1);  // Ensures single initialization
 
@@ -64,13 +71,14 @@ public sealed class DeviceStream : IFrameStream
     private readonly Lock _subscribersLock = new();
     private Task? _broadcastTask;
 
-    // Lifecycle management: DeviceStream has its own cancellation independent of consumers
+    // Lifecycle management: ReceiverStream has its own cancellation independent of consumers
     private CancellationTokenSource? _internalCts;
 
-    public DeviceStream(
+    public ReceiverStream(
         List<DeviceConfig> deviceConfigs,
         TrackingConfig trackingConfig,
-        ReceiverConfig? receiverConfig)
+        ReceiverConfig? receiverConfig,
+        MlatConfig? mlatConfig = null)
     {
         if (deviceConfigs == null || deviceConfigs.Count == 0)
         {
@@ -80,14 +88,16 @@ public sealed class DeviceStream : IFrameStream
         _deviceConfigs = deviceConfigs;
         _trackingConfig = trackingConfig;
         _receiverConfig = receiverConfig;
+        _mlatConfig = mlatConfig;
     }
 
     // Convenience constructor for single device
-    public DeviceStream(
+    public ReceiverStream(
         DeviceConfig deviceConfig,
         TrackingConfig trackingConfig,
-        ReceiverConfig? receiverConfig)
-        : this([deviceConfig], trackingConfig, receiverConfig)
+        ReceiverConfig? receiverConfig,
+        MlatConfig? mlatConfig = null)
+        : this([deviceConfig], trackingConfig, receiverConfig, mlatConfig)
     {
     }
 
@@ -113,45 +123,47 @@ public sealed class DeviceStream : IFrameStream
             // Create internal CTS for device lifecycle management
             _internalCts = new CancellationTokenSource();
 
-            // Lazy initialization: Choose strategy based on device count
-            if (_deviceConfigs.Count == 1)
-            {
-                // Single device: Use channel directly (no aggregator overhead)
-                _singleDeviceChannel = Channel.CreateUnbounded<ProcessedFrame>(new UnboundedChannelOptions
-                {
-                    SingleReader = true,
-                    SingleWriter = true
-                });
+            // Create shared confidence tracker (enables MLAT to mark ICAOs as confident for SDR workers)
+            _confidenceTracker = new IcaoConfidenceTracker(
+                _trackingConfig.ConfidenceLevel,
+                _trackingConfig.IcaoTimeoutSeconds);
 
+            // Always use FrameAggregator (simplifies logic, minimal overhead)
+            _aggregator = new FrameAggregator();
+
+            // Create DeviceWorkers with shared confidence tracker
+            foreach (DeviceConfig deviceConfig in _deviceConfigs)
+            {
                 var worker = new DeviceWorker(
-                    _deviceConfigs[0],
+                    deviceConfig,
                     _trackingConfig,
                     _receiverConfig,
+                    _confidenceTracker,  // Shared tracker - MLAT can mark ICAOs as confident
                     onDataParsed: (frame, message) =>
-                        _singleDeviceChannel.Writer.TryWrite(new ProcessedFrame(frame, message, DateTime.UtcNow)));
+                        _aggregator.AddData(new ProcessedFrame(frame, message, DateTime.UtcNow)));
 
                 worker.OpenDevice();
                 worker.StartReceiving(_internalCts.Token);
                 _workers.Add(worker);
             }
+
+            // Start MLAT input worker (if enabled)
+            if (_mlatConfig?.Enabled == true)
+            {
+                _mlatWorker = new MlatWorker(
+                    _mlatConfig.InputPort,
+                    IPAddress.Any,  // Accept from any interface
+                    _receiverConfig,
+                    _confidenceTracker,  // Shared tracker - MLAT marks ICAOs as confident
+                    onDataParsed: (frame, message) =>
+                        _aggregator.AddData(new ProcessedFrame(frame, message, DateTime.UtcNow, FrameSource.Mlat)));
+
+                _mlatWorker.Start(_internalCts.Token);
+                Log.Information("MLAT input worker started on port {Port}", _mlatConfig.InputPort);
+            }
             else
             {
-                // Multiple devices: Use FrameAggregator
-                _aggregator = new FrameAggregator();
-
-                foreach (DeviceConfig deviceConfig in _deviceConfigs)
-                {
-                    var worker = new DeviceWorker(
-                        deviceConfig,
-                        _trackingConfig,
-                        _receiverConfig,
-                        onDataParsed: (frame, message) =>
-                            _aggregator.AddData(new ProcessedFrame(frame, message, DateTime.UtcNow)));
-
-                    worker.OpenDevice();
-                    worker.StartReceiving(_internalCts.Token);
-                    _workers.Add(worker);
-                }
+                Log.Information("MLAT input disabled");
             }
 
             // Start broadcaster task that fans out data to all subscribers
@@ -169,7 +181,7 @@ public sealed class DeviceStream : IFrameStream
     {
         if (!_started)
         {
-            throw new InvalidOperationException("DeviceStream not started. Call StartAsync() first.");
+            throw new InvalidOperationException("ReceiverStream not started. Call StartAsync() first.");
         }
 
         // Create dedicated channel for this subscriber
@@ -201,9 +213,9 @@ public sealed class DeviceStream : IFrameStream
     }
 
     /// <summary>
-    /// Background task that reads from device source and fans out to all subscribers.
+    /// Background task that reads from FrameAggregator and fans out to all subscribers.
     /// Runs until cancellation or source completes.
-    /// This is the ONLY place where an async enumerator is created on the device data source.
+    /// This is the ONLY place where an async enumerator is created on the FrameAggregator.
     /// All subscribers receive data through their own channels written to in this loop.
     /// This architecture prevents concurrent async enumerator creation which causes memory corruption.
     /// </summary>
@@ -211,19 +223,14 @@ public sealed class DeviceStream : IFrameStream
     {
         try
         {
-            // Read from appropriate source
-            IAsyncEnumerable<ProcessedFrame>? source = _singleDeviceChannel != null
-                ? _singleDeviceChannel.Reader.ReadAllAsync(ct)
-                : _aggregator?.GetDataAsync(ct);
-
-            if (source == null)
+            if (_aggregator == null)
             {
                 return;
             }
 
             // Fan-out loop: Broadcast each frame to all subscribers
-            // This is the ONLY async enumerator created on the data source
-            await foreach (ProcessedFrame data in source.WithCancellation(ct))
+            // This is the ONLY async enumerator created on the FrameAggregator
+            await foreach (ProcessedFrame data in _aggregator.GetDataAsync(ct))
             {
                 // Thread-safe snapshot: Copy subscriber channels while holding lock
                 // Using List<Channel> instead of Dictionary reduces allocation overhead
@@ -272,10 +279,11 @@ public sealed class DeviceStream : IFrameStream
             return null;
         }
 
-        // Aggregate statistics from all workers
+        // Aggregate statistics from all workers (SDR devices + MLAT)
         return new StreamStatistics(
             _workers.Sum(w => w.PreambleDetector.FramesExtracted),
             _workers.Sum(w => w.ConfidenceTracker.ConfidentFrames),
+            _mlatWorker?.FramesReceived ?? 0,
             _workers.Sum(w => w.ValidatedFrameFactory.FramesCorrected),
             _workers.Sum(w => w.MessageParser.MessagesParsed),
             DateTime.UtcNow - _workers.Min(w => w.StartTime));
@@ -283,14 +291,16 @@ public sealed class DeviceStream : IFrameStream
 
     public async ValueTask DisposeAsync()
     {
-        // Step 1: Cancel internal operations (device workers and broadcast task)
+        // Step 1: Cancel internal operations (device workers, MLAT worker, and broadcast task)
         await (_internalCts?.CancelAsync() ?? Task.CompletedTask);
 
-        // Step 2: Complete source channels to signal end of data
-        _singleDeviceChannel?.Writer.Complete();
+        // Step 2: Complete source and dispose aggregator
         _aggregator?.Dispose();
 
-        // Step 3: Wait for broadcast task to complete (will complete subscriber channels)
+        // Step 3: Dispose MLAT worker if active
+        _mlatWorker?.Dispose();
+
+        // Step 4: Wait for broadcast task to complete (will complete subscriber channels)
         if (_broadcastTask != null)
         {
             try
@@ -303,13 +313,13 @@ public sealed class DeviceStream : IFrameStream
             }
         }
 
-        // Step 4: Dispose workers
+        // Step 5: Dispose workers
         foreach (DeviceWorker worker in _workers)
         {
             worker.Dispose();
         }
 
-        // Step 5: Dispose resources
+        // Step 6: Dispose resources
         _internalCts?.Dispose();
         _startLock.Dispose();
     }
