@@ -1352,14 +1352,14 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
 
         // Indicated Airspeed (IAS from Comm-B)
         string indicatedAirspeed;
-        if (aircraft.Velocity.IndicatedAirspeed != null)
+        if (aircraft.Velocity.CommBIndicatedAirspeed != null)
         {
             double displayIAS = speedUnit switch
             {
-                SpeedUnit.Knots => aircraft.Velocity.IndicatedAirspeed.Knots,
-                SpeedUnit.KilometersPerHour => aircraft.Velocity.IndicatedAirspeed.Knots * 1.852,
-                SpeedUnit.MilesPerHour => aircraft.Velocity.IndicatedAirspeed.Knots * 1.15078,
-                _ => aircraft.Velocity.IndicatedAirspeed.Knots
+                SpeedUnit.Knots => aircraft.Velocity.CommBIndicatedAirspeed.Knots,
+                SpeedUnit.KilometersPerHour => aircraft.Velocity.CommBIndicatedAirspeed.Knots * 1.852,
+                SpeedUnit.MilesPerHour => aircraft.Velocity.CommBIndicatedAirspeed.Knots * 1.15078,
+                _ => aircraft.Velocity.CommBIndicatedAirspeed.Knots
             };
 
             string unitLabel = speedUnit switch
@@ -1376,18 +1376,18 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         {
             indicatedAirspeed = "N/A (no data yet)";
         }
-        allRows.Add(new DetailRow("Indicated Airspeed", indicatedAirspeed));
+        allRows.Add(new DetailRow("Comm-B Indicated Airspeed", indicatedAirspeed));
 
         // True Airspeed (TAS from Comm-B)
         string trueAirspeed;
-        if (aircraft.Velocity.TrueAirspeed != null)
+        if (aircraft.Velocity.CommBTrueAirspeed != null)
         {
             double displayTAS = speedUnit switch
             {
-                SpeedUnit.Knots => aircraft.Velocity.TrueAirspeed.Knots,
-                SpeedUnit.KilometersPerHour => aircraft.Velocity.TrueAirspeed.Knots * 1.852,
-                SpeedUnit.MilesPerHour => aircraft.Velocity.TrueAirspeed.Knots * 1.15078,
-                _ => aircraft.Velocity.TrueAirspeed.Knots
+                SpeedUnit.Knots => aircraft.Velocity.CommBTrueAirspeed.Knots,
+                SpeedUnit.KilometersPerHour => aircraft.Velocity.CommBTrueAirspeed.Knots * 1.852,
+                SpeedUnit.MilesPerHour => aircraft.Velocity.CommBTrueAirspeed.Knots * 1.15078,
+                _ => aircraft.Velocity.CommBTrueAirspeed.Knots
             };
 
             string unitLabel = speedUnit switch
@@ -1404,7 +1404,35 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         {
             trueAirspeed = "N/A (no data yet)";
         }
-        allRows.Add(new DetailRow("True Airspeed", trueAirspeed));
+        allRows.Add(new DetailRow("Comm-B True Airspeed", trueAirspeed));
+
+        // True Airspeed (GS from Comm-B)
+        string groundSpeed;
+        if (aircraft.Velocity.CommBGroundSpeed != null)
+        {
+            double displayGS = speedUnit switch
+            {
+                SpeedUnit.Knots => aircraft.Velocity.CommBGroundSpeed.Knots,
+                SpeedUnit.KilometersPerHour => aircraft.Velocity.CommBGroundSpeed.Knots * 1.852,
+                SpeedUnit.MilesPerHour => aircraft.Velocity.CommBGroundSpeed.Knots * 1.15078,
+                _ => aircraft.Velocity.CommBGroundSpeed.Knots
+            };
+
+            string unitLabel = speedUnit switch
+            {
+                SpeedUnit.Knots => "kts",
+                SpeedUnit.KilometersPerHour => "km/h",
+                SpeedUnit.MilesPerHour => "mph",
+                _ => "kts"
+            };
+
+            groundSpeed = $"{displayGS:F0} {unitLabel} (GS)";
+        }
+        else
+        {
+            groundSpeed = "N/A (no data yet)";
+        }
+        allRows.Add(new DetailRow("Comm-B Ground Speed", groundSpeed));
 
         // Navigation Accuracy Category for Velocity
         string nacv = aircraft.Velocity.NACv?.ToString() ?? "N/A (no data yet)";

@@ -322,10 +322,12 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         TrackedVelocity velocity = aircraft.Velocity with
         {
             TrackAngle = data.TrackAngle ?? aircraft.Velocity.TrackAngle,
-            TrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
+            CommBTrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
                 ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
-                : aircraft.Velocity.TrueAirspeed,
-            // Note: GroundSpeed from BDS 5,0 stored separately from TC 5-8 GroundSpeed
+                : aircraft.Velocity.CommBTrueAirspeed,
+            CommBGroundSpeed = data.GroundSpeed.HasValue && data.GroundSpeed.Value <= 1500
+                ? Velocity.FromKnots(data.GroundSpeed.Value, VelocityType.GroundSpeed)
+                : aircraft.Velocity.CommBGroundSpeed,
             LastUpdate = timestamp
         };
 
@@ -366,12 +368,12 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         // Note: IAS range 0-500 knots (OK), TAS range 0-2046 knots (validate ≤1500)
         TrackedVelocity velocity = aircraft.Velocity with
         {
-            IndicatedAirspeed = data.IndicatedAirspeed.HasValue
+            CommBIndicatedAirspeed = data.IndicatedAirspeed.HasValue
                 ? Velocity.FromKnots(data.IndicatedAirspeed.Value, VelocityType.IndicatedAirspeed)
-                : aircraft.Velocity.IndicatedAirspeed,
-            TrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
+                : aircraft.Velocity.CommBIndicatedAirspeed,
+            CommBTrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
                 ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
-                : aircraft.Velocity.TrueAirspeed,
+                : aircraft.Velocity.CommBTrueAirspeed,
             LastUpdate = timestamp
         };
 
@@ -411,9 +413,9 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         // Update velocity with BDS 6,0 indicated airspeed
         TrackedVelocity velocity = aircraft.Velocity with
         {
-            IndicatedAirspeed = data.IndicatedAirspeed.HasValue
+            CommBIndicatedAirspeed = data.IndicatedAirspeed.HasValue
                 ? Velocity.FromKnots(data.IndicatedAirspeed.Value, VelocityType.IndicatedAirspeed)
-                : aircraft.Velocity.IndicatedAirspeed,
+                : aircraft.Velocity.CommBIndicatedAirspeed,
             LastUpdate = timestamp
         };
 

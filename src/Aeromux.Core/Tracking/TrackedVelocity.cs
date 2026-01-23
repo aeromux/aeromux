@@ -76,7 +76,7 @@ public sealed record TrackedVelocity
     /// IAS is the speed displayed to pilots and used for aircraft performance (stall speed, V-speeds).
     /// Null if no BDS 5,3 or BDS 6,0 message received (requires ground interrogation for Comm-B).
     /// </summary>
-    public Velocity? IndicatedAirspeed { get; init; }
+    public Velocity? CommBIndicatedAirspeed { get; init; }
 
     /// <summary>
     /// True Airspeed (TAS) from Comm-B BDS registers (BDS 5,0 or BDS 5,3).
@@ -85,7 +85,18 @@ public sealed record TrackedVelocity
     /// TAS is used for navigation calculations and differs from ground speed due to wind.
     /// Null if no BDS 5,0 or BDS 5,3 message received (requires ground interrogation for Comm-B).
     /// </summary>
-    public Velocity? TrueAirspeed { get; init; }
+    public Velocity? CommBTrueAirspeed { get; init; }
+
+    /// <summary>
+    /// Ground Speed from Comm-B BDS 5,0 (Track and Turn) register.
+    /// Aircraft's speed over the ground while airborne (from ground interrogation).
+    /// Range: 0-2046 knots (Velocity value object supports up to 1500 knots).
+    /// Provides redundancy to TC 19 ground speed and allows cross-validation.
+    /// Different from GroundSpeed field which comes from TC 5-8 surface movement messages.
+    /// This field is for airborne ground speed from Comm-B interrogations.
+    /// Null if no BDS 5,0 message received (requires ground interrogation for Comm-B).
+    /// </summary>
+    public Velocity? CommBGroundSpeed { get; init; }
 
     /// <summary>
     /// True track angle from Comm-B BDS 5,0 (Track and Turn) register.
