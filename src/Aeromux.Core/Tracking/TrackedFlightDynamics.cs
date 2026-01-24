@@ -43,6 +43,24 @@ public sealed record TrackedFlightDynamics
     public double? MagneticHeading { get; init; }
 
     /// <summary>
+    /// True heading in degrees (derived from magnetic heading + declination).
+    /// Direction aircraft nose points relative to true north (geographic north).
+    /// Range: 0-360 degrees.
+    /// Calculated from MagneticHeading when position is available using WMM-2025.
+    /// Validated using crab angle check (difference from track &lt; 45°).
+    /// Null if magnetic heading unavailable, position unknown, or validation failed.
+    /// </summary>
+    public double? TrueHeading { get; init; }
+
+    /// <summary>
+    /// Cached magnetic declination (WMM-2025) with calculation timestamp.
+    /// Used for converting magnetic heading to true heading.
+    /// Cache TTL (5 seconds) managed by MagneticDeclinationCalculator service.
+    /// Null if no position available or magnetic heading not yet received.
+    /// </summary>
+    public MagneticDeclination? MagneticDeclination { get; init; }
+
+    /// <summary>
     /// Barometric vertical rate in feet per minute (BDS 6,0).
     /// Climb/descent rate derived from barometric altitude changes.
     /// Positive: climbing, Negative: descending.

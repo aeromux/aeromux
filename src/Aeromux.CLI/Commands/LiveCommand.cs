@@ -1621,6 +1621,18 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Magnetic Heading", magneticHeading));
 
+        // Magnetic Declination
+        string magneticDeclination = aircraft.FlightDynamics?.MagneticDeclination != null
+            ? $"{aircraft.FlightDynamics.MagneticDeclination.Declination:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Magnetic Declination", magneticDeclination));
+
+        // True Heading
+        string trueHeading = aircraft.FlightDynamics?.TrueHeading.HasValue == true
+            ? $"{aircraft.FlightDynamics.TrueHeading.Value:F1}°"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("True Heading", trueHeading));
+
         // Barometric Vertical Rate
         string baroVerticalRate = aircraft.FlightDynamics?.BarometricVerticalRate.HasValue == true
             ? $"{aircraft.FlightDynamics.BarometricVerticalRate.Value:+0;-#} ft/min"

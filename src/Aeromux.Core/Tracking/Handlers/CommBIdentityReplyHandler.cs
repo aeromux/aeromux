@@ -18,6 +18,7 @@ using Aeromux.Core.ModeS;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.ValueObjects;
+using Aeromux.Core.Services;
 
 namespace Aeromux.Core.Tracking.Handlers;
 
@@ -188,11 +189,19 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         {
             Bds40NavigationMode modes = data.NavigationModes.Value;
             if (modes.HasFlag(Bds40NavigationMode.Vnav))
+            {
                 vnavMode = true;
+            }
+
             if (modes.HasFlag(Bds40NavigationMode.AltitudeHold))
+            {
                 altitudeHoldMode = true;
+            }
+
             if (modes.HasFlag(Bds40NavigationMode.Approach))
+            {
                 approachMode = true;
+            }
         }
 
         // Create new autopilot state with field-level merging:
@@ -309,6 +318,8 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         {
             RollAngle = data.RollAngle ?? existing?.RollAngle,
             MagneticHeading = existing?.MagneticHeading,                       // From BDS 5,3 or BDS 6,0
+            TrueHeading = existing?.TrueHeading,                               // From BDS 5,3 or BDS 6,0
+            MagneticDeclination = existing?.MagneticDeclination,               // From BDS 5,3 or BDS 6,0
             BarometricVerticalRate = existing?.BarometricVerticalRate,         // From BDS 6,0
             InertialVerticalRate = existing?.InertialVerticalRate,             // From BDS 6,0
             MachNumber = existing?.MachNumber,                                 // From BDS 5,3 or BDS 6,0
@@ -322,10 +333,10 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         TrackedVelocity velocity = aircraft.Velocity with
         {
             TrackAngle = data.TrackAngle ?? aircraft.Velocity.TrackAngle,
-            CommBTrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
+            CommBTrueAirspeed = data.TrueAirspeed is <= 1500
                 ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
                 : aircraft.Velocity.CommBTrueAirspeed,
-            CommBGroundSpeed = data.GroundSpeed.HasValue && data.GroundSpeed.Value <= 1500
+            CommBGroundSpeed = data.GroundSpeed is <= 1500
                 ? Velocity.FromKnots(data.GroundSpeed.Value, VelocityType.GroundSpeed)
                 : aircraft.Velocity.CommBGroundSpeed,
             LastUpdate = timestamp
@@ -350,13 +361,45 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
     {
         TrackedFlightDynamics? existing = aircraft.FlightDynamics;
 
+        // Calculate true heading with magnetic declination
+        double? trueHeading = existing?.TrueHeading;
+        MagneticDeclination? magneticDeclination = existing?.MagneticDeclination;
+
+        if ((data.MagneticHeading ?? existing?.MagneticHeading).HasValue && aircraft.Position.Coordinate != null)
+        {
+            double magneticHeading = (data.MagneticHeading ?? existing?.MagneticHeading)!.Value;
+            GeographicCoordinate? coord = aircraft.Position.Coordinate;
+            double altKm = (aircraft.Position.BarometricAltitude?.Feet ?? 0) * 0.0003048;
+
+            // Get or calculate magnetic declination (service handles caching)
+            magneticDeclination = MagneticDeclinationCalculator.GetOrCalculate(
+                existing?.MagneticDeclination,
+                coord.Latitude,
+                coord.Longitude,
+                altKm,
+                timestamp);
+
+            // Calculate true heading - only update if validation succeeds
+            double? track = aircraft.Velocity.TrackAngle ?? aircraft.Velocity.Track;
+            double? calculated = TrueHeadingCalculator.Calculate(
+                magneticHeading,
+                magneticDeclination.Declination,
+                track);
+            if (calculated.HasValue)
+            {
+                trueHeading = calculated;
+            }
+        }
+
         // Create new dynamics state with field-level merging:
-        // - Update magnetic heading, Mach, and barometric vertical rate from BDS 5,3
+        // - Update magnetic heading, true heading, Mach, and barometric vertical rate from BDS 5,3
         // - Preserve roll and track rate from BDS 5,0, inertial vertical rate from BDS 6,0
         var dynamics = new TrackedFlightDynamics
         {
             RollAngle = existing?.RollAngle,                       // From BDS 5,0
             MagneticHeading = data.MagneticHeading ?? existing?.MagneticHeading,
+            TrueHeading = trueHeading,                             // Calculated or preserved
+            MagneticDeclination = magneticDeclination,             // Cached declination
             BarometricVerticalRate = data.VerticalRate ?? existing?.BarometricVerticalRate,
             InertialVerticalRate = existing?.InertialVerticalRate,              // From BDS 6,0
             MachNumber = data.MachNumber ?? existing?.MachNumber,
@@ -371,7 +414,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
             CommBIndicatedAirspeed = data.IndicatedAirspeed.HasValue
                 ? Velocity.FromKnots(data.IndicatedAirspeed.Value, VelocityType.IndicatedAirspeed)
                 : aircraft.Velocity.CommBIndicatedAirspeed,
-            CommBTrueAirspeed = data.TrueAirspeed.HasValue && data.TrueAirspeed.Value <= 1500
+            CommBTrueAirspeed = data.TrueAirspeed is <= 1500
                 ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
                 : aircraft.Velocity.CommBTrueAirspeed,
             LastUpdate = timestamp
@@ -396,13 +439,45 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
     {
         TrackedFlightDynamics? existing = aircraft.FlightDynamics;
 
+        // Calculate true heading with magnetic declination
+        double? trueHeading = existing?.TrueHeading;
+        MagneticDeclination? magneticDeclination = existing?.MagneticDeclination;
+
+        if ((data.MagneticHeading ?? existing?.MagneticHeading).HasValue && aircraft.Position.Coordinate != null)
+        {
+            double magneticHeading = (data.MagneticHeading ?? existing?.MagneticHeading)!.Value;
+            GeographicCoordinate? coord = aircraft.Position.Coordinate;
+            double altKm = (aircraft.Position.BarometricAltitude?.Feet ?? 0) * 0.0003048;
+
+            // Get or calculate magnetic declination (service handles caching)
+            magneticDeclination = MagneticDeclinationCalculator.GetOrCalculate(
+                existing?.MagneticDeclination,
+                coord.Latitude,
+                coord.Longitude,
+                altKm,
+                timestamp);
+
+            // Calculate true heading - only update if validation succeeds
+            double? track = aircraft.Velocity.TrackAngle ?? aircraft.Velocity.Track;
+            double? calculated = TrueHeadingCalculator.Calculate(
+                magneticHeading,
+                magneticDeclination.Declination,
+                track);
+            if (calculated.HasValue)
+            {
+                trueHeading = calculated;
+            }
+        }
+
         // Create new dynamics state with field-level merging:
-        // - Update magnetic heading, Mach, and vertical rates from BDS 6,0
+        // - Update magnetic heading, true heading, Mach, and vertical rates from BDS 6,0
         // - Preserve roll and track rate from BDS 5,0
         var dynamics = new TrackedFlightDynamics
         {
             RollAngle = existing?.RollAngle,                       // From BDS 5,0
             MagneticHeading = data.MagneticHeading ?? existing?.MagneticHeading,
+            TrueHeading = trueHeading,                             // Calculated or preserved
+            MagneticDeclination = magneticDeclination,             // Cached declination
             BarometricVerticalRate = data.BarometricVerticalRate ?? existing?.BarometricVerticalRate,
             InertialVerticalRate = data.InertialVerticalRate ?? existing?.InertialVerticalRate,
             MachNumber = data.MachNumber ?? existing?.MachNumber,

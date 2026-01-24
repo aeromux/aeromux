@@ -41,7 +41,7 @@ public sealed record TrackedStatus
     /// Typical values: -45 to -10 dBFS for aircraft signals.
     /// </summary>
     public double? SignalStrengthDecibel =>
-        SignalStrength.HasValue && SignalStrength.Value > 0
+        SignalStrength is > 0
             ? 10.0 * Math.Log10(SignalStrength.Value / 255.0)
             : null;
 
