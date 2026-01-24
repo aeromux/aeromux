@@ -241,22 +241,16 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     {
         TrackedMeteo? existing = aircraft.Meteo;
 
-        // Create new meteo state with field-level merging:
-        // - Update routine weather fields from BDS 4,4
-        // - Preserve hazard fields from BDS 4,5
-        var meteo = new TrackedMeteo
+        // Update routine weather fields from BDS 4,4 using 'with' expression
+        // Only specify fields that change; all others (hazards from BDS 4,5, TAT) are preserved
+        TrackedMeteo meteo = (existing ?? new TrackedMeteo()) with
         {
             WindSpeed = data.WindSpeed ?? existing?.WindSpeed,
             WindDirection = data.WindDirection ?? existing?.WindDirection,
             StaticAirTemperature = data.StaticAirTemperature ?? existing?.StaticAirTemperature,
             Pressure = data.Pressure ?? existing?.Pressure,
-            Turbulence = data.Turbulence ?? existing?.Turbulence,             // From BDS 4,4
-            Humidity = data.Humidity ?? existing?.Humidity,                   // From BDS 4,4
-            WindShear = existing?.WindShear,                      // From BDS 4,5
-            Microburst = existing?.Microburst,                    // From BDS 4,5
-            Icing = existing?.Icing,                              // From BDS 4,5
-            WakeVortex = existing?.WakeVortex,                    // From BDS 4,5
-            RadioHeight = existing?.RadioHeight,                  // From BDS 4,5
+            Turbulence = data.Turbulence ?? existing?.Turbulence,
+            Humidity = data.Humidity ?? existing?.Humidity,
             FigureOfMerit = data.FigureOfMerit ?? existing?.FigureOfMerit,
             LastUpdate = timestamp
         };
@@ -279,13 +273,10 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
     {
         TrackedMeteo? existing = aircraft.Meteo;
 
-        // Create new meteo state with field-level merging:
-        // - Update hazard fields from BDS 4,5
-        // - Preserve routine weather fields from BDS 4,4
-        var meteo = new TrackedMeteo
+        // Update hazard fields from BDS 4,5 using 'with' expression
+        // Only specify fields that change; all others (routine weather, wind, TAT) are preserved
+        TrackedMeteo meteo = (existing ?? new TrackedMeteo()) with
         {
-            WindSpeed = existing?.WindSpeed,                      // From BDS 4,4
-            WindDirection = existing?.WindDirection,              // From BDS 4,4
             StaticAirTemperature = data.StaticAirTemperature ?? existing?.StaticAirTemperature,
             Pressure = data.Pressure ?? existing?.Pressure,
             Turbulence = data.Turbulence ?? existing?.Turbulence,
@@ -294,7 +285,6 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             Icing = data.Icing ?? existing?.Icing,
             WakeVortex = data.WakeVortex ?? existing?.WakeVortex,
             RadioHeight = data.RadioHeight ?? existing?.RadioHeight,
-            FigureOfMerit = existing?.FigureOfMerit,              // From BDS 4,4
             LastUpdate = timestamp
         };
 
@@ -348,7 +338,10 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        return aircraft with { FlightDynamics = dynamics, Velocity = velocity };
+        aircraft = aircraft with { FlightDynamics = dynamics, Velocity = velocity };
+
+        // Trigger wind and temperature calculations
+        return UpdateCalculatedMeteo(aircraft, timestamp);
     }
 
     /// <summary>
@@ -426,7 +419,10 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        return aircraft with { FlightDynamics = dynamics, Velocity = velocity };
+        aircraft = aircraft with { FlightDynamics = dynamics, Velocity = velocity };
+
+        // Trigger wind and temperature calculations
+        return UpdateCalculatedMeteo(aircraft, timestamp);
     }
 
     /// <summary>
@@ -500,6 +496,64 @@ public sealed class CommBAltitudeReplyHandler : ITrackingHandler
             LastUpdate = timestamp
         };
 
-        return aircraft with { FlightDynamics = dynamics, Velocity = velocity };
+        aircraft = aircraft with { FlightDynamics = dynamics, Velocity = velocity };
+
+        // Trigger wind and temperature calculations
+        return UpdateCalculatedMeteo(aircraft, timestamp);
+    }
+
+    /// <summary>
+    /// Updates calculated meteorological values (wind and temperature) from aircraft state.
+    /// Triggered after velocity/dynamics updates from BDS 5,0, 5,3, or 6,0 messages.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wind calculation requires: TAS, ground speed, true heading, and track (all fresh data).
+    /// Temperature calculation requires: TAS and Mach number (both fresh data).
+    /// </para>
+    /// <para>
+    /// Rate limited to 1 calculation per second per aircraft to reduce computation overhead.
+    /// Calculations only performed when aircraft is airborne and source data age is less than 2.5 seconds.
+    /// </para>
+    /// <para>
+    /// Latest wins pattern: calculated values can overwrite direct BDS 4,4 values and vice versa,
+    /// ensuring most recent data is always used regardless of source.
+    /// </para>
+    /// </remarks>
+    private static Aircraft UpdateCalculatedMeteo(
+        Aircraft aircraft,
+        DateTime timestamp)
+    {
+        TrackedMeteo? existing = aircraft.Meteo;
+
+        // Rate limiting: skip if meteo updated less than 1 second ago
+        if (existing?.LastUpdate != null &&
+            (timestamp - existing.LastUpdate.Value).TotalSeconds < 1.0)
+        {
+            return aircraft;
+        }
+
+        MeteoCalculationHelper.TryCalculateWind(aircraft, timestamp,
+            out int? windSpeed, out double? windDirection);
+
+        MeteoCalculationHelper.TryCalculateTemperatures(aircraft, timestamp,
+            out double? oat, out double? tat);
+
+        if (windSpeed == null && windDirection == null && oat == null && tat == null)
+        {
+            return aircraft;
+        }
+
+        // Latest wins: calculated values overwrite existing regardless of source
+        TrackedMeteo meteo = (existing ?? new TrackedMeteo()) with
+        {
+            WindSpeed = windSpeed ?? existing?.WindSpeed,
+            WindDirection = windDirection ?? existing?.WindDirection,
+            StaticAirTemperature = oat ?? existing?.StaticAirTemperature,
+            TotalAirTemperature = tat ?? existing?.TotalAirTemperature,
+            LastUpdate = timestamp
+        };
+
+        return aircraft with { Meteo = meteo };
     }
 }

@@ -1681,11 +1681,17 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Wind Direction", windDirection));
 
+        // Total Air Temperature
+        string totalAirTemp = aircraft.Meteo?.TotalAirTemperature.HasValue == true
+            ? $"{aircraft.Meteo.TotalAirTemperature.Value:F1} °C"
+            : "N/A (no data yet)";
+        allRows.Add(new DetailRow("Total Air Temperature", totalAirTemp));
+
         // Static Air Temperature
         string staticAirTemp = aircraft.Meteo?.StaticAirTemperature.HasValue == true
             ? $"{aircraft.Meteo.StaticAirTemperature.Value:F1} °C"
             : "N/A (no data yet)";
-        allRows.Add(new DetailRow("Static Air Temp", staticAirTemp));
+        allRows.Add(new DetailRow("Static Air Temperature", staticAirTemp));
 
         // Pressure
         string pressure = aircraft.Meteo?.Pressure.HasValue == true

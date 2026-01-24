@@ -26,30 +26,44 @@ namespace Aeromux.Core.Tracking;
 public sealed record TrackedMeteo
 {
     /// <summary>
-    /// Wind speed in knots (BDS 4,4).
-    /// Meteorological wind speed measured by aircraft.
+    /// Wind speed in knots.
+    /// Meteorological wind speed measured or calculated by aircraft.
+    /// Sources: BDS 4,4 (direct), calculated from velocity vectors (TAS, GS, heading, track).
     /// Range: 0-250 knots.
-    /// Null if BDS 4,4 not received or wind data unavailable.
+    /// Null if no source data available or aircraft on ground.
     /// </summary>
     public int? WindSpeed { get; init; }
 
     /// <summary>
-    /// Wind direction in degrees (BDS 4,4).
+    /// Wind direction in degrees.
     /// Direction wind is coming FROM (meteorological convention).
+    /// Sources: BDS 4,4 (direct), calculated from velocity vectors (TAS, GS, heading, track).
     /// Range: 0-360 degrees.
-    /// Resolution: 180/256 degrees (~0.703°).
-    /// Null if BDS 4,4 not received or wind data unavailable.
+    /// Resolution: 180/256 degrees (~0.703°) for BDS 4,4, variable for calculated.
+    /// Null if no source data available or aircraft on ground.
     /// </summary>
     public double? WindDirection { get; init; }
 
     /// <summary>
-    /// Static air temperature in °C (BDS 4,4, BDS 4,5).
-    /// Outside air temperature (OAT) measured by aircraft.
-    /// Range: -80 to +60 °C.
-    /// Resolution: 0.25 °C.
-    /// Null if BDS 4,4/4,5 not received or temperature unavailable.
+    /// Static air temperature in °C (also known as OAT - Outside Air Temperature).
+    /// Temperature of undisturbed air at aircraft altitude.
+    /// Sources: BDS 4,4/4,5 (direct), calculated from TAS and Mach number.
+    /// Range: -80 to +60 °C (BDS 4,4), -80 to +100 °C (calculated).
+    /// Resolution: 0.25 °C (BDS 4,4), variable (calculated).
+    /// Null if no source data available or aircraft on ground.
     /// </summary>
     public double? StaticAirTemperature { get; init; }
+
+    /// <summary>
+    /// Total air temperature in °C (also known as TAT or indicated air temperature).
+    /// Temperature measured by aircraft probe including kinetic heating (ram effect).
+    /// Sources: BDS 4,4 (direct, rare), calculated from OAT and Mach number.
+    /// Formula: TAT = OAT_kelvin * (1 + 0.2 * Mach²) - 273.15
+    /// where 0.2 is the recovery factor for ram air temperature rise.
+    /// Range: -80 to +100 °C.
+    /// Null if calculation inputs unavailable or aircraft on ground.
+    /// </summary>
+    public double? TotalAirTemperature { get; init; }
 
     /// <summary>
     /// Atmospheric pressure in hPa (BDS 4,4, BDS 4,5).
