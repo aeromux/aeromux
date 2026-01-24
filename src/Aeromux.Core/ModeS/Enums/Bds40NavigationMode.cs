@@ -24,7 +24,6 @@ namespace Aeromux.Core.ModeS.Enums;
 /// <remarks>
 /// Transmitted as 3-bit field (bits 49-51) in BDS 4,0 messages.
 /// Each bit represents a different mode that can be independently active.
-/// Reference: readsb comm_b.c lines 482-510.
 /// </remarks>
 [Flags]
 public enum Bds40NavigationMode

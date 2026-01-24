@@ -17,6 +17,7 @@
 using Aeromux.Core.ModeS;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
+using Aeromux.Core.ModeS.ValueObjects;
 
 namespace Aeromux.Core.Tracking.Handlers;
 
@@ -59,21 +60,22 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
         double? heading = null;
         double? track = null;
 
-        if (msg.Subtype is VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic)
+        switch (msg.Subtype)
         {
-            // Ground speed: extract track angle (direction of movement accounting for wind)
-            track = msg.Heading;
-        }
-        else if (msg.Subtype is VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic)
-        {
-            // Airspeed: extract true heading (direction nose points)
-            heading = msg.Heading;
+            case VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic:
+                // Ground speed: extract track angle (direction of movement accounting for wind)
+                track = msg.Heading;
+                break;
+            case VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic:
+                // Airspeed: extract true heading (direction nose points)
+                heading = msg.Heading;
+                break;
         }
 
         // Update velocity with TC 19 message fields while preserving Comm-B and surface data
         // TC 19 provides: Speed, Heading/Track, VerticalRate, VelocitySubtype, NACv
         // Preserve from other handlers: IndicatedAirspeed, TrueAirspeed, TrackAngle (Comm-B BDS 5,0/5,3/6,0)
-        //                                GroundSpeed, GroundTrack (Surface Position TC 5-8)
+        //                               GroundSpeed, GroundTrack (Surface Position TC 5-8)
         TrackedVelocity velocity = aircraft.Velocity with
         {
             Speed = msg.Velocity,                                      // Airborne velocity from TC 19
@@ -88,6 +90,22 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
             LastUpdate = msg.Velocity != null ? timestamp : null       // Update timestamp only if velocity present
         };
 
-        return aircraft with { Velocity = velocity };
+        // Cache geometric-barometric delta from TC 19 for geometric altitude derivation
+        // Note: We only save the delta here; geometric altitude will be recalculated
+        // when new barometric altitude arrives from TC 9-18
+        TrackedPosition position = aircraft.Position;
+        if (msg.GeometricBarometricDelta != null)
+        {
+            position = position with
+            {
+                GeometricBarometricDelta = msg.GeometricBarometricDelta.Value
+            };
+        }
+
+        return aircraft with
+        {
+            Velocity = velocity,
+            Position = position
+        };
     }
 }

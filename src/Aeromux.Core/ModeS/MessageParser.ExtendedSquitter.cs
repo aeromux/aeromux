@@ -230,14 +230,15 @@ public sealed partial class MessageParser
 
         // Extract vertical rate first (common to all subtypes)
         int? verticalRate = ParseVerticalRate(frame);
+        int? geometricDelta = ParseGeometricDelta(frame);
 
         // Route to subtype-specific parsers
         return subtype switch
         {
             VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic
-                => ParseGroundSpeedVelocity(frame, subtype, verticalRate, nacv),
+                => ParseGroundSpeedVelocity(frame, subtype, verticalRate, nacv, geometricDelta),
             VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic
-                => ParseAirspeedVelocity(frame, subtype, verticalRate, nacv),
+                => ParseAirspeedVelocity(frame, subtype, verticalRate, nacv, geometricDelta),
             _ => null  // Unknown subtype
         };
     }
@@ -245,7 +246,12 @@ public sealed partial class MessageParser
     /// <summary>
     /// Parses ground speed velocity (subtypes 1-2).
     /// </summary>
-    private ModeSMessage? ParseGroundSpeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate, NavigationAccuracyCategoryVelocity? nacv)
+    private ModeSMessage? ParseGroundSpeedVelocity(
+        ValidatedFrame frame,
+        VelocitySubtype subtype,
+        int? verticalRate,
+        NavigationAccuracyCategoryVelocity? nacv,
+        int? geometricDelta)
     {
         // Extract EW direction (S_ew) - bit 46 (1 bit)
         int sew = ExtractBits(frame.Data, 46, 1);
@@ -285,13 +291,19 @@ public sealed partial class MessageParser
             normalizedHeading,
             verticalRate,
             subtype,
-            nacv);
+            nacv,
+            geometricDelta);
     }
 
     /// <summary>
     /// Parses airspeed velocity (subtypes 3-4).
     /// </summary>
-    private ModeSMessage? ParseAirspeedVelocity(ValidatedFrame frame, VelocitySubtype subtype, int? verticalRate, NavigationAccuracyCategoryVelocity? nacv)
+    private ModeSMessage? ParseAirspeedVelocity(
+        ValidatedFrame frame,
+        VelocitySubtype subtype,
+        int? verticalRate,
+        NavigationAccuracyCategoryVelocity? nacv,
+        int? geometricDelta)
     {
         // Extract heading status (SH) - bit 46 (1 bit)
         int sh = ExtractBits(frame.Data, 46, 1);
@@ -334,7 +346,8 @@ public sealed partial class MessageParser
             heading,
             verticalRate,
             subtype,
-            nacv);
+            nacv,
+            geometricDelta);
     }
 
     /// <summary>
@@ -367,6 +380,37 @@ public sealed partial class MessageParser
         }
 
         return verticalRate;
+    }
+
+    /// <summary>
+    /// Extracts geometric-barometric altitude delta from TC 19 message.
+    /// Delta represents the difference between GNSS altitude and barometric altitude.
+    /// </summary>
+    /// <remarks>
+    /// Per ICAO Annex 10 Volume IV, Section 3.1.2.9.5.
+    /// </remarks>
+    private int? ParseGeometricDelta(ValidatedFrame frame)
+    {
+        // Extract geometric-barometric altitude delta (ME bits 49-56, overall bits 81-88)
+        // Note: ME (Message Extended Squitter) starts at overall bit 33
+        // SDif (ME bit 49, overall bit 81): Sign of altitude difference
+        //   0 = GNSS altitude above barometric (positive)
+        //   1 = GNSS altitude below barometric (negative)
+        // dAlt (ME bits 50-56, overall bits 82-88): Magnitude of altitude difference
+        //   Resolution: 25 feet per unit
+        //   Formula: Δh = s × (n - 1) × 25 feet
+        int sDif = ExtractBits(frame.Data, 81, 1);
+        int dAlt = ExtractBits(frame.Data, 82, 7);
+
+        // Check if delta is unavailable (all zeros or all ones)
+        if (dAlt is 0 or 127)
+        {
+            return null;
+        }
+
+        // Apply formula and sign
+        int magnitude = (dAlt - 1) * 25;
+        return (sDif == 0) ? magnitude : -magnitude;
     }
 
     // ========================================

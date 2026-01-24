@@ -37,6 +37,14 @@ namespace Aeromux.Core.ModeS.Messages;
 /// <param name="VerticalRate">Vertical rate in feet/minute (null if not available, negative = descending).</param>
 /// <param name="Subtype">Velocity subtype (ground speed vs airspeed, subsonic vs supersonic).</param>
 /// <param name="NACv">Navigation Accuracy Category for Velocity (bits 43-45, null if not available).</param>
+/// <param name="GeometricBarometricDelta">
+/// Difference between geometric (GNSS) altitude and barometric altitude in feet.
+/// Extracted from TC 19 ME bits 49-56 (SDif + dAlt fields).
+/// Positive values indicate GNSS altitude is above barometric (typical: +50 to +100 feet).
+/// Formula: Δh = s × (n - 1) × 25 feet, where s=±1 based on SDif bit, n is dAlt magnitude.
+/// Range: ±25 to ±3,150 feet. Null if unavailable (dAlt = 0 or 127).
+/// Used to derive geometric altitude when TC 20-22 messages are unavailable.
+/// </param>
 public sealed record AirborneVelocity(
     string IcaoAddress,
     DateTime Timestamp,
@@ -47,4 +55,5 @@ public sealed record AirborneVelocity(
     double? Heading,
     int? VerticalRate,
     VelocitySubtype Subtype,
-    NavigationAccuracyCategoryVelocity? NACv) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    NavigationAccuracyCategoryVelocity? NACv,
+    int? GeometricBarometricDelta) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

@@ -45,10 +45,22 @@ public sealed record TrackedPosition
     /// <summary>
     /// GNSS (GPS) altitude above WGS84 ellipsoid (TC 20-22).
     /// More accurate than barometric but not used for ATC separation.
-    /// Typically 50-100 feet higher than barometric altitude.
+    /// Typically, 50-100 feet higher than barometric altitude.
     /// Null if no GNSS altitude data received (rare in ADS-B).
     /// </summary>
     public Altitude? GeometricAltitude { get; init; }
+
+    /// <summary>
+    /// Cached difference between geometric (GNSS) altitude and barometric altitude in feet.
+    /// Derived from TC 19 (Airborne Velocity) ME bits 49-56 (SDif + dAlt fields).
+    /// Positive values indicate GNSS altitude is above barometric (typical: +50 to +100 feet).
+    /// Formula: Δh = s × (n - 1) × 25 feet, where s=±1 based on SDif bit, n is dAlt magnitude.
+    /// Range: ±25 to ±3,150 feet.
+    /// Used to derive GeometricAltitude when TC 20-22 messages are unavailable:
+    /// GeometricAltitude = BarometricAltitude + GeometricBarometricDelta.
+    /// Null if no TC 19 message with valid delta has been received.
+    /// </summary>
+    public int? GeometricBarometricDelta { get; init; }
 
     /// <summary>
     /// Surface vs airborne status (from TC type code).

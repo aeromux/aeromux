@@ -415,26 +415,27 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                 aircraft.Identification.Callsign ?? "Unknown");
         };
 
-        // Log significant updates (position, altitude, velocity changes)
+        // Log significant updates (typically for debug, currently does nothing)
         tracker.OnAircraftUpdated += (sender, e) =>
         {
-            Aircraft prev = e.Previous;
-            Aircraft curr = e.Updated;
-
-            // Only log if position or velocity actually changed to reduce log noise
-            bool positionChanged = prev.Position.Coordinate != curr.Position.Coordinate ||
-                                  prev.Position.BarometricAltitude != curr.Position.BarometricAltitude;
-            bool velocityChanged = prev.Velocity.GroundSpeed != curr.Velocity.GroundSpeed ||
-                                  prev.Velocity.Speed != curr.Velocity.Speed;
-
-            if (positionChanged || velocityChanged)
-            {
-                Log.Debug("Aircraft update: ICAO={Icao}, Position={Position}, Alt={Altitude}, Speed={Velocity}",
-                    curr.Identification.ICAO,
-                    curr.Position.Coordinate,
-                    curr.Position.BarometricAltitude,
-                    curr.Velocity.GroundSpeed ?? curr.Velocity.Speed);
-            }
+            // Example
+            //
+            // Aircraft prev = e.Previous;
+            // Aircraft curr = e.Updated;
+            //
+            // bool positionChanged = prev.Position.Coordinate != curr.Position.Coordinate ||
+            //                       prev.Position.BarometricAltitude != curr.Position.BarometricAltitude;
+            // bool velocityChanged = prev.Velocity.GroundSpeed != curr.Velocity.GroundSpeed ||
+            //                       prev.Velocity.Speed != curr.Velocity.Speed;
+            //
+            // if (positionChanged || velocityChanged)
+            // {
+            //     Log.Debug("Aircraft update: ICAO={Icao}, Position={Position}, Alt={Altitude}, Speed={Velocity}",
+            //         curr.Identification.ICAO,
+            //         curr.Position.Coordinate,
+            //         curr.Position.BarometricAltitude,
+            //         curr.Velocity.GroundSpeed ?? curr.Velocity.Speed);
+            // }
         };
 
         // IMPORTANT: Tracker runs in background, consuming frames automatically
@@ -1250,7 +1251,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         {
             geoAlt = "N/A (no data yet)";
         }
-        allRows.Add(new DetailRow("Geo Altitude", geoAlt));
+        allRows.Add(new DetailRow("Geometric Altitude (WGS84)", geoAlt));
 
         allRows.Add(new DetailRow("On Ground", aircraft.Position.IsOnGround.ToString()));
 

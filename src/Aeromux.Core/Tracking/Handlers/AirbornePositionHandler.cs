@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.ModeS.ValueObjects;
 
@@ -66,19 +67,42 @@ public sealed class AirbornePositionHandler : ITrackingHandler
         // Both types are preserved separately to avoid lossy merging
         Altitude? barometricAltitude = position.BarometricAltitude;
         Altitude? geometricAltitude = position.GeometricAltitude;
+        int? geometricBarometricDelta = position.GeometricBarometricDelta;
 
         if (msg.Altitude != null)
         {
-            if (msg.Altitude.Type == ModeS.Enums.AltitudeType.Barometric)
+            switch (msg.Altitude.Type)
             {
-                // Store barometric altitude (standard pressure setting 29.92 inHg / 1013.25 hPa)
-                barometricAltitude = msg.Altitude;
-            }
-            else if (msg.Altitude.Type == ModeS.Enums.AltitudeType.Geometric)
-            {
-                // Store geometric altitude (GNSS height above WGS84 ellipsoid)
-                // Typically 50-100 feet higher than barometric altitude
-                geometricAltitude = msg.Altitude;
+                case AltitudeType.Barometric:
+                {
+                    // Store barometric altitude from TC 9-18
+                    barometricAltitude = msg.Altitude;
+
+                    // Always derive geometric altitude from latest barometric + cached delta
+                    // This ensures geometric altitude stays in sync with changing barometric altitude
+                    // Strategy: Recalculate on every barometric update (TC 9-18), not on delta updates (TC 19)
+                    if (geometricBarometricDelta != null)
+                    {
+                        int derivedGeometricFeet = barometricAltitude.Feet + geometricBarometricDelta.Value;
+                        geometricAltitude = Altitude.FromFeet(derivedGeometricFeet, AltitudeType.Geometric);
+                    }
+
+                    break;
+                }
+                case AltitudeType.Geometric:
+                {
+                    // Store geometric altitude from TC 20-22 (latest explicit value)
+                    geometricAltitude = msg.Altitude;
+
+                    // Reverse-calculate delta for future derivations
+                    // Formula: delta = geometric - barometric
+                    if (barometricAltitude != null)
+                    {
+                        geometricBarometricDelta = geometricAltitude.Feet - barometricAltitude.Feet;
+                    }
+
+                    break;
+                }
             }
         }
 
@@ -93,11 +117,12 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             Coordinate = msg.Position ?? position.Coordinate,
             BarometricAltitude = barometricAltitude,
             GeometricAltitude = geometricAltitude,
+            GeometricBarometricDelta = geometricBarometricDelta,
             Antenna = msg.Antenna ?? position.Antenna,
             IsOnGround = false,
             LastUpdate = timestamp,
             PositionSource = frame.Source,
-            HadMlatPosition = position.HadMlatPosition || frame.Source == ModeS.Enums.FrameSource.Mlat
+            HadMlatPosition = position.HadMlatPosition || frame.Source == FrameSource.Mlat
         };
 
         return aircraft with { Position = position };

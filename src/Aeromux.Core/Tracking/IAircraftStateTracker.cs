@@ -23,7 +23,6 @@ namespace Aeromux.Core.Tracking;
 /// Maintains comprehensive state for all tracked aircraft including current values
 /// and historical data (position, altitude, velocity over time).
 /// Provides synchronous queries and event-based notifications.
-/// Follows readsb/dump1090 "tracker" pattern with enhanced state management.
 /// </summary>
 public interface IAircraftStateTracker
 {
@@ -89,7 +88,7 @@ public interface IAircraftStateTracker
     /// Gets or sets the aircraft timeout duration.
     /// Aircraft not seen within this time are considered expired and removed during cleanup.
     /// Typical values: 60s (default), 300s (5min for slow update rates), 30s (fast turnover).
-    /// Default: 60 seconds (matches readsb default)
+    /// Default: 60 seconds
     /// </summary>
     TimeSpan AircraftTimeout { get; set; }
 

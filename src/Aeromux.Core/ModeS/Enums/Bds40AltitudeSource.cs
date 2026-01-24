@@ -22,7 +22,6 @@ namespace Aeromux.Core.ModeS.Enums;
 /// </summary>
 /// <remarks>
 /// Transmitted as 2-bit field (bits 55-56) in BDS 4,0 messages.
-/// Reference: readsb comm_b.c lines 492-510.
 /// </remarks>
 public enum Bds40AltitudeSource
 {

@@ -138,4 +138,5 @@ public class AirborneVelocityTests
         AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
         velocity.NACv.Should().Be(expectedNACv);
     }
+
 }

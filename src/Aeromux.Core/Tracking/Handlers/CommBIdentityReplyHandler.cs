@@ -369,7 +369,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         {
             double magneticHeading = (data.MagneticHeading ?? existing?.MagneticHeading)!.Value;
             GeographicCoordinate? coord = aircraft.Position.Coordinate;
-            double altKm = (aircraft.Position.BarometricAltitude?.Feet ?? 0) * 0.0003048;
+            double altKm = (aircraft.Position.GeometricAltitude?.Feet ?? 0) * 0.0003048;
 
             // Get or calculate magnetic declination (service handles caching)
             magneticDeclination = MagneticDeclinationCalculator.GetOrCalculate(
@@ -447,7 +447,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         {
             double magneticHeading = (data.MagneticHeading ?? existing?.MagneticHeading)!.Value;
             GeographicCoordinate? coord = aircraft.Position.Coordinate;
-            double altKm = (aircraft.Position.BarometricAltitude?.Feet ?? 0) * 0.0003048;
+            double altKm = (aircraft.Position.GeometricAltitude?.Feet ?? 0) * 0.0003048;
 
             // Get or calculate magnetic declination (service handles caching)
             magneticDeclination = MagneticDeclinationCalculator.GetOrCalculate(
