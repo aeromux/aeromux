@@ -17,13 +17,16 @@
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
-/// Aircraft category derived from Type Code (TC) and Category (CA) fields in TC 1-4 messages.
+/// Aircraft category derived from TC (Type Code) and CA (Category) fields in TC 1-4 messages.
 /// Used for wake vortex separation and aircraft classification.
 /// </summary>
 /// <remarks>
 /// The category is encoded as a combination of:
 /// - Type Code (TC): 1-4 (determines general class)
 /// - Category field (CA): 0-7 (3 bits, specific category within class)
+///
+/// Wake vortex separation is the spacing required between aircraft to avoid turbulence
+/// created by wingtip vortices from preceding aircraft.
 ///
 /// Reference: ICAO Doc 9871 (Technical Provisions for Mode S Services and Extended Squitter).
 /// </remarks>
@@ -95,7 +98,8 @@ public enum AircraftCategory
     Heavy = 45,
 
     /// <summary>
-    /// High performance aircraft, speed greater than 5g acceleration capability (TC 4, CA 6).
+    /// High performance aircraft, capable of sustained maneuvers exceeding 5g acceleration (TC 4, CA 6).
+    /// Where g = gravitational acceleration (9.8 m/s² or 32.2 ft/s²).
     /// Examples: Military fighters, high-performance jets.
     /// </summary>
     HighPerformance = 46,

@@ -17,7 +17,7 @@
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
-/// Transponder capability field (CA) from DF 11 (All-Call Reply) messages.
+/// Transponder capability field (CA - Capability) from DF 11 (All-Call Reply) messages.
 /// Indicates the operational capabilities and status of the Mode S transponder.
 /// </summary>
 /// <remarks>
@@ -25,7 +25,7 @@ namespace Aeromux.Core.ModeS.Enums;
 /// - Level of Mode S support (Level 1 = basic, Level 2+ = enhanced)
 /// - On-ground vs airborne status (for Level 2+ transponders)
 /// - SI (Surveillance Identifier) code capability
-/// - Special conditions (DR field, flight status)
+/// - Special conditions (DR - Downlink Request field, FS - Flight Status)
 ///
 /// Level 1 transponders support only basic Mode S (DF 0, 4, 5, 11).
 /// Level 2+ transponders support extended squitter and enhanced surveillance.

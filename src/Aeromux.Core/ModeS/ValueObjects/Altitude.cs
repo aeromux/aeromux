@@ -27,7 +27,7 @@ namespace Aeromux.Core.ModeS.ValueObjects;
 /// <para>Implements IComparable for ordering - higher altitudes are considered "greater".</para>
 /// <para><strong>Usage Example:</strong></para>
 /// <code>
-/// var cruiseAlt = Altitude.FromFeet(35000, AltitudeType.Barometric);  // FL350
+/// var cruiseAlt = Altitude.FromFeet(35000, AltitudeType.Barometric);  // FL350 (Flight Level 350)
 /// var approachAlt = Altitude.FromFeet(5000, AltitudeType.Barometric);
 /// bool isHigher = cruiseAlt > approachAlt;  // true
 ///
@@ -51,7 +51,9 @@ public record Altitude : IComparable<Altitude>, IComparable
             throw new ArgumentOutOfRangeException(
                 nameof(feet),
                 feet,
-                "Altitude must be between -2000 and 126700 feet (-2000 allows Dead Sea, 126700 is Gillham maximum)");
+                "Altitude must be between -2000 and 126700 feet " +
+                "(-2000 allows Dead Sea, 126700 is Gillham code maximum, " +
+                "where Gillham is the Gray code altitude encoding used in Mode A/C replies)");
         }
 
         _feet = feet;
@@ -68,6 +70,7 @@ public record Altitude : IComparable<Altitude>, IComparable
 
     /// <summary>
     /// Creates an altitude from meters.
+    /// Conversion: 1 foot = 0.3048 meters (exactly, by international definition).
     /// </summary>
     /// <param name="meters">Altitude in meters.</param>
     /// <param name="type">Type of altitude measurement.</param>
@@ -82,12 +85,15 @@ public record Altitude : IComparable<Altitude>, IComparable
 
     /// <summary>
     /// Gets the altitude in meters.
+    /// Conversion: 1 foot = 0.3048 meters (exactly).
     /// </summary>
     public int Meters => (int)(_feet * 0.3048);
 
     /// <summary>
     /// Gets the flight level (altitude / 100).
+    /// FL (Flight Level) is the altitude in hundreds of feet on standard pressure (1013.25 hPa).
     /// Example: 35000 feet = FL350.
+    /// Used for high-altitude traffic separation above transition altitude.
     /// </summary>
     public int FlightLevel => _feet / 100;
 

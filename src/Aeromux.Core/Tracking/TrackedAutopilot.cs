@@ -20,22 +20,22 @@ using Aeromux.Core.ModeS.ValueObjects;
 namespace Aeromux.Core.Tracking;
 
 /// <summary>
-/// Aircraft autopilot/FMS intent information group.
+/// Aircraft autopilot and FMS (Flight Management System) intent information group.
 /// Contains target altitude, heading, and barometric settings from autopilot/FMS.
 /// Sources: TC 29 (Target State and Status), BDS 4,0 (Comm-B Selected Vertical Intention).
 /// </summary>
 /// <remarks>
-/// TCAS fields (TcasOperational, TcasRaActive) have been moved to TrackedAcas.
+/// TCAS (Traffic Alert and Collision Avoidance System) fields have been moved to TrackedAcas.
 /// This record now focuses exclusively on autopilot/FMS intent and configuration.
 /// </remarks>
 public sealed record TrackedAutopilot
 {
     /// <summary>
-    /// Selected altitude from MCP/FCU or FMS (TC 29, BDS 4,0).
-    /// Target altitude set by pilot in autopilot or FMS.
+    /// Selected altitude from MCP/FCU (Mode Control Panel / Flight Control Unit) or FMS (TC 29, BDS 4,0).
+    /// Target altitude set by pilot in autopilot control panel or flight management system.
     /// Range: -1000 to +100,000 feet.
     /// Null if not available.
-    /// Source: TC 29 (both versions) or BDS 4,0 (MCP/FMS altitude).
+    /// Source: TC 29 (both versions) or BDS 4,0 (MCP/FCU or FMS altitude).
     /// </summary>
     public Altitude? SelectedAltitude { get; init; }
 
@@ -111,7 +111,8 @@ public sealed record TrackedAutopilot
 
     /// <summary>
     /// Approach mode engaged (TC 29 V2).
-    /// True if approach mode active (ILS/RNAV approach).
+    /// True if approach mode active for precision approach procedures.
+    /// Includes ILS (Instrument Landing System) or RNAV (Area Navigation) approach modes.
     /// Null if TC 29 V2 not received.
     /// </summary>
     public bool? ApproachMode { get; init; }

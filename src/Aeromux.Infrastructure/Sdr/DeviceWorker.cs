@@ -29,7 +29,7 @@ namespace Aeromux.Infrastructure.Sdr;
 /// <summary>
 /// Manages a single RTL-SDR device: opening, configuration, and sample reception.
 /// Each DeviceWorker runs in its own task and processes samples from one device.
-/// Uses Serilog for structured logging (ADR-007).
+/// Uses Serilog for structured logging.
 /// </summary>
 public sealed class DeviceWorker : IDisposable
 {
@@ -320,7 +320,6 @@ public sealed class DeviceWorker : IDisposable
             // Convert samples to magnitude (IQ → Magnitude)
             // Fills a linear buffer with prefix from previous buffer for seamless preamble detection
             // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
-            // (ADR-009: Coordinator Pattern - zero overhead in hot path)
             IQDemodulator.MagnitudeBuffer? magnitudeBuffer = _demodulator.ProcessSamples(samples);
 
             if (magnitudeBuffer == null)
@@ -406,9 +405,9 @@ public sealed class DeviceWorker : IDisposable
     /// <param name="cancellationToken">Token to signal task shutdown.</param>
     /// <remarks>
     /// Runs until cancellation is requested. OperationCanceledException is expected on shutdown.
-    /// Uses Coordinator Pattern (ADR-009): DeviceWorker aggregates and logs statistics from all
-    /// processing components (IQDemodulator, PreambleDetector, ValidatedFrameFactory, etc.)
-    /// to provide comprehensive device health monitoring without overhead in hot path.
+    /// DeviceWorker aggregates and logs statistics from all processing components (IQDemodulator,
+    /// PreambleDetector, ValidatedFrameFactory, etc.) to provide comprehensive device health monitoring
+    /// without overhead in hot path.
     /// </remarks>
     private async Task StatisticsLoop(CancellationToken cancellationToken)
     {
@@ -431,7 +430,7 @@ public sealed class DeviceWorker : IDisposable
                 double samplesPerSecondInMillions = samplesPerSecond / 1_000_000.0;
 
                 // === Sample Reception & Demodulation Statistics ===
-                // Coordinator Pattern (ADR-009): Aggregate statistics from IQDemodulator and device buffer
+                // Aggregate statistics from IQDemodulator and device buffer
                 // to monitor overall sample flow health and verify expected 2.4 MSPS rate
                 Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) stats: {TotalSamples:F3}M samples ({Delta:F3}M increase), {SamplesPerSec:F3}M samples/sec, running {Elapsed}",
                     _config.Name,

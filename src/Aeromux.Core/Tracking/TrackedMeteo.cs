@@ -20,7 +20,8 @@ namespace Aeromux.Core.Tracking;
 
 /// <summary>
 /// Aircraft meteorological information group.
-/// Contains wind, temperature, pressure, and hazard data from MRAR (Meteorological Routine Air Report).
+/// Contains wind, temperature, pressure, and hazard data from MRAR (Meteorological Routine Air Report),
+/// an automated weather report transmitted by the aircraft's onboard weather sensors.
 /// Sources: BDS 4,4 (Meteorological Routine), BDS 4,5 (Meteorological Hazard).
 /// </summary>
 public sealed record TrackedMeteo
@@ -109,11 +110,12 @@ public sealed record TrackedMeteo
     public Severity? WakeVortex { get; init; }
 
     /// <summary>
-    /// Radio (radar) altitude in feet (BDS 4,5).
-    /// Height above ground measured by radar altimeter.
+    /// Radio altitude (radar altimeter height) in feet (BDS 4,5).
+    /// Height above ground measured by radar altimeter using radio wave reflection.
     /// Range: 0-65520 feet.
     /// Resolution: 16 feet.
-    /// Typically only available below 2500 feet AGL.
+    /// Typically only available below 2500 feet AGL (Above Ground Level).
+    /// Used for low-altitude operations, landing, and terrain avoidance.
     /// Null if BDS 4,5 not received or radio height unavailable.
     /// </summary>
     public int? RadioHeight { get; init; }

@@ -27,7 +27,7 @@ namespace Aeromux.CLI;
 
 /// <summary>
 /// Main entry point for the Aeromux CLI application.
-/// Configures Spectre.Console command infrastructure and Serilog logging (ADR-007).
+/// Configures Spectre.Console command infrastructure and Serilog logging.
 /// </summary>
 internal abstract class Program
 {
@@ -38,7 +38,7 @@ internal abstract class Program
     /// <returns>Exit code: 0 for success, non-zero for failure.</returns>
     private static async Task<int> Main(string[] args)
     {
-        // Bootstrap logging with minimal config (ADR-007)
+        // Bootstrap logging with minimal config
         // Only logs warnings and errors during startup before full configuration is loaded
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Warning()
@@ -116,7 +116,7 @@ internal abstract class Program
     }
 
     /// <summary>
-    /// Reconfigures Serilog from YAML configuration (ADR-007).
+    /// Reconfigures Serilog from YAML configuration.
     /// Called after loading configuration file to apply logging settings.
     /// </summary>
     /// <param name="loggingConfig">The logging configuration from YAML.</param>

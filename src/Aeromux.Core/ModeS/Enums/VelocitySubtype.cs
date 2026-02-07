@@ -46,14 +46,16 @@ public enum VelocitySubtype
 
     /// <summary>
     /// Airspeed (subsonic, multiplier = 1).
-    /// Provides heading and airspeed magnitude (IAS or TAS).
+    /// Provides heading and airspeed magnitude.
+    /// Airspeed can be IAS (Indicated Airspeed) or TAS (True Airspeed) depending on aircraft equipment.
     /// Speed range: 0-1023 knots.
     /// </summary>
     AirspeedSubsonic = 3,
 
     /// <summary>
     /// Airspeed (supersonic, multiplier = 4).
-    /// Provides heading and airspeed magnitude (IAS or TAS).
+    /// Provides heading and airspeed magnitude.
+    /// Airspeed can be IAS (Indicated Airspeed) or TAS (True Airspeed) depending on aircraft equipment.
     /// Speed range: 0-4092 knots.
     /// </summary>
     AirspeedSupersonic = 4

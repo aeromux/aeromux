@@ -68,6 +68,7 @@ public record Velocity : IComparable<Velocity>, IComparable
 
     /// <summary>
     /// Creates a velocity from kilometers per hour.
+    /// Conversion: 1 knot = 1.852 km/h (exactly, by definition).
     /// </summary>
     /// <param name="kilometersPerHour">Velocity in km/h.</param>
     /// <param name="type">Type of velocity measurement.</param>
@@ -76,31 +77,36 @@ public record Velocity : IComparable<Velocity>, IComparable
         => new((int)(kilometersPerHour / 1.852), type);
 
     /// <summary>
-    /// Creates a velocity from miles per hour.
+    /// Creates a velocity from miles per hour (statute miles).
+    /// Conversion: 1 knot ≈ 1.15078 mph.
     /// </summary>
-    /// <param name="milesPerHour">Velocity in mph.</param>
+    /// <param name="milesPerHour">Velocity in mph (statute miles per hour).</param>
     /// <param name="type">Type of velocity measurement.</param>
     /// <returns>A Velocity instance.</returns>
     public static Velocity FromMilesPerHour(int milesPerHour, VelocityType type)
         => new((int)(milesPerHour / 1.15078), type);
 
     /// <summary>
-    /// Gets the velocity in knots.
+    /// Gets the velocity in knots (nautical miles per hour).
+    /// 1 knot = 1 nautical mile per hour = 1.852 km/h (exactly).
     /// </summary>
     public int Knots => _knots;
 
     /// <summary>
     /// Gets the velocity in kilometers per hour.
+    /// Conversion: 1 knot = 1.852 km/h (exactly, by definition).
     /// </summary>
     public int KilometersPerHour => (int)(_knots * 1.852);
 
     /// <summary>
-    /// Gets the velocity in miles per hour.
+    /// Gets the velocity in miles per hour (statute miles).
+    /// Conversion: 1 knot ≈ 1.15078 mph.
     /// </summary>
     public int MilesPerHour => (int)(_knots * 1.15078);
 
     /// <summary>
     /// Gets the velocity in meters per second.
+    /// Conversion: 1 knot ≈ 0.514444 m/s (1.852 km/h ÷ 3600 s/h).
     /// </summary>
     public double MetersPerSecond => _knots * 0.514444;
 

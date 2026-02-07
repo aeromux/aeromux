@@ -20,13 +20,14 @@ namespace Aeromux.Core.Tracking;
 
 /// <summary>
 /// Aircraft identification information group.
-/// Contains all identity-related fields: ICAO, callsign, squawk, category, emergency state.
+/// Contains all identity-related fields: ICAO address, callsign, squawk, category, emergency state.
 /// Sources: TC 1-4 (ADS-B Identification), TC 28 (Aircraft Status), DF 5 (Surveillance Identity Reply).
 /// </summary>
 public sealed record TrackedIdentification
 {
     /// <summary>
-    /// 24-bit ICAO address uniquely identifying the aircraft (always present).
+    /// 24-bit ICAO (International Civil Aviation Organization) address uniquely identifying the aircraft (always present).
+    /// Each aircraft is assigned a unique ICAO address by its country of registration.
     /// Format: 6-character uppercase hex string (e.g., "440CF8").
     /// This is the primary key for aircraft tracking.
     /// </summary>
@@ -43,7 +44,8 @@ public sealed record TrackedIdentification
     /// <summary>
     /// Mode A code / squawk (TC 28, DF 5).
     /// Format: 4-digit octal string (0-7 for each digit).
-    /// Example: "7700" (emergency), "1200" (VFR), "7600" (lost comms).
+    /// Example: "7700" (emergency), "1200" (VFR - Visual Flight Rules), "7600" (lost comms).
+    /// Used by ATC for aircraft identification and emergency signaling.
     /// Null if not yet received.
     /// </summary>
     public string? Squawk { get; init; }
@@ -65,7 +67,7 @@ public sealed record TrackedIdentification
 
     /// <summary>
     /// Flight status from Mode S surveillance replies (DF 0, 4, 5, 16, 20, 21).
-    /// Encodes airborne/ground status, alert conditions, and SPI (Special Position Identification).
+    /// Encodes airborne/ground status, alert conditions, and SPI (Special Position Identification - pilot-activated IDENT pulse).
     /// Null if no surveillance reply received yet.
     /// Values: AirborneNormal, OnGroundNormal, AirborneAlert, OnGroundAlert, AlertSPI, NoAlertSPI.
     /// </summary>

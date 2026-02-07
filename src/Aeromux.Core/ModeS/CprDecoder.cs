@@ -156,8 +156,10 @@ public sealed class CprDecoder
         double lat1 = oddCprLat / 131072.0;
 
         // Calculate latitude zone index (j) by comparing even/odd frame positions
-        // The formula resolves which of the 60/59 overlapping zones the aircraft is in
+        // Formula: j = floor((59 × lat0) - (60 × lat1) + 0.5)
+        // This resolves which of the 60/59 overlapping zones the aircraft is in
         // The +0.5 provides rounding to nearest integer zone
+        // Reference: ICAO Annex 10, Volume IV, Section 3.1.2.8.3
         int j = (int)Math.Floor((59 * lat0) - (60 * lat1) + 0.5);
 
         // Compute actual latitudes for both frames
@@ -218,8 +220,10 @@ public sealed class CprDecoder
         int ni = Math.Max(CprN(rlat, useOddFrame ? 1 : 0), 1);
 
         // Calculate longitude zone index (m) by comparing even/odd frame positions
+        // Formula: m = floor((lon0 × (nl - 1)) - (lon1 × nl) + 0.5)
         // Similar to latitude index j, but accounts for varying zone counts
         // This resolves which of the nl overlapping longitude zones the aircraft is in
+        // Reference: ICAO Annex 10, Volume IV, Section 3.1.2.8.4
         int m = (int)Math.Floor((lon0 * (nl - 1)) - (lon1 * nl) + 0.5);
 
         // Compute actual longitude
@@ -240,15 +244,18 @@ public sealed class CprDecoder
     }
 
     /// <summary>
-    /// NL function: Number of longitude zones at given latitude.
-    /// Returns the number of longitude zones (1-59) based on latitude.
-    /// Used in CPR decoding to handle varying longitude zone widths.
+    /// NL (Number of Longitude zones) function: Returns the number of longitude zones at given latitude.
+    /// Returns values from 1 (at poles) to 59 (at equator) based on latitude.
+    /// Used in CPR (Compact Position Reporting) decoding to handle varying longitude zone widths.
     /// </summary>
     /// <remarks>
     /// The NL function accounts for meridian convergence (longitude lines meet at poles).
     /// At the equator, longitude zones are narrow (59 zones, ~6.1° each).
     /// Near the poles, longitude zones are wider (fewer zones, eventually 1 zone at pole).
-    /// This table is defined by ICAO Annex 10 and must match exactly for correct decoding.
+    /// This lookup table is defined by ICAO Annex 10, Volume IV, Table A-2-1 and must match
+    /// exactly for correct decoding. The latitude thresholds are computed from the CPR reference
+    /// latitude formula: NL(lat) = floor(2π / arccos(1 - (1-cos(π/(2×NZ))) / cos²(lat×π/180)))
+    /// where NZ is the number of geographic latitude zones (15 for Mode S).
     /// </remarks>
     /// <param name="lat">Latitude in decimal degrees (-90 to +90).</param>
     /// <returns>Number of longitude zones (1 at poles, 59 at the equator).</returns>

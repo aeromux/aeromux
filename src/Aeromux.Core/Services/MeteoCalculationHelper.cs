@@ -27,23 +27,26 @@ namespace Aeromux.Core.Services;
 internal static class MeteoCalculationHelper
 {
     /// <summary>
-    /// Maximum data age for velocity data (TAS, GS) in seconds.
+    /// Maximum data age for velocity data (TAS = True Airspeed, GS = Ground Speed) in seconds.
+    /// Data older than this is considered stale and not used for wind calculations.
     /// </summary>
     private const double MaxDataAge = 2.5;
 
     /// <summary>
     /// Maximum data age for heading and track data in seconds.
+    /// Stricter than velocity data age to ensure accurate wind vector calculations.
     /// </summary>
     private const double MaxHeadingAge = 1.25;
 
     /// <summary>
     /// Attempts to calculate wind speed and direction from aircraft velocity vectors.
+    /// Uses the triangle of velocities: Wind Vector = Ground Speed Vector - True Airspeed Vector.
     /// </summary>
-    /// <param name="aircraft">Aircraft state</param>
-    /// <param name="timestamp">Current message timestamp</param>
+    /// <param name="aircraft">Aircraft state containing velocity and heading data</param>
+    /// <param name="timestamp">Current message timestamp for data freshness checks</param>
     /// <param name="windSpeed">Calculated wind speed in knots (output)</param>
-    /// <param name="windDirection">Calculated wind direction in degrees (output)</param>
-    /// <returns>True if calculation succeeded, false otherwise</returns>
+    /// <param name="windDirection">Calculated wind direction in degrees true (output)</param>
+    /// <returns>True if calculation succeeded with fresh data, false otherwise</returns>
     public static bool TryCalculateWind(
         Aircraft aircraft,
         DateTime timestamp,
@@ -77,13 +80,14 @@ internal static class MeteoCalculationHelper
     }
 
     /// <summary>
-    /// Attempts to calculate OAT and TAT from TAS and Mach number.
+    /// Attempts to calculate OAT (Outside Air Temperature) and TAT (Total Air Temperature) from TAS (True Airspeed) and Mach number.
+    /// OAT is the static air temperature, while TAT accounts for ram air heating due to aircraft speed.
     /// </summary>
-    /// <param name="aircraft">Aircraft state</param>
-    /// <param name="timestamp">Current message timestamp</param>
-    /// <param name="oat">Calculated outside air temperature in °C (output)</param>
-    /// <param name="tat">Calculated total air temperature in °C (output)</param>
-    /// <returns>True if calculation succeeded, false otherwise</returns>
+    /// <param name="aircraft">Aircraft state containing TAS and Mach number from Comm-B messages</param>
+    /// <param name="timestamp">Current message timestamp for data freshness checks</param>
+    /// <param name="oat">Calculated outside air temperature (static) in °C (output)</param>
+    /// <param name="tat">Calculated total air temperature (with ram rise) in °C (output)</param>
+    /// <returns>True if calculation succeeded with fresh data, false otherwise</returns>
     public static bool TryCalculateTemperatures(
         Aircraft aircraft,
         DateTime timestamp,
@@ -153,7 +157,7 @@ internal static class MeteoCalculationHelper
         }
         trueHeading = aircraft.FlightDynamics.TrueHeading.Value;
 
-        // Prefer TrackAngle from BDS 5,0 over ADS-B Track for better accuracy
+        // Prefer TrackAngle from BDS 5,0 (Comm-B Track and Turn Report) over ADS-B Track for better accuracy
         double? trackValue = aircraft.Velocity.TrackAngle ?? aircraft.Velocity.Track;
         if (trackValue == null ||
             aircraft.Velocity.LastUpdate == null ||
@@ -163,7 +167,7 @@ internal static class MeteoCalculationHelper
         }
         track = trackValue.Value;
 
-        // TAS available from BDS 5,0 or BDS 5,3
+        // TAS (True Airspeed) available from BDS 5,0 (Track and Turn) or BDS 5,3 (Air-Referenced State)
         if (aircraft.Velocity.CommBTrueAirspeed == null ||
             aircraft.Velocity.LastUpdate == null ||
             (timestamp - aircraft.Velocity.LastUpdate.Value).TotalSeconds > MaxDataAge)
@@ -172,7 +176,7 @@ internal static class MeteoCalculationHelper
         }
         tas = aircraft.Velocity.CommBTrueAirspeed.Knots;
 
-        // Prefer CommB ground speed from BDS 5,0 over ADS-B for consistency
+        // Prefer CommB ground speed from BDS 5,0 over ADS-B TC 19 for temporal consistency
         Velocity? gsVelocity = aircraft.Velocity.CommBGroundSpeed ?? aircraft.Velocity.Speed;
         if (gsVelocity == null ||
             aircraft.Velocity.LastUpdate == null ||

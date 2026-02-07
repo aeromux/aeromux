@@ -39,12 +39,13 @@ public sealed partial class MessageParser
     /// <returns>Surveillance altitude reply message with altitude and flight status.</returns>
     /// <remarks>
     /// DF 4 messages contain barometric altitude encoded in 13 bits (AC field).
-    /// Four encoding modes: all-zeros (invalid), M=1 (meters), Q=1 (25-ft), Q=0 (Gillham code).
-    /// Flight status indicates airborne/ground and alert/SPI conditions.
+    /// Four encoding modes: all-zeros (invalid), M=1 (meters), Q=1 (25-ft increments), Q=0 (Gillham Gray code).
+    /// Gillham code is a modified Gray code used in older transponders.
+    /// Flight status (FS) indicates airborne/ground and alert/SPI conditions.
     /// </remarks>
     private ModeSMessage? ParseSurveillanceAltitudeReply(ValidatedFrame frame)
     {
-        // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
+        // Extract Flight Status (FS - Flight Status) field from bits 6-8 (byte 0, bits 0-2)
         int  flightStatusRaw = ExtractBits(frame.Data, 6, 3);
         if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
         {
@@ -79,7 +80,9 @@ public sealed partial class MessageParser
     /// <returns>Surveillance identity reply message with squawk code.</returns>
     /// <remarks>
     /// DF 5 messages contain a 13-bit identity code (squawk code) that requires
-    /// the bit rearrangement to extract the 4-digit octal code.
+    /// bit rearrangement to extract the 4-digit octal code.
+    /// Bits are interleaved (A1, B1, C1, D1, A2, B2, C2, D2, etc.) and must be de-interleaved
+    /// to form the standard 4-digit octal squawk code (e.g., 7700).
     /// </remarks>
     private ModeSMessage? ParseSurveillanceIdentityReply(ValidatedFrame frame)
     {

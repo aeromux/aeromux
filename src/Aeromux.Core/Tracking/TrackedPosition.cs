@@ -27,26 +27,29 @@ namespace Aeromux.Core.Tracking;
 public sealed record TrackedPosition
 {
     /// <summary>
-    /// Geographic coordinates (latitude/longitude) from CPR decoding (TC 9-18, 20-22).
-    /// Decoded from Compact Position Reporting (even/odd frame pairs or local decoding).
+    /// Geographic coordinates (latitude/longitude) from CPR (Compact Position Reporting) decoding (TC 9-18, 20-22).
+    /// CPR encoding compresses position into 17 bits each for latitude and longitude, requiring
+    /// paired even/odd frames for global decoding or receiver location for local decoding.
     /// Null if no position message received yet or CPR decoding failed.
-    /// Note: CPR longitude decoding has known accuracy issues (Issue #005).
     /// </summary>
     public GeographicCoordinate? Coordinate { get; init; }
 
     /// <summary>
-    /// Barometric (pressure) altitude above mean sea level (TC 9-18, DF 4).
-    /// Standard altimeter setting (29.92 inHg / 1013.25 hPa).
-    /// This is the altitude displayed to pilots and used for traffic separation.
+    /// Barometric (pressure) altitude above mean sea level in feet (TC 9-18, DF 4).
+    /// Standard altimeter setting (29.92 inHg / 1013.25 hPa) defines reference pressure.
+    /// This is the altitude displayed to pilots and used for ATC traffic separation.
+    /// Changes with atmospheric pressure; same physical altitude shows different barometric
+    /// altitude readings depending on weather conditions and QNH setting.
     /// Null if no altitude data received.
     /// </summary>
     public Altitude? BarometricAltitude { get; init; }
 
     /// <summary>
-    /// GNSS (GPS) altitude above WGS84 ellipsoid (TC 20-22).
-    /// More accurate than barometric but not used for ATC separation.
-    /// Typically, 50-100 feet higher than barometric altitude.
-    /// Null if no GNSS altitude data received (rare in ADS-B).
+    /// GNSS (Global Navigation Satellite System, e.g., GPS/Galileo) altitude above WGS84 ellipsoid (TC 20-22).
+    /// WGS84 (World Geodetic System 1984) is the standard Earth reference ellipsoid used by GPS.
+    /// Geometric altitude is more accurate than barometric but not used for ATC separation.
+    /// Typically 50-100 feet higher than barometric altitude (geoid-ellipsoid separation).
+    /// Null if no GNSS altitude data received (TC 20-22 messages are less common than TC 9-18).
     /// </summary>
     public Altitude? GeometricAltitude { get; init; }
 
@@ -89,8 +92,10 @@ public sealed record TrackedPosition
     public AntennaFlag? Antenna { get; init; }
 
     /// <summary>
-    /// Navigation Accuracy Category for Position (TC 31 Operational Status).
-    /// Indicates GPS accuracy: 0-11 scale (11 = &lt;3m, 10 = &lt;10m, 9 = &lt;30m, etc.).
+    /// NACp (Navigation Accuracy Category for Position) from TC 31 Operational Status.
+    /// Indicates GNSS position accuracy on a 0-11 scale based on EPU (Estimated Position Uncertainty):
+    /// 11 = &lt;3m (precision GPS), 10 = &lt;10m (high-quality GPS), 9 = &lt;30m (standard GPS), etc.
+    /// Higher values indicate better accuracy. Used by ATC for determining separation minima.
     /// Extracted from OperationalStatus messages (TC 31) and preserved across position updates.
     /// Values are retained until a new TC 31 message provides updated accuracy information.
     /// Null if no TC 31 message received yet.
@@ -98,9 +103,11 @@ public sealed record TrackedPosition
     public NavigationAccuracyCategoryPosition? NACp { get; init; }
 
     /// <summary>
-    /// Navigation Integrity Category for Barometric altitude (TC 31 Operational Status).
-    /// Indicates whether barometric altitude is cross-checked with other sources.
-    /// True = barometric altitude integrity verified, False = not verified.
+    /// NICbaro (Navigation Integrity Category for Barometric altitude) from TC 31 Operational Status.
+    /// Indicates whether barometric altitude is cross-checked with other sensors for integrity.
+    /// True = barometric altitude has been verified against GNSS altitude or other reference,
+    ///        providing confidence that the pressure sensor is working correctly.
+    /// False = barometric altitude is not cross-checked, single-source measurement only.
     /// Extracted from OperationalStatus messages (TC 31) and preserved across position updates.
     /// Values are retained until a new TC 31 message provides updated integrity information.
     /// Null if no TC 31 message received yet.
@@ -108,9 +115,14 @@ public sealed record TrackedPosition
     public bool? NICbaro { get; init; }
 
     /// <summary>
-    /// Source Integrity Level (TC 31 Operational Status).
-    /// Indicates probability of position data exceeding containment radius.
-    /// Scale: 0-3 (3 = highest integrity, &lt;10^-7 per hour).
+    /// SIL (Source Integrity Level) from TC 31 Operational Status.
+    /// Indicates the probability per flight hour that reported position exceeds its stated
+    /// accuracy (containment radius) without detection. Scale: 0-3, where:
+    /// - SIL 3: &lt; 1×10⁻⁷ per hour (highest integrity, SBAS/GBAS augmented systems)
+    /// - SIL 2: &lt; 1×10⁻⁵ per hour (high integrity, multi-constellation GNSS)
+    /// - SIL 1: &lt; 1×10⁻³ per hour (moderate integrity, basic GNSS)
+    /// - SIL 0: Unknown or &gt; 1×10⁻³ per hour (low/unknown integrity)
+    /// Critical for ATC decision-making on how much to trust reported positions.
     /// Extracted from OperationalStatus messages (TC 31) and preserved across position updates.
     /// Values are retained until a new TC 31 message provides updated integrity information.
     /// Null if no TC 31 message received yet.
@@ -126,14 +138,19 @@ public sealed record TrackedPosition
 
     /// <summary>
     /// Source of the most recent position update (Sdr, Beast, or Mlat).
-    /// Indicates where the current Coordinate came from.
+    /// Indicates where the current Coordinate came from:
+    /// - Sdr: Direct reception from local SDR (Software-Defined Radio)
+    /// - Beast: Received from network Beast protocol feed
+    /// - Mlat: MLAT (Multilateration) - position calculated from time-of-arrival differences at multiple receivers
     /// Null if no position data received yet.
-    /// Used by consumers (JSON, UI) to distinguish MLAT-derived positions from direct SDR reception.
+    /// Used by consumers (JSON, UI) to distinguish MLAT-derived positions from direct ADS-B reception.
     /// </summary>
     public FrameSource? PositionSource { get; init; }
 
     /// <summary>
-    /// True if this aircraft has ever received an MLAT-derived position.
+    /// True if this aircraft has ever received an MLAT (Multilateration) derived position.
+    /// MLAT calculates position from time-of-arrival differences at multiple ground receivers,
+    /// used for aircraft not equipped with ADS-B position transmitters (Mode-S only aircraft).
     /// Used for consistent UI display (e.g., different color for MLAT-capable aircraft)
     /// without flickering when positions alternate between SDR and MLAT sources.
     /// Once set to true, this flag is never reset to false during the aircraft's tracking lifetime.

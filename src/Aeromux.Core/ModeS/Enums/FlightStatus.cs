@@ -56,7 +56,7 @@ public enum FlightStatus
 
     /// <summary>
     /// Alert, SPI condition (airborne or on ground).
-    /// Special position identification pulse for ATC.
+    /// Special position identification pulse for ATC (Air Traffic Control) radar display.
     /// </summary>
     AlertSPI = 4,
 

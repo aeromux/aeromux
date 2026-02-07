@@ -22,7 +22,8 @@ namespace Aeromux.Core.Tracking;
 /// <summary>
 /// Aircraft system capabilities and configuration metadata.
 /// Contains transponder capabilities, ADS-B capabilities, Comm-B capabilities, and physical configuration.
-/// Sources: DF 11 (All-Call Reply), TC 31 (Operational Status), BDS 1,0 (Data Link Capability), BDS 1,7 (GICB Capability).
+/// Sources: DF 11 (All-Call Reply), TC 31 (Operational Status), BDS 1,0 (Data Link Capability),
+/// BDS 1,7 (GICB - Ground-Initiated Comm-B Capability Report).
 /// </summary>
 public sealed record TrackedCapabilities
 {
@@ -37,7 +38,7 @@ public sealed record TrackedCapabilities
     public TransponderCapability? TransponderLevel { get; init; }
 
     /// <summary>
-    /// Indicates whether TCAS (Traffic Collision Avoidance System) is operational (TC 31 CapabilityClass).
+    /// Indicates whether TCAS (Traffic Alert and Collision Avoidance System) is operational (TC 31 CapabilityClass).
     /// True if TCAS is installed and operational, false if not operational or not installed.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
@@ -52,7 +53,8 @@ public sealed record TrackedCapabilities
     public bool? CockpitDisplayTraffic { get; init; }
 
     /// <summary>
-    /// Indicates whether the aircraft supports ADS-B 1090ES (1090 MHz Extended Squitter) transmission (TC 31 CapabilityClass).
+    /// Indicates whether the aircraft supports ADS-B 1090ES transmission (TC 31 CapabilityClass).
+    /// 1090ES = 1090 MHz Extended Squitter (extended Mode S transmissions carrying ADS-B data).
     /// True if 1090ES transmission is supported, false if not.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
@@ -101,7 +103,8 @@ public sealed record TrackedCapabilities
     public bool? PositionOffsetApplied { get; init; }
 
     /// <summary>
-    /// Indicates whether the aircraft transmits on 1090ES at low power (B2 Low) (TC 31 CapabilityClass).
+    /// Indicates whether the aircraft transmits on 1090ES at low power (TC 31 CapabilityClass).
+    /// B2 Low = Reduced power Mode S transponder operating at lower transmission power (B2 refers to Mode S reply power level).
     /// Low power transmission is used for reduced interference in dense traffic areas.
     /// True if low power mode is active, false if not.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
@@ -119,16 +122,17 @@ public sealed record TrackedCapabilities
     public NavigationAccuracyCategoryVelocity? NACv { get; init; }
 
     /// <summary>
-    /// NIC Supplement-C bit (TC 31 CapabilityClass).
-    /// Used in combination with NIC (Navigation Integrity Category) to determine
-    /// the horizontal containment radius for position accuracy.
+    /// NIC (Navigation Integrity Category) Supplement-C bit (TC 31 CapabilityClass).
+    /// Used in combination with NIC to determine the horizontal containment radius for position accuracy.
+    /// NIC indicates the probability that the reported position is within a certain radius.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field (Version 0 does not include NIC Supplement-C).
     /// </summary>
     public bool? NICSupplementC { get; init; }
 
     /// <summary>
     /// Data link capability bits (BDS 1,0 Comm-B register).
-    /// 16-bit capability flags indicating support for various Comm-A, Comm-B, Comm-C, and Comm-D services.
+    /// 16-bit capability flags indicating support for various Mode S communications services:
+    /// Comm-A (uplink ELM), Comm-B (downlink ELM), Comm-C (uplink EHS), Comm-D (downlink EHS).
     /// Each bit represents a specific data link service or protocol support.
     /// Null if BDS 1,0 not yet received (requires ground interrogation for Comm-B replies).
     /// </summary>

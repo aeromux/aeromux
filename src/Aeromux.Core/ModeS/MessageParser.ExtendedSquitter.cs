@@ -23,6 +23,7 @@ namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// MessageParser partial class: Extended Squitter messages (DF 17/18/19 - ADS-B).
+/// Extended Squitter (ES) are 112-bit Mode S transmissions carrying ADS-B data.
 /// Handles all Type Codes for identification, position, velocity, and status messages.
 /// </summary>
 public sealed partial class MessageParser
@@ -32,7 +33,7 @@ public sealed partial class MessageParser
     /// </summary>
     private ModeSMessage? ParseExtendedSquitter(ValidatedFrame frame)
     {
-        // Extract Type Code (TC) from ME field (bits 33-37 of message)
+        // Extract Type Code (TC) from ME (Message, Extended Squitter) field (bits 33-37 of message)
         int tc = (frame.Data[4] >> 3) & 0x1F;
 
         // Track TC statistics
@@ -92,7 +93,7 @@ public sealed partial class MessageParser
 
     /// <summary>
     /// Parses aircraft identification (callsign and category) from Type Code 1-4.
-    /// Extracts 8-character callsign using 6-bit AIS encoding.
+    /// Extracts 8-character callsign using 6-bit Mode S character encoding.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
     /// <param name="tc">Type code (1-4, determines aircraft category).</param>

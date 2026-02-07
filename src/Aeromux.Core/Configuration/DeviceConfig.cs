@@ -46,7 +46,7 @@ public class DeviceConfig
     public double TunerGain { get; set; } = 49.6;
 
     /// <summary>
-    /// Gets or sets the gain control mode (ADR-008: uses RtlSdrManager.Modes enum directly).
+    /// Gets or sets the gain control mode.
     /// Default: Manual (industry standard, maximum sensitivity with 49.6 dB)
     /// Set to AGC only if near airport and manual gain causes strong signal overload.
     /// Note: AGC is almost never optimal (dump1090-fa documentation).

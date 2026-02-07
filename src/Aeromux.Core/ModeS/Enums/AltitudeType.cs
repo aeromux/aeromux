@@ -18,23 +18,32 @@ namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
 /// Specifies the type of altitude measurement.
+/// Different altitude types are used for different aviation purposes.
 /// </summary>
 public enum AltitudeType
 {
     /// <summary>
-    /// Barometric altitude (based on standard pressure 1013.25 hPa).
-    /// Most common for airborne operations.
+    /// Barometric altitude (pressure altitude based on standard pressure 1013.25 hPa / 29.92 inHg).
+    /// Most common for airborne operations and ATC separation.
+    /// Varies with atmospheric pressure changes; same physical height shows different barometric readings
+    /// depending on weather. All aircraft in an area use the same pressure reference for safe separation.
+    /// Source: TC 9-18, DF 4, DF 20.
     /// </summary>
     Barometric,
 
     /// <summary>
-    /// Geometric altitude (GPS-based, height above WGS84 ellipsoid).
-    /// More accurate for position reporting.
+    /// Geometric altitude (GNSS-based height above WGS84 ellipsoid).
+    /// WGS84 (World Geodetic System 1984) is the standard Earth reference ellipsoid used by GPS.
+    /// More accurate than barometric for absolute position reporting but not used for ATC separation.
+    /// Typically 50-100 feet higher than barometric altitude due to geoid-ellipsoid separation.
+    /// Source: TC 20-22, derived from TC 19 delta.
     /// </summary>
     Geometric,
 
     /// <summary>
-    /// Ground level (0 feet, used for surface position reports).
+    /// Ground level (0 feet altitude, used for surface position reports).
+    /// Indicates aircraft is on the ground (taxiing, parked, or ground operations).
+    /// Source: TC 5-8 (surface position messages).
     /// </summary>
     Ground
 }

@@ -22,14 +22,26 @@ namespace Aeromux.Core.Services;
 /// <remarks>
 /// <para>
 /// Implements the vector triangle method for wind calculation from aircraft motion data.
-/// Uses the relationship between true heading (aircraft nose direction), ground track
-/// (actual path over ground), true airspeed (speed through air), and ground speed
-/// (speed over ground) to resolve wind velocity components.
+/// The velocity triangle relates three vectors:
+/// </para>
+/// <list type="number">
+/// <item>True Airspeed (TAS) vector: Aircraft velocity through the air mass (magnitude + heading)</item>
+/// <item>Ground Speed (GS) vector: Aircraft velocity over the ground (magnitude + track)</item>
+/// <item>Wind vector: Air mass velocity over the ground (magnitude + direction)</item>
+/// </list>
+/// <para>
+/// Relationship: GS Vector = TAS Vector + Wind Vector
+/// Therefore: Wind Vector = GS Vector - TAS Vector
 /// </para>
 /// <para>
-/// The crab angle (difference between heading and track) indicates wind drift.
-/// Wind components are resolved into headwind/tailwind and crosswind, then combined
-/// to determine wind speed and direction.
+/// The crab angle (difference between heading and track) indicates wind drift. When an aircraft
+/// points in one direction (heading) but travels in another (track), wind is causing the drift.
+/// Wind components are resolved into headwind/tailwind and crosswind using trigonometry,
+/// then combined via Pythagorean theorem to determine wind speed and direction.
+/// </para>
+/// <para>
+/// Wind direction follows meteorological convention: direction the wind is coming FROM (0-360°).
+/// For example, a 270° wind blows from the west toward the east.
 /// </para>
 /// <para>
 /// Implementation inspired by readsb (https://github.com/wiedehopf/readsb)

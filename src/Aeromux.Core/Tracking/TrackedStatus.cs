@@ -53,7 +53,8 @@ public sealed record TrackedStatus
     public int TotalMessages { get; init; }
 
     /// <summary>
-    /// Count of position messages received (TC 5-8 surface, TC 9-18 airborne, TC 20-22 airborne GNSS).
+    /// Count of position messages received.
+    /// Includes TC (Type Code) 5-8 surface, TC 9-18 airborne, TC 20-22 airborne GNSS position messages.
     /// Used to assess position update rate and coverage quality.
     /// Typical rate: 0.5-2 Hz (every 0.5-2 seconds).
     /// </summary>
@@ -98,7 +99,6 @@ public sealed record TrackedStatus
     /// Seconds since last position update (last time Coordinate or altitude changed).
     /// Null if no position data ever received.
     /// Used for determining position data staleness.
-    /// Matches readsb's "seen_pos" field.
     /// </summary>
     public double? SeenPosSeconds { get; init; }
 

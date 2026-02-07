@@ -99,6 +99,9 @@ public class BeastEncoder
         // Convert absolute timestamp to 12 MHz counter
         // Frame timestamp has sub-millisecond precision from StopwatchTimeProvider
         // DateTime.Ticks is in 100ns units, convert to 12 MHz (1/12,000,000 second units)
+        // Beast protocol uses 12 MHz sampling rate (standard for Mode S receivers like dump1090/readsb)
+        // because it provides sufficient resolution for timestamping Mode S pulses (0.5 μs pulse width)
+        // Conversion: Ticks (100ns) → Microseconds (/10) → 12 MHz samples (×12)
         long timestamp12MHz = (long)(frame.Timestamp.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
 
         // Mask to 48 bits (Beast protocol limitation)

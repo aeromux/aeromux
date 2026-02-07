@@ -21,10 +21,14 @@ namespace Aeromux.Core.ModeS.Enums;
 /// Indicates the 95% horizontal accuracy of the reported position.
 /// </summary>
 /// <remarks>
-/// Reference: RTCA DO-260B, Table 2-14 (NACp values).
+/// NACp quantifies position integrity using EPU (Estimated Position Uncertainty), defined as
+/// the radius of a circle centered on the reported position where the true position lies
+/// with 95% probability. Lower EPU values indicate higher accuracy.
+///
+/// Reference: RTCA DO-260B, Table 2-14 (NACp values and EPU thresholds).
 /// NACp field is 4 bits (values 0-15).
-/// Higher values indicate better position accuracy.
-/// EPU = Estimated Position Uncertainty (95% containment radius).
+/// Higher NACp values indicate better position accuracy (lower EPU).
+/// Example: NACp=11 means EPU &lt; 3 meters (precision GPS with DGPS/RTK).
 /// </remarks>
 public enum NavigationAccuracyCategoryPosition
 {

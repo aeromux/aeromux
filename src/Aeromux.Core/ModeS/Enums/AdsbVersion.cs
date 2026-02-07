@@ -36,15 +36,20 @@ public enum AdsbVersion
 
     /// <summary>
     /// DO-260A (ADS-B version 1).
-    /// Adds: NACp, NACv, SIL, operational status messages.
+    /// Adds: NACp (Navigation Accuracy Category - Position),
+    /// NACv (Navigation Accuracy Category - Velocity),
+    /// SIL (Source Integrity Level), operational status messages.
     /// First version to include accuracy and integrity reporting.
     /// </summary>
     DO260A = 1,
 
     /// <summary>
     /// DO-260B (ADS-B version 2).
-    /// Adds: NIC supplements, SDA, GVA, target state and status.
-    /// Mandatory for 2020+ aircraft (FAA/EASA mandates).
+    /// Adds: NIC (Navigation Integrity Category) supplements,
+    /// SDA (System Design Assurance), GVA (Geometric Vertical Accuracy),
+    /// target state and status.
+    /// Mandatory for 2020+ aircraft (FAA - Federal Aviation Administration /
+    /// EASA - European Union Aviation Safety Agency mandates).
     /// Enhanced position accuracy and integrity parameters.
     /// </summary>
     DO260B = 2,

@@ -17,13 +17,13 @@
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
-/// Specifies the source of selected altitude information in aircraft autopilot/FMS systems.
+/// Specifies the source of selected altitude information in aircraft autopilot and FMS (Flight Management System).
 /// Used in ADS-B Target State and Status messages (TC 29) and Comm-B Selected Vertical Intention (BDS 4,0).
 /// </summary>
 public enum AltitudeSource
 {
     /// <summary>
-    /// Mode Control Panel / Flight Control Unit.
+    /// MCP/FCU (Mode Control Panel / Flight Control Unit).
     /// Altitude manually selected by the pilot on the autopilot control panel.
     /// Used for tactical altitude changes and direct pilot intervention.
     /// Sources: TC 29 (both versions), BDS 4,0.
@@ -31,7 +31,7 @@ public enum AltitudeSource
     McpFcu,
 
     /// <summary>
-    /// Flight Management System.
+    /// FMS (Flight Management System).
     /// Altitude programmed into the FMS as part of the flight plan.
     /// Used for strategic navigation following the planned vertical profile.
     /// Sources: TC 29 Version 2 only.
@@ -39,8 +39,9 @@ public enum AltitudeSource
     Fms,
 
     /// <summary>
-    /// Flight Management System / Area Navigation.
-    /// Altitude from FMS/RNAV system, includes both flight plan and RNAV procedures.
+    /// FMS/RNAV (Flight Management System / Area Navigation).
+    /// Altitude from FMS or RNAV system, includes both flight plan and area navigation procedures.
+    /// RNAV allows aircraft to fly any desired flight path within coverage of ground-based or satellite navigation aids.
     /// Sources: TC 29 Version 1, BDS 4,0.
     /// </summary>
     FmsRnav,

@@ -21,14 +21,14 @@ using Serilog;
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
-/// CPR decoder for surface position messages (TC 5-8).
+/// CPR (Compact Position Reporting) decoder for surface position messages (TC 5-8).
 /// Uses receiver location for local decoding (surface positions require reference point).
 /// </summary>
 /// <remarks>
 /// Surface CPR differs from airborne CPR:
-/// - Uses different NL (Number of Longitude Zones) function
+/// - Uses different NL (Number of Longitude Zones) function with 1.5° latitude zones
 /// - Requires receiver location as reference (no global decoding)
-/// - Resolution: ~3.8 meters at equator
+/// - Resolution: ~3.8 meters at equator (better precision than airborne)
 /// - Only local decoding supported (global decoding not applicable for surface)
 ///
 /// Algorithm: ICAO Annex 10, Volume IV, 3.1.2.8.7 (Surface Position Format).

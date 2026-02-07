@@ -17,32 +17,66 @@
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
-/// Emergency state codes from TC 28 aircraft status messages.
+/// Emergency state codes from TC 28 (Aircraft Status) messages.
 /// Indicates the type of emergency or priority condition reported by the aircraft.
 /// </summary>
+/// <remarks>
+/// Emergency squawk codes are 4-digit transponder codes pilots enter to signal specific emergencies to ATC.
+/// These standardized codes trigger immediate alerts and priority handling by air traffic control.
+/// </remarks>
 public enum EmergencyState
 {
-    /// <summary>No emergency (0)</summary>
+    /// <summary>
+    /// No emergency (0).
+    /// Normal operations.
+    /// </summary>
     NoEmergency = 0,
 
-    /// <summary>General emergency - squawk 7700 (1)</summary>
+    /// <summary>
+    /// General emergency - squawk 7700 (1).
+    /// Indicates any emergency condition not covered by other specific codes (e.g., engine failure, fire, medical).
+    /// Triggers immediate ATC priority handling and emergency services coordination.
+    /// </summary>
     GeneralEmergency = 1,
 
-    /// <summary>Lifeguard/medical emergency (2)</summary>
+    /// <summary>
+    /// Lifeguard/medical emergency (2).
+    /// Aircraft carrying urgent medical patients or organs.
+    /// May request priority routing and expedited handling.
+    /// </summary>
     LifeguardMedical = 2,
 
-    /// <summary>Minimum fuel (3)</summary>
+    /// <summary>
+    /// Minimum fuel (3).
+    /// Aircraft has reached minimum fuel state, may need priority landing.
+    /// Not yet an emergency but requires expedited handling to prevent fuel exhaustion.
+    /// </summary>
     MinimumFuel = 3,
 
-    /// <summary>No communications - squawk 7600 (4)</summary>
+    /// <summary>
+    /// No communications - squawk 7600 (4).
+    /// Loss of radio communication with ATC.
+    /// Aircraft will follow standard lost-comm procedures.
+    /// </summary>
     NoCommunications = 4,
 
-    /// <summary>Unlawful interference (hijack) - squawk 7500 (5)</summary>
+    /// <summary>
+    /// Unlawful interference (hijack) - squawk 7500 (5).
+    /// Aircraft hijacking or unlawful seizure.
+    /// Triggers immediate security and law enforcement response.
+    /// </summary>
     UnlawfulInterference = 5,
 
-    /// <summary>Downed aircraft (6)</summary>
+    /// <summary>
+    /// Downed aircraft (6).
+    /// Aircraft has crashed or made forced landing.
+    /// Triggers emergency response and search and rescue operations.
+    /// </summary>
     DownedAircraft = 6,
 
-    /// <summary>Reserved (7)</summary>
+    /// <summary>
+    /// Reserved (7).
+    /// Reserved for future use.
+    /// </summary>
     Reserved = 7
 }

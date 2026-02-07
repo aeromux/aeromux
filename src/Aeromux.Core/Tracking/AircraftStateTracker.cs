@@ -285,6 +285,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <summary>
     /// Updates message counters based on message type.
     /// Called for both first message and subsequent updates.
+    /// Counters track message frequency for data quality assessment, statistics reporting,
+    /// and determining aircraft tracking confidence (e.g., aircraft with many position updates
+    /// have higher quality tracks than those with only identification messages).
     /// </summary>
     private static Aircraft UpdateMessageCounters(Aircraft aircraft, ProcessedFrame frame, bool isFirstMessage)
     {

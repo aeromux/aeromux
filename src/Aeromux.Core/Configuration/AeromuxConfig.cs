@@ -24,7 +24,7 @@ namespace Aeromux.Core.Configuration;
 public class AeromuxConfig
 {
     /// <summary>
-    /// Gets or sets the logging configuration (ADR-007).
+    /// Gets or sets the logging configuration.
     /// </summary>
     public LoggingConfig? Logging { get; set; }
 

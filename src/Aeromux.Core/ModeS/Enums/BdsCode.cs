@@ -21,8 +21,10 @@ namespace Aeromux.Core.ModeS.Enums;
 /// Identifies the type of data contained in the 56-bit MB field of Comm-B messages (DF 20/21).
 /// </summary>
 /// <remarks>
-/// BDS registers provide enhanced surveillance (EHS), elementary surveillance (ELS),
-/// and meteorological (MRAR) data from aircraft transponders.
+/// BDS registers provide:
+/// - EHS (Enhanced Surveillance): High-rate aircraft state data (heading, speed, vertical rate)
+/// - ELS (Elementary Surveillance): Basic aircraft intent and capability data
+/// - MRAR (Meteorological Routine Air Report): Weather observations from aircraft sensors
 /// Reference: ICAO Doc 9871 (Technical Provisions for Mode S Services and Extended Squitter).
 /// </remarks>
 public enum BdsCode
@@ -44,26 +46,31 @@ public enum BdsCode
     Bds10 = 10,
 
     /// <summary>
-    /// BDS 1,7: Common usage GICB capability report.
+    /// BDS 1,7: Common usage GICB (Ground-Initiated Comm-B) capability report.
     /// Reports which BDS registers the aircraft supports (56-bit capability mask).
+    /// Allows ground interrogators to determine available data types before requesting them.
     /// </summary>
     Bds17 = 17,
 
     /// <summary>
     /// BDS 2,0: Aircraft identification (callsign).
-    /// 8-character callsign encoded using AIS charset (6 bits per character).
+    /// 8-character callsign encoded using the Mode S character set (6 bits per character).
+    /// Character set includes: A-Z, 0-9, and space.
     /// </summary>
     Bds20 = 20,
 
     /// <summary>
     /// BDS 3,0: ACAS Resolution Advisory.
-    /// ACAS/TCAS active resolution advisory data (simplified VDS validation only).
+    /// ACAS/TCAS active resolution advisory data.
+    /// Uses VDS (Vertical Data Source) validation to verify data integrity.
     /// </summary>
     Bds30 = 30,
 
     /// <summary>
-    /// BDS 4,0: Selected vertical intention (EHS).
-    /// MCP/FCU selected altitude, FMS selected altitude, barometric pressure setting.
+    /// BDS 4,0: Selected vertical intention (EHS - Enhanced Surveillance).
+    /// MCP/FCU (Mode Control Panel / Flight Control Unit) selected altitude,
+    /// FMS (Flight Management System) selected altitude, barometric pressure setting.
+    /// Provides autopilot target altitudes for trajectory prediction.
     /// </summary>
     Bds40 = 40,
 
@@ -92,8 +99,9 @@ public enum BdsCode
     Bds53 = 53,
 
     /// <summary>
-    /// BDS 6,0: Heading and speed report (EHS).
-    /// Magnetic heading, IAS, Mach, barometric vertical rate, inertial vertical rate.
+    /// BDS 6,0: Heading and speed report (EHS - Enhanced Surveillance).
+    /// Magnetic heading, IAS (Indicated Airspeed), Mach number,
+    /// barometric vertical rate, inertial vertical rate.
     /// </summary>
     Bds60 = 60
 }

@@ -27,7 +27,9 @@ namespace Aeromux.Core.ModeS;
 /// 3. Error Correction - Attempts single-bit error correction for corrupted frames
 /// 4. Frame Transformation - Converts RawFrame → ValidatedFrame (or null if irreparably corrupted)
 ///
-/// CRC Polynomial: 0xFFF409 (G(x) = x²⁴ + x²³ + ... + x³ + 1)
+/// CRC Polynomial: 0xFFF409
+/// G(x) = x²⁴ + x²³ + x²² + x²¹ + x²⁰ + x¹⁹ + x¹⁸ + x¹⁷ + x¹⁶ + x¹⁵ + x¹⁴ + x¹³ + x¹² + x¹⁰ + x³ + 1
+/// (ICAO Annex 10, Volume IV, Section 3.1.2.3.7.1)
 ///
 /// Two validation modes:
 /// - PI (Parity/Interrogator): ICAO in AA field (DF 11, 17, 18, 19) - CRC remainder must be 0
@@ -268,7 +270,7 @@ public sealed class ValidatedFrameFactory
     /// </summary>
     private static string FormatIcaoAddress(uint icao) => $"{icao:X6}"; // E.g., "A1B2C3"
 
-    // Statistics properties for Coordinator Pattern (ADR-009)
+    // Statistics properties for Coordinator Pattern
     public long FramesChecked => _framesChecked;
     public long FramesValid => _framesValid;
     public long FramesCorrected => _framesCorrected;

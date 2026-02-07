@@ -34,25 +34,25 @@ public enum NavigationAccuracyCategoryVelocity
     Unknown = 0,
 
     /// <summary>
-    /// Horizontal velocity error &lt; 10 m/s, vertical velocity error &lt; 15.2 m/s (50 fps).
+    /// Horizontal velocity error &lt; 10 m/s, vertical velocity error &lt; 15.2 m/s (50 ft/s).
     /// Basic velocity accuracy for general awareness.
     /// </summary>
     LessThan10MetersPerSecond = 1,
 
     /// <summary>
-    /// Horizontal velocity error &lt; 3 m/s, vertical velocity error &lt; 4.5 m/s (15 fps).
+    /// Horizontal velocity error &lt; 3 m/s, vertical velocity error &lt; 4.5 m/s (15 ft/s).
     /// Good velocity accuracy for traffic monitoring.
     /// </summary>
     LessThan3MetersPerSecond = 2,
 
     /// <summary>
-    /// Horizontal velocity error &lt; 1 m/s, vertical velocity error &lt; 1.5 m/s (5 fps).
-    /// High velocity accuracy for ATC applications.
+    /// Horizontal velocity error &lt; 1 m/s, vertical velocity error &lt; 1.5 m/s (5 ft/s).
+    /// High velocity accuracy for ATC (Air Traffic Control) applications.
     /// </summary>
     LessThan1MeterPerSecond = 3,
 
     /// <summary>
-    /// Horizontal velocity error &lt; 0.3 m/s, vertical velocity error &lt; 0.46 m/s (1.5 fps).
+    /// Horizontal velocity error &lt; 0.3 m/s, vertical velocity error &lt; 0.46 m/s (1.5 ft/s).
     /// Precision velocity for safety-critical operations.
     /// </summary>
     LessThan0Point3MetersPerSecond = 4,

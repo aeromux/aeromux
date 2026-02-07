@@ -79,7 +79,12 @@ public sealed class AirbornePositionHandler : ITrackingHandler
                     barometricAltitude = msg.Altitude;
 
                     // Always derive geometric altitude from latest barometric + cached delta
-                    // This ensures geometric altitude stays in sync with changing barometric altitude
+                    // This ensures geometric altitude stays in sync with changing barometric altitude,
+                    // which varies with atmospheric pressure and QNH settings, while geometric altitude
+                    // remains absolute relative to WGS84 ellipsoid. Recalculation is necessary because
+                    // barometric altitude changes frequently (every TC 9-18 message) but delta updates
+                    // are less frequent (only in TC 19). By deriving from barometric + delta, we maintain
+                    // accurate geometric altitude without requiring constant TC 19 updates.
                     // Strategy: Recalculate on every barometric update (TC 9-18), not on delta updates (TC 19)
                     if (geometricBarometricDelta != null)
                     {

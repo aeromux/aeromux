@@ -19,7 +19,7 @@ using Serilog.Events;
 namespace Aeromux.Core.Configuration;
 
 /// <summary>
-/// Structured logging configuration for console and file outputs (ADR-007).
+/// Structured logging configuration for console and file outputs.
 /// </summary>
 public class LoggingConfig
 {

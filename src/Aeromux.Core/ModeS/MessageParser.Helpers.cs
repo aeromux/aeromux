@@ -30,18 +30,19 @@ public sealed partial class MessageParser
     // ========================================
 
     /// <summary>
-    /// Decodes 13-bit AC altitude code (DF 4, 20).
+    /// Decodes 13-bit AC (Altitude Code) field from DF 4/20 surveillance messages.
     /// Supports four encoding modes:
     /// - Mode 1: All-zeros (altitude unavailable)
-    /// - Mode 2: M=1 (metric altitude, 12-bit value)
-    /// - Mode 3: Q=1 (25-foot increments, 11-bit value)
-    /// - Mode 4: Q=0 (Gillham/Gray code, 100-foot increments)
+    /// - Mode 2: M=1 (metric altitude, 12-bit value, 25-meter increments)
+    /// - Mode 3: Q=1 (25-foot increments, 11-bit value, range: -1000 to +50,175 feet)
+    /// - Mode 4: Q=0 (Gillham/Gray code, 100-foot increments, for altitudes > 50,187 feet)
     /// </summary>
-    /// <param name="ac13">13-bit altitude code field</param>
+    /// <param name="ac13">13-bit altitude code field from DF 4 or DF 20 message</param>
     /// <returns>Decoded altitude, or <see langword="null"/> if invalid or unavailable.</returns>
     /// <remarks>
-    /// Implements all four encoding modes per ICAO Annex 10 specification.
+    /// Implements all four encoding modes per ICAO Annex 10, Volume IV, Section 3.1.2.6.5.4.
     /// Gillham (Gray code) decoding handles extreme altitudes above 50,187 feet.
+    /// Formula for Q=1 mode: Altitude (ft) = N × 25 - 1000, where N is the 11-bit value.
     /// </remarks>
     private Altitude? DecodeAltitudeAC13(int ac13)
     {
@@ -88,16 +89,23 @@ public sealed partial class MessageParser
     }
 
     /// <summary>
-    /// Decodes Gillham-coded altitude (Gray code).
+    /// Decodes Gillham-coded altitude (Gray code) from AC field.
     /// Used for all altitudes when Q=0 (most commonly for extreme altitudes > 50,187 feet).
     /// Implements ICAO Annex 10 Gillham code decoding with bit rearrangement and Gray-to-binary conversion.
     /// </summary>
-    /// <param name="ac13Field">13-bit altitude code field</param>
-    /// <returns>Altitude in 100-foot increments, or -9999 if invalid</returns>
+    /// <param name="ac13Field">13-bit altitude code field from DF 4 or DF 20 message</param>
+    /// <returns>Altitude in 100-foot increments, or -9999 if invalid code</returns>
     /// <remarks>
-    /// Gillham code uses Gray code (reflected binary) encoding where adjacent values
-    /// differ by only one bit. This reduces errors during altitude changes.
-    /// The bit rearrangement: AC field → Gillham format → Gray code conversion → altitude
+    /// Gillham code uses Gray code (reflected binary) encoding where adjacent altitude values
+    /// differ by only one bit. This reduces transient errors during altitude changes (e.g., when
+    /// transitioning from FL500 to FL501, only one bit changes instead of multiple bits).
+    ///
+    /// Decoding process:
+    /// 1. Rearrange AC field bits (C1,A1,C2,A2,C4,A4,M,B1,Q,B2,D2,B4,D4) to Gillham format
+    /// 2. Convert Gray code to binary using XOR reduction
+    /// 3. Map binary value to altitude using 100-foot increments
+    ///
+    /// Reference: ICAO Annex 10, Volume IV, Section 3.1.2.6.5.4 (Mode C altitude encoding).
     /// </remarks>
     private static int DecodeGillham(int ac13Field)
     {
@@ -278,8 +286,11 @@ public sealed partial class MessageParser
         }
 
         // Final altitude calculation using ICAO-defined Gillham offset
-        // Formula: ((fiveHundreds * 5) + oneHundreds - gillhamOffset) * 100 feet
-        // GillhamOffset = 13: ICAO Annex 10 Volume IV specification establishes origin at -1300 feet
+        // Formula: Altitude (100 ft units) = (fiveHundreds × 5) + oneHundreds - 13
+        // Then multiply by 100 to get feet: Altitude (ft) = result × 100
+        // GillhamOffset = 13: ICAO Annex 10 Volume IV establishes origin at -1300 feet
+        // This allows encoding altitudes from -1200 ft to +126,700 ft in 100-foot increments
+        // Reference: ICAO Annex 10, Volume IV, Section 3.1.2.6.5.4, Figure 3-11
         const int gillhamOffset = 13;
         return (fiveHundreds * 5) + oneHundreds - gillhamOffset;
     }

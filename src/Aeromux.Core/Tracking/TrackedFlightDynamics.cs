@@ -53,9 +53,10 @@ public sealed record TrackedFlightDynamics
     public double? TrueHeading { get; init; }
 
     /// <summary>
-    /// Cached magnetic declination (WMM-2025) with calculation timestamp.
+    /// Cached magnetic declination from WMM-2025 (World Magnetic Model 2025) with calculation timestamp.
     /// Used for converting magnetic heading to true heading.
-    /// Cache TTL (5 seconds) managed by MagneticDeclinationCalculator service.
+    /// Cache TTL (Time To Live: 5 seconds) managed by MagneticDeclinationCalculator service.
+    /// WMM-2025 is NOAA's standard model for Earth's magnetic field variations with latitude/longitude.
     /// Null if no position available or magnetic heading not yet received.
     /// </summary>
     public MagneticDeclination? MagneticDeclination { get; init; }

@@ -67,7 +67,7 @@ public record GeographicCoordinate(double Latitude, double Longitude)
     /// </summary>
     /// <remarks>
     /// The Haversine formula calculates the shortest distance between two points on a sphere,
-    /// accounting for Earth's curvature. Accurate for distances up to approximately 10,000 NM.
+    /// accounting for Earth's curvature. Accurate for distances up to approximately 10,000 nautical miles.
     /// For very long distances or high-precision requirements, consider geodesic calculations.
     /// </remarks>
     /// <param name="other">The destination coordinate.</param>

@@ -22,14 +22,14 @@ using Serilog;
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
-/// MessageParser partial class: ACAS coordination messages (DF 0, DF 16).
+/// MessageParser partial class: ACAS (Airborne Collision Avoidance System) coordination messages (DF 0, DF 16).
 /// Handles short and long air-air surveillance with ACAS field decoding.
 /// </summary>
 public sealed partial class MessageParser
 {
     /// <summary>
     /// Parses short air-air surveillance from Downlink Format 0.
-    /// ACAS coordination message containing altitude and ACAS status fields.
+    /// ACAS coordination message containing altitude and ACAS operational status fields.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
     /// <returns>Short air-air surveillance message with ACAS data, or <see langword="null"/> if invalid.</returns>
@@ -48,7 +48,7 @@ public sealed partial class MessageParser
     ///
     /// DF 0 is used for air-air surveillance (aircraft-to-aircraft).
     /// Unlike DF 4 (ground surveillance), DF 0 contains air-air specific fields (VS, CC, SL, RI).
-    /// The RI field indicates either ACAS operational capabilities (0,2,3,4) or maximum airspeed (8-14).
+    /// The RI (Reply Information) field indicates either ACAS operational capabilities (0,2,3,4) or maximum airspeed (8-14).
     /// </remarks>
     private ModeSMessage? ParseShortAirAirSurveillance(ValidatedFrame frame)
     {

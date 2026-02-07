@@ -22,9 +22,9 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Aeromux.Infrastructure.Configuration;
 
 /// <summary>
-/// Loads and validates Aeromux configuration from YAML files (ADR-003).
+/// Loads and validates Aeromux configuration from YAML files.
 /// Uses YamlDotNet for deserialization with camelCase naming convention.
-/// Uses Serilog for structured logging (ADR-007).
+/// Uses Serilog for structured logging.
 /// </summary>
 public class YamlConfigurationLoader : IYamlConfigurationLoader
 {

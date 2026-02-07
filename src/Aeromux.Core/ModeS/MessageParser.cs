@@ -23,7 +23,7 @@ namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// Parses validated Mode S frames into structured message objects.
-/// Implements the Coordinator Pattern (ADR-009) for statistics.
+/// Implements the Coordinator Pattern for statistics.
 /// </summary>
 /// <remarks>
 /// Complete DF/TC routing skeleton with statistics.
@@ -38,26 +38,27 @@ namespace Aeromux.Core.ModeS;
 ///
 /// Supported ADS-B Type Codes (TC) for DF 17/18:
 /// - TC 1-4: Aircraft identification and category (callsign)
-/// - TC 5-8: Surface position (CPR encoded, requires local decoding)
+/// - TC 5-8: Surface position (CPR - Compact Position Reporting encoded, requires local decoding)
 /// - TC 9-18: Airborne position (barometric altitude, CPR encoded)
 /// - TC 19: Airborne velocity (ground speed, heading, vertical rate)
 /// - TC 20-22: Airborne position (GNSS altitude, CPR encoded)
-/// - TC 28: Aircraft status (emergency/priority, TCAS RA)
+/// - TC 28: Aircraft status (emergency/priority, TCAS RA - Resolution Advisory)
 /// - TC 29: Target state and status (selected altitude, autopilot modes)
 /// - TC 31: Operational status (version, capabilities, NIC/NACp/SIL)
 ///
 /// Statistics are exposed via properties and logged by the coordinator (DeviceWorker).
 /// This class focuses on parsing and counting; logging is the coordinator's responsibility.
-/// Uses Serilog for structured logging (ADR-007).
+/// Uses Serilog for structured logging.
 /// </remarks>
 public sealed partial class MessageParser
 {
-    // AIS character set for callsign decoding (6-bit to ASCII mapping)
+    // Mode S character set for callsign decoding (6-bit to ASCII mapping)
+    // Used for aircraft identification in BDS 2,0 and TC 1-4 messages
     // Reference: ICAO Annex 10, Volume IV, Table A-2-6
     private static readonly char[] AisCharset =
         "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?".ToCharArray();
 
-    // CPR decoder for position messages
+    // CPR (Compact Position Reporting) decoders for position messages
     private readonly CprDecoder _cprDecoder = new();
     private readonly SurfaceCprDecoder _surfaceCprDecoder = new();
 
@@ -65,7 +66,7 @@ public sealed partial class MessageParser
     private readonly string? _deviceName;
     private readonly int? _deviceIndex;
 
-    // Statistics (Coordinator Pattern - ADR-009)
+    // Statistics
     private long _messagesParsed;
     private long _validationFailures;   // Expected failures: invalid data, returns null
     private long _unexpectedErrors;     // Unexpected exceptions: bugs, should be 0
@@ -180,7 +181,7 @@ public sealed partial class MessageParser
     }
 
     // ========================================
-    // Statistics Properties (Coordinator Pattern - ADR-009)
+    // Statistics Properties
     // ========================================
 
     /// <summary>

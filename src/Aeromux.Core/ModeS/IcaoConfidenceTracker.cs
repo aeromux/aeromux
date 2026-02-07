@@ -167,7 +167,7 @@ public sealed class IcaoConfidenceTracker
         _expiredIcaos += expiredIcaos.Count;
     }
 
-    // Statistics properties for Coordinator Pattern (ADR-009)
+    // Statistics properties for Coordinator Pattern
     // DeviceWorker reads these for logging, tracker never logs itself
 
     /// <summary>Total frames processed (both confident and non-confident)</summary>

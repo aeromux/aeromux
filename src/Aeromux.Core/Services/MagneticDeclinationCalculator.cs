@@ -60,7 +60,7 @@ internal static class MagneticDeclinationCalculator
 {
     private const int MaxDegree = 12;
     private const double Epoch = 2025.0;
-    private const double A = 6378.137;      // WGS84 semi-major axis (km)
+    private const double A = 6378.137;      // WGS84 (World Geodetic System 1984) semi-major axis (km)
     private const double B = 6356.7523142;  // WGS84 semi-minor axis (km)
     private const double Re = 6371.2;       // Earth mean radius (km)
     private const double Pi = Math.PI;
@@ -73,10 +73,10 @@ internal static class MagneticDeclinationCalculator
     /// </summary>
     /// <param name="N">Degree (n) of spherical harmonic.</param>
     /// <param name="M">Order (m) of spherical harmonic.</param>
-    /// <param name="Gnm">Gauss coefficient g(n,m) in nanotesla (nT).</param>
-    /// <param name="Hnm">Gauss coefficient h(n,m) in nanotesla (nT).</param>
-    /// <param name="Dgnm">Secular variation dg(n,m)/dt in nT/year.</param>
-    /// <param name="Dhnm">Secular variation dh(n,m)/dt in nT/year.</param>
+    /// <param name="Gnm">Gauss coefficient g(n,m) in nT (nanotesla, 10⁻⁹ tesla).</param>
+    /// <param name="Hnm">Gauss coefficient h(n,m) in nT (nanotesla).</param>
+    /// <param name="Dgnm">Secular variation dg(n,m)/dt in nT/year (rate of change).</param>
+    /// <param name="Dhnm">Secular variation dh(n,m)/dt in nT/year (rate of change).</param>
     private readonly record struct WmmCoefficient(int N, int M, double Gnm, double Hnm, double Dgnm, double Dhnm);
 
     // WMM-2025 Gauss coefficients (Schmidt semi-normalized)

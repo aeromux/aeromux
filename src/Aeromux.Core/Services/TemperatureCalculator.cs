@@ -21,13 +21,13 @@ namespace Aeromux.Core.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Implements International Standard Atmosphere (ISA) temperature calculations using the relationship
+/// Implements ISA (International Standard Atmosphere) temperature calculations using the relationship
 /// between true airspeed, Mach number, and static air temperature. TAT includes kinetic heating effects
 /// from ram air compression (recovery factor for air temperature probes).
 /// </para>
 /// <para>
 /// Original formulas derived from aerodynamic relationships documented in ICAO Doc 7488 and
-/// NACA Report 1135 (temperature recovery in air at high speeds).
+/// NACA (National Advisory Committee for Aeronautics) Report 1135 (temperature recovery in air at high speeds).
 /// </para>
 /// <para>
 /// Implementation inspired by readsb (https://github.com/wiedehopf/readsb)
@@ -43,12 +43,13 @@ public static class TemperatureCalculator
     private const double MinMachForCalculation = 0.395;
 
     /// <summary>
-    /// Speed of sound at ISA sea level in knots.
+    /// Speed of sound at ISA (International Standard Atmosphere) sea level in knots.
+    /// ISA defines standard atmospheric conditions: 15°C (288.15K), 1013.25 hPa at sea level.
     /// </summary>
     private const double SpeedOfSoundSeaLevel = 661.47;
 
     /// <summary>
-    /// Standard temperature at ISA sea level in Kelvin.
+    /// Standard temperature at ISA sea level in Kelvin (15°C).
     /// </summary>
     private const double StandardTemperatureSeaLevel = 288.15;
 
@@ -113,7 +114,8 @@ public static class TemperatureCalculator
 
         // Calculate TAT using ram air temperature rise formula:
         // TAT = OAT_kelvin × (1 + recoveryFactor × Mach²)
-        // where recoveryFactor = (gamma - 1) / 2 = 0.2 for gamma = 1.4 (air)
+        // where recoveryFactor = (γ - 1) / 2 = 0.2 for γ = 1.4 (air)
+        // γ (gamma) is the heat capacity ratio (specific heat at constant pressure / constant volume)
         // This accounts for kinetic heating from air compression at the temperature probe
         const double recoveryFactor = 0.2;
         double oatKelvin = oat - AbsoluteZeroCelsius;

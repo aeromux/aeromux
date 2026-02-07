@@ -36,21 +36,21 @@ public enum SourceIntegrityLevel
     Unknown = 0,
 
     /// <summary>
-    /// Probability of exceeding NACp radius ≤ 1×10⁻³ per hour.
+    /// Probability of exceeding NACp (Navigation Accuracy Category - Position) radius ≤ 1×10⁻³ per hour.
     /// Low integrity - suitable for traffic awareness only.
     /// </summary>
     PerHour1E3 = 1,
 
     /// <summary>
     /// Probability of exceeding NACp radius ≤ 1×10⁻⁵ per hour.
-    /// Medium integrity - suitable for most ATC applications.
+    /// Medium integrity - suitable for most ATC (Air Traffic Control) applications.
     /// </summary>
     PerHour1E5 = 2,
 
     /// <summary>
     /// Probability of exceeding NACp radius ≤ 1×10⁻⁷ per hour.
     /// High integrity - suitable for safety-critical applications (e.g., separation services).
-    /// Required for DO-260B compliance in safety-critical airspace.
+    /// Required for RTCA DO-260B compliance in safety-critical airspace.
     /// </summary>
     PerHour1E7 = 3
 }

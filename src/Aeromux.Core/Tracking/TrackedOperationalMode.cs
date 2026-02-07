@@ -20,25 +20,26 @@ using Aeromux.Core.ModeS.ValueObjects;
 namespace Aeromux.Core.Tracking;
 
 /// <summary>
-/// Real-time operational status and ATC coordination information.
+/// Real-time operational status and ATC (Air Traffic Control) coordination information.
 /// Contains cockpit mode indicators, system status, GPS antenna configuration, and ATC coordination metadata.
 /// Sources: TC 31 (Operational Status), DF 20/21 (Comm-B Altitude/Identity Reply).
 /// </summary>
 public sealed record TrackedOperationalMode
 {
     /// <summary>
-    /// Indicates whether a TCAS Resolution Advisory (RA) is currently active (TC 31 OperationalMode).
+    /// Indicates whether a TCAS RA (Resolution Advisory) is currently active (TC 31 OperationalMode).
     /// An RA is issued when TCAS detects a collision threat and provides escape maneuvers to the flight crew.
     /// True if TCAS RA is active, false if not active.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
-    /// Note: This is different from RA information in DF 16 (Long Air-Air Surveillance) and BDS 3,0 (ACAS RA).
+    /// Note: This is different from RA information in DF 16 (Long Air-Air Surveillance) and BDS 3,0 (ACAS Resolution Advisory report).
     /// </summary>
     public bool? TCASRAActive { get; init; }
 
     /// <summary>
     /// Indicates whether the aircraft's IDENT switch is currently active (TC 31 OperationalMode).
-    /// IDENT is used by ATC to positively identify an aircraft on radar by causing a special indicator
-    /// to appear on the controller's display.
+    /// IDENT (Identification) feature allows pilots to activate a special pulse on ATC radar screens,
+    /// causing the aircraft's blip to brighten or flash for positive identification.
+    /// Typically activated when ATC requests "Ident" to confirm aircraft identity.
     /// True if IDENT switch is active, false if not active.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
     /// </summary>
@@ -74,7 +75,7 @@ public sealed record TrackedOperationalMode
     public SdaSupportedFailureCondition? SystemDesignAssurance { get; init; }
 
     /// <summary>
-    /// Lateral offset of the GPS antenna from the aircraft reference point (TC 31 OperationalMode).
+    /// Lateral offset of the GPS (Global Positioning System) antenna from the aircraft reference point (TC 31 OperationalMode).
     /// Used to accurately determine the aircraft's position based on antenna location.
     /// Range: -6 meters (left) to +6 meters (right) of aircraft centerline.
     /// Null if TC 31 not yet received or if ADS-B version does not provide this field.
@@ -82,7 +83,7 @@ public sealed record TrackedOperationalMode
     public LateralGpsAntennaOffset? GPSLateralOffset { get; init; }
 
     /// <summary>
-    /// Longitudinal offset of the GPS antenna from the aircraft reference point (TC 31 OperationalMode).
+    /// Longitudinal offset of the GPS (Global Positioning System) antenna from the aircraft reference point (TC 31 OperationalMode).
     /// Used to accurately determine the aircraft's position based on antenna location.
     /// Measured from nose (positive values indicate antenna is aft of nose).
     /// Range: 0 to 62 meters aft of the nose.

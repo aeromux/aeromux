@@ -34,7 +34,9 @@ public sealed partial class MessageParser
     /// <returns>All-call reply message with capability, or <see langword="null"/> if invalid.</returns>
     /// <remarks>
     /// All-call replies are transmitted in response to Mode S all-call interrogations.
-    /// They announce the aircraft's presence and ICAO address with basic capability information.
+    /// All-call interrogation (UF=11) is a broadcast request asking all aircraft to identify themselves.
+    /// They announce the aircraft's presence and ICAO (International Civil Aviation Organization) address
+    /// with basic capability information.
     /// Capability values:
     ///   0 = Level 1 transponder (basic Mode S)
     ///   1-3 = Reserved (not assigned, rejected if encountered)
@@ -45,7 +47,7 @@ public sealed partial class MessageParser
     /// </remarks>
     private ModeSMessage? ParseAllCallReply(ValidatedFrame frame)
     {
-        // Extract Capability (CA) field from bits 6-8 (byte 0, bits 0-2)
+        // Extract Capability (CA - Capability) field from bits 6-8 (byte 0, bits 0-2)
         int capabilityRaw = ExtractBits(frame.Data, 6, 3);
 
         // Validate capability value (0-7 are defined in TransponderCapability enum)

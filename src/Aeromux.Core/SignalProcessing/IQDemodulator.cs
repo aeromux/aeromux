@@ -229,7 +229,7 @@ public sealed class IQDemodulator : IDisposable
 
     /// <summary>
     /// Gets the total number of samples processed (converted to magnitude) by this demodulator.
-    /// Used by DeviceWorker for statistics logging (ADR-009: Coordinator Pattern).
+    /// Used by DeviceWorker for statistics logging.
     /// </summary>
     public long TotalSamplesProcessed { get; private set; }
 
