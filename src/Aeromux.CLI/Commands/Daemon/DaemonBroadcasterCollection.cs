@@ -31,7 +31,7 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// in .NET's Socket.ValidateBlockingMode() on macOS ARM64 where concurrent socket initialization
 /// can corrupt internal state fields, causing AccessViolationException.
 /// </remarks>
-public sealed class BroadcasterCollection : IAsyncDisposable
+public sealed class DaemonBroadcasterCollection : IAsyncDisposable
 {
     private TcpBroadcaster? _beastBroadcaster;
     private TcpBroadcaster? _jsonBroadcaster;
@@ -47,7 +47,7 @@ public sealed class BroadcasterCollection : IAsyncDisposable
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>Number of broadcasters started.</returns>
     public async Task<int> StartBroadcastersAsync(
-        ValidatedDaemonConfig config,
+        DaemonValidatedConfig config,
         ReceiverStream receiverStream,
         AircraftStateTracker aircraftTracker,
         CancellationToken cancellationToken)

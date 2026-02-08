@@ -23,7 +23,7 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// Immutable validated configuration for the daemon command.
 /// All values have been validated and resolved from CLI parameters, YAML config, and defaults.
 /// </summary>
-public sealed record ValidatedDaemonConfig
+public sealed record DaemonValidatedConfig
 {
     /// <summary>The fully loaded Aeromux configuration.</summary>
     public required AeromuxConfig Config { get; init; }

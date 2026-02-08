@@ -24,7 +24,7 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// service (SIGTERM) shutdown signals. Properly unregisters the Console.CancelKeyPress
 /// handler on disposal.
 /// </summary>
-public sealed class ShutdownCoordinator : IDisposable
+public sealed class DaemonShutdownCoordinator : IDisposable
 {
     private readonly CancellationTokenSource _shutdownCts;
     private readonly ConsoleCancelEventHandler? _cancelHandler;
@@ -34,7 +34,7 @@ public sealed class ShutdownCoordinator : IDisposable
     /// Registers a CTRL+C handler if running in interactive mode.
     /// </summary>
     /// <param name="externalCancellationToken">External token (e.g., from Spectre.Console.Cli framework).</param>
-    public ShutdownCoordinator(CancellationToken externalCancellationToken)
+    public DaemonShutdownCoordinator(CancellationToken externalCancellationToken)
     {
         _shutdownCts = CancellationTokenSource.CreateLinkedTokenSource(externalCancellationToken);
 

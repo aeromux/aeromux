@@ -32,17 +32,17 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// </remarks>
 public sealed class DaemonOrchestrator : IAsyncDisposable
 {
-    private readonly ValidatedDaemonConfig _config;
+    private readonly DaemonValidatedConfig _config;
     private ReceiverStream? _receiverStream;
     private AircraftStateTracker? _aircraftTracker;
-    private BroadcasterCollection? _broadcasters;
+    private DaemonBroadcasterCollection? _broadcasters;
     private bool _disposed;
 
     /// <summary>
     /// Creates a new daemon orchestrator with the specified validated configuration.
     /// </summary>
     /// <param name="config">Validated daemon configuration.</param>
-    public DaemonOrchestrator(ValidatedDaemonConfig config)
+    public DaemonOrchestrator(DaemonValidatedConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
         _config = config;
@@ -118,7 +118,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         Log.Information("Aircraft state tracker started");
 
         // Create and start TCP broadcasters
-        _broadcasters = new BroadcasterCollection();
+        _broadcasters = new DaemonBroadcasterCollection();
         return await _broadcasters.StartBroadcastersAsync(_config, _receiverStream, _aircraftTracker, cancellationToken);
     }
 

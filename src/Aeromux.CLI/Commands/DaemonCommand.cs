@@ -47,7 +47,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         // Validate settings parameter (required by CA1062)
         ArgumentNullException.ThrowIfNull(settings);
 
-        SessionSummaryReporter.LogSessionStart();
+        DaemonSessionSummaryReporter.LogSessionStart();
         Console.WriteLine("Aeromux daemon starting...");
 
         // Track session start time for summary statistics
@@ -59,7 +59,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             AeromuxConfig config = ConfigurationProvider.Current;
 
             // Validate and resolve all configuration
-            ValidatedDaemonConfig validatedConfig = DaemonConfigValidator.Validate(settings, config);
+            DaemonValidatedConfig validatedConfig = DaemonConfigValidator.Validate(settings, config);
 
             // Create and start all daemon services (receiver stream, aircraft tracker, broadcasters)
             var orchestrator = new DaemonOrchestrator(validatedConfig);
@@ -70,7 +70,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 // Wait for shutdown signal (CTRL+C or SIGTERM)
                 Console.WriteLine(
                     $"Aeromux daemon running with {orchestrator.DeviceCount} device(s). Press Ctrl+C to stop.");
-                using var shutdown = new ShutdownCoordinator(cancellationToken);
+                using var shutdown = new DaemonShutdownCoordinator(cancellationToken);
                 await shutdown.WaitForShutdownAsync();
 
                 // Collect statistics before disposal (stream still alive)
@@ -80,8 +80,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 await orchestrator.DisposeAsync();
 
                 // Display session summary with aggregated statistics from all devices
-                SessionSummaryReporter.LogSessionSummary(sessionStart, stats);
-                SessionSummaryReporter.LogSessionEnd();
+                DaemonSessionSummaryReporter.LogSessionSummary(sessionStart, stats);
+                DaemonSessionSummaryReporter.LogSessionEnd();
 
                 return 0;
             }

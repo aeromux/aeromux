@@ -23,7 +23,7 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// Logs session start/end separators and summary statistics for the daemon session.
 /// Provides clear visual markers in log files for easy identification of daemon instances.
 /// </summary>
-public static class SessionSummaryReporter
+public static class DaemonSessionSummaryReporter
 {
     /// <summary>
     /// Logs the session start separator with timestamp.

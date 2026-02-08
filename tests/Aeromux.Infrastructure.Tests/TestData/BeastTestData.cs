@@ -154,13 +154,10 @@ public static class BeastTestData
         ArgumentNullException.ThrowIfNull(timestamp);
         ArgumentNullException.ThrowIfNull(data);
 
-        var buffer = new List<byte>();
-
-        // Frame start marker
-        buffer.Add(ESC);
-
-        // Message type
-        buffer.Add(messageType);
+        var buffer = new List<byte> {
+            // Frame start marker
+            ESC, // Message type
+            messageType };
 
         if (messageType == TYPE_RECEIVER_ID)
         {

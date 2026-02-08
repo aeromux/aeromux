@@ -34,7 +34,7 @@ public static class DaemonConfigValidator
     /// <param name="config">Loaded Aeromux configuration.</param>
     /// <returns>Validated and resolved configuration.</returns>
     /// <exception cref="InvalidOperationException">Thrown when validation fails.</exception>
-    public static ValidatedDaemonConfig Validate(DaemonSettings settings, AeromuxConfig config)
+    public static DaemonValidatedConfig Validate(DaemonSettings settings, AeromuxConfig config)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(config);
@@ -70,7 +70,7 @@ public static class DaemonConfigValidator
 
         var enabledDevices = config.Devices!.Where(d => d.Enabled).ToList();
 
-        return new ValidatedDaemonConfig
+        return new DaemonValidatedConfig
         {
             Config = config,
             BeastPort = beastPort,
