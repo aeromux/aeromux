@@ -22,11 +22,40 @@ namespace Aeromux.CLI.Commands.Live;
 
 /// <summary>
 /// Centralized exception handler for live command errors.
-/// Provides separate methods for standalone and client modes, as they have
-/// entirely different exception types and user-facing error messages.
+/// Provides a top-level handler for ExecuteAsync and separate methods for standalone
+/// and client modes, as they have entirely different exception types and user-facing error messages.
 /// </summary>
 public static class LiveExceptionHandler
 {
+    /// <summary>
+    /// Handles top-level exceptions from ExecuteAsync.
+    /// Maps validation errors (InvalidOperationException) to concise messages
+    /// and logs unexpected errors with full context.
+    /// </summary>
+    /// <param name="ex">The exception to handle.</param>
+    /// <returns>Exit code (always 1 for error).</returns>
+    public static int HandleException(Exception ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+
+        switch (ex)
+        {
+            // Validation failures from LiveConfigValidator
+            case InvalidOperationException:
+                Log.Error(ex.Message);
+                Console.WriteLine($"Error: {ex.Message}");
+                break;
+
+            // Unexpected errors
+            default:
+                Log.Error(ex, "Unexpected error in Live command");
+                Console.WriteLine(ex);
+                break;
+        }
+
+        return 1;
+    }
+
     /// <summary>
     /// Handles exceptions from standalone mode (direct RTL-SDR access).
     /// Maps RTL-SDR library exceptions to user-friendly error messages.
