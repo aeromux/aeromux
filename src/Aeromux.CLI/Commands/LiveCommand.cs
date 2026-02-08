@@ -14,10 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using System.ComponentModel;
 using System.Net;
 using System.Net.Sockets;
-using Aeromux.CLI.Configuration;
+using Aeromux.CLI.Commands.Live;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -29,85 +28,6 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace Aeromux.CLI.Commands;
-
-/// <summary>
-/// Optional connection string that supports both flag usage (--connect) and value usage (--connect HOST:PORT).
-/// </summary>
-/// <remarks>
-/// When used as flag, defaults to empty string which ParseConnectionString interprets as localhost:30005.
-/// Implements IFlagValue to enable Spectre.Console.Cli's flag parsing behavior.
-/// </remarks>
-public sealed class OptionalConnectionString : IFlagValue
-{
-    private string _value = string.Empty;
-    private bool _isSet;
-
-    /// <summary>
-    /// Gets or sets the connection string value.
-    /// </summary>
-    public object? Value
-    {
-        get => _value;
-        set => _value = value?.ToString() ?? string.Empty;
-    }
-
-    /// <summary>
-    /// Gets or sets whether the flag was explicitly set by the user.
-    /// </summary>
-    public bool IsSet
-    {
-        get => _isSet;
-        set => _isSet = value;
-    }
-
-    /// <summary>
-    /// Gets the underlying type of the value (always string).
-    /// </summary>
-    public Type Type => typeof(string);
-
-    /// <summary>
-    /// Creates an instance for flag usage without a value (--connect).
-    /// </summary>
-    /// <returns>An OptionalConnectionString with empty value and IsSet=true.</returns>
-    public static OptionalConnectionString FromFlag() =>
-        new() { _value = string.Empty, _isSet = true };
-
-    /// <summary>
-    /// Creates an instance with a specific connection string value (--connect HOST:PORT).
-    /// </summary>
-    /// <param name="value">The connection string value.</param>
-    /// <returns>An OptionalConnectionString with the specified value and IsSet=true.</returns>
-    public static OptionalConnectionString FromValue(string value) =>
-        new() { _value = value, _isSet = true };
-
-    /// <summary>
-    /// Implicitly converts OptionalConnectionString to string for convenient usage.
-    /// </summary>
-    /// <param name="connection">The OptionalConnectionString to convert.</param>
-    /// <returns>The connection string value, or null if connection is null.</returns>
-    public static implicit operator string?(OptionalConnectionString? connection) =>
-        connection?._value;
-}
-
-/// <summary>
-/// Settings for the Live command.
-/// </summary>
-public sealed class LiveSettings : GlobalSettings
-{
-    /// <summary>
-    /// Gets or sets whether to run in standalone mode with direct RTL-SDR access.
-    /// </summary>
-    [CommandOption("--standalone")]
-    [Description("Run in standalone mode (process RTL-SDR directly)")]
-    public bool Standalone { get; set; }
-
-    /// <summary>
-    /// Gets or sets the connection string for Beast-compatible source.
-    /// </summary>
-    [CommandOption("--connect [ADDRESS]")]
-    [Description("Connect to Beast-compatible source (default: localhost:30005)")]
-    public OptionalConnectionString? Connect { get; set; }
-}
 
 /// <summary>
 /// Live aircraft display command.

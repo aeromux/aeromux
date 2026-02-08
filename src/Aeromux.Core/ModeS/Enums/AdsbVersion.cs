@@ -47,9 +47,8 @@ public enum AdsbVersion
     /// DO-260B (ADS-B version 2).
     /// Adds: NIC (Navigation Integrity Category) supplements,
     /// SDA (System Design Assurance), GVA (Geometric Vertical Accuracy),
-    /// target state and status.
-    /// Mandatory for 2020+ aircraft (FAA - Federal Aviation Administration /
-    /// EASA - European Union Aviation Safety Agency mandates).
+    /// target state and status. Mandatory for 2020+ aircraft (FAA - Federal Aviation
+    /// Administration and EASA - European Union Aviation Safety Agency mandates).
     /// Enhanced position accuracy and integrity parameters.
     /// </summary>
     DO260B = 2,

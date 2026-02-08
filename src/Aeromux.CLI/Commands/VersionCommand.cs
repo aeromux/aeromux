@@ -14,25 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using System.ComponentModel;
-using Aeromux.CLI.Configuration;
+using Aeromux.CLI.Commands.Version;
 using Spectre.Console.Cli;
 
 namespace Aeromux.CLI.Commands;
-
-/// <summary>
-/// Settings for the version command.
-/// Inherits global --config option from GlobalSettings.
-/// </summary>
-public class VersionSettings : GlobalSettings
-{
-    /// <summary>
-    /// Gets or sets whether to display detailed version information.
-    /// </summary>
-    [CommandOption("--details")]
-    [Description("Display detailed version information")]
-    public bool Details { get; set; }
-}
 
 /// <summary>
 /// CLI command to display version information about Aeromux.
