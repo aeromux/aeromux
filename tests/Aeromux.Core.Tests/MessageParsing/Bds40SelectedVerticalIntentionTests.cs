@@ -165,6 +165,30 @@ public class Bds40SelectedVerticalIntentionTests
     }
 
     [Fact]
+    public void ParseMessage_DF20_Bds40_RealCapture_49D421_McpAltitude29008()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_49D421_BDS40)
+            .WithIcaoAddress("49D421")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds40, "message structure and validation rules match BDS 4,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds40SelectedVerticalIntention? bds40 = reply.BdsData.Should().BeOfType<Bds40SelectedVerticalIntention>().Subject;
+        bds40.McpSelectedAltitude.Should().Be(29008, "MCP selected altitude from real capture");
+        bds40.FmsSelectedAltitude.Should().Be(29008, "FMS selected altitude from real capture");
+        bds40.BarometricPressureSetting.Should().BeApproximately(1013.2, 0.5, "QNH from real capture");
+    }
+
+    [Fact]
     public void ParseMessage_DF21_Bds40_RealCapture_4C0177_McpAltitude12000()
     {
         // Arrange

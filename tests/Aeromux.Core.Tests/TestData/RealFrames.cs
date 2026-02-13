@@ -1159,6 +1159,27 @@ public static class RealFrames
     /// </remarks>
     public const string CommB_Altitude_760918_BDS40 = "A00017B0C8480030A4000019E974";
 
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 4,0): ICAO 49D421 at 13050 ft, MCP Alt 29008 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 49D421 (extracted from CRC)
+    /// Comm-B format: BDS 4,0 (Selected vertical intention)
+    /// Altitude: 13050 ft barometric
+    /// FMS Selected Altitude: 29008 ft
+    /// MCP Selected Altitude: 29008 ft
+    /// QNH: 1013.2 millibars
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 2226 (Gillham coded)
+    /// Message, Comm-B (MB): B8ADC570A80000
+    /// DF: 20
+    /// RSSI: -21.9 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_49D421_BDS40 = "A00008B2B8ADC570A80000808233";
+
     // BDS 5,0: Track and Turn Report
 
     /// <summary>
