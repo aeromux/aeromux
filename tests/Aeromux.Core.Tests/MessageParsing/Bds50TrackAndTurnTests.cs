@@ -186,4 +186,60 @@ public class Bds50TrackAndTurnTests
         bds50.TrackRate.Should().NotBeNull("track angle rate status bit is 1");
         bds50.TrueAirspeed.Should().NotBeNull("true airspeed status bit is 1");
     }
+
+    // ========================================
+    // Real Capture Tests
+    // ========================================
+
+    [Fact]
+    public void ParseMessage_DF20_Bds50_RealCapture_407D44_Track302_GS418()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_407D44_BDS50)
+            .WithIcaoAddress("407D44")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds50, "message structure and validation rules match BDS 5,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds50TrackAndTurn? bds50 = reply.BdsData.Should().BeOfType<Bds50TrackAndTurn>().Subject;
+        bds50.TrackAngle.Should().BeApproximately(302.9, 0.2, "ground track from real capture");
+        bds50.GroundSpeed.Should().Be(418, "ground speed from real capture");
+        bds50.TrueAirspeed.Should().Be(466, "true airspeed from real capture");
+        bds50.TrackRate.Should().BeApproximately(0.03, 0.01, "track rate from real capture");
+        bds50.RollAngle.Should().BeApproximately(-0.2, 0.2, "roll angle from real capture");
+    }
+
+    [Fact]
+    public void ParseMessage_DF21_Bds50_RealCapture_4BC890_Track121_GS490()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Identity_4BC890_BDS50)
+            .WithIcaoAddress("4BC890")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds50, "message structure and validation rules match BDS 5,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds50TrackAndTurn? bds50 = reply.BdsData.Should().BeOfType<Bds50TrackAndTurn>().Subject;
+        bds50.TrackAngle.Should().BeApproximately(121.8, 0.2, "ground track from real capture");
+        bds50.GroundSpeed.Should().Be(490, "ground speed from real capture");
+        bds50.TrueAirspeed.Should().Be(440, "true airspeed from real capture");
+        bds50.TrackRate.Should().BeApproximately(0.0, 0.01, "track rate from real capture");
+        bds50.RollAngle.Should().BeApproximately(-0.2, 0.2, "roll angle from real capture");
+    }
 }

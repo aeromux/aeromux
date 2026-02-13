@@ -93,4 +93,52 @@ public class Bds20AircraftIdentificationTests
         bds20.Callsign.Should().StartWith("KLM", "airline code");
         bds20.Callsign.Should().EndWith("1017", "flight number");
     }
+
+    // ========================================
+    // Real Capture Tests
+    // ========================================
+
+    [Fact]
+    public void ParseMessage_DF20_Bds20_RealCapture_407D44_CallsignWUK8484()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_407D44_BDS20)
+            .WithIcaoAddress("407D44")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds20, "MB field starts with 0x20 indicating BDS 2,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds20AircraftIdentification? bds20 = reply.BdsData.Should().BeOfType<Bds20AircraftIdentification>().Subject;
+        bds20.Callsign.Should().Be("WUK8484", "callsign decoded from real capture");
+    }
+
+    [Fact]
+    public void ParseMessage_DF21_Bds20_RealCapture_4C0177_CallsignASL16F()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Identity_4C0177_BDS20)
+            .WithIcaoAddress("4C0177")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds20, "MB field starts with 0x20 indicating BDS 2,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds20AircraftIdentification? bds20 = reply.BdsData.Should().BeOfType<Bds20AircraftIdentification>().Subject;
+        bds20.Callsign.Should().Be("ASL16F", "callsign decoded from real capture");
+    }
 }

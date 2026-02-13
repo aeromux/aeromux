@@ -187,4 +187,60 @@ public class Bds60HeadingAndSpeedTests
         bds60.BarometricVerticalRate.Should().NotBeNull("barometric vertical rate status bit is 1");
         bds60.InertialVerticalRate.Should().NotBeNull("inertial vertical rate status bit is 1");
     }
+
+    // ========================================
+    // Real Capture Tests
+    // ========================================
+
+    [Fact]
+    public void ParseMessage_DF20_Bds60_RealCapture_760918_Heading99_IAS267_BaroRateNeg160()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_760918_BDS60_A)
+            .WithIcaoAddress("760918")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds60, "message structure and validation rules match BDS 6,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds60HeadingAndSpeed? bds60 = reply.BdsData.Should().BeOfType<Bds60HeadingAndSpeed>().Subject;
+        bds60.MagneticHeading.Should().BeApproximately(99.0, 0.2, "magnetic heading from real capture");
+        bds60.IndicatedAirspeed.Should().Be(267, "IAS from real capture");
+        bds60.MachNumber.Should().BeApproximately(0.820, 0.001, "Mach number from real capture");
+        bds60.BarometricVerticalRate.Should().Be(-160, "barometric rate from real capture");
+        bds60.InertialVerticalRate.Should().Be(-32, "geometric rate from real capture");
+    }
+
+    [Fact]
+    public void ParseMessage_DF20_Bds60_RealCapture_760918_Heading99_IAS267_BaroRateNeg64()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_760918_BDS60_B)
+            .WithIcaoAddress("760918")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds60, "message structure and validation rules match BDS 6,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds60HeadingAndSpeed? bds60 = reply.BdsData.Should().BeOfType<Bds60HeadingAndSpeed>().Subject;
+        bds60.MagneticHeading.Should().BeApproximately(99.0, 0.2, "magnetic heading from real capture");
+        bds60.IndicatedAirspeed.Should().Be(267, "IAS from real capture");
+        bds60.MachNumber.Should().BeApproximately(0.820, 0.001, "Mach number from real capture");
+        bds60.BarometricVerticalRate.Should().Be(-64, "barometric rate from real capture");
+        bds60.InertialVerticalRate.Should().Be(-32, "geometric rate from real capture");
+    }
 }

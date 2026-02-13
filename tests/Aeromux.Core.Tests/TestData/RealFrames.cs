@@ -1078,6 +1078,160 @@ public static class RealFrames
     /// </remarks>
     public const string CommB_Altitude_3C4AD7 = "A0001998CE200030AA0000A4C208";
 
+    // BDS 1,0: Datalink Capabilities
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 1,0): ICAO 407D44 at 38050 ft, Datalink capabilities
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 407D44 (extracted from CRC)
+    /// Comm-B format: BDS 1,0 (Datalink capabilities)
+    /// Altitude: 38050 ft barometric
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6202 (Gillham coded)
+    /// Message, Comm-B (MB): 10030A80FD0000
+    /// DF: 20
+    /// RSSI: -20.2 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_407D44_BDS10 = "A000183A10030A80FD0000953220";
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 1,0): ICAO 4C0177 at 12350 ft, Datalink capabilities
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 4C0177 (extracted from CRC)
+    /// Comm-B format: BDS 1,0 (Datalink capabilities)
+    /// Altitude: 12350 ft barometric
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 2102 (Gillham coded)
+    /// Message, Comm-B (MB): 10030A80E50000
+    /// DF: 20
+    /// RSSI: -15.9 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_4C0177_BDS10 = "A000083610030A80E5000055F54B";
+
+    // BDS 2,0: Aircraft Identification
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 2,0): ICAO 407D44 at 38050 ft, Ident "WUK8484"
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 407D44 (extracted from CRC)
+    /// Comm-B format: BDS 2,0 (Aircraft identification)
+    /// Altitude: 38050 ft barometric
+    /// Ident: "WUK8484"
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6202 (Gillham coded)
+    /// Message, Comm-B (MB): 205D52F8D38D20
+    /// DF: 20
+    /// RSSI: -19.6 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_407D44_BDS20 = "A000183A205D52F8D38D209C96A4";
+
+    // BDS 4,0: Selected Vertical Intention
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 4,0): ICAO 760918 at 37000 ft, MCP Alt 37008 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 760918 (extracted from CRC)
+    /// Comm-B format: BDS 4,0 (Selected vertical intention)
+    /// Altitude: 37000 ft barometric
+    /// MCP Selected Altitude: 37008 ft
+    /// QNH: 1013.0 millibars
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6064 (Gillham coded)
+    /// Message, Comm-B (MB): C8480030A40000
+    /// DF: 20
+    /// RSSI: -24.8 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_760918_BDS40 = "A00017B0C8480030A4000019E974";
+
+    // BDS 5,0: Track and Turn Report
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 5,0): ICAO 407D44 at 38050 ft, Track 302.9°, GS 418.0 kt
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 407D44 (extracted from CRC)
+    /// Comm-B format: BDS 5,0 (Track and turn report)
+    /// Altitude: 38050 ft barometric
+    /// Ground Track: 302.9°
+    /// Track Rate: 0.03 deg/sec right
+    /// Roll Angle: -0.2° left
+    /// Ground Speed: 418.0 kt
+    /// True Airspeed: 466 kt
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6202 (Gillham coded)
+    /// Message, Comm-B (MB): FFFD7734600CE9
+    /// DF: 20
+    /// RSSI: -19.2 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_407D44_BDS50 = "A000183AFFFD7734600CE94FECFA";
+
+    // BDS 6,0: Heading and Speed Report
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 6,0): ICAO 760918 at 37000 ft, Heading 99.0°, IAS 267 kt
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 760918 (extracted from CRC)
+    /// Comm-B format: BDS 6,0 (Heading and speed report)
+    /// Altitude: 37000 ft barometric
+    /// Magnetic Heading: 99.0°
+    /// IAS: 267 kt
+    /// Mach: 0.820
+    /// Barometric Rate: -160 ft/min
+    /// Geometric Rate: -32 ft/min
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6064 (Gillham coded)
+    /// Message, Comm-B (MB): A33A17337FDFFF
+    /// DF: 20
+    /// RSSI: -24.9 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_760918_BDS60_A = "A00017B0A33A17337FDFFF1FEC71";
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20, BDS 6,0): ICAO 760918 at 37000 ft, Heading 99.0°, IAS 267 kt
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 760918 (extracted from CRC)
+    /// Comm-B format: BDS 6,0 (Heading and speed report)
+    /// Altitude: 37000 ft barometric
+    /// Magnetic Heading: 99.0°
+    /// IAS: 267 kt
+    /// Mach: 0.820
+    /// Barometric Rate: -64 ft/min
+    /// Geometric Rate: -32 ft/min
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Altitude Code (AC): 6064 (Gillham coded)
+    /// Message, Comm-B (MB): A33A17337FF7FF
+    /// DF: 20
+    /// RSSI: -23.8 dBFS
+    /// </remarks>
+    public const string CommB_Altitude_760918_BDS60_B = "A00017B0A33A17337FF7FF51C478";
+
     // ========================================
     // DF 21: Comm-B Identity Reply
     // ========================================
@@ -1150,4 +1304,72 @@ public static class RealFrames
     /// RSSI: -21.3 dBFS
     /// </remarks>
     public const string CommB_Identity_3C4AD7_WithCallsign = "A8000A192010C237D7582024F33E";
+
+    // BDS 2,0: Aircraft Identification
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21, BDS 2,0): ICAO 4C0177, Squawk 7361, Ident "ASL16F"
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 4C0177 (extracted from CRC)
+    /// Comm-B format: BDS 2,0 (Aircraft identification)
+    /// Squawk: 7361 (Mode A identity code)
+    /// Ident: "ASL16F"
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Identity Code (ID): 4024 (Gillham coded)
+    /// Message, Comm-B (MB): 20053331D86820
+    /// DF: 21
+    /// RSSI: -10.2 dBFS
+    /// </remarks>
+    public const string CommB_Identity_4C0177_BDS20 = "A8000FB820053331D86820292F80";
+
+    // BDS 4,0: Selected Vertical Intention
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21, BDS 4,0): ICAO 4C0177, Squawk 7361, MCP Alt 12000 ft
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 4C0177 (extracted from CRC)
+    /// Comm-B format: BDS 4,0 (Selected vertical intention)
+    /// Squawk: 7361 (Mode A identity code)
+    /// MCP Selected Altitude: 12000 ft
+    /// QNH: 1013.2 millibars
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Identity Code (ID): 4024 (Gillham coded)
+    /// Message, Comm-B (MB): 97700030A80000
+    /// DF: 21
+    /// RSSI: -10.5 dBFS
+    /// </remarks>
+    public const string CommB_Identity_4C0177_BDS40 = "A8000FB897700030A80000754189";
+
+    // BDS 5,0: Track and Turn Report
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21, BDS 5,0): ICAO 4BC890, Squawk 7664, Track 121.8°, GS 490.0 kt
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 4BC890 (extracted from CRC)
+    /// Comm-B format: BDS 5,0 (Track and turn report)
+    /// Squawk: 7664 (Mode A identity code)
+    /// Ground Track: 121.8°
+    /// Track Rate: 0.00 deg/sec
+    /// Roll Angle: -0.2° left
+    /// Ground Speed: 490.0 kt
+    /// True Airspeed: 440 kt
+    /// Flight Status (FS): 0 (no alert, no SPI, aircraft is airborne)
+    /// Downlink Request (DR): 0
+    /// Utility Message (UM): 0
+    /// Identity Code (ID): 3979 (Gillham coded)
+    /// Message, Comm-B (MB): FFF56B3D6004DC
+    /// DF: 21
+    /// RSSI: -17.9 dBFS
+    /// </remarks>
+    public const string CommB_Identity_4BC890_BDS50 = "A8000F8BFFF56B3D6004DC538855";
 }

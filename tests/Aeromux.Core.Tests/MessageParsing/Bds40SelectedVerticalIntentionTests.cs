@@ -136,4 +136,54 @@ public class Bds40SelectedVerticalIntentionTests
         bds40.FmsSelectedAltitude.Should().NotBeNull("FMS status bit is 1");
         bds40.BarometricPressureSetting.Should().NotBeNull("barometric pressure status bit is 1");
     }
+
+    // ========================================
+    // Real Capture Tests
+    // ========================================
+
+    [Fact]
+    public void ParseMessage_DF20_Bds40_RealCapture_760918_McpAltitude37008()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_760918_BDS40)
+            .WithIcaoAddress("760918")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds40, "message structure and validation rules match BDS 4,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds40SelectedVerticalIntention? bds40 = reply.BdsData.Should().BeOfType<Bds40SelectedVerticalIntention>().Subject;
+        bds40.McpSelectedAltitude.Should().Be(37008, "MCP selected altitude from real capture");
+        bds40.BarometricPressureSetting.Should().BeApproximately(1013.0, 0.5, "QNH from real capture");
+    }
+
+    [Fact]
+    public void ParseMessage_DF21_Bds40_RealCapture_4C0177_McpAltitude12000()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Identity_4C0177_BDS40)
+            .WithIcaoAddress("4C0177")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds40, "message structure and validation rules match BDS 4,0");
+        reply.BdsData.Should().NotBeNull();
+
+        Bds40SelectedVerticalIntention? bds40 = reply.BdsData.Should().BeOfType<Bds40SelectedVerticalIntention>().Subject;
+        bds40.McpSelectedAltitude.Should().Be(12000, "MCP selected altitude from real capture");
+        bds40.BarometricPressureSetting.Should().BeApproximately(1013.2, 0.5, "QNH from real capture");
+    }
 }
