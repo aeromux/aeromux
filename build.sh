@@ -20,6 +20,11 @@
 
 set -e  # Exit on error
 
+# Build step tracking
+CURRENT_STEP=""
+TERMINAL_WIDTH=$(stty size 2>/dev/null | awk '{print $2}')
+: "${TERMINAL_WIDTH:=80}"
+
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
@@ -196,15 +201,38 @@ mkdir -p "$BINARIES_DIR"
 log "✓ Artifacts directory cleaned"
 log ""
 
+# Run a command quietly — suppress output on success, show on failure
+run_quiet() {
+    local output
+    output=$("$@" 2>&1) || {
+        [ -z "$CURRENT_STEP" ] || [ "$SILENT" = true ] || echo "✗ $CURRENT_STEP failed"
+        echo ""
+        echo "================================================"
+        echo "BUILD FAILED"
+        echo "================================================"
+        if [ -n "$output" ]; then
+            echo ""
+            echo "An error occurred during the build. See the log below for details."
+            echo "Paths relative to: $PROJECT_ROOT/"
+            echo ""
+            echo "$output" | sed "s|$PROJECT_ROOT/|./|g" | sed 's/^[[:space:]]*//' | fold -s -w $((TERMINAL_WIDTH - 3)) | sed 's/^/ | /'
+        fi
+        echo ""
+        exit 1
+    }
+}
+
 # Step 1: Restore dependencies
+CURRENT_STEP="Dependency restore"
 log "Restoring dependencies..."
-dotnet restore "$PROJECT_ROOT/Aeromux.sln" > /dev/null 2>&1
+run_quiet dotnet restore "$PROJECT_ROOT/Aeromux.sln"
 log "✓ Dependencies restored"
 log ""
 
 # Step 2: Publish single-file self-contained executable
+CURRENT_STEP="Publishing"
 log "Publishing self-contained executable..."
-dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
+run_quiet dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
     --configuration "$CONFIGURATION" \
     --runtime "$RUNTIME_ID" \
     --self-contained true \
@@ -212,8 +240,7 @@ dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
     -p:PublishSingleFile=true \
     -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=true \
-    -p:DebugType=embedded \
-    > /dev/null 2>&1
+    -p:DebugType=embedded
 log "✓ Executable published"
 log ""
 
@@ -245,7 +272,13 @@ if [ -f "$BINARIES_DIR/aeromux" ]; then
     log ""
     log "Run with: ./artifacts/binaries/$RUNTIME_ID/aeromux"
 else
-    echo "ERROR: Binary not found!"
+    echo ""
+    echo "================================================"
+    echo "BUILD FAILED"
+    echo "================================================"
+    echo ""
+    echo "Binary not found after a successful build."
+    echo ""
     exit 1
 fi
 log ""

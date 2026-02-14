@@ -64,13 +64,11 @@ echo ""
 if [ "$NO_BUILD" = true ]; then
     echo "Skipping build (--no-build)"
 else
-    echo "Building aeromux..."
-    if "$PROJECT_ROOT/build.sh" --silent; then
-        echo "✓ Build complete"
-    else
-        echo "ERROR: Build failed!"
+    echo "Building Aeromux..."
+    if ! "$PROJECT_ROOT/build.sh" --silent; then
         exit 1
     fi
+    echo "✓ Build complete"
 fi
 
 # Verify binary exists
