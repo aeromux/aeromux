@@ -1,195 +1,176 @@
-# Aeromux - Multi-SDR Mode S and ADS-B Demodulator and Decoder for .NET
+# Aeromux
 
-**A high-performance, multi-device ADS-B/Mode S receiver written in C# for .NET**
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.md)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512bd4)](https://dotnet.microsoft.com)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey)]()
 
-Aeromux receives and decodes aircraft transponder signals from RTL-SDR devices, providing real-time aircraft tracking data via industry-standard protocols (Beast, SBS, JSON).
+**A multi-SDR Mode S and ADS-B demodulator and decoder for .NET**
 
-## Status
-
-**Current Phase:** Phase 6 ✅ COMPLETE (Live Display and TCP Broadcasting)
-**Next Phase:** Phase 7 (Aircraft Tracking Infrastructure)
-
-### Phase 5 Completion Summary
-
-✅ **100% Mode S Protocol Coverage**
-- All 24 Downlink Formats (DF 0-24) implemented
-- All Type Codes (TC 1-31) for ADS-B Extended Squitter
-- All 10 Comm-B BDS registers (1,0 through 6,0)
-- 15 message types with 21 strongly-typed enums
-- MessageParser split across 6 partial classes for maintainability
-
-**Coverage Breakdown:**
-- ~70% Priority 1: Essential ADS-B (TC 1-4, 9-18, 19)
-- ~16% Priority 2: Common Surveillance (DF 0, 4, 5, 11)
-- ~9% Priority 3: Advanced ADS-B (TC 5-8, 20-22, 28, 29, 31)
-- ~5% Priority 4: Comm-B and ACAS (DF 16, 20, 21, all BDS registers)
+Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-SDR USB receivers, decodes Mode S and ADS-B messages, and serves the decoded aircraft data over the network. It supports multiple SDR devices simultaneously for improved coverage and runs on macOS and Linux, including Raspberry Pi.
 
 ## Features
 
-### Current (Phases 0-5)
-- ✅ Multi-device support (multiple RTL-SDR dongles simultaneously)
-- ✅ Industry-standard 2.4 MSPS sampling (aligned with readsb)
-- ✅ High-performance IQ demodulation with lookup tables
-- ✅ Advanced preamble detection with local noise estimation
-- ✅ CRC-24 validation with single-bit error correction
-- ✅ ICAO confidence tracking (filters noise from real aircraft)
-- ✅ Complete Mode S message parsing (all DFs, TCs, BDS registers)
-- ✅ CPR position decoding (airborne and surface vehicles)
-- ✅ Gillham altitude decoding for legacy transponders
-- ✅ BDS register inference for Comm-B messages
-- ✅ Structured logging with Serilog
-- ✅ YAML-based configuration
+- **Mode S and ADS-B Decoding** — Decodes aircraft identification, position, altitude, speed, heading, and more from transponder broadcasts. Covers all Mode S downlink formats, ADS-B Extended Squitter message types, and Comm-B data registers.
 
-### Upcoming (Phase 7+)
-- 🔄 Aircraft state tracking (position, velocity, identification)
-- 🔄 Terminal UI for live aircraft display
-- 🔄 Enhanced protocol compatibility (full state output)
-- 🔄 HTTP REST API for statistics and aircraft data
-- 🔄 WebSocket real-time updates
-- 🔄 Web-based aircraft map visualization
+- **Multiple Receiver Support** — Use several RTL-SDR devices at once to improve reception coverage. Multi-device operation is a built-in feature — just list your devices in the configuration file. Frames from all devices are automatically combined and deduplicated.
+
+- **Network Output** — In daemon mode, serves decoded data over TCP in three standard formats:
+  - **Beast** — Binary protocol compatible with dump1090, readsb, and most ADS-B tools
+  - **SBS/BaseStation** — Text protocol compatible with Virtual Radar Server
+  - **JSON** — Streaming format for web applications and custom integrations
+
+- **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
+
+- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with keyboard controls for sorting and filtering.
+
+- **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network.
+
+- **Cross-Platform** — Runs on macOS (Intel and Apple Silicon) and Linux (x64 and ARM64, including Raspberry Pi 4/5).
+
+### Live Mode Preview
+
+```
+                                       AIRCRAFT LIST - Aeromux
+┌────────┬──────────┬──────────┬────────────┬───────────┬──────────┬──────────┬────────┬───────────┬───┐
+│ ICAO   │ Callsign │ Altitude │   Vertical │  Distance │    Speed │ Messages │ Signal │ Last seen │   │
+├────────┼──────────┼──────────┼────────────┼───────────┼──────────┼──────────┼────────┼───────────┼───┤
+│ 040047 │ ETH761   │ 37000 ft │     0 ft/m │  149.0 mi │  479 kts │      197 │  -25.2 │  0.4s ago │ █ │
+│ 06A1BC │ QTR69E   │ 35000 ft │     0 ft/m │  130.7 mi │  489 kts │       75 │  -26.5 │  0.3s ago │ █ │
+│ 3C55C3 │ EWG22HP  │ 37975 ft │     0 ft/m │  140.1 mi │  435 kts │      653 │  -23.5 │  0.1s ago │ █ │
+│ 3C6742 │ DLH2HW   │ 37050 ft │  -128 ft/m │  129.4 mi │  475 kts │      352 │  -23.0 │  0.2s ago │ █ │
+│ 406A9F │ BAW257   │ 39000 ft │   -64 ft/m │  116.4 mi │  529 kts │      438 │  -21.3 │  0.2s ago │ █ │
+│ 4079CD │ VIR300   │ 37000 ft │     0 ft/m │   21.4 mi │  513 kts │      573 │   -2.8 │  0.0s ago │ █ │
+│ 407FDA │ WUK7600  │ 35950 ft │   192 ft/m │  117.4 mi │  423 kts │      732 │  -14.7 │  0.2s ago │ █ │
+│ 408142 │ DHK593   │ 36000 ft │     0 ft/m │   59.3 mi │  452 kts │      744 │   -4.8 │  0.0s ago │ █ │
+│ 471D5C │ WZZ2302  │ 30150 ft │ -1088 ft/m │   37.4 mi │  451 kts │      566 │  -11.2 │  0.2s ago │ █ │
+│ 4B8750 │ PGT77QG  │ 35000 ft │    64 ft/m │   74.6 mi │  447 kts │      633 │  -20.2 │  0.1s ago │ █ │
+│ 4BC8D4 │ PGT96WD  │ 34000 ft │     0 ft/m │   28.8 mi │  421 kts │      555 │  -14.7 │  0.1s ago │ █ │
+│ 4CADF2 │ RYR7GQ   │ 37000 ft │    64 ft/m │   86.5 mi │  410 kts │      448 │  -12.7 │  0.0s ago │ █ │
+│ 4D24B1 │ WZZ3773  │ 34950 ft │  -512 ft/m │   13.9 mi │  415 kts │      735 │   -5.7 │  0.1s ago │ █ │
+│ 5140D7 │ GEL1903  │ 41000 ft │     0 ft/m │   94.5 mi │  488 kts │      725 │  -10.3 │  0.2s ago │ ░ │
+│ 71C009 │ KAL908   │ 33000 ft │     0 ft/m │   51.2 mi │  488 kts │      580 │  -22.1 │  0.1s ago │ ░ │
+│ 8695A4 │ ANA212   │ 28975 ft │     0 ft/m │   62.8 mi │  472 kts │      729 │   -5.5 │  0.0s ago │ ░ │
+└────────┴──────────┴──────────┴────────────┴───────────┴──────────┴──────────┴────────┴───────────┴───┘
+  Aircraft: 54 | Viewport: 1-16                                          Dist: mi | Alt: ft | Spd: kts
+  ↑/↓: Row, ←/→: Page                                            ENTER: Details, D/A/S: Units, Q: Quit
+```
 
 ## Quick Start
 
 ### Prerequisites
-- .NET 9.0 SDK
-- RTL-SDR device(s) with R820T/R820T2 tuner
-- librtlsdr installed
 
-### Installation
+- Microsoft [.NET 10.0 SDK](https://dotnet.microsoft.com/download) or later
+- An RTL-SDR USB receiver (with R820T/R820T2 tuner)
+- The `librtlsdr` native library:
+  - **macOS:** `brew install librtlsdr`
+  - **Debian/Ubuntu:** `sudo apt-get install librtlsdr-dev`
+
+### Build and Run
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/nandortoth/aeromux.git
 cd aeromux
 
-# Build single executable
+# Build a self-contained executable (auto-detects your platform)
 ./build.sh
 
-# Run (uses defaults if aeromux.yaml doesn't exist)
-./aeromux daemon
+# Copy the example configuration and edit it for your setup
+cp aeromux.example.yaml aeromux.yaml
+
+# Run in daemon mode (the build output shows the exact binary path for your platform)
+./artifacts/binaries/osx-arm64/aeromux daemon --config aeromux.yaml
 ```
 
-### Configuration
+The binary path depends on your platform: `osx-arm64`, `osx-x64`, `linux-x64`, or `linux-arm64`. The build script prints the correct path when it finishes.
 
-Create `aeromux.yaml`:
+Alternatively, use the convenience script, which builds and presents an interactive menu:
 
-```yaml
-devices:
-  - name: primary
-    deviceIndex: 0
-    centerFrequency: 1090      # MHz (ADS-B frequency)
-    sampleRate: 2.4            # MHz (industry standard)
-    tunerGain: 40.0            # dB
-    gainMode: manual
-    enabled: true
-
-network:
-  beastPort: 30002
-  httpPort: 8080
-  bindAddress: "0.0.0.0"
-
-tracking:
-  confidenceLevel: medium      # low (5) | medium (10) | high (15) detections
-
-# Optional: For surface vehicle position decoding (TC 5-8)
-receiver:
-  latitude: 46.907982          # Your receiver latitude
-  longitude: 19.693172         # Your receiver longitude
-  altitude: 120                # Meters above sea level
-  name: "Kecskemét"
-
-logging:
-  level: information           # verbose | debug | information | warning | error
+```bash
+./run.sh
 ```
 
-## Architecture
+## Usage
 
-Aeromux follows clean architecture principles with clear separation of concerns:
+Aeromux provides three commands:
 
+```bash
+# Daemon mode — runs in the background, serves data on network ports
+aeromux daemon --config aeromux.yaml
+
+# Live mode (standalone) — interactive terminal display reading directly from your SDR device(s)
+aeromux live --standalone --config aeromux.yaml
+
+# Live mode (connect) — interactive terminal display connecting to an existing Beast data source
+aeromux live --connect host:port --config aeromux.yaml
+
+# Version — shows version and runtime information
+aeromux version
 ```
-Aeromux.CLI (executable)
-   ↓
-   ├─> Aeromux.Infrastructure (TCP, HTTP, Device I/O)
-   │      ↓
-   │      └─> Aeromux.Core (Domain logic, no dependencies)
-   │
-   └─> RtlSdrManager (SDR device driver)
+
+**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft.
+
+## Configuration
+
+Aeromux uses a YAML configuration file. Copy [`aeromux.example.yaml`](aeromux.example.yaml) as your starting point — it contains detailed comments explaining every option.
+
+The main sections are:
+
+- **`devices`** — Your RTL-SDR receivers. Configure gain, frequency correction (PPM), preamble sensitivity, and enable or disable individual devices.
+- **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the HTTP port and bind address.
+- **`tracking`** — Controls how strictly aircraft are filtered. The confidence level determines how many detections are required before an aircraft is reported, reducing false positives from noise.
+- **`receiver`** — Your station's geographic location (latitude, longitude, altitude). This is needed for surface vehicle position decoding and for MLAT triangulation.
+- **`mlat`** — Multilateration input settings. When enabled, Aeromux can receive position data from mlat-client for aircraft that do not broadcast ADS-B positions.
+- **`logging`** — Log level, console and file output, log rotation, and retention.
+
+## Network Ports
+
+| Port  | Protocol   | Description                                          |
+|-------|------------|------------------------------------------------------|
+| 30005 | Beast      | Binary protocol, compatible with dump1090 and readsb |
+| 30003 | SBS        | BaseStation text format, compatible with VRS         |
+| 30006 | JSON       | Streaming JSON for web applications                  |
+| 8080  | HTTP       | API and web interface (to be implemented)            |
+| 30104 | MLAT Input | Receives positions from mlat-client                  |
+
+All ports are configurable in the YAML configuration file. Protocols can be individually enabled or disabled.
+
+## Supported Platforms
+
+Aeromux builds as a self-contained, single-file executable for the following platforms:
+
+| Platform             | Architecture | Runtime ID    |
+|----------------------|--------------|---------------|
+| macOS (Apple Silicon)| ARM64        | `osx-arm64`   |
+| macOS (Intel)        | x64          | `osx-x64`     |
+| Linux                | x64          | `linux-x64`   |
+| Linux (Raspberry Pi) | ARM64        | `linux-arm64`  |
+
+The build script auto-detects your platform, or you can cross-compile for a specific target:
+
+```bash
+./build.sh --target linux-arm64
 ```
-
-### Key Design Decisions
-- **Single executable** - No separate processes to manage
-- **Direct RtlSdrManager integration** - No abstraction layers
-- **YAML configuration** - Simple, readable, version-controllable
-- **Structured logging** - Serilog for production-grade observability
-- **Coordinator Pattern** - Zero overhead statistics in hot paths
-
-See [Architecture Documentation](docs/dev/design/ARCHITECTURE.md) for details.
-
-## Documentation
-
-- **[Development Documentation](docs/dev/design/README.md)** - Architecture, design decisions, implementation guides
-- **[Implementation Status](docs/dev/implementation/README.md)** - Phase-by-phase progress tracking
-- **[Architecture Overview](docs/dev/design/ARCHITECTURE.md)** - System design and structure
-- **[Configuration Guide](docs/dev/design/CONFIGURATION.md)** - Detailed configuration reference
-- **[Data Flow](docs/dev/design/DATA_FLOW.md)** - How data flows through the system
-
-### Architecture Decision Records (ADRs)
-- [ADR-001: Single Executable](docs/dev/design/decisions/001-single-executable.md)
-- [ADR-002: HTTP for Stats](docs/dev/design/decisions/002-no-ipc-http-stats.md)
-- [ADR-003: YAML Configuration](docs/dev/design/decisions/003-yaml-configuration.md)
-- [ADR-004: No Environment Variables](docs/dev/design/decisions/004-no-environment-variables.md)
-- [ADR-005: Direct RtlSdrManager](docs/dev/design/decisions/005-direct-rtlsdrmanager.md)
-- [ADR-006: Spectre.Console.Cli](docs/dev/design/decisions/006-spectre-console-cli.md)
-- [ADR-007: Structured Logging (Serilog)](docs/dev/design/decisions/007-structured-logging.md)
-- [ADR-008: Use RtlSdrManager Types Directly](docs/dev/design/decisions/008-use-rtlsdrmanager-types.md)
-- [ADR-009: Statistics Logging Pattern](docs/dev/design/decisions/009-statistics-logging-pattern.md)
-
-## Technology Stack
-
-- **.NET 9.0** - Modern, high-performance runtime
-- **RtlSdrManager** - RTL-SDR device management library
-- **Spectre.Console.Cli** - CLI framework with rich terminal output
-- **YamlDotNet** - YAML configuration parsing
-- **Serilog** - Structured logging framework
-
-## Performance
-
-- CPU: ~20-30% single core at 2.4 MSPS (with lookup tables)
-- Memory: ~100-200 MB typical
-- Latency: <25ms from RF reception to TCP output
-- Throughput: 50-500 messages/second (depends on local traffic)
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Whether it is a bug fix, a new feature, improved documentation, or additional tests, we appreciate your help.
 
-### Development Setup
-
-1. Install .NET 9.0 SDK
-2. Clone repository with RtlSdrManager submodule:
-   ```bash
-   git clone --recursive https://github.com/nandortoth/aeromux.git
-   ```
-3. Build: `dotnet build`
-4. Run: `dotnet run --project src/Aeromux.CLI`
+Please read the [Contributing Guide](CONTRIBUTING.md) for development setup, architecture overview, coding standards, and the pull request process. This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-GNU General Public License v3.0 - See [LICENSE.md](LICENSE.md) for details.
+Aeromux is free software, released under the [GNU General Public License v3.0 or later](LICENSE.md).
 
 ## Acknowledgments
 
-- **readsb** - Reference implementation for Mode S demodulation techniques
-- **pyModeS** - Comprehensive Mode S/ADS-B decoder and reference for algorithms
-- **Mode S Made Easy** (mode-s.org) - Excellent technical documentation
-- **RtlSdrManager** - Clean RTL-SDR device abstraction for .NET
+- **[readsb](https://github.com/wiedehopf/readsb)** — Reference implementation for Mode S demodulation techniques
+- **[pyModeS](https://github.com/junzis/pyModeS)** — Comprehensive Mode S/ADS-B decoder and reference for decoding algorithms
+- **[Mode S Made Easy](https://mode-s.org)** — Excellent technical documentation on Mode S and ADS-B protocols
+- **[RtlSdrManager](https://github.com/nandortoth/RtlSdrManager)** — RTL-SDR device management library for .NET
 
 ## Contact
 
 - **Author:** Nandor Toth
 - **Email:** dev@nandortoth.com
-- **Issues:** https://github.com/nandortoth/aeromux/issues
-
----
-
-**Note:** Aeromux is currently in active development. Phase 6 (Live Display & TCP Broadcasting) is complete with Beast/JSON/SBS protocol support. Phase 7 (Aircraft Tracking Infrastructure) is next.
+- **Issues:** [github.com/nandortoth/aeromux/issues](https://github.com/nandortoth/aeromux/issues)
