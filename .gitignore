@@ -1,16 +1,13 @@
 # Build results
 [Bb]in/
 [Oo]bj/
-artifacts/
+artifacts/binaries/
 
 # Research
 research/
 
 # Logs
 logs/
-
-# Documentation
-docs/
 
 # IDEs
 .idea/
