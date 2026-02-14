@@ -19,15 +19,65 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 set -e  # Exit on error
-clear
 
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
 CONFIGURATION="Release"
 
-# Parse target architecture parameter
-TARGET="${1:-auto}"
+# Parse named parameters
+SILENT=false
+TARGET="auto"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --silent)
+            SILENT=true
+            shift
+            ;;
+        --target)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "ERROR: --target requires a value"
+                exit 1
+            fi
+            TARGET="$2"
+            shift 2
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1"
+            echo ""
+            echo "Usage: ./build.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
+            echo "  --silent         Suppress all output (only errors are shown)"
+            echo ""
+            echo "Supported targets:"
+            echo "  auto           - Auto-detect current platform and architecture (default)"
+            echo "  linux          - Auto-detect Linux architecture (x64 or arm64)"
+            echo "  macos          - Auto-detect macOS architecture (x64 or arm64)"
+            echo "  linux-x64      - Linux x64 (explicit, for cross-compilation)"
+            echo "  linux-arm64    - Linux ARM64 (Raspberry Pi 4/5, explicit)"
+            echo "  macos-x64      - macOS Intel (explicit, for cross-compilation)"
+            echo "  macos-arm64    - macOS Apple Silicon (explicit, for cross-compilation)"
+            echo ""
+            echo "Examples:"
+            echo "  ./build.sh                              # Auto-detect current platform"
+            echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
+            echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
+            echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
+            echo "  ./build.sh --silent                     # Auto-detect, no output"
+            echo "  ./build.sh --silent --target linux-arm64  # Both flags"
+            exit 1
+            ;;
+    esac
+done
+
+# Logging helper (suppressed in silent mode)
+log() { [ "$SILENT" = true ] || echo "$@"; }
+
+# Clear screen (suppressed in silent mode)
+[ "$SILENT" = true ] || clear
 
 # Determine runtime identifier
 case "$TARGET" in
@@ -49,7 +99,7 @@ case "$TARGET" in
             fi
         else
             echo "ERROR: Unsupported platform: $OSTYPE"
-            echo "Please specify target explicitly: ./build.sh [linux|macos|linux-x64|linux-arm64|macos-x64|macos-arm64]"
+            echo "Please specify target explicitly: ./build.sh --target [linux|macos|linux-x64|linux-arm64|macos-x64|macos-arm64]"
             exit 1
         fi
         ;;
@@ -64,7 +114,7 @@ case "$TARGET" in
             fi
         else
             echo "ERROR: Cannot auto-detect Linux architecture on non-Linux system"
-            echo "Please specify explicit target: ./build.sh linux-x64 or ./build.sh linux-arm64"
+            echo "Please specify explicit target: ./build.sh --target linux-x64 or ./build.sh --target linux-arm64"
             exit 1
         fi
         ;;
@@ -79,7 +129,7 @@ case "$TARGET" in
             fi
         else
             echo "ERROR: Cannot auto-detect macOS architecture on non-macOS system"
-            echo "Please specify explicit target: ./build.sh macos-x64 or ./build.sh macos-arm64"
+            echo "Please specify explicit target: ./build.sh --target macos-x64 or ./build.sh --target macos-arm64"
             exit 1
         fi
         ;;
@@ -98,7 +148,11 @@ case "$TARGET" in
     *)
         echo "ERROR: Unknown target: $TARGET"
         echo ""
-        echo "Usage: ./build.sh [TARGET]"
+        echo "Usage: ./build.sh [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
+        echo "  --silent         Suppress all output (only errors are shown)"
         echo ""
         echo "Supported targets:"
         echo "  auto           - Auto-detect current platform and architecture (default)"
@@ -110,10 +164,12 @@ case "$TARGET" in
         echo "  macos-arm64    - macOS Apple Silicon (explicit, for cross-compilation)"
         echo ""
         echo "Examples:"
-        echo "  ./build.sh                  # Auto-detect current platform"
-        echo "  ./build.sh linux            # Auto-detect Linux architecture"
-        echo "  ./build.sh macos            # Auto-detect macOS architecture"
-        echo "  ./build.sh linux-arm64      # Build for Raspberry Pi (cross-compile)"
+        echo "  ./build.sh                              # Auto-detect current platform"
+        echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
+        echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
+        echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
+        echo "  ./build.sh --silent                     # Auto-detect, no output"
+        echo "  ./build.sh --silent --target linux-arm64  # Both flags"
         exit 1
         ;;
 esac
@@ -121,33 +177,33 @@ esac
 # Set binaries directory with architecture subdirectory
 BINARIES_DIR="$ARTIFACTS_DIR/binaries/$RUNTIME_ID"
 
-echo "================================================"
-echo "Aeromux Build Script"
-echo "================================================"
-echo ""
+log "================================================"
+log "Aeromux Build Script"
+log "================================================"
+log ""
 
 # Show target determination
-echo "Determining target architecture..."
-echo "✓ Target architecture: $RUNTIME_ID"
-echo ""
+log "Determining target architecture..."
+log "✓ Target architecture: $RUNTIME_ID"
+log ""
 
 # Clean artifacts directory
-echo "Cleaning artifacts directory..."
+log "Cleaning artifacts directory..."
 if [ -d "$ARTIFACTS_DIR" ]; then
     rm -rf "$ARTIFACTS_DIR"
 fi
 mkdir -p "$BINARIES_DIR"
-echo "✓ Artifacts directory cleaned"
-echo ""
+log "✓ Artifacts directory cleaned"
+log ""
 
 # Step 1: Restore dependencies
-echo "Restoring dependencies..."
+log "Restoring dependencies..."
 dotnet restore "$PROJECT_ROOT/Aeromux.sln" > /dev/null 2>&1
-echo "✓ Dependencies restored"
-echo ""
+log "✓ Dependencies restored"
+log ""
 
 # Step 2: Publish single-file self-contained executable
-echo "Publishing self-contained executable..."
+log "Publishing self-contained executable..."
 dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
     --configuration "$CONFIGURATION" \
     --runtime "$RUNTIME_ID" \
@@ -158,38 +214,38 @@ dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
     -p:EnableCompressionInSingleFile=true \
     -p:DebugType=embedded \
     > /dev/null 2>&1
-echo "✓ Executable published"
-echo ""
+log "✓ Executable published"
+log ""
 
 # Step 3: Rename the output file to 'aeromux'
-echo "Finalizing..."
+log "Finalizing..."
 if [ -f "$BINARIES_DIR/Aeromux.CLI" ]; then
     mv "$BINARIES_DIR/Aeromux.CLI" "$BINARIES_DIR/aeromux"
 fi
-echo "✓ Build finalized"
-echo ""
+log "✓ Build finalized"
+log ""
 
-# Step 3: Summary
-echo "================================================"
-echo "BUILD SUMMARY"
-echo "================================================"
-echo ""
+# Step 4: Summary
+log "================================================"
+log "BUILD SUMMARY"
+log "================================================"
+log ""
 
 if [ -f "$BINARIES_DIR/aeromux" ]; then
     FILESIZE=$(ls -lh "$BINARIES_DIR/aeromux" | awk '{print $5}')
     TOTAL_FILES=$(find "$ARTIFACTS_DIR" -type f | wc -l | tr -d ' ')
 
-    echo "Build completed successfully!"
-    echo "Architecture: $RUNTIME_ID"
-    echo "Total files created: $TOTAL_FILES"
-    echo "All artifacts are in: $ARTIFACTS_DIR"
-    echo ""
-    echo "Executable:"
-    echo "  - binaries/$RUNTIME_ID/aeromux ($FILESIZE)"
-    echo ""
-    echo "Run with: ./artifacts/binaries/$RUNTIME_ID/aeromux"
+    log "Build completed successfully!"
+    log "Architecture: $RUNTIME_ID"
+    log "Total files created: $TOTAL_FILES"
+    log "All artifacts are in: $ARTIFACTS_DIR"
+    log ""
+    log "Executable:"
+    log "  - binaries/$RUNTIME_ID/aeromux ($FILESIZE)"
+    log ""
+    log "Run with: ./artifacts/binaries/$RUNTIME_ID/aeromux"
 else
     echo "ERROR: Binary not found!"
     exit 1
 fi
-echo ""
+log ""
