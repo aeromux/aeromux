@@ -3,7 +3,7 @@
 # Aeromux Run Script
 # This script builds and runs aeromux with an interactive mode selector
 #
-# Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+# Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

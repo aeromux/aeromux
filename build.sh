@@ -3,7 +3,7 @@
 # Aeromux Build Script
 # This script builds the project and compiles a single self-contained binary
 #
-# Copyright (C) 2025 Nandor Toth <dev@nandortoth.com>
+# Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
