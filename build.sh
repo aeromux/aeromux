@@ -198,6 +198,7 @@ if [ -d "$ARTIFACTS_DIR" ]; then
     rm -rf "$ARTIFACTS_DIR"
 fi
 mkdir -p "$BINARIES_DIR"
+touch "$ARTIFACTS_DIR/.gitkeep"
 log "✓ Artifacts directory cleaned"
 log ""
 

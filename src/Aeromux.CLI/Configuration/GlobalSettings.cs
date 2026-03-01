@@ -45,4 +45,13 @@ public class GlobalSettings : CommandSettings, IGlobalSettings
     [CommandOption("--log-level")]
     [Description("Logging level (Verbose|Debug|Information|Warning|Error|Fatal)")]
     public LogEventLevel? LogLevel { get; init; }
+
+    /// <summary>
+    /// Gets the path to the database directory.
+    /// When provided, implicitly enables database support at runtime.
+    /// Overrides the <c>database.path</c> value from YAML configuration.
+    /// </summary>
+    [CommandOption("--database")]
+    [Description("Database directory path (implicitly enables database support)")]
+    public string? DatabasePath { get; init; }
 }

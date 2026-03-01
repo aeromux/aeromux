@@ -59,6 +59,11 @@ receiver:
   # Generate a new UUID with: uuidgen (macOS/Linux), [guid]::NewGuid() (PowerShell), or https://www.uuidgenerator.net/
   # receiverUuid: "00000000-0000-0000-0000-000000000000"  # Replace with YOUR unique UUID
 
+# Aircraft metadata database
+database:
+  enabled: false                          # Enable database enrichment at runtime (default: false)
+  path: "artifacts/db/"                   # Directory for database storage (relative or absolute path)
+
 # MLAT (Multilateration) input configuration
 mlat:
   enabled: true                           # Enable MLAT input from mlat-client (default: true, daemon mode only)

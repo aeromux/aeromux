@@ -96,6 +96,14 @@ internal abstract class Program
                       .WithExample("version")
                       .WithExample("version", "--details");
 
+                // Database command - manages aircraft metadata database
+                config.AddCommand<DatabaseCommand>("database")
+                      .WithDescription("Manage the aircraft metadata database")
+                      .WithExample("database", "info")
+                      .WithExample("database", "info", "--database", "artifacts/db/")
+                      .WithExample("database", "update", "--database", "artifacts/db/")
+                      .WithExample("database", "update", "--config", "aeromux.yaml");
+
                 // TODO: Phase 9 will add validate and doctor commands
             });
 

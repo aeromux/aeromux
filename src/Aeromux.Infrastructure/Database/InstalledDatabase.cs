@@ -14,33 +14,38 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using Serilog.Events;
+using Aeromux.Core.Database;
 
-namespace Aeromux.Core.Configuration;
+namespace Aeromux.Infrastructure.Database;
 
 /// <summary>
-/// Interface for global settings to allow testability of ConfigurationBuilder.
-/// This interface abstracts command-line arguments from the Spectre.Console.Cli framework,
-/// enabling ConfigurationBuilder to be tested without framework dependencies.
+/// Represents an installed aeromux-db database file discovered on disk.
 /// </summary>
-public interface IGlobalSettings
+public class InstalledDatabase
 {
     /// <summary>
-    /// Gets the path to the configuration file.
-    /// Null means use default location (aeromux.yaml).
+    /// Gets the full path to the database file.
     /// </summary>
-    string? ConfigPath { get; }
+    public required string FilePath { get; init; }
 
     /// <summary>
-    /// Gets the logging level override.
-    /// Null means use value from YAML or defaults.
+    /// Gets the database filename (e.g., <c>aeromux-db_2026.1.w08_r1.sqlite</c>).
     /// </summary>
-    LogEventLevel? LogLevel { get; }
+    public required string FileName { get; init; }
 
     /// <summary>
-    /// Gets the database directory path override.
-    /// Null means use value from YAML or defaults.
-    /// When provided, implicitly enables database support.
+    /// Gets the version parsed from the filename.
     /// </summary>
-    string? DatabasePath { get; }
+    public required DatabaseVersion VersionFromFilename { get; init; }
+
+    /// <summary>
+    /// Gets the file size in bytes.
+    /// </summary>
+    public required long FileSize { get; init; }
+
+    /// <summary>
+    /// Gets the metadata read from the SQLite database.
+    /// <c>null</c> if the file is corrupted or cannot be read.
+    /// </summary>
+    public DatabaseMetadata? Metadata { get; init; }
 }

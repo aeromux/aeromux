@@ -55,4 +55,10 @@ public class AeromuxConfig
     /// Enables receiving MLAT-computed positions from mlat-client.
     /// </summary>
     public MlatConfig? Mlat { get; set; }
+
+    /// <summary>
+    /// Gets or sets the aircraft metadata database configuration (optional).
+    /// Controls database enrichment of decoded aircraft data.
+    /// </summary>
+    public DatabaseConfig? Database { get; set; }
 }

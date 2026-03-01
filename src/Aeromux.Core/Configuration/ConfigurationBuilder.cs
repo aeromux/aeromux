@@ -131,6 +131,11 @@ public class ConfigurationBuilder
             {
                 Enabled = true,
                 InputPort = 30104
+            },
+            Database = new DatabaseConfig
+            {
+                Enabled = false,
+                Path = null
             }
         };
     }
@@ -149,7 +154,8 @@ public class ConfigurationBuilder
             Network = yamlConfig.Network ?? baseConfig.Network,
             Tracking = yamlConfig.Tracking ?? baseConfig.Tracking,
             Receiver = yamlConfig.Receiver ?? baseConfig.Receiver,
-            Mlat = yamlConfig.Mlat ?? baseConfig.Mlat
+            Mlat = yamlConfig.Mlat ?? baseConfig.Mlat,
+            Database = yamlConfig.Database ?? baseConfig.Database
         };
     }
 
@@ -170,6 +176,12 @@ public class ConfigurationBuilder
         if (settings.LogLevel.HasValue)
         {
             config.Logging!.Level = settings.LogLevel.Value;
+        }
+
+        if (settings.DatabasePath != null)
+        {
+            config.Database!.Path = settings.DatabasePath;
+            config.Database.Enabled = true;
         }
 
         return config;

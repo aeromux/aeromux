@@ -14,33 +14,27 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using Serilog.Events;
-
 namespace Aeromux.Core.Configuration;
 
 /// <summary>
-/// Interface for global settings to allow testability of ConfigurationBuilder.
-/// This interface abstracts command-line arguments from the Spectre.Console.Cli framework,
-/// enabling ConfigurationBuilder to be tested without framework dependencies.
+/// Configuration for the aircraft metadata database.
+/// Controls whether aeromux uses an SQLite database for enriching decoded aircraft data
+/// with registrations, types, operators, and manufacturers.
 /// </summary>
-public interface IGlobalSettings
+public class DatabaseConfig
 {
     /// <summary>
-    /// Gets the path to the configuration file.
-    /// Null means use default location (aeromux.yaml).
+    /// Gets or sets whether database enrichment is enabled at runtime.
+    /// When <c>false</c>, aeromux operates without database enrichment.
+    /// The <c>database</c> command actions (<c>update</c>, <c>info</c>) work regardless of this setting.
+    /// Default: <c>false</c>. Providing <c>--database</c> on the CLI implicitly sets this to <c>true</c>.
     /// </summary>
-    string? ConfigPath { get; }
+    public bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets the logging level override.
-    /// Null means use value from YAML or defaults.
+    /// Gets or sets the directory where the database file is stored.
+    /// Supports both relative paths (resolved against the working directory) and absolute paths.
+    /// Can be overridden via the <c>--database</c> CLI option.
     /// </summary>
-    LogEventLevel? LogLevel { get; }
-
-    /// <summary>
-    /// Gets the database directory path override.
-    /// Null means use value from YAML or defaults.
-    /// When provided, implicitly enables database support.
-    /// </summary>
-    string? DatabasePath { get; }
+    public string? Path { get; set; }
 }
