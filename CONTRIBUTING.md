@@ -86,6 +86,7 @@ The build script produces a self-contained single-file executable in `artifacts/
 # Or run directly via dotnet
 dotnet run --project src/Aeromux.CLI -- daemon --config aeromux.example.yaml
 dotnet run --project src/Aeromux.CLI -- live --standalone --config aeromux.example.yaml
+dotnet run --project src/Aeromux.CLI -- database update --database artifacts/db/
 dotnet run --project src/Aeromux.CLI -- version
 ```
 
@@ -109,6 +110,7 @@ Aeromux follows a clean architecture with three layers:
 src/
 ├── Aeromux.Core/              # Domain logic (no external dependencies)
 │   ├── Configuration/         # Application configuration models
+│   ├── Database/              # Database version parsing and comparison
 │   ├── ModeS/                 # Mode S protocol implementation
 │   │   ├── Enums/             # Protocol enumerations
 │   │   ├── Messages/          # Message types
@@ -119,6 +121,7 @@ src/
 │   └── Tracking/              # Aircraft state tracking
 ├── Aeromux.Infrastructure/    # I/O, networking, SDR device management
 │   ├── Configuration/         # Config file loading and validation
+│   ├── Database/              # Database discovery, download, and integrity verification
 │   ├── Network/               # TCP servers and protocol output
 │   │   └── Protocols/         # Beast, SBS, JSON implementations
 │   ├── Sdr/                   # SDR device coordination
@@ -126,7 +129,7 @@ src/
 │   ├── Aggregation/           # Multi-device data aggregation
 │   └── Mlat/                  # MLAT input support
 └── Aeromux.CLI/               # CLI executable and user interface
-    ├── Commands/              # daemon, live, version
+    ├── Commands/              # daemon, live, database, version
     └── Configuration/         # CLI config validation
 ```
 

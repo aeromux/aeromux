@@ -92,7 +92,7 @@ Alternatively, use the convenience script, which builds and presents an interact
 
 ## Usage
 
-Aeromux provides three commands:
+Aeromux provides four commands:
 
 ```bash
 # Daemon mode — runs in the background, serves data on network ports
@@ -104,11 +104,15 @@ aeromux live --standalone --config aeromux.yaml
 # Live mode (connect) — interactive terminal display connecting to an existing Beast data source
 aeromux live --connect host:port --config aeromux.yaml
 
+# Database management — download, update, and verify the aircraft metadata database
+aeromux database update --database artifacts/db/
+aeromux database info --database artifacts/db/
+
 # Version — shows version and runtime information
 aeromux version
 ```
 
-**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft.
+**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft. **Database** manages the aircraft metadata database downloaded from GitHub releases, with integrity verification.
 
 ## Configuration
 
@@ -120,6 +124,7 @@ The main sections are:
 - **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the HTTP port and bind address.
 - **`tracking`** — Controls how strictly aircraft are filtered. The confidence level determines how many detections are required before an aircraft is reported, reducing false positives from noise.
 - **`receiver`** — Your station's geographic location (latitude, longitude, altitude). This is needed for surface vehicle position decoding and for MLAT triangulation.
+- **`database`** — Aircraft metadata database settings. Configure the storage path and enable database enrichment for aircraft identification data.
 - **`mlat`** — Multilateration input settings. When enabled, Aeromux can receive position data from mlat-client for aircraft that do not broadcast ADS-B positions.
 - **`logging`** — Log level, console and file output, log rotation, and retention.
 
