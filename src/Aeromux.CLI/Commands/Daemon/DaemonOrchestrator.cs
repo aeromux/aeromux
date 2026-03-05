@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Database;
 using Aeromux.Infrastructure.Streaming;
 using Serilog;
 
@@ -33,6 +34,7 @@ namespace Aeromux.CLI.Commands.Daemon;
 public sealed class DaemonOrchestrator : IAsyncDisposable
 {
     private readonly DaemonValidatedConfig _config;
+    private AircraftDatabaseLookupService? _databaseLookup;
     private ReceiverStream? _receiverStream;
     private AircraftStateTracker? _aircraftTracker;
     private DaemonBroadcasterCollection? _broadcasters;
@@ -76,9 +78,12 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         await _receiverStream.StartAsync(cancellationToken);
         Log.Information("Device stream started");
 
+        // Create database lookup service (null if database not configured or unavailable)
+        _databaseLookup = DatabaseLookupFactory.TryCreate(_config.Config.Database);
+
         // Create centralized aircraft state tracker for all devices
         // Tracks aircraft across multiple RTL-SDR devices (automatic deduplication by ICAO)
-        _aircraftTracker = new AircraftStateTracker(_config.Config.Tracking!);
+        _aircraftTracker = new AircraftStateTracker(_config.Config.Tracking!, _databaseLookup);
 
         // Subscribe to aircraft lifecycle events for operational visibility
         // Logs new aircraft to track what's being received and help diagnose coverage issues
@@ -169,6 +174,9 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             _aircraftTracker.Dispose();
             Log.Information("Aircraft state tracker stopped");
         }
+
+        // Step 4: Close database connection
+        _databaseLookup?.Dispose();
 
         Console.WriteLine("All device workers and TCP broadcasters stopped.");
         Log.Information("All device workers and TCP broadcasters stopped");

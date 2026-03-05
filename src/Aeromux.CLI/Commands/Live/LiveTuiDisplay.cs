@@ -16,6 +16,7 @@
 
 using Aeromux.Core.Configuration;
 using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Database;
 using Aeromux.Infrastructure.Streaming;
 using Serilog;
 using Spectre.Console;
@@ -53,7 +54,8 @@ internal sealed class LiveTuiDisplay
     {
         // Create local AircraftStateTracker (follows DaemonCommand pattern)
         AeromuxConfig config = ConfigurationProvider.Current;
-        var tracker = new AircraftStateTracker(config.Tracking!);
+        AircraftDatabaseLookupService? databaseLookup = DatabaseLookupFactory.TryCreate(config.Database);
+        var tracker = new AircraftStateTracker(config.Tracking!, databaseLookup);
 
         // Create linked cancellation token for tracker consumer task
         // This allows us to cancel the tracker independently when user quits
@@ -267,6 +269,9 @@ internal sealed class LiveTuiDisplay
             // Now safe to dispose tracker (consumer task will complete gracefully)
             tracker.Dispose();
             Log.Information("Aircraft state tracker stopped");
+
+            // Close database connection
+            databaseLookup?.Dispose();
 
             // Display session summary with statistics
             LiveSessionReporter.LogSessionSummary(

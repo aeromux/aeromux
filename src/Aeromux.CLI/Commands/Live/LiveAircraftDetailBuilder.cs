@@ -69,15 +69,46 @@ internal static class LiveAircraftDetailBuilder
             new("Flight Status", aircraft.Identification.FlightStatus?.ToString() ?? "N/A"),
             new("ADS-B Version", aircraft.Identification.Version?.ToString() ?? "N/A"),
             new("", "", IsSectionHeader: true), // Empty separator (non-selectable)
-            // === STATUS ===
-            new("[bold]=== STATUS =============================[/]", "", IsSectionHeader: true),
-            new("First Seen", aircraft.Status.FirstSeen.ToString("HH:mm:ss")),
-            new("Last Seen", $"{(DateTime.UtcNow - aircraft.Status.LastSeen).TotalSeconds:F1}s ago"),
-            new("Total Messages", aircraft.Status.TotalMessages.ToString()),
-            new("Position Messages", aircraft.Status.PositionMessages.ToString()),
-            new("Velocity Messages", aircraft.Status.VelocityMessages.ToString()),
-            new("ID Messages", aircraft.Status.IdentificationMessages.ToString())
         };
+
+        // === AIRCRAFT DETAILS ===
+        allRows.Add(new DetailRow("[bold]=== AIRCRAFT DETAILS ===================[/]", "", IsSectionHeader: true));
+
+        if (!aircraft.DatabaseEnabled)
+        {
+            allRows.Add(new DetailRow("No valid database configured", "", IsSectionHeader: true));
+        }
+        else
+        {
+            AircraftDatabaseRecord db = aircraft.DatabaseRecord;
+            allRows.AddRange([
+                new DetailRow("Registration", db.Registration ?? "N/A"),
+                new DetailRow("Registration Country", db.Country ?? "N/A"),
+                new DetailRow("Operator Name", db.OperatorName ?? "N/A"),
+                new DetailRow("Manufacturer ICAO", db.ManufacturerIcao ?? "N/A"),
+                new DetailRow("Manufacturer Name", db.ManufacturerName ?? "N/A"),
+                new DetailRow("Type Class ICAO", db.TypeIcaoClass ?? "N/A"),
+                new DetailRow("Type Designator", db.TypeCode ?? "N/A"),
+                new DetailRow("Type Description", db.TypeDescription ?? "N/A"),
+                new DetailRow("Aircraft Model", db.Model ?? "N/A"),
+                new DetailRow("FAA PIA (Privacy)", db.Pia.HasValue ? (db.Pia.Value ? "Yes" : "No") : "N/A"),
+                new DetailRow("FAA LADD (Limiting)", db.Ladd.HasValue ? (db.Ladd.Value ? "Yes" : "No") : "N/A"),
+                new DetailRow("Military", db.Military.HasValue ? (db.Military.Value ? "Yes" : "No") : "N/A")
+            ]);
+        }
+
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));  // Empty separator (non-selectable)
+
+        // === STATUS ===
+        allRows.AddRange([
+            new DetailRow("[bold]=== STATUS =============================[/]", "", IsSectionHeader: true),
+            new DetailRow("First Seen", aircraft.Status.FirstSeen.ToString("HH:mm:ss")),
+            new DetailRow("Last Seen", $"{(DateTime.UtcNow - aircraft.Status.LastSeen).TotalSeconds:F1}s ago"),
+            new DetailRow("Total Messages", aircraft.Status.TotalMessages.ToString()),
+            new DetailRow("Position Messages", aircraft.Status.PositionMessages.ToString()),
+            new DetailRow("Velocity Messages", aircraft.Status.VelocityMessages.ToString()),
+            new DetailRow("ID Messages", aircraft.Status.IdentificationMessages.ToString())
+        ]);
 
         string signalStrength = aircraft.Status is { SignalStrength: not null, SignalStrengthDecibel: not null }
             ? $"{aircraft.Status.SignalStrengthDecibel.Value:F1} dBFS (RSSI: {aircraft.Status.SignalStrength.Value:F1})"

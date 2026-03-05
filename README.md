@@ -21,7 +21,7 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 
 - **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
 
-- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with keyboard controls for sorting and filtering.
+- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Keyboard controls for navigation and unit switching.
 
 - **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network.
 
@@ -169,6 +169,7 @@ Aeromux is free software, released under the [GNU General Public License v3.0 or
 
 ## Acknowledgments
 
+- **[aeromux-db](https://github.com/nandortoth/aeromux-db)** — Aircraft metadata database for registration, type, and operator enrichment
 - **[readsb](https://github.com/wiedehopf/readsb)** — Reference implementation for Mode S demodulation techniques
 - **[pyModeS](https://github.com/junzis/pyModeS)** — Comprehensive Mode S/ADS-B decoder and reference for decoding algorithms
 - **[Mode S Made Easy](https://mode-s.org)** — Excellent technical documentation on Mode S and ADS-B protocols

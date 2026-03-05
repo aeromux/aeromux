@@ -35,6 +35,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     private readonly Timer _cleanupTimer;
     private readonly TrackingConfig _trackingConfig;
     private readonly TrackingHandlerRegistry _handlerRegistry;
+    private readonly IAircraftDatabaseLookup? _databaseLookup;
     private Task? _consumerTask;
     private bool _disposed;
 
@@ -43,10 +44,12 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// Starts background cleanup timer automatically.
     /// </summary>
     /// <param name="trackingConfig">Tracking configuration (history buffer sizes, enable flags)</param>
-    public AircraftStateTracker(TrackingConfig trackingConfig)
+    /// <param name="databaseLookup">Optional database lookup service for aircraft enrichment. Null if database is not available.</param>
+    public AircraftStateTracker(TrackingConfig trackingConfig, IAircraftDatabaseLookup? databaseLookup = null)
     {
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
         _handlerRegistry = new TrackingHandlerRegistry();
+        _databaseLookup = databaseLookup;
 
         // Initialize timeout from config (convert seconds to TimeSpan)
         AircraftTimeout = TimeSpan.FromSeconds(trackingConfig.AircraftTimeoutSeconds);
@@ -236,6 +239,16 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
 
         // Update history buffers with first frame data
         aircraft = aircraft with { History = UpdateHistory(aircraft.History, frame, aircraft.Position, aircraft.Velocity, now) };
+
+        // Enrich with database data if lookup service is available
+        if (_databaseLookup != null)
+        {
+            aircraft = aircraft with
+            {
+                DatabaseEnabled = true,
+                DatabaseRecord = _databaseLookup.LookupAircraft(icao)
+            };
+        }
 
         // Notify listeners of new aircraft
         OnAircraftAdded?.Invoke(this, new AircraftEventArgs { Aircraft = aircraft });

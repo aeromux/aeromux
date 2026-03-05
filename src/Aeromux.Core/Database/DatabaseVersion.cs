@@ -157,7 +157,7 @@ public partial class DatabaseVersion : IComparable<DatabaseVersion>, IEquatable<
 
     /// <summary>Equality operator.</summary>
     public static bool operator ==(DatabaseVersion? left, DatabaseVersion? right) =>
-        left is null ? right is null : left.Equals(right);
+        left?.Equals(right) ?? right is null;
 
     /// <summary>Inequality operator.</summary>
     public static bool operator !=(DatabaseVersion? left, DatabaseVersion? right) => !(left == right);

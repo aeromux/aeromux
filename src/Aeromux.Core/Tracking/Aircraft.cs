@@ -123,6 +123,20 @@ public sealed record Aircraft
     public TrackedOperationalMode? OperationalMode { get; init; }
 
     /// <summary>
+    /// Whether the aeromux-db database lookup service was available when this aircraft was first tracked.
+    /// True if database enrichment is active, false if database is not configured or unavailable.
+    /// Used by the detail display to decide whether to show the AIRCRAFT DETAILS section.
+    /// </summary>
+    public bool DatabaseEnabled { get; init; }
+
+    /// <summary>
+    /// Static aircraft data from the aeromux-db database (registration, type, operator, flags).
+    /// Populated once when the aircraft is first tracked, if the database is available.
+    /// Contains all-null fields if the ICAO address was not found in the database.
+    /// </summary>
+    public AircraftDatabaseRecord DatabaseRecord { get; init; } = AircraftDatabaseRecord.Empty;
+
+    /// <summary>
     /// Applies an update from a processed frame to create a new aircraft state.
     /// NOTE: This method is a placeholder and currently not used.
     /// Actual updates are performed by AircraftStateTracker.ApplyUpdate() instead.
