@@ -21,7 +21,7 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 
 - **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
 
-- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Keyboard controls for navigation and unit switching.
+- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, and unit switching. See the [TUI Guide](TUI.md) for full documentation.
 
 - **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network.
 
@@ -30,30 +30,33 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 ### Live Mode Preview
 
 ```
-                                       AIRCRAFT LIST - Aeromux
+                                        AIRCRAFT LIST - Aeromux
 ┌────────┬──────────┬──────────┬────────────┬───────────┬──────────┬──────────┬────────┬───────────┬───┐
 │ ICAO   │ Callsign │ Altitude │   Vertical │  Distance │    Speed │ Messages │ Signal │ Last seen │   │
 ├────────┼──────────┼──────────┼────────────┼───────────┼──────────┼──────────┼────────┼───────────┼───┤
-│ 040047 │ ETH761   │ 37000 ft │     0 ft/m │  149.0 mi │  479 kts │      197 │  -25.2 │  0.4s ago │ █ │
-│ 06A1BC │ QTR69E   │ 35000 ft │     0 ft/m │  130.7 mi │  489 kts │       75 │  -26.5 │  0.3s ago │ █ │
-│ 3C55C3 │ EWG22HP  │ 37975 ft │     0 ft/m │  140.1 mi │  435 kts │      653 │  -23.5 │  0.1s ago │ █ │
-│ 3C6742 │ DLH2HW   │ 37050 ft │  -128 ft/m │  129.4 mi │  475 kts │      352 │  -23.0 │  0.2s ago │ █ │
-│ 406A9F │ BAW257   │ 39000 ft │   -64 ft/m │  116.4 mi │  529 kts │      438 │  -21.3 │  0.2s ago │ █ │
-│ 4079CD │ VIR300   │ 37000 ft │     0 ft/m │   21.4 mi │  513 kts │      573 │   -2.8 │  0.0s ago │ █ │
-│ 407FDA │ WUK7600  │ 35950 ft │   192 ft/m │  117.4 mi │  423 kts │      732 │  -14.7 │  0.2s ago │ █ │
-│ 408142 │ DHK593   │ 36000 ft │     0 ft/m │   59.3 mi │  452 kts │      744 │   -4.8 │  0.0s ago │ █ │
-│ 471D5C │ WZZ2302  │ 30150 ft │ -1088 ft/m │   37.4 mi │  451 kts │      566 │  -11.2 │  0.2s ago │ █ │
-│ 4B8750 │ PGT77QG  │ 35000 ft │    64 ft/m │   74.6 mi │  447 kts │      633 │  -20.2 │  0.1s ago │ █ │
-│ 4BC8D4 │ PGT96WD  │ 34000 ft │     0 ft/m │   28.8 mi │  421 kts │      555 │  -14.7 │  0.1s ago │ █ │
-│ 4CADF2 │ RYR7GQ   │ 37000 ft │    64 ft/m │   86.5 mi │  410 kts │      448 │  -12.7 │  0.0s ago │ █ │
-│ 4D24B1 │ WZZ3773  │ 34950 ft │  -512 ft/m │   13.9 mi │  415 kts │      735 │   -5.7 │  0.1s ago │ █ │
-│ 5140D7 │ GEL1903  │ 41000 ft │     0 ft/m │   94.5 mi │  488 kts │      725 │  -10.3 │  0.2s ago │ ░ │
-│ 71C009 │ KAL908   │ 33000 ft │     0 ft/m │   51.2 mi │  488 kts │      580 │  -22.1 │  0.1s ago │ ░ │
-│ 8695A4 │ ANA212   │ 28975 ft │     0 ft/m │   62.8 mi │  472 kts │      729 │   -5.5 │  0.0s ago │ ░ │
+│ 06A13C │ QTR3293  │ 37000 ft │     0 ft/m │  193.2 mi │  472 kts │      191 │  -25.9 │  0.1s ago │ █ │
+│ 392AED │ N/A      │ 37000 ft │   -64 ft/m │  203.2 mi │  450 kts │       40 │  -27.3 │  0.1s ago │ █ │
+│ 3965AF │ AFR274   │ 31000 ft │     0 ft/m │   55.3 mi │  477 kts │      322 │   -4.3 │  0.0s ago │ █ │
+│ 3C6593 │ DLH8KC   │ 39025 ft │     0 ft/m │    8.8 mi │  461 kts │      300 │   -5.7 │  0.0s ago │ █ │
+│ 4007EE │ BAW2231  │ 33000 ft │     0 ft/m │   79.2 mi │  470 kts │      340 │   -9.7 │  0.1s ago │ █ │
+│ 407994 │ BAW15    │ 31000 ft │     0 ft/m │   37.7 mi │  493 kts │      360 │  -10.2 │  0.1s ago │ █ │
+│ 4081BF │ N/A      │ 39000 ft │    64 ft/m │  137.6 mi │  454 kts │      319 │  -19.8 │  0.0s ago │ █ │
+│ 440020 │ AUA7     │ 30150 ft │   832 ft/m │   32.2 mi │  494 kts │      419 │   -2.9 │  0.1s ago │ ░ │
+│ 4408FB │ AUA15    │ 30725 ft │   576 ft/m │   21.4 mi │  485 kts │      396 │   -3.1 │  0.0s ago │ ░ │
+│ 440A8D │ TAY1841  │ 33000 ft │     0 ft/m │   30.7 mi │  485 kts │      427 │   -3.8 │  0.0s ago │ ░ │
+│ 471DBD │ WZZ5070  │  3425 ft │ -1280 ft/m │   29.6 mi │  200 kts │       20 │  -27.3 │  0.3s ago │ ░ │
+│ 471F5C │ WMT559   │ 39000 ft │     0 ft/m │  122.3 mi │  451 kts │      208 │  -17.8 │  0.1s ago │ ░ │
+│ 471FA2 │ N/A      │ 35000 ft │     0 ft/m │  136.5 mi │  429 kts │       28 │  -30.1 │  0.9s ago │ ░ │
+│ 474808 │ N/A      │      N/A │        N/A │       N/A │      N/A │        7 │  -29.0 │  0.0s ago │ ░ │
+│ 4891B2 │ ENT7646  │ 38000 ft │     0 ft/m │   24.3 mi │  422 kts │      393 │  -14.9 │  0.1s ago │ ░ │
+│ 48C2B6 │ RYR46TT  │ 10675 ft │ -1856 ft/m │   20.5 mi │  320 kts │      274 │   -2.7 │  0.2s ago │ ░ │
 └────────┴──────────┴──────────┴────────────┴───────────┴──────────┴──────────┴────────┴───────────┴───┘
-  Aircraft: 54 | Viewport: 1-16                                          Dist: mi | Alt: ft | Spd: kts
-  ↑/↓: Row, ←/→: Page                                            ENTER: Details, D/A/S: Units, Q: Quit
+  F1: ICAO ▲  F2: Callsign  F3: Altitude  F4: Vertical  F5: Distance  F6: Speed             F12: Reset
+  Aircraft: 34 | Selected: 1/34 | Viewport: 1-16                         Dist: mi | Alt: ft | Spd: kts
+  ↑/↓: Row, ←/→: Page, Home/End                       ENTER: Details, D/A/S: Units, /: Search, Q: Quit
 ```
+
+See the [TUI Guide](TUI.md) for full keyboard reference, sorting, search, and detail view documentation.
 
 ## Quick Start
 

@@ -38,3 +38,59 @@ internal enum SpeedUnit { Knots, KilometersPerHour, MilesPerHour }
 /// <param name="Value">The field value displayed in the right column.</param>
 /// <param name="IsSectionHeader">True if this row is a section header or separator (non-selectable).</param>
 internal record DetailRow(string Field, string Value, bool IsSectionHeader = false);
+
+/// <summary>
+/// Column used for sorting the aircraft table.
+/// </summary>
+internal enum SortColumn { ICAO, Callsign, Altitude, Vertical, Distance, Speed }
+
+/// <summary>
+/// Sort direction for the aircraft table.
+/// </summary>
+internal enum SortDirection { Ascending, Descending }
+
+/// <summary>
+/// Mutable state for the live TUI display. Consolidates all state variables
+/// previously scattered as locals in LiveTuiDisplay.RunAsync().
+/// Passed by reference to keyboard handlers and builders.
+/// </summary>
+internal sealed class LiveTuiState
+{
+    // Selection
+    public string? SelectedIcao { get; set; }
+    public int SelectedRow { get; set; }
+
+    // View mode
+    public bool ShowingDetails { get; set; }
+    public int DetailViewSelectedRow { get; set; }
+    public List<DetailRow>? CurrentDetailRows { get; set; }
+
+    // Display units
+    public DistanceUnit DistanceUnit { get; set; } = DistanceUnit.Miles;
+    public AltitudeUnit AltitudeUnit { get; set; } = AltitudeUnit.Feet;
+    public SpeedUnit SpeedUnit { get; set; } = SpeedUnit.Knots;
+
+    // Sorting
+    public SortColumn SortColumn { get; set; } = SortColumn.ICAO;
+    public SortDirection SortDirection { get; set; } = SortDirection.Ascending;
+
+    // Search
+    public bool IsSearchActive { get; set; }
+    public string SearchInput { get; set; } = "";
+    public string? PreSearchSelectedIcao { get; set; }
+
+    /// <summary>
+    /// Resets sort, units, and search to defaults. Preserves selection (FR-RESET-02).
+    /// </summary>
+    public void ResetToDefaults()
+    {
+        SortColumn = SortColumn.ICAO;
+        SortDirection = SortDirection.Ascending;
+        DistanceUnit = DistanceUnit.Miles;
+        AltitudeUnit = AltitudeUnit.Feet;
+        SpeedUnit = SpeedUnit.Knots;
+        IsSearchActive = false;
+        SearchInput = "";
+        PreSearchSelectedIcao = null;
+    }
+}

@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.RegularExpressions;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -68,10 +69,10 @@ internal static class LiveAircraftDetailBuilder
             new("Emergency", aircraft.Identification.EmergencyState.ToString()),
             new("Flight Status", aircraft.Identification.FlightStatus?.ToString() ?? "N/A"),
             new("ADS-B Version", aircraft.Identification.Version?.ToString() ?? "N/A"),
-            new("", "", IsSectionHeader: true), // Empty separator (non-selectable)
         };
 
         // === AIRCRAFT DETAILS ===
+        allRows.Add(new DetailRow("", "", IsSectionHeader: true));
         allRows.Add(new DetailRow("[bold]=== AIRCRAFT DETAILS ===================[/]", "", IsSectionHeader: true));
 
         if (!aircraft.DatabaseEnabled)
@@ -1016,15 +1017,12 @@ internal static class LiveAircraftDetailBuilder
         string footerRow1Right = $"[bold]Dist:[/] {distUnitLabel} | [bold]Alt:[/] {altUnitLabel} | [bold]Spd:[/] {speedUnitLabel}";
 
         // Footer row 2: left and right sections
-        string footerRow2Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page";
+        string footerRow2Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page, [bold]Home/End[/]";
         string footerRow2Right = "[bold]ESC[/]: Back, [bold]Q[/]: Quit";
 
-        // Calculate spacing for right alignment (100 chars total width - border chars)
-        // Table width is 104, but caption appears inside borders, so usable width is 100
-        int usableWidth = 100;
-
-        string footerRow1 = footerRow1Left + new string(' ', Math.Max(1, usableWidth - footerRow1Left.Length + 9 - footerRow1Right.Length + 27)) + footerRow1Right;
-        string footerRow2 = footerRow2Left + new string(' ', Math.Max(1, usableWidth - footerRow2Left.Length + 18 - footerRow2Right.Length + 18)) + footerRow2Right;
+        // Pad footer rows to exactly 100 visible characters (table is 104 wide, 2 indent per side)
+        string footerRow1 = PadFooterRow(footerRow1Left, footerRow1Right);
+        string footerRow2 = PadFooterRow(footerRow2Left, footerRow2Right);
 
         string footer = footerRow1 + "\n" + footerRow2;
 
@@ -1032,5 +1030,27 @@ internal static class LiveAircraftDetailBuilder
 
         // Return table and allRows for navigation
         return (table, allRows);
+    }
+
+    /// <summary>
+    /// Pads a footer row so left and right sections fill exactly 100 visible characters.
+    /// Accounts for Spectre.Console markup tags that don't consume visible width.
+    /// </summary>
+    private static string PadFooterRow(string left, string right)
+    {
+        const int usableWidth = 100;
+        int leftVisible = VisibleLength(left);
+        int rightVisible = VisibleLength(right);
+        int padding = Math.Max(1, usableWidth - leftVisible - rightVisible);
+        return left + new string(' ', padding) + right;
+    }
+
+    /// <summary>
+    /// Calculates the visible length of a string by stripping Spectre.Console markup tags.
+    /// </summary>
+    private static int VisibleLength(string markup)
+    {
+        string stripped = Regex.Replace(markup, @"\[/?[^\]]*\]", "");
+        return stripped.Length;
     }
 }

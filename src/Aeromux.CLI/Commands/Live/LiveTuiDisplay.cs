@@ -100,15 +100,8 @@ internal sealed class LiveTuiDisplay
 
         AnsiConsole.Clear();
 
-        // TUI state
-        string? selectedIcao = null; // Track selected aircraft by ICAO (not row index)
-        int selectedRow;
-        bool showingDetails = false;
-        int detailViewSelectedRow = 0;  // Track scroll position in detail view
-        List<DetailRow>? currentDetailRows = null;  // Store for keyboard navigation
-        DistanceUnit distanceUnit = DistanceUnit.Miles;
-        AltitudeUnit altitudeUnit = AltitudeUnit.Feet;
-        SpeedUnit speedUnit = SpeedUnit.Knots;
+        // TUI state (consolidates all display state into a single mutable object)
+        var state = new LiveTuiState();
 
         // Track terminal size for resize detection (workaround for Spectre.Console bug)
         // Spectre.Console Live display gets corrupted on resize, requiring restart
@@ -149,34 +142,36 @@ internal sealed class LiveTuiDisplay
                     {
                         while (!ct.IsCancellationRequested)
                         {
-                            // Poll tracker for current state (tracker updates in background)
-                            // Sort by ICAO for stable, predictable order
-                            var sortedAircraft = tracker.GetAllAircraft()
-                                .OrderBy(a => a.Identification.ICAO)
-                                .ToList();
+                            // Poll tracker for current state, apply search filter and sort
+                            List<Aircraft> sortedAircraft = LiveAircraftSorter.SortAndFilter(
+                                tracker.GetAllAircraft().ToList(),
+                                state.SortColumn,
+                                state.SortDirection,
+                                state.IsSearchActive ? state.SearchInput : null,
+                                receiverConfig);
 
                             // Track selection by ICAO (not row index) to maintain selection stability
                             // Aircraft list changes every second (timeouts, new aircraft), so row indices shift
                             // ICAO remains constant for each aircraft, ensuring selection persists across refreshes
-                            if (selectedIcao != null)
+                            if (state.SelectedIcao != null)
                             {
-                                int foundIndex = sortedAircraft.FindIndex(a => a.Identification.ICAO == selectedIcao);
+                                int foundIndex = sortedAircraft.FindIndex(a => a.Identification.ICAO == state.SelectedIcao);
                                 if (foundIndex >= 0)
                                 {
-                                    selectedRow = foundIndex;
+                                    state.SelectedRow = foundIndex;
                                 }
                                 else
                                 {
-                                    // Selected aircraft expired (timeout), select first available
-                                    selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
-                                    selectedRow = 0;
+                                    // Selected aircraft expired (timeout) or filtered out, select first available
+                                    state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
+                                    state.SelectedRow = 0;
                                 }
                             }
                             else
                             {
                                 // Initial selection
-                                selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
-                                selectedRow = 0;
+                                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
+                                state.SelectedRow = 0;
                             }
 
                             // WORKAROUND: Detect terminal resize to fix Spectre.Console Live display corruption
@@ -190,22 +185,33 @@ internal sealed class LiveTuiDisplay
                             }
 
                             // Update display with current view (flicker-free for normal updates)
-                            if (showingDetails && sortedAircraft.Count > 0)
+                            if (state.ShowingDetails && sortedAircraft.Count > 0)
                             {
                                 (Table detailTable, List<DetailRow> detailRows) = LiveAircraftDetailBuilder.Build(
-                                    sortedAircraft[selectedRow],
-                                    distanceUnit,
-                                    altitudeUnit,
-                                    speedUnit,
+                                    sortedAircraft[state.SelectedRow],
+                                    state.DistanceUnit,
+                                    state.AltitudeUnit,
+                                    state.SpeedUnit,
                                     receiverConfig,
-                                    detailViewSelectedRow);
+                                    state.DetailViewSelectedRow);
 
-                                currentDetailRows = detailRows;  // Store for keyboard handling
+                                state.CurrentDetailRows = detailRows;
                                 ctx.UpdateTarget(detailTable);
                             }
                             else
                             {
-                                ctx.UpdateTarget(LiveAircraftTableBuilder.Build(sortedAircraft, stream.GetStatistics(), selectedRow, distanceUnit, altitudeUnit, speedUnit, receiverConfig));
+                                ctx.UpdateTarget(LiveAircraftTableBuilder.Build(
+                                    sortedAircraft,
+                                    stream.GetStatistics(),
+                                    state.SelectedRow,
+                                    state.DistanceUnit,
+                                    state.AltitudeUnit,
+                                    state.SpeedUnit,
+                                    receiverConfig,
+                                    state.SortColumn,
+                                    state.SortDirection,
+                                    state.IsSearchActive,
+                                    state.SearchInput));
                             }
                             ctx.Refresh();
 
@@ -217,12 +223,12 @@ internal sealed class LiveTuiDisplay
                                 {
                                     ConsoleKeyInfo key = Console.ReadKey(intercept: true);
 
-                                    if (showingDetails)
+                                    if (state.ShowingDetails)
                                     {
                                         // Detail view keyboard handling
-                                        if (currentDetailRows != null)
+                                        if (state.CurrentDetailRows != null)
                                         {
-                                            if (!LiveKeyboardHandler.HandleDetailInput(key, currentDetailRows, ref detailViewSelectedRow, ref showingDetails))
+                                            if (!LiveKeyboardHandler.HandleDetailInput(key, state.CurrentDetailRows, state))
                                             {
                                                 shouldQuit = true;
                                                 return;  // Quit
@@ -231,8 +237,8 @@ internal sealed class LiveTuiDisplay
                                     }
                                     else
                                     {
-                                        // Table view keyboard handling
-                                        if (!LiveKeyboardHandler.HandleTableInput(key, sortedAircraft, ref selectedIcao, ref selectedRow, ref showingDetails, ref detailViewSelectedRow, ref distanceUnit, ref altitudeUnit, ref speedUnit))
+                                        // Table view keyboard handling (normal and search modes)
+                                        if (!LiveKeyboardHandler.HandleTableInput(key, sortedAircraft, state))
                                         {
                                             shouldQuit = true;
                                             return; // Exit Live display

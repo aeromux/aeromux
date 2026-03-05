@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.RegularExpressions;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
@@ -24,21 +25,25 @@ namespace Aeromux.CLI.Commands.Live;
 
 /// <summary>
 /// Builds the aircraft list table with dynamic viewport, scrollbar, and footer.
-/// Renders aircraft data with selection highlighting and unit-aware formatting.
+/// Renders aircraft data with selection highlighting, search match highlighting, and unit-aware formatting.
 /// </summary>
 internal static class LiveAircraftTableBuilder
 {
     /// <summary>
-    /// Builds aircraft table with dynamic viewport.
+    /// Builds the aircraft list table with dynamic viewport, scrollbar, search highlighting, and three-row footer.
     /// </summary>
-    /// <param name="sortedAircraft">Aircraft list sorted by ICAO for stable display order.</param>
+    /// <param name="sortedAircraft">Aircraft list (filtered and sorted).</param>
     /// <param name="stats">Stream statistics from ReceiverStream, or null in client mode.</param>
     /// <param name="selectedRow">Index of currently selected row for highlighting.</param>
     /// <param name="distanceUnit">Unit to display distances (miles or kilometers).</param>
     /// <param name="altitudeUnit">Unit to display altitudes (feet or meters).</param>
     /// <param name="speedUnit">Unit to display speeds (knots, km/h, or mph).</param>
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
-    /// <returns>Spectre.Console Table with aircraft data, footer, and fixed 120-character width.</returns>
+    /// <param name="sortColumn">Current sort column for footer display.</param>
+    /// <param name="sortDirection">Current sort direction for footer display.</param>
+    /// <param name="isSearchActive">Whether search mode is active.</param>
+    /// <param name="searchInput">Current search input text.</param>
+    /// <returns>Spectre.Console Table with aircraft data, footer, and fixed width.</returns>
     public static Table Build(
         List<Aircraft> sortedAircraft,
         StreamStatistics? stats,
@@ -46,13 +51,17 @@ internal static class LiveAircraftTableBuilder
         DistanceUnit distanceUnit,
         AltitudeUnit altitudeUnit,
         SpeedUnit speedUnit,
-        ReceiverConfig? receiverConfig)
+        ReceiverConfig? receiverConfig,
+        SortColumn sortColumn,
+        SortDirection sortDirection,
+        bool isSearchActive,
+        string searchInput)
     {
         // Calculate available viewport rows based on terminal height
-        // Layout: title (1) + table header (1) + data rows + footer (2) + padding (3)
+        // Layout: title (1) + table header (1) + data rows + footer (3) + padding (3)
         // Minimum 5 rows ensures usable display even in very small terminals
         const int headerLines = 1;        // Title row "AIRCRAFT LIST - Aeromux"
-        const int footerLines = 2;        // Two-line footer with navigation hints
+        const int footerLines = 3;        // Three-line footer with navigation and sort/search hints
         const int tableHeaderLines = 1;   // Column header row
         const int padding = 3;            // Border and spacing overhead
 
@@ -118,6 +127,8 @@ internal static class LiveAircraftTableBuilder
         table.AddColumn("[bold]Last seen[/]", col => col.Width(9).RightAligned().NoWrap().PadLeft(1).PadRight(1));
         table.AddColumn("[bold] [/]", col => col.Width(1).Centered().NoWrap());
 
+        bool searching = isSearchActive && searchInput.Length > 0;
+
         // Render aircraft in viewport
         for (int i = viewportStart; i < viewportEnd; i++)
         {
@@ -144,9 +155,16 @@ internal static class LiveAircraftTableBuilder
                 scrollbarChar = "░"; // Full track (all items fit - no scrolling needed)
             }
 
-            // Format callsign (or N/A if not known)
+            // Format ICAO and callsign with optional search highlighting
+            string icaoDisplay = aircraft.Identification.ICAO;
             string callsign = aircraft.Identification.Callsign ?? "N/A";
             callsign = callsign.PadRight(8);
+
+            if (searching)
+            {
+                icaoDisplay = HighlightMatch(icaoDisplay, searchInput, isSelected);
+                callsign = HighlightMatch(callsign, searchInput, isSelected);
+            }
 
             // Format altitude based on selected unit (or N/A if not known)
             string altitude = "N/A";
@@ -231,11 +249,15 @@ internal static class LiveAircraftTableBuilder
             string messages = $"{aircraft.Status.TotalMessages}".PadLeft(8);
 
             // Apply selection highlighting (inverted colors)
+            // When searching, ICAO and callsign already contain markup from HighlightMatch
             if (isSelected)
             {
+                string icaoCell = searching ? icaoDisplay : $"[black on white]{icaoDisplay}[/]";
+                string callsignCell = searching ? callsign : $"[black on white]{callsign}[/]";
+
                 table.AddRow(
-                    $"[black on white]{aircraft.Identification.ICAO}[/]",
-                    $"[black on white]{callsign}[/]",
+                    icaoCell,
+                    callsignCell,
                     $"[black on white]{altitude}[/]",
                     $"[black on white]{verticalRate}[/]",
                     $"[black on white]{distance}[/]",
@@ -243,12 +265,12 @@ internal static class LiveAircraftTableBuilder
                     $"[black on white]{messages}[/]",
                     $"[black on white]{signal}[/]",
                     $"[black on white]{lastSeenNumber}[/]",
-                    scrollbarChar); // Keep scrollbar with normal styling for visibility
+                    scrollbarChar);
             }
             else
             {
                 table.AddRow(
-                    aircraft.Identification.ICAO,
+                    icaoDisplay,
                     callsign,
                     altitude,
                     verticalRate,
@@ -269,7 +291,7 @@ internal static class LiveAircraftTableBuilder
             table.AddRow("", "", "", "", "", "", "", "", "", "░");
         }
 
-        // Build footer (2 rows with left/right alignment)
+        // Build footer (3 rows with left/right alignment)
         string distUnitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
         string altUnitLabel = altitudeUnit == AltitudeUnit.Feet ? "ft" : "m";
         string speedUnitLabel = speedUnit switch
@@ -280,25 +302,123 @@ internal static class LiveAircraftTableBuilder
             _ => "kts"
         };
 
-        // Footer row 1: left and right sections
-        string footerRow1Left = $"[bold]Aircraft:[/] {sortedAircraft.Count} | [bold]Selected:[/] {selectedRow + 1}/{sortedAircraft.Count} | [bold]Viewport:[/] {viewportStart + 1}-{viewportEnd}";
-        string footerRow1Right = $"[bold]Dist:[/] {distUnitLabel} | [bold]Alt:[/] {altUnitLabel} | [bold]Spd:[/] {speedUnitLabel}";
+        // Footer row 1: sort hints or search prompt (closest to table data)
+        string footerRow1;
+        if (isSearchActive)
+        {
+            string matchText = sortedAircraft.Count == 1 ? "1 match" : $"{sortedAircraft.Count} matches";
+            string footerRow1Left = $"[white][bold]Search:[/] {Markup.Escape(searchInput)}_ ({matchText})[/]";
+            string footerRow1Right = "[bold]ESC[/]: Cancel";
+            footerRow1 = PadFooterRow(footerRow1Left, footerRow1Right);
+        }
+        else
+        {
+            footerRow1 = BuildSortHintRow(sortColumn, sortDirection);
+        }
 
-        // Footer row 2: left and right sections
-        string footerRow2Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page";
-        string footerRow2Right = "[bold]ENTER[/]: Details, [bold]D/A/S[/]: Units, [bold]Q[/]: Quit";
+        // Footer row 2: status
+        string footerRow2Left = $"[bold]Aircraft:[/] {sortedAircraft.Count} | [bold]Selected:[/] {selectedRow + 1}/{sortedAircraft.Count} | [bold]Viewport:[/] {viewportStart + 1}-{viewportEnd}";
+        string footerRow2Right = $"[bold]Dist:[/] {distUnitLabel} | [bold]Alt:[/] {altUnitLabel} | [bold]Spd:[/] {speedUnitLabel}";
 
-        // Calculate spacing for right alignment (100 chars total width - border chars)
+        // Footer row 3: navigation
+        string footerRow3Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page, [bold]Home/End[/]";
+        string footerRow3Right = "[bold]ENTER[/]: Details, [bold]D/A/S[/]: Units, [bold]/[/]: Search, [bold]Q[/]: Quit";
+
         // Table width is 104, but caption appears inside borders, so usable width is 100
-        int usableWidth = 100;
+        string footerRow2 = PadFooterRow(footerRow2Left, footerRow2Right);
+        string footerRow3 = PadFooterRow(footerRow3Left, footerRow3Right);
 
-        string footerRow1 = footerRow1Left + new string(' ', Math.Max(1, usableWidth - footerRow1Left.Length + 27 - footerRow1Right.Length + 27)) + footerRow1Right;
-        string footerRow2 = footerRow2Left + new string(' ', Math.Max(1, usableWidth - footerRow2Left.Length + 18 - footerRow2Right.Length + 27)) + footerRow2Right;
-
-        string footer = footerRow1 + "\n" + footerRow2;
+        string footer = footerRow1 + "\n" + footerRow2 + "\n" + footerRow3;
 
         table.Caption(footer, new Style(foreground: Color.Grey));
 
         return table;
+    }
+
+    /// <summary>
+    /// Pads a footer row so left and right sections fill exactly 100 visible characters.
+    /// Accounts for Spectre.Console markup tags that don't consume visible width.
+    /// </summary>
+    private static string PadFooterRow(string left, string right)
+    {
+        const int usableWidth = 100;
+        int leftVisible = VisibleLength(left);
+        int rightVisible = VisibleLength(right);
+        int padding = Math.Max(1, usableWidth - leftVisible - rightVisible);
+        return left + new string(' ', padding) + right;
+    }
+
+    /// <summary>
+    /// Calculates the visible length of a string by stripping Spectre.Console markup tags.
+    /// Markup tags are enclosed in square brackets like [bold], [/], [black on white], etc.
+    /// </summary>
+    private static int VisibleLength(string markup)
+    {
+        // Strip all Spectre.Console markup tags: [bold], [/], [black on white], [bold yellow], etc.
+        string stripped = Regex.Replace(markup, @"\[/?[^\]]*\]", "");
+        return stripped.Length;
+    }
+
+    /// <summary>
+    /// Builds footer row 1 for normal mode with F-key sort hints and active sort indicator.
+    /// The active sort column's F-key label is highlighted in bold white; others are gray.
+    /// </summary>
+    private static string BuildSortHintRow(SortColumn sortColumn, SortDirection sortDirection)
+    {
+        var labels = new (SortColumn Column, string Key, string Label)[]
+        {
+            (SortColumn.ICAO, "F1", "ICAO"),
+            (SortColumn.Callsign, "F2", "Callsign"),
+            (SortColumn.Altitude, "F3", "Altitude"),
+            (SortColumn.Vertical, "F4", "Vertical"),
+            (SortColumn.Distance, "F5", "Distance"),
+            (SortColumn.Speed, "F6", "Speed"),
+        };
+
+        string arrow = sortDirection == SortDirection.Ascending ? "▲" : "▼";
+
+        var parts = new List<string>();
+        foreach (var (column, fKey, label) in labels)
+        {
+            parts.Add(column == sortColumn
+                ? $"[bold white]{fKey}: {label} {arrow}[/]"
+                : $"[bold]{fKey}:[/] [grey]{label}[/]");
+        }
+
+        string left = string.Join("  ", parts);
+        string right = "[bold]F12:[/] [grey]Reset[/]";
+
+        return PadFooterRow(left, right);
+    }
+
+    /// <summary>
+    /// Highlights the first occurrence of searchTerm within text using Spectre.Console markup.
+    /// Produces correct styling for both normal and selected (inverted) rows.
+    /// </summary>
+    private static string HighlightMatch(string text, string searchTerm, bool isSelected)
+    {
+        if (string.IsNullOrEmpty(searchTerm))
+        {
+            return isSelected ? $"[black on white]{Markup.Escape(text)}[/]" : text;
+        }
+
+        int matchIndex = text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase);
+        if (matchIndex < 0)
+        {
+            return isSelected ? $"[black on white]{Markup.Escape(text)}[/]" : text;
+        }
+
+        string pre = Markup.Escape(text[..matchIndex]);
+        string match = Markup.Escape(text[matchIndex..(matchIndex + searchTerm.Length)]);
+        string post = Markup.Escape(text[(matchIndex + searchTerm.Length)..]);
+
+        if (isSelected)
+        {
+            // Selected row: red highlight on white background, rest inverted
+            return $"[black on white]{pre}[/][bold red on white]{match}[/][black on white]{post}[/]";
+        }
+
+        // Normal row: red highlight, rest unstyled
+        return $"{pre}[bold red]{match}[/]{post}";
     }
 }

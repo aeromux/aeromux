@@ -21,106 +21,29 @@ namespace Aeromux.CLI.Commands.Live;
 
 /// <summary>
 /// Handles keyboard input for table and detail views in the live TUI display.
-/// Supports arrow key navigation, page up/down, unit toggling, and view switching.
+/// Supports arrow key navigation, page up/down, Home/End, unit toggling, column sorting,
+/// search mode, F12 reset, and view switching.
 /// </summary>
 internal static class LiveKeyboardHandler
 {
     /// <summary>
-    /// Handles keyboard input for table view.
+    /// Handles keyboard input for table view (normal and search modes).
     /// </summary>
     /// <param name="key">The console key information from keyboard input.</param>
-    /// <param name="sortedAircraft">List of aircraft sorted by ICAO for stable display order.</param>
-    /// <param name="selectedIcao">Currently selected aircraft ICAO (updated on navigation).</param>
-    /// <param name="selectedRow">Currently selected row index (updated on navigation).</param>
-    /// <param name="showingDetails">Detail view toggle (set true when Enter is pressed).</param>
-    /// <param name="detailViewSelectedRow">Detail view selected row index (reset to 1 when entering detail view).</param>
-    /// <param name="distanceUnit">Distance unit setting (toggled by D key).</param>
-    /// <param name="altitudeUnit">Altitude unit setting (toggled by A key).</param>
-    /// <param name="speedUnit">Speed unit setting (cycled by S key).</param>
-    /// <returns>False if user pressed Q or Escape (quit), true to continue.</returns>
+    /// <param name="sortedAircraft">Current (filtered and sorted) aircraft list.</param>
+    /// <param name="state">Mutable TUI state.</param>
+    /// <returns>False if user requested quit, true to continue.</returns>
     public static bool HandleTableInput(
         ConsoleKeyInfo key,
         List<Aircraft> sortedAircraft,
-        ref string? selectedIcao,
-        ref int selectedRow,
-        ref bool showingDetails,
-        ref int detailViewSelectedRow,
-        ref DistanceUnit distanceUnit,
-        ref AltitudeUnit altitudeUnit,
-        ref SpeedUnit speedUnit)
+        LiveTuiState state)
     {
-        // Calculate available viewport rows based on terminal height
-        // Layout: title (0) + table header (1) + data rows + footer (2) + padding (3)
-        // Minimum 5 rows ensures usable display even in very small terminals
-        const int headerLines = 0;        // No title row in main table
-        const int footerLines = 2;        // Two-line footer with navigation hints
-        const int tableHeaderLines = 1;   // Column header row
-        const int padding = 3;            // Border and spacing overhead
-
-        int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
-
-        switch (key.Key)
+        if (state.IsSearchActive)
         {
-            case ConsoleKey.UpArrow:
-                selectedRow = Math.Max(0, selectedRow - 1);
-                selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[selectedRow].Identification.ICAO : null;
-                break;
-            case ConsoleKey.DownArrow:
-                selectedRow = Math.Min(sortedAircraft.Count - 1, selectedRow + 1);
-                selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[selectedRow].Identification.ICAO : null;
-                break;
-            case ConsoleKey.LeftArrow:
-            case ConsoleKey.PageUp:
-                // Jump up by viewport size
-                selectedRow = Math.Max(0, selectedRow - availableRows);
-                selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[selectedRow].Identification.ICAO : null;
-                break;
-            case ConsoleKey.RightArrow:
-            case ConsoleKey.PageDown:
-                // Jump down by viewport size
-                selectedRow = Math.Min(sortedAircraft.Count - 1, selectedRow + availableRows);
-                selectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[selectedRow].Identification.ICAO : null;
-                break;
-            case ConsoleKey.Enter:
-                // Show detail view for selected aircraft
-                if (sortedAircraft.Count > 0)
-                {
-                    showingDetails = true;
-                    detailViewSelectedRow = 1;  // Start at first data row (row 0 is always a header)
-                }
-                break;
-            case ConsoleKey.D:
-                // Toggle distance unit (miles <-> kilometers)
-                distanceUnit = distanceUnit == DistanceUnit.Miles
-                    ? DistanceUnit.Kilometers
-                    : DistanceUnit.Miles;
-                Log.Debug("Distance unit changed to: {Unit}", distanceUnit);
-                break;
-            case ConsoleKey.A:
-                // Toggle altitude unit (feet <-> meters)
-                altitudeUnit = altitudeUnit == AltitudeUnit.Feet
-                    ? AltitudeUnit.Meters
-                    : AltitudeUnit.Feet;
-                Log.Debug("Altitude unit changed to: {Unit}", altitudeUnit);
-                break;
-            case ConsoleKey.S:
-                // Cycle through speed units (knots -> km/h -> mph -> knots)
-                speedUnit = speedUnit switch
-                {
-                    SpeedUnit.Knots => SpeedUnit.KilometersPerHour,
-                    SpeedUnit.KilometersPerHour => SpeedUnit.MilesPerHour,
-                    SpeedUnit.MilesPerHour => SpeedUnit.Knots,
-                    _ => SpeedUnit.Knots
-                };
-                Log.Debug("Speed unit changed to: {Unit}", speedUnit);
-                break;
-            case ConsoleKey.Q:
-            case ConsoleKey.Escape:
-                Log.Information("User quit requested (Q/ESC)");
-                return false; // Quit
+            return HandleSearchModeInput(key, sortedAircraft, state);
         }
 
-        return true; // Continue
+        return HandleNormalTableInput(key, sortedAircraft, state);
     }
 
     /// <summary>
@@ -128,14 +51,12 @@ internal static class LiveKeyboardHandler
     /// </summary>
     /// <param name="key">The console key information.</param>
     /// <param name="allRows">All detail rows (needed to check for section headers).</param>
-    /// <param name="selectedRow">Currently selected row (updated on navigation).</param>
-    /// <param name="showingDetails">Detail view toggle (set false when Escape pressed).</param>
+    /// <param name="state">Mutable TUI state.</param>
     /// <returns>False if user pressed Q (quit), true to continue.</returns>
     public static bool HandleDetailInput(
         ConsoleKeyInfo key,
         List<DetailRow> allRows,
-        ref int selectedRow,
-        ref bool showingDetails)
+        LiveTuiState state)
     {
         int totalRows = allRows.Count;
 
@@ -152,64 +73,86 @@ internal static class LiveKeyboardHandler
         {
             case ConsoleKey.UpArrow:
                 // Move to previous non-header row
-                int prevRow = selectedRow - 1;
+                int prevRow = state.DetailViewSelectedRow - 1;
                 while (prevRow >= 0 && allRows[prevRow].IsSectionHeader)
                 {
                     prevRow--;
                 }
-                // Only update if we found a valid non-header row
                 if (prevRow >= 0)
                 {
-                    selectedRow = prevRow;
+                    state.DetailViewSelectedRow = prevRow;
                 }
                 break;
 
             case ConsoleKey.DownArrow:
                 // Move to next non-header row
-                int nextRow = selectedRow + 1;
+                int nextRow = state.DetailViewSelectedRow + 1;
                 while (nextRow < totalRows && allRows[nextRow].IsSectionHeader)
                 {
                     nextRow++;
                 }
-                // Only update if we found a valid non-header row
                 if (nextRow < totalRows)
                 {
-                    selectedRow = nextRow;
+                    state.DetailViewSelectedRow = nextRow;
                 }
                 break;
 
             case ConsoleKey.LeftArrow:
             case ConsoleKey.PageUp:
                 // Jump up by viewport, then find nearest non-header
-                int targetUp = Math.Max(0, selectedRow - availableRows);
-                while (targetUp < selectedRow && allRows[targetUp].IsSectionHeader)
+                int targetUp = Math.Max(0, state.DetailViewSelectedRow - availableRows);
+                while (targetUp < state.DetailViewSelectedRow && allRows[targetUp].IsSectionHeader)
                 {
                     targetUp++;
                 }
-                // Only update if we found a valid non-header row before current position
-                if (targetUp < selectedRow && !allRows[targetUp].IsSectionHeader)
+                if (targetUp < state.DetailViewSelectedRow && !allRows[targetUp].IsSectionHeader)
                 {
-                    selectedRow = targetUp;
+                    state.DetailViewSelectedRow = targetUp;
                 }
                 break;
 
             case ConsoleKey.RightArrow:
             case ConsoleKey.PageDown:
                 // Jump down by viewport, then find nearest non-header
-                int targetDown = Math.Min(totalRows - 1, selectedRow + availableRows);
-                while (targetDown > selectedRow && allRows[targetDown].IsSectionHeader)
+                int targetDown = Math.Min(totalRows - 1, state.DetailViewSelectedRow + availableRows);
+                while (targetDown > state.DetailViewSelectedRow && allRows[targetDown].IsSectionHeader)
                 {
                     targetDown--;
                 }
-                // Only update if we found a valid non-header row after current position
-                if (targetDown > selectedRow && !allRows[targetDown].IsSectionHeader)
+                if (targetDown > state.DetailViewSelectedRow && !allRows[targetDown].IsSectionHeader)
                 {
-                    selectedRow = targetDown;
+                    state.DetailViewSelectedRow = targetDown;
+                }
+                break;
+
+            case ConsoleKey.Home:
+                // Jump to first non-header row
+                int firstRow = 0;
+                while (firstRow < totalRows && allRows[firstRow].IsSectionHeader)
+                {
+                    firstRow++;
+                }
+                if (firstRow < totalRows)
+                {
+                    state.DetailViewSelectedRow = firstRow;
+                }
+                break;
+
+            case ConsoleKey.End:
+                // Jump to last non-header row
+                int lastRow = totalRows - 1;
+                while (lastRow >= 0 && allRows[lastRow].IsSectionHeader)
+                {
+                    lastRow--;
+                }
+                if (lastRow >= 0)
+                {
+                    state.DetailViewSelectedRow = lastRow;
                 }
                 break;
 
             case ConsoleKey.Escape:
-                showingDetails = false;
+                state.ShowingDetails = false;
                 break;
 
             case ConsoleKey.Q:
@@ -217,5 +160,227 @@ internal static class LiveKeyboardHandler
         }
 
         return true;  // Continue
+    }
+
+    /// <summary>
+    /// Handles keyboard input when search mode is active.
+    /// Only allows search-related keys; all other keys are ignored.
+    /// </summary>
+    private static bool HandleSearchModeInput(
+        ConsoleKeyInfo key,
+        List<Aircraft> sortedAircraft,
+        LiveTuiState state)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.Escape:
+                // Cancel search, restore previous selection
+                state.IsSearchActive = false;
+                state.SearchInput = "";
+                state.SelectedIcao = state.PreSearchSelectedIcao;
+                state.PreSearchSelectedIcao = null;
+                Log.Debug("Search cancelled");
+                break;
+
+            case ConsoleKey.Enter:
+                // Confirm search and open detail view of selected aircraft
+                state.IsSearchActive = false;
+                state.SearchInput = "";
+                state.PreSearchSelectedIcao = null;
+                if (sortedAircraft.Count > 0)
+                {
+                    state.ShowingDetails = true;
+                    state.DetailViewSelectedRow = 1;
+                }
+                Log.Debug("Search confirmed, opening details");
+                break;
+
+            case ConsoleKey.Backspace:
+                if (state.SearchInput.Length > 0)
+                {
+                    state.SearchInput = state.SearchInput[..^1];
+                }
+                break;
+
+            case ConsoleKey.UpArrow:
+                state.SelectedRow = Math.Max(0, state.SelectedRow - 1);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+
+            case ConsoleKey.DownArrow:
+                state.SelectedRow = Math.Min(Math.Max(0, sortedAircraft.Count - 1), state.SelectedRow + 1);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+
+            case ConsoleKey.Home:
+                state.SelectedRow = 0;
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
+                break;
+
+            case ConsoleKey.End:
+                state.SelectedRow = Math.Max(0, sortedAircraft.Count - 1);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+
+            case ConsoleKey.F12:
+                state.ResetToDefaults();
+                Log.Debug("All settings reset to defaults (from search mode)");
+                break;
+
+            default:
+                // Append alphanumeric characters to search input
+                if (char.IsLetterOrDigit(key.KeyChar) && state.SearchInput.Length < 8)
+                {
+                    state.SearchInput += char.ToUpperInvariant(key.KeyChar);
+                }
+                break;
+        }
+
+        return true;  // Search mode never quits (Escape cancels search, Q is ignored)
+    }
+
+    /// <summary>
+    /// Handles keyboard input for normal (non-search) table view.
+    /// </summary>
+    private static bool HandleNormalTableInput(
+        ConsoleKeyInfo key,
+        List<Aircraft> sortedAircraft,
+        LiveTuiState state)
+    {
+        // Calculate available viewport rows based on terminal height
+        // Layout: title (1) + table header (1) + data rows + footer (3) + padding (3)
+        // Minimum 5 rows ensures usable display even in very small terminals
+        const int headerLines = 1;        // Title row "AIRCRAFT LIST - Aeromux"
+        const int footerLines = 3;        // Three-line footer with navigation and sort/search hints
+        const int tableHeaderLines = 1;   // Column header row
+        const int padding = 3;            // Border and spacing overhead
+
+        int availableRows = Math.Max(5, Console.WindowHeight - headerLines - footerLines - tableHeaderLines - padding);
+
+        // Check for '/' key to enter search mode (use KeyChar for cross-platform reliability)
+        if (key.KeyChar == '/')
+        {
+            state.IsSearchActive = true;
+            state.SearchInput = "";
+            state.PreSearchSelectedIcao = state.SelectedIcao;
+            Log.Debug("Search mode activated");
+            return true;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                state.SelectedRow = Math.Max(0, state.SelectedRow - 1);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+            case ConsoleKey.DownArrow:
+                state.SelectedRow = Math.Min(Math.Max(0, sortedAircraft.Count - 1), state.SelectedRow + 1);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+            case ConsoleKey.LeftArrow:
+            case ConsoleKey.PageUp:
+                state.SelectedRow = Math.Max(0, state.SelectedRow - availableRows);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+            case ConsoleKey.RightArrow:
+            case ConsoleKey.PageDown:
+                state.SelectedRow = Math.Min(Math.Max(0, sortedAircraft.Count - 1), state.SelectedRow + availableRows);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+            case ConsoleKey.Home:
+                state.SelectedRow = 0;
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[0].Identification.ICAO : null;
+                break;
+            case ConsoleKey.End:
+                state.SelectedRow = Math.Max(0, sortedAircraft.Count - 1);
+                state.SelectedIcao = sortedAircraft.Count > 0 ? sortedAircraft[state.SelectedRow].Identification.ICAO : null;
+                break;
+            case ConsoleKey.Enter:
+                if (sortedAircraft.Count > 0)
+                {
+                    state.ShowingDetails = true;
+                    state.DetailViewSelectedRow = 1;
+                }
+                break;
+            case ConsoleKey.D:
+                state.DistanceUnit = state.DistanceUnit == DistanceUnit.Miles
+                    ? DistanceUnit.Kilometers
+                    : DistanceUnit.Miles;
+                Log.Debug("Distance unit changed to: {Unit}", state.DistanceUnit);
+                break;
+            case ConsoleKey.A:
+                state.AltitudeUnit = state.AltitudeUnit == AltitudeUnit.Feet
+                    ? AltitudeUnit.Meters
+                    : AltitudeUnit.Feet;
+                Log.Debug("Altitude unit changed to: {Unit}", state.AltitudeUnit);
+                break;
+            case ConsoleKey.S:
+                state.SpeedUnit = state.SpeedUnit switch
+                {
+                    SpeedUnit.Knots => SpeedUnit.KilometersPerHour,
+                    SpeedUnit.KilometersPerHour => SpeedUnit.MilesPerHour,
+                    SpeedUnit.MilesPerHour => SpeedUnit.Knots,
+                    _ => SpeedUnit.Knots
+                };
+                Log.Debug("Speed unit changed to: {Unit}", state.SpeedUnit);
+                break;
+            case ConsoleKey.F1:
+                HandleSortKey(state, SortColumn.ICAO);
+                break;
+            case ConsoleKey.F2:
+                HandleSortKey(state, SortColumn.Callsign);
+                break;
+            case ConsoleKey.F3:
+                HandleSortKey(state, SortColumn.Altitude);
+                break;
+            case ConsoleKey.F4:
+                HandleSortKey(state, SortColumn.Vertical);
+                break;
+            case ConsoleKey.F5:
+                HandleSortKey(state, SortColumn.Distance);
+                break;
+            case ConsoleKey.F6:
+                HandleSortKey(state, SortColumn.Speed);
+                break;
+            case ConsoleKey.F12:
+                state.ResetToDefaults();
+                Log.Debug("All settings reset to defaults");
+                break;
+            case ConsoleKey.Q:
+            case ConsoleKey.Escape:
+                Log.Information("User quit requested (Q/ESC)");
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Handles sort key cycling: same column cycles asc -> desc -> default, different column starts at ascending.
+    /// </summary>
+    private static void HandleSortKey(LiveTuiState state, SortColumn column)
+    {
+        if (state.SortColumn == column)
+        {
+            // Same column: cycle ascending -> descending -> default (ICAO ascending)
+            if (state.SortDirection == SortDirection.Ascending)
+            {
+                state.SortDirection = SortDirection.Descending;
+            }
+            else
+            {
+                // Back to default
+                state.SortColumn = SortColumn.ICAO;
+                state.SortDirection = SortDirection.Ascending;
+            }
+        }
+        else
+        {
+            // Different column: start at ascending
+            state.SortColumn = column;
+            state.SortDirection = SortDirection.Ascending;
+        }
+
+        Log.Debug("Sort changed to: {Column} {Direction}", state.SortColumn, state.SortDirection);
     }
 }
