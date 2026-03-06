@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.Tracking;
+
 namespace Aeromux.CLI.Commands.Live;
 
 /// <summary>
@@ -64,6 +66,8 @@ internal sealed class LiveTuiState
     public bool ShowingDetails { get; set; }
     public int DetailViewSelectedRow { get; set; }
     public List<DetailRow>? CurrentDetailRows { get; set; }
+    public Aircraft? DetailAircraft { get; set; }
+    public bool DetailAircraftExpired { get; set; }
 
     // Display units
     public DistanceUnit DistanceUnit { get; set; } = DistanceUnit.Miles;
@@ -92,5 +96,7 @@ internal sealed class LiveTuiState
         IsSearchActive = false;
         SearchInput = "";
         PreSearchSelectedIcao = null;
+        DetailAircraft = null;
+        DetailAircraftExpired = false;
     }
 }

@@ -153,6 +153,8 @@ internal static class LiveKeyboardHandler
 
             case ConsoleKey.Escape:
                 state.ShowingDetails = false;
+                state.DetailAircraft = null;
+                state.DetailAircraftExpired = false;
                 break;
 
             case ConsoleKey.Q:
@@ -300,6 +302,8 @@ internal static class LiveKeyboardHandler
                 {
                     state.ShowingDetails = true;
                     state.DetailViewSelectedRow = 1;
+                    state.DetailAircraft = sortedAircraft[state.SelectedRow];
+                    state.DetailAircraftExpired = false;
                 }
                 break;
             case ConsoleKey.D:

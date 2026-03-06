@@ -159,6 +159,16 @@ internal sealed class LiveTuiDisplay
                                 if (foundIndex >= 0)
                                 {
                                     state.SelectedRow = foundIndex;
+                                    if (state.ShowingDetails)
+                                    {
+                                        state.DetailAircraft = sortedAircraft[foundIndex];
+                                        state.DetailAircraftExpired = false;
+                                    }
+                                }
+                                else if (state is { ShowingDetails: true, DetailAircraft: not null })
+                                {
+                                    // Aircraft expired while in detail view — freeze snapshot, show [EXPIRED]
+                                    state.DetailAircraftExpired = true;
                                 }
                                 else
                                 {
@@ -185,15 +195,16 @@ internal sealed class LiveTuiDisplay
                             }
 
                             // Update display with current view (flicker-free for normal updates)
-                            if (state.ShowingDetails && sortedAircraft.Count > 0)
+                            if (state is { ShowingDetails: true, DetailAircraft: not null })
                             {
                                 (Table detailTable, List<DetailRow> detailRows) = LiveAircraftDetailBuilder.Build(
-                                    sortedAircraft[state.SelectedRow],
+                                    state.DetailAircraft,
                                     state.DistanceUnit,
                                     state.AltitudeUnit,
                                     state.SpeedUnit,
                                     receiverConfig,
-                                    state.DetailViewSelectedRow);
+                                    state.DetailViewSelectedRow,
+                                    state.DetailAircraftExpired);
 
                                 state.CurrentDetailRows = detailRows;
                                 ctx.UpdateTarget(detailTable);

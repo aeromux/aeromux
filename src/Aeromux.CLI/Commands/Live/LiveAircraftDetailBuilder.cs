@@ -38,6 +38,7 @@ internal static class LiveAircraftDetailBuilder
     /// <param name="speedUnit">Unit to display speeds (knots, km/h, or mph).</param>
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
     /// <param name="selectedRow">Currently selected row index for highlighting (0-based, validated to skip headers).</param>
+    /// <param name="isExpired">True if the aircraft has expired (timed out) — shows [EXPIRED] in title.</param>
     /// <returns>Spectre.Console Table with detailed aircraft information and fixed 120-character width.</returns>
     public static (Table Table, List<DetailRow> DetailRows) Build(
         Aircraft aircraft,
@@ -45,7 +46,8 @@ internal static class LiveAircraftDetailBuilder
         AltitudeUnit altitudeUnit,
         SpeedUnit speedUnit,
         ReceiverConfig? receiverConfig,
-        int selectedRow = 0)
+        int selectedRow = 0,
+        bool isExpired = false)
     {
         // Calculate available viewport rows based on terminal height
         // Layout: title (1) + table header (1) + data rows + footer (2) + padding (3)
@@ -955,7 +957,9 @@ internal static class LiveAircraftDetailBuilder
         // Create table with scrollbar column
         Table table = new Table()
             .Border(TableBorder.Square)
-            .Title($"AIRCRAFT DETAIL ({aircraft.Identification.ICAO}) - Aeromux", new Style(decoration:Decoration.Bold))
+            .Title(isExpired
+                ? $"AIRCRAFT DETAIL ({aircraft.Identification.ICAO}) [red][[EXPIRED]][/] - Aeromux"
+                : $"AIRCRAFT DETAIL ({aircraft.Identification.ICAO}) - Aeromux", new Style(decoration:Decoration.Bold))
             .AddColumn(new TableColumn("[bold]Field[/]").Width(40).NoWrap().PadLeft(1).PadRight(1))
             .AddColumn(new TableColumn("[bold]Value[/]").Width(53).NoWrap().PadLeft(1).PadRight(1))
             .AddColumn(new TableColumn("[bold] [/]").Width(1).Centered().NoWrap());
