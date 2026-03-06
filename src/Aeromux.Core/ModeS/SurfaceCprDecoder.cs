@@ -28,7 +28,7 @@ namespace Aeromux.Core.ModeS;
 /// Surface CPR differs from airborne CPR:
 /// - Uses different NL (Number of Longitude Zones) function with 1.5° latitude zones
 /// - Requires receiver location as reference (no global decoding)
-/// - Resolution: ~3.8 meters at equator (better precision than airborne)
+/// - Resolution: ~3.8 meters at the equator (better precision than airborne)
 /// - Only local decoding supported (global decoding not applicable for surface)
 ///
 /// Algorithm: ICAO Annex 10, Volume IV, 3.1.2.8.7 (Surface Position Format).
@@ -157,6 +157,20 @@ public sealed class SurfaceCprDecoder
     }
 
     /// <summary>
+    /// Surface NL lookup table (ICAO Annex 10, Volume IV, Table 3-2).
+    /// Maps latitude zone index (floor(abs(lat) / 1.5)) to number of longitude zones.
+    /// </summary>
+    private static readonly int[] SurfaceNlTable =
+    [
+        59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  // 0-15°
+        49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  // 15-30°
+        39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  // 30-45°
+        29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  // 45-60°
+        19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  // 60-75°
+        9,  8,  7,  6,  5,  4,  3,  2,  1,  1    // 75-90°
+    ];
+
+    /// <summary>
     /// Calculates the Number of Longitude Zones (NL) for surface CPR at a given latitude.
     /// Surface NL function differs from airborne NL function.
     /// </summary>
@@ -165,33 +179,21 @@ public sealed class SurfaceCprDecoder
     /// <remarks>
     /// Surface NL table (ICAO Annex 10, Volume IV, Table 3-2):
     /// Uses 1.5° latitude zones (60 zones total) instead of airborne's variable zones.
-    /// NL decreases from 59 at equator to 1 near poles.
+    /// NL decreases from 59 at the equator to 1 near poles.
     /// </remarks>
     private static int CalculateSurfaceNL(double latitude)
     {
         double absLat = Math.Abs(latitude);
 
-        // Surface NL table (extracted from ICAO specification)
-        // Index by floor(abs(lat) / 1.5)
-        int[] surfaceNlTable =
-        [
-            59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  // 0-15°
-            49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  // 15-30°
-            39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  // 30-45°
-            29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  // 45-60°
-            19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  // 60-75°
-            9,  8,  7,  6,  5,  4,  3,  2,  1,  1    // 75-90°
-        ];
-
         // Calculate table index
         int index = (int)Math.Floor(absLat / 1.5);
 
         // Clamp to valid range
-        if (index < 0 || index >= surfaceNlTable.Length)
+        if (index < 0 || index >= SurfaceNlTable.Length)
         {
             return 0;  // Invalid latitude
         }
 
-        return surfaceNlTable[index];
+        return SurfaceNlTable[index];
     }
 }

@@ -22,8 +22,8 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <remarks>
 /// Determines message type and length:
-/// - Short frames (56 bits): DF 0, 4, 5, 11, 16, 24
-/// - Long frames (112 bits): DF 17, 18, 19, 20, 21
+/// - Short frames (56 bits): DF 0, 4, 5, 11
+/// - Long frames (112 bits): DF 16, 17, 18, 19, 20, 21, 24
 ///
 /// Reference: ICAO Annex 10, Volume IV
 /// </remarks>
@@ -58,7 +58,8 @@ public enum DownlinkFormat
 
     /// <summary>
     /// DF 16: Long air-air surveillance (ACAS)
-    /// Length: 56 bits
+    /// Length: 112 bits
+    /// Contains: Altitude + 56-bit MV (Message Vertical, ACAS data)
     /// </summary>
     LongAirAirSurveillance = 16,
 
@@ -99,8 +100,7 @@ public enum DownlinkFormat
 
     /// <summary>
     /// DF 24: Comm-D extended length message
-    /// Length: 56 bits (can extend to 112 bits with continuation)
-    /// Note: Treated as 56-bit short frame for basic detection
+    /// Length: 112 bits
     /// </summary>
     CommDExtendedLength = 24
 }

@@ -314,12 +314,9 @@ public sealed class PreambleDetector
             message[i] = SliceByte(m, ref pPtr, ref phase);
         }
 
-        // Calculate signal strength as average power over message duration
-        double signalStrength = CalculateSignalStrength(m, pos, messageLengthBits);
-
-        // Validate message with CRC and score based on quality
-        var rawFrame = new RawFrame(message, _timeProvider.GetCurrentTimestamp(), signalStrength);
-        ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
+        // Validate message with CRC (signal strength deferred until best phase selected)
+        var rawFrame = new RawFrame(message, default, 0.0);
+        ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, 0.0);
 
         int score;
         if (validated == null)
@@ -362,10 +359,16 @@ public sealed class PreambleDetector
         if (score > bestScore)
         {
             bestScore = score;
-            // Only save message if score is positive (accepted)
-            bestMessage = score > 0 ? message : null;
-            // Track signal strength for best phase
-            bestSignalStrength = signalStrength;
+            // Only save message and compute signal strength if score is positive (accepted)
+            if (score > 0)
+            {
+                bestMessage = message;
+                bestSignalStrength = CalculateSignalStrength(m, pos, messageLengthBits);
+            }
+            else
+            {
+                bestMessage = null;
+            }
         }
     }
 
@@ -553,11 +556,11 @@ public sealed class PreambleDetector
             DownlinkFormat.ShortAirAirSurveillance or
             DownlinkFormat.SurveillanceAltitudeReply or
             DownlinkFormat.SurveillanceIdentityReply or
-            DownlinkFormat.AllCallReply or
-            DownlinkFormat.LongAirAirSurveillance or
-            DownlinkFormat.CommDExtendedLength
+            DownlinkFormat.AllCallReply
                 => ModeSFrameLength.Short,
 
+            DownlinkFormat.LongAirAirSurveillance or
+            DownlinkFormat.CommDExtendedLength or
             DownlinkFormat.ExtendedSquitter or
             DownlinkFormat.ExtendedSquitterNonTransponder or
             DownlinkFormat.MilitaryExtendedSquitter or

@@ -51,8 +51,8 @@ public sealed class FrameDeduplicator
     private readonly int _deduplicationWindowMs;
     private readonly int _maxTrackedFrames;
 
-    // Cache: frame data → last seen timestamp (milliseconds since epoch)
-    private readonly Dictionary<byte[], long> _frameCache;
+    // Node map: frame data → LinkedList node for O(1) lookup and removal
+    private readonly Dictionary<byte[], LinkedListNode<(byte[] Data, long Timestamp)>> _nodeMap;
 
     // LRU tracking: ordered list of (frame data, timestamp) for eviction
     private readonly LinkedList<(byte[] Data, long Timestamp)> _lruList;
@@ -81,8 +81,8 @@ public sealed class FrameDeduplicator
 
         _deduplicationWindowMs = deduplicationWindow;
         _maxTrackedFrames = maxTrackedFrames;
-        _frameCache = new Dictionary<byte[], long>(maxTrackedFrames, ByteArrayComparer.Instance);
-        _lruList = new LinkedList<(byte[], long)>();
+        _nodeMap = new Dictionary<byte[], LinkedListNode<(byte[] Data, long Timestamp)>>(maxTrackedFrames, ByteArrayComparer.Instance);
+        _lruList = new LinkedList<(byte[] Data, long Timestamp)>();
     }
 
     /// <summary>
@@ -109,9 +109,9 @@ public sealed class FrameDeduplicator
         long currentMs = new DateTimeOffset(currentTimestamp).ToUnixTimeMilliseconds();
 
         // Check if frame exists in cache
-        if (_frameCache.TryGetValue(frameData, out long lastSeenMs))
+        if (_nodeMap.TryGetValue(frameData, out LinkedListNode<(byte[] Data, long Timestamp)>? node))
         {
-            long timeDiffMs = currentMs - lastSeenMs;
+            long timeDiffMs = currentMs - node.Value.Timestamp;
 
             if (timeDiffMs <= _deduplicationWindowMs)
             {
@@ -119,7 +119,7 @@ public sealed class FrameDeduplicator
                 DuplicatesFiltered++;
 
                 // Update timestamp for this frame (keep it fresh in cache)
-                _frameCache[frameData] = currentMs;
+                node.Value = (node.Value.Data, currentMs);
 
                 return true;
             }
@@ -127,7 +127,7 @@ public sealed class FrameDeduplicator
             {
                 // Outside window - treat as new frame
                 // Remove old entry and add new one (effectively updates timestamp)
-                RemoveFromLru(frameData);
+                _lruList.Remove(node);
                 AddToCache(frameData, currentMs);
 
                 return false;
@@ -148,35 +148,15 @@ public sealed class FrameDeduplicator
     /// </summary>
     private void AddToCache(byte[] frameData, long timestamp)
     {
-        // Check if we need to evict oldest entry
-        if (_frameCache.Count >= _maxTrackedFrames)
+        // Check if we need to evict the oldest entry
+        if (_nodeMap.Count >= _maxTrackedFrames)
         {
             EvictOldest();
         }
 
-        // Add to cache and LRU list
-        _frameCache[frameData] = timestamp;
-        _lruList.AddLast((frameData, timestamp));
-    }
-
-    /// <summary>
-    /// Removes a frame from the LRU list (used when updating existing entry).
-    /// </summary>
-    private void RemoveFromLru(byte[] frameData)
-    {
-        // Find and remove from LRU list
-        LinkedListNode<(byte[] Data, long Timestamp)>? node = _lruList.First;
-
-        while (node != null)
-        {
-            if (ByteArrayComparer.Instance.Equals(node.Value.Data, frameData))
-            {
-                _lruList.Remove(node);
-                break;
-            }
-
-            node = node.Next;
-        }
+        // Add to LRU list and node map
+        LinkedListNode<(byte[] Data, long Timestamp)> node = _lruList.AddLast((frameData, timestamp));
+        _nodeMap[frameData] = node;
     }
 
     /// <summary>
@@ -191,7 +171,7 @@ public sealed class FrameDeduplicator
 
         (byte[] oldestData, long _) = _lruList.First.Value;
 
-        _frameCache.Remove(oldestData);
+        _nodeMap.Remove(oldestData);
         _lruList.RemoveFirst();
 
         CacheEvictions++;
@@ -200,7 +180,7 @@ public sealed class FrameDeduplicator
     /// <summary>
     /// Gets the current number of unique frames being tracked.
     /// </summary>
-    public int CurrentCacheSize => _frameCache.Count;
+    public int CurrentCacheSize => _nodeMap.Count;
 
     /// <summary>
     /// Resets all statistics counters.
@@ -217,7 +197,7 @@ public sealed class FrameDeduplicator
     /// </summary>
     public void ClearCache()
     {
-        _frameCache.Clear();
+        _nodeMap.Clear();
         _lruList.Clear();
     }
 }

@@ -22,8 +22,8 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <remarks>
 /// Frame structure:
-/// - Short frame: 56 bits = 7 bytes (DF 0, 4, 5, 11, 16, 24)
-/// - Long frame: 112 bits = 14 bytes (DF 17, 18, 19, 20, 21)
+/// - Short frame: 56 bits = 7 bytes (DF 0, 4, 5, 11)
+/// - Long frame: 112 bits = 14 bytes (DF 16, 17, 18, 19, 20, 21, 24)
 ///
 /// At 2.4 MSPS sampling rate (standard):
 /// - Mode S data rate: 1 Mbit/s
@@ -35,13 +35,13 @@ public static class ModeSFrameLength
 {
     /// <summary>
     /// Short frame length in bits.
-    /// Used by: DF 0, 4, 5, 11, 16, 24
+    /// Used by: DF 0, 4, 5, 11
     /// </summary>
     public const int Short = 56;
 
     /// <summary>
     /// Long frame length in bits.
-    /// Used by: DF 17, 18, 19, 20, 21
+    /// Used by: DF 16, 17, 18, 19, 20, 21, 24
     /// </summary>
     public const int Long = 112;
 
