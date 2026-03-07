@@ -40,6 +40,7 @@ public sealed class CprDecoder
     /// Thread-safe for concurrent frame processing from multiple SDRs.
     /// </summary>
     private readonly ConcurrentDictionary<string, CprFramePair> _aircraftCprState = new();
+    private readonly List<string> _staleKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
 
     /// <summary>
     /// Timestamp of last cleanup operation.
@@ -196,13 +197,13 @@ public sealed class CprDecoder
             return null;  // Zone transition, wait for consistent pair
         }
 
-        // Choose final latitude based on which frame is newer
+        // Choose final latitude based on which frame is newer.
         // Newer frame better represents current aircraft position
         double rlat = useOddFrame ? rlat1 : rlat0;
 
         // === STEP 2: LONGITUDE DECODING ===
         // Longitude is more complex because number of zones varies with latitude
-        // Near equator: 59 zones (~6.1° wide), near poles: fewer zones (wider)
+        // Near the equator: 59 zones (~6.1° wide), near poles: fewer zones (wider)
         // This accounts for meridian convergence (longitude lines meet at poles)
 
         // Normalize CPR longitude values to fractional [0, 1)
@@ -211,7 +212,7 @@ public sealed class CprDecoder
 
         // Get number of longitude zones at computed latitude
         // nl (Number of Longitude zones) depends on latitude due to Earth's curvature
-        // At equator: nl=59, at poles: nl=1
+        // At the equator: nl=59, at poles: nl=1
         int nl = CprNL(rlat);
 
         // Get number of longitude zones for selected frame type (even or odd)
@@ -245,7 +246,7 @@ public sealed class CprDecoder
 
     /// <summary>
     /// NL (Number of Longitude zones) function: Returns the number of longitude zones at given latitude.
-    /// Returns values from 1 (at poles) to 59 (at equator) based on latitude.
+    /// Returns values from 1 (at poles) to 59 (at the equator) based on latitude.
     /// Used in CPR (Compact Position Reporting) decoding to handle varying longitude zone widths.
     /// </summary>
     /// <remarks>
@@ -351,7 +352,7 @@ public sealed class CprDecoder
     /// </summary>
     /// <remarks>
     /// Zone width = 360° / number of zones at this latitude.
-    /// Near equator with 59 zones: ~6.1° per zone.
+    /// Near the equator with 59 zones: ~6.1° per zone.
     /// Near poles with fewer zones: wider zones (e.g., 10 zones = 36° each).
     /// At pole with 1 zone: 360° (entire circumference is one zone).
     /// </remarks>
@@ -378,17 +379,20 @@ public sealed class CprDecoder
     /// </summary>
     private void CleanupStaleState(DateTime now)
     {
-        var staleAircraft = _aircraftCprState
-            .Where(kvp =>
-            {
-                CprFramePair state = kvp.Value;
-                DateTime lastSeen = state.EvenFrame?.Timestamp ?? state.OddFrame?.Timestamp ?? DateTime.MinValue;
-                return (now - lastSeen) > TimeSpan.FromMinutes(10);
-            })
-            .Select(kvp => kvp.Key)
-            .ToList();
+        _staleKeys.Clear();
 
-        foreach (string icao in staleAircraft)
+        foreach (KeyValuePair<string, CprFramePair> kvp in _aircraftCprState)
+        {
+            DateTime lastSeen = kvp.Value.EvenFrame?.Timestamp
+                             ?? kvp.Value.OddFrame?.Timestamp
+                             ?? DateTime.MinValue;
+            if ((now - lastSeen) > TimeSpan.FromMinutes(10))
+            {
+                _staleKeys.Add(kvp.Key);
+            }
+        }
+
+        foreach (string icao in _staleKeys)
         {
             _aircraftCprState.TryRemove(icao, out _);
         }

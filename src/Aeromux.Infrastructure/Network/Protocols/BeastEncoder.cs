@@ -48,6 +48,9 @@ public class BeastEncoder
     /// </summary>
     private const byte ESC = 0x1A;
 
+    // Reusable encode buffer: worst case = 1 (ESC) + 1 (type) + 12 (timestamp) + 2 (signal) + 28 (data) = 44
+    private readonly byte[] _encodeBuffer = new byte[44];
+
     /// <summary>
     /// Writes a byte to the output buffer, escaping it if it equals the ESC byte (0x1A).
     /// Beast protocol requires ALL bytes (timestamp, signal, and data) to be escaped.
@@ -82,11 +85,9 @@ public class BeastEncoder
         // Determine frame length (7 bytes for short, 14 bytes for long)
         bool isLong = frame.Data.Length == 14;
 
-        // Allocate worst-case buffer size: header + data with all bytes escaped
-        // Structure: 1 (ESC) + 1 (type) + 6*2 (timestamp, escaped) + 1*2 (signal, escaped) + data*2 (escaped)
-        // Worst case: All 6 timestamp bytes + 1 signal byte + all data bytes are 0x1A = each doubled
-        int maxLength = 1 + 1 + (6 * 2) + (1 * 2) + (frame.Data.Length * 2);
-        byte[] output = new byte[maxLength];
+        // Encode into reusable buffer to avoid per-frame allocation
+        // Worst case: 1 (ESC) + 1 (type) + 6×2 (timestamp escaped) + 1×2 (signal escaped) + 14×2 (data escaped) = 44
+        byte[] output = _encodeBuffer;
 
         int pos = 0;
 

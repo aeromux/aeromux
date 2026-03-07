@@ -52,6 +52,7 @@ public sealed class IcaoConfidenceTracker
     private readonly Dictionary<string, IcaoRecord> _icaoRecords = new();
     private readonly ConfidenceLevel _requiredConfidence;
     private readonly TimeSpan _timeout;
+    private readonly List<string> _expiredKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
 
     // Statistics (exposed as properties for DeviceWorker to log)
     private long _totalFrames;
@@ -152,19 +153,22 @@ public sealed class IcaoConfidenceTracker
     /// <param name="currentTime">Current timestamp for expiry calculation</param>
     private void CleanupExpired(DateTime currentTime)
     {
-        // Find expired ICAOs
-        var expiredIcaos = _icaoRecords
-            .Where(kvp => currentTime - kvp.Value.LastSeen > _timeout)
-            .Select(kvp => kvp.Key)
-            .ToList();
+        _expiredKeys.Clear();
 
-        // Remove them
-        foreach (string icao in expiredIcaos)
+        foreach (KeyValuePair<string, IcaoRecord> kvp in _icaoRecords)
+        {
+            if (currentTime - kvp.Value.LastSeen > _timeout)
+            {
+                _expiredKeys.Add(kvp.Key);
+            }
+        }
+
+        foreach (string icao in _expiredKeys)
         {
             _icaoRecords.Remove(icao);
         }
 
-        _expiredIcaos += expiredIcaos.Count;
+        _expiredIcaos += _expiredKeys.Count;
     }
 
     // Statistics properties for Coordinator Pattern

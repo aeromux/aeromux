@@ -36,12 +36,15 @@ namespace Aeromux.Core.ModeS;
 /// - AP (Address/Parity): ICAO encoded in CRC (DF 0, 4, 5, 16, 20, 21) - ICAO = CRC XOR transmitted
 ///
 /// Performance: Uses lookup table for fast CRC calculation (~7-14 table lookups per frame)
-/// Error correction: Single-bit errors corrected by trying each bit flip (PI mode only)
+/// Error correction: Single-bit errors corrected via syndrome lookup table (O(1) per frame, PI mode only)
 /// </remarks>
 public sealed class ValidatedFrameFactory
 {
     private const uint CrcPolynomial = 0xFFF409;  // ICAO CRC-24 polynomial
     private readonly uint[] _crcTable = new uint[256];  // Lookup table for fast CRC
+    private readonly Dictionary<uint, int> _syndromesShort;  // Syndrome → bit position for 56-bit frames
+    private readonly Dictionary<uint, int> _syndromesLong;   // Syndrome → bit position for 112-bit frames
+    private readonly Dictionary<uint, string> _icaoStringCache = new();  // ICAO uint → hex string cache
 
     // Statistics (exposed as properties for DeviceWorker to log)
     private long _framesChecked;
@@ -50,11 +53,13 @@ public sealed class ValidatedFrameFactory
     private long _framesInvalid;
 
     /// <summary>
-    /// Initializes the factory and pre-computes CRC lookup table.
+    /// Initializes the factory and pre-computes CRC lookup table and syndrome tables.
     /// </summary>
     public ValidatedFrameFactory()
     {
         InitializeCrcTable();
+        _syndromesShort = InitializeSyndromeTable(ModeSFrameLength.ShortBytes);
+        _syndromesLong = InitializeSyndromeTable(ModeSFrameLength.LongBytes);
     }
 
     /// <summary>
@@ -139,35 +144,29 @@ public sealed class ValidatedFrameFactory
     }
 
     /// <summary>
-    /// Attempts to correct a single-bit error by flipping each bit and rechecking CRC.
+    /// Attempts to correct a single-bit error using syndrome lookup.
+    /// The CRC remainder of a corrupted message is the error syndrome — a unique value
+    /// determined solely by the bit position of the error (CRC linearity property).
+    /// Pre-computed syndrome tables enable O(1) error correction instead of brute-force O(N).
     /// Only applicable to PI mode messages (AP mode has no validation to check against).
     /// </summary>
     private bool TryCorrectSingleBitError(byte[] data, out string? icaoAddress)
     {
-        // Try flipping each bit in the message
-        for (int byteIdx = 0; byteIdx < data.Length; byteIdx++)
+        // The CRC remainder IS the error syndrome for single-bit errors
+        uint syndrome = CalculateCrc(data, data.Length);
+
+        Dictionary<uint, int> table =
+            data.Length == ModeSFrameLength.ShortBytes ? _syndromesShort : _syndromesLong;
+
+        if (table.TryGetValue(syndrome, out int bitPosition))
         {
-            byte original = data[byteIdx];
-
-            for (int bitIdx = 0; bitIdx < 8; bitIdx++)
-            {
-                // Flip bit (MSB first: 7, 6, 5, 4, 3, 2, 1, 0)
-                data[byteIdx] ^= (byte)(1 << (7 - bitIdx));
-
-                // Check if now valid (CRC = 0 for PI mode)
-                uint crc = CalculateCrc(data, data.Length);
-                if (crc == 0)
-                {
-                    // Correction successful! Keep the corrected data
-                    icaoAddress = ExtractIcaoFromAA(data);
-                    return true;
-                }
-
-                // Restore bit
-                data[byteIdx] = original;
-            }
+            // Flip the errored bit (MSB-first bit ordering)
+            data[bitPosition / 8] ^= (byte)(1 << (7 - (bitPosition % 8)));
+            icaoAddress = ExtractIcaoFromAA(data);
+            return true;
         }
 
+        // Syndrome not in table → multi-bit error, uncorrectable
         icaoAddress = null;
         return false;
     }
@@ -236,6 +235,36 @@ public sealed class ValidatedFrameFactory
     }
 
     /// <summary>
+    /// Pre-computes syndrome lookup table for single-bit error correction.
+    /// For each bit position, calculates the CRC remainder that a single-bit error at that position
+    /// would produce. This enables O(1) error correction by looking up the syndrome.
+    /// </summary>
+    /// <param name="messageLengthBytes">Frame length in bytes (7 for short, 14 for long)</param>
+    /// <returns>Dictionary mapping CRC syndrome to the bit position that caused it</returns>
+    private Dictionary<uint, int> InitializeSyndromeTable(int messageLengthBytes)
+    {
+        int totalBits = messageLengthBytes * 8;
+        var table = new Dictionary<uint, int>(totalBits);
+
+        byte[] probe = new byte[messageLengthBytes];
+
+        for (int bitPos = 0; bitPos < totalBits; bitPos++)
+        {
+            // Set single bit in probe message (MSB-first ordering)
+            probe[bitPos / 8] = (byte)(1 << (7 - (bitPos % 8)));
+
+            // The CRC of a single-bit message IS the syndrome for that bit position
+            uint syndrome = CalculateCrc(probe, messageLengthBytes);
+            table[syndrome] = bitPos;
+
+            // Clear the bit for next iteration
+            probe[bitPos / 8] = 0;
+        }
+
+        return table;
+    }
+
+    /// <summary>
     /// Determines if a DF type uses PI mode (ICAO in AA field) or AP mode (ICAO in CRC).
     /// </summary>
     private static bool UsesPIMode(DownlinkFormat df)
@@ -250,7 +279,7 @@ public sealed class ValidatedFrameFactory
     /// <summary>
     /// Extracts ICAO address from AA field (bytes 1-3) for PI mode messages.
     /// </summary>
-    private static string ExtractIcaoFromAA(byte[] data)
+    private string ExtractIcaoFromAA(byte[] data)
     {
         uint icao = ((uint)data[1] << 16) | ((uint)data[2] << 8) | data[3];
         return FormatIcaoAddress(icao);
@@ -267,8 +296,17 @@ public sealed class ValidatedFrameFactory
 
     /// <summary>
     /// Formats 24-bit ICAO address as 6-character hex string (uppercase).
+    /// Caches results to avoid repeated string allocations for the same aircraft.
     /// </summary>
-    private static string FormatIcaoAddress(uint icao) => $"{icao:X6}"; // E.g., "A1B2C3"
+    private string FormatIcaoAddress(uint icao)
+    {
+        if (!_icaoStringCache.TryGetValue(icao, out string? cached))
+        {
+            cached = $"{icao:X6}";
+            _icaoStringCache[icao] = cached;
+        }
+        return cached;
+    }
 
     // Statistics properties for Coordinator Pattern
     public long FramesChecked => _framesChecked;
