@@ -108,70 +108,71 @@ public class DeviceCommand : Command<DeviceSettings>
         Console.WriteLine($"Found {manager.Devices.Count} RTL-SDR device(s).");
         Console.WriteLine("Opening devices for detailed info...");
 
-        try
+        foreach (DeviceInfo device in manager.Devices.Values)
         {
-            foreach (DeviceInfo device in manager.Devices.Values)
+            Console.WriteLine();
+            Console.WriteLine($"  Device #{device.Index}: {device.Manufacturer} {device.ProductType}");
+
+            string friendlyName = $"aeromux-probe-{device.Index}";
+            int managedBefore = manager.CountManagedDevices;
+            try
             {
-                Console.WriteLine();
-                Console.WriteLine($"  Device #{device.Index}: {device.Manufacturer} {device.ProductType}");
+                manager.OpenManagedDevice(device.Index, friendlyName);
+                RtlSdrManagedDevice managed = manager[friendlyName];
 
-                string friendlyName = $"aeromux-probe-{device.Index}";
-                try
+                // Configure with Aeromux defaults
+                managed.CenterFrequency = Frequency.FromMHz(CenterFrequency);
+                managed.SampleRate = Frequency.FromMHz(SampleRate);
+                managed.TunerGainMode = TunerGainModes.AGC;
+                managed.ResetDeviceBuffer();
+
+                // Print all parameters aligned to the widest label (22 chars)
+                Console.WriteLine($"    {"Serial",-22}: {device.Serial}");
+                Console.WriteLine($"    {"Name",-22}: {device.Name}");
+                Console.WriteLine($"    {"Tuner type",-22}: {managed.TunerType}");
+                Console.WriteLine($"    {"Center frequency",-22}: {managed.CenterFrequency.MHz} MHz");
+                Console.WriteLine($"    {"Crystal frequency",-22}: {managed.CrystalFrequency}");
+                Console.WriteLine($"    {"Frequency correction",-22}: {managed.FrequencyCorrection} ppm");
+                Console.WriteLine($"    {"Bandwidth selection",-22}: {managed.TunerBandwidthSelectionMode}");
+                Console.WriteLine($"    {"Sample rate",-22}: {managed.SampleRate.MHz} MHz");
+                Console.WriteLine($"    {"Direct sampling mode",-22}: {managed.DirectSamplingMode}");
+                Console.WriteLine($"    {"AGC mode",-22}: {managed.AGCMode}");
+                Console.WriteLine($"    {"Tuner gain mode",-22}: {managed.TunerGainMode}");
+                Console.WriteLine($"    {"Offset tuning mode",-22}: {managed.OffsetTuningMode}");
+                Console.WriteLine($"    {"KerberosSDR mode",-22}: {managed.KerberosSDRMode}");
+                Console.WriteLine($"    {"Frequency dithering",-22}: {managed.FrequencyDitheringMode}");
+                Console.WriteLine($"    {"Test mode",-22}: {managed.TestMode}");
+
+                // Supported tuner gains — 5 per row
+                List<double> gains = managed.SupportedTunerGains;
+                for (int i = 0; i < gains.Count; i++)
                 {
-                    manager.OpenManagedDevice(device.Index, friendlyName);
-                    RtlSdrManagedDevice managed = manager[friendlyName];
-
-                    // Configure with Aeromux defaults
-                    managed.CenterFrequency = Frequency.FromMHz(CenterFrequency);
-                    managed.SampleRate = Frequency.FromMHz(SampleRate);
-                    managed.TunerGainMode = TunerGainModes.AGC;
-                    managed.ResetDeviceBuffer();
-
-                    // Print all parameters aligned to the widest label (22 chars)
-                    Console.WriteLine($"    {"Serial",-22}: {device.Serial}");
-                    Console.WriteLine($"    {"Name",-22}: {device.Name}");
-                    Console.WriteLine($"    {"Tuner type",-22}: {managed.TunerType}");
-                    Console.WriteLine($"    {"Center frequency",-22}: {managed.CenterFrequency.MHz} MHz");
-                    Console.WriteLine($"    {"Crystal frequency",-22}: {managed.CrystalFrequency}");
-                    Console.WriteLine($"    {"Frequency correction",-22}: {managed.FrequencyCorrection} ppm");
-                    Console.WriteLine($"    {"Bandwidth selection",-22}: {managed.TunerBandwidthSelectionMode}");
-                    Console.WriteLine($"    {"Sample rate",-22}: {managed.SampleRate.MHz} MHz");
-                    Console.WriteLine($"    {"Direct sampling mode",-22}: {managed.DirectSamplingMode}");
-                    Console.WriteLine($"    {"AGC mode",-22}: {managed.AGCMode}");
-                    Console.WriteLine($"    {"Tuner gain mode",-22}: {managed.TunerGainMode}");
-                    Console.WriteLine($"    {"Offset tuning mode",-22}: {managed.OffsetTuningMode}");
-                    Console.WriteLine($"    {"KerberosSDR mode",-22}: {managed.KerberosSDRMode}");
-                    Console.WriteLine($"    {"Frequency dithering",-22}: {managed.FrequencyDitheringMode}");
-                    Console.WriteLine($"    {"Test mode",-22}: {managed.TestMode}");
-
-                    // Supported tuner gains — 5 per row
-                    List<double> gains = managed.SupportedTunerGains;
-                    for (int i = 0; i < gains.Count; i++)
+                    if (i % 5 == 0)
                     {
-                        if (i % 5 == 0)
-                        {
-                            Console.Write(i == 0 ? $"    {"Supported tuner gains",-22}: " : $"    {"",-22}: ");
-                        }
+                        Console.Write(i == 0 ? $"    {"Supported tuner gains",-22}: " : $"    {"",-22}: ");
+                    }
 
-                        Console.Write($"{gains.ElementAt(i),4:F1} dB  ");
+                    Console.Write($"{gains.ElementAt(i),4:F1} dB  ");
 
-                        if ((i + 1) % 5 == 0 || i == gains.Count - 1)
-                        {
-                            Console.WriteLine();
-                        }
+                    if ((i + 1) % 5 == 0 || i == gains.Count - 1)
+                    {
+                        Console.WriteLine();
                     }
                 }
-                catch (RtlSdrDeviceException)
+            }
+            catch (Exception ex) when (ex is RtlSdrDeviceException or RtlSdrLibraryExecutionException)
+            {
+                Console.WriteLine($"    {"Serial",-22}: {device.Serial}");
+                Console.WriteLine($"    {"Name",-22}: {device.Name}");
+                Console.WriteLine($"    Error: Failed to open the device. It may be in use by another application.");
+            }
+            finally
+            {
+                if (manager.CountManagedDevices > managedBefore)
                 {
-                    Console.WriteLine($"    {"Serial",-22}: {device.Serial}");
-                    Console.WriteLine($"    {"Name",-22}: {device.Name}");
-                    Console.WriteLine($"    Error: Failed to open the device. It may be in use by another application.");
+                    manager.CloseManagedDevice(friendlyName);
                 }
             }
-        }
-        finally
-        {
-            manager.CloseAllManagedDevice();
         }
 
         Console.WriteLine();
