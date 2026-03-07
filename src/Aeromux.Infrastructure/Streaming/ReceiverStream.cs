@@ -69,6 +69,7 @@ public sealed class ReceiverStream : IFrameStream
     // This allows Unsubscribe() to locate the correct channel from the reader reference
     private readonly Dictionary<ChannelReader<ProcessedFrame>, Channel<ProcessedFrame>> _subscribers = [];
     private readonly Lock _subscribersLock = new();
+    private volatile Channel<ProcessedFrame>[] _subscriberSnapshot = [];
     private Task? _broadcastTask;
 
     // Lifecycle management: ReceiverStream has its own cancellation independent of consumers
@@ -195,6 +196,7 @@ public sealed class ReceiverStream : IFrameStream
         lock (_subscribersLock)
         {
             _subscribers.Add(subscriberChannel.Reader, subscriberChannel);
+            _subscriberSnapshot = [.. _subscribers.Values];
             Log.Debug("Registered new subscriber (total: {Count})", _subscribers.Count);
         }
 
@@ -207,6 +209,7 @@ public sealed class ReceiverStream : IFrameStream
         {
             if (_subscribers.Remove(reader))
             {
+                _subscriberSnapshot = [.. _subscribers.Values];
                 Log.Debug("Unregistered subscriber (remaining: {Count})", _subscribers.Count);
             }
         }
@@ -232,21 +235,10 @@ public sealed class ReceiverStream : IFrameStream
             // This is the ONLY async enumerator created on the FrameAggregator
             await foreach (ProcessedFrame data in _aggregator.GetDataAsync(ct))
             {
-                // Thread-safe snapshot: Copy subscriber channels while holding lock
-                // Using List<Channel> instead of Dictionary reduces allocation overhead
-                // Snapshot allows iteration without holding lock during channel writes
-                List<Channel<ProcessedFrame>> snapshot;
-                lock (_subscribersLock)
+                // Copy-on-write snapshot: volatile read is lock-free and allocation-free
+                // Snapshot array is rebuilt only when subscribers change (Subscribe/Unsubscribe)
+                foreach (Channel<ProcessedFrame> channel in _subscriberSnapshot)
                 {
-                    snapshot = new List<Channel<ProcessedFrame>>(_subscribers.Values);
-                }
-
-                // Broadcast to all subscribers: Non-blocking writes to each channel
-                foreach (Channel<ProcessedFrame> channel in snapshot)
-                {
-                    // TryWrite (non-blocking): Avoid blocking broadcast task on slow consumers
-                    // Unbounded channels should never be full, but TryWrite is defensive
-                    // Each subscriber reads from their own channel independently
                     channel.Writer.TryWrite(data);
                 }
             }

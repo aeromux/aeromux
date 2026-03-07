@@ -59,6 +59,7 @@ public sealed class BeastStream : IFrameStream
     // Broadcasting support: Fan out frames to multiple consumers
     private readonly Dictionary<ChannelReader<ProcessedFrame>, Channel<ProcessedFrame>> _subscribers = [];
     private readonly Lock _subscribersLock = new();
+    private volatile Channel<ProcessedFrame>[] _subscriberSnapshot = [];
     private Task? _broadcastTask;
 
     // Lifecycle management
@@ -177,6 +178,7 @@ public sealed class BeastStream : IFrameStream
         lock (_subscribersLock)
         {
             _subscribers[channel.Reader] = channel;
+            _subscriberSnapshot = [.. _subscribers.Values];
             Log.Debug("BeastStream: New subscriber added (total: {Count})", _subscribers.Count);
         }
 
@@ -200,6 +202,7 @@ public sealed class BeastStream : IFrameStream
                 return;
             }
 
+            _subscriberSnapshot = [.. _subscribers.Values];
             channel.Writer.TryComplete();
             Log.Debug("BeastStream: Subscriber removed (remaining: {Count})", _subscribers.Count);
         }
@@ -254,14 +257,9 @@ public sealed class BeastStream : IFrameStream
                 // Construct ProcessedFrame with Beast source marking
                 var processedFrame = new ProcessedFrame(validatedFrame, message, DateTime.UtcNow, FrameSource.Beast);
 
-                // Fan out to all subscribers
-                List<Channel<ProcessedFrame>> snapshot;
-                lock (_subscribersLock)
-                {
-                    snapshot = new List<Channel<ProcessedFrame>>(_subscribers.Values);
-                }
-
-                foreach (Channel<ProcessedFrame> channel in snapshot)
+                // Copy-on-write snapshot: volatile read is lock-free and allocation-free
+                // Snapshot array is rebuilt only when subscribers change (Subscribe/Unsubscribe)
+                foreach (Channel<ProcessedFrame> channel in _subscriberSnapshot)
                 {
                     channel.Writer.TryWrite(processedFrame);
                 }

@@ -48,7 +48,7 @@ namespace Aeromux.Core.ModeS;
 /// </remarks>
 public sealed class FrameDeduplicator
 {
-    private readonly int _deduplicationWindowMs;
+    private readonly long _deduplicationWindowTicks;
     private readonly int _maxTrackedFrames;
 
     // Node map: frame data → LinkedList node for O(1) lookup and removal
@@ -79,7 +79,7 @@ public sealed class FrameDeduplicator
             throw new ArgumentOutOfRangeException(nameof(maxTrackedFrames), "Must be greater than 0");
         }
 
-        _deduplicationWindowMs = deduplicationWindow;
+        _deduplicationWindowTicks = deduplicationWindow * TimeSpan.TicksPerMillisecond;
         _maxTrackedFrames = maxTrackedFrames;
         _nodeMap = new Dictionary<byte[], LinkedListNode<(byte[] Data, long Timestamp)>>(maxTrackedFrames, ByteArrayComparer.Instance);
         _lruList = new LinkedList<(byte[] Data, long Timestamp)>();
@@ -106,29 +106,29 @@ public sealed class FrameDeduplicator
 
         TotalFramesProcessed++;
 
-        long currentMs = new DateTimeOffset(currentTimestamp).ToUnixTimeMilliseconds();
+        long currentTicks = currentTimestamp.Ticks;
 
         // Check if frame exists in cache
         if (_nodeMap.TryGetValue(frameData, out LinkedListNode<(byte[] Data, long Timestamp)>? node))
         {
-            long timeDiffMs = currentMs - node.Value.Timestamp;
-
-            if (timeDiffMs <= _deduplicationWindowMs)
+            if (currentTicks - node.Value.Timestamp <= _deduplicationWindowTicks)
             {
                 // Duplicate detected within window
                 DuplicatesFiltered++;
 
                 // Update timestamp for this frame (keep it fresh in cache)
-                node.Value = (node.Value.Data, currentMs);
+                node.Value = (node.Value.Data, currentTicks);
 
                 return true;
             }
             else
             {
                 // Outside window - treat as new frame
-                // Remove old entry and add new one (effectively updates timestamp)
+                // Reuse existing node: move to tail with updated timestamp
+                // No dictionary update needed — same node reference, same key
                 _lruList.Remove(node);
-                AddToCache(frameData, currentMs);
+                node.Value = (node.Value.Data, currentTicks);
+                _lruList.AddLast(node);
 
                 return false;
             }
@@ -136,7 +136,7 @@ public sealed class FrameDeduplicator
         else
         {
             // New frame - add to cache
-            AddToCache(frameData, currentMs);
+            AddToCache(frameData, currentTicks);
 
             return false;
         }

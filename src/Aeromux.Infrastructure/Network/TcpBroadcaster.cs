@@ -382,7 +382,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                     foreach (TcpClient client in disconnected)
                     {
                         // Log individual disconnection with remote endpoint before disposal
-                        Log.Information("Client [{Format}] disconnected from {Remote} on port {Port}",
+                        Log.Information("[{Format}] Client disconnected from {Remote} on port {Port}",
                             _format.ToString(), client.Client.RemoteEndPoint, _port);
 
                         _clients.Remove(client);
@@ -390,7 +390,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                         client.Dispose();
                     }
 
-                    Log.Information("Total clients [{Format}] on port {Port}: {Remaining}",
+                    Log.Information("[{Format}] Total clients on port {Port}: {Remaining}",
                         _format.ToString(), _port, _clients.Count);
                 }
             }
