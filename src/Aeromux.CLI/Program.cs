@@ -104,6 +104,13 @@ internal abstract class Program
                       .WithExample("database", "update", "--database", "artifacts/db/")
                       .WithExample("database", "update", "--config", "aeromux.yaml");
 
+                // Device command - list RTL-SDR devices on the system
+                config.AddCommand<DeviceCommand>("device")
+                      .WithDescription("List RTL-SDR devices on the system")
+                      .WithExample("device")
+                      .WithExample("device", "--verbose")
+                      .WithExample("device", "-v");
+
                 // TODO: Phase 9 will add validate and doctor commands
             });
 

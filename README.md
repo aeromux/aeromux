@@ -95,7 +95,7 @@ Alternatively, use the convenience script, which builds and presents an interact
 
 ## Usage
 
-Aeromux provides four commands:
+Aeromux provides five commands:
 
 ```bash
 # Daemon mode — runs in the background, serves data on network ports
@@ -111,11 +111,15 @@ aeromux live --connect host:port --config aeromux.yaml
 aeromux database update --database artifacts/db/
 aeromux database info --database artifacts/db/
 
+# Device discovery — list RTL-SDR devices to find device indices and tuner gains for aeromux.yaml
+aeromux device
+aeromux device --verbose
+
 # Version — shows version and runtime information
 aeromux version
 ```
 
-**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft. **Database** manages the aircraft metadata database downloaded from GitHub releases, with integrity verification.
+**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft. **Database** manages the aircraft metadata database downloaded from GitHub releases, with integrity verification. **Device** lists RTL-SDR hardware detected on the system and, with `--verbose`, shows detailed tuner parameters.
 
 ## Configuration
 
