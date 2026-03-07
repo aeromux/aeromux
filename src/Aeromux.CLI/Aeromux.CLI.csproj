@@ -3,7 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Aeromux.Core\Aeromux.Core.csproj" />
     <ProjectReference Include="..\Aeromux.Infrastructure\Aeromux.Infrastructure.csproj" />
-    <PackageReference Include="RtlSdrManager" Version="0.5.2" />
+    <PackageReference Include="RtlSdrManager" Version="0.5.3" />
   </ItemGroup>
 
   <ItemGroup>
