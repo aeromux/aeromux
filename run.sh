@@ -99,16 +99,20 @@ echo "Select a command:"
 echo "  1) daemon             Start as background service"
 echo "  2) live --standalone  Live TUI with direct RTL-SDR access"
 echo "  3) live --connect     Live TUI connecting to Beast source"
-echo "  4) version            Display version information"
+echo "  4) database           Manage aircraft metadata database"
+echo "  5) device             List RTL-SDR devices on the system"
+echo "  6) version            Display version information"
 echo ""
-read -rp "Enter selection (1-4): " COMMAND_CHOICE
+read -rp "Enter selection (1-6): " COMMAND_CHOICE
 echo ""
 
 case "$COMMAND_CHOICE" in
     1) CMD_ARGS=("daemon") ;;
     2) CMD_ARGS=("live" "--standalone") ;;
     3) CMD_ARGS=("live" "--connect") ;;
-    4) CMD_ARGS=("version" "--details") ;;
+    4) CMD_ARGS=("database") ;;
+    5) CMD_ARGS=("device") ;;
+    6) CMD_ARGS=("version" "--details") ;;
     *)
         echo "ERROR: Invalid selection"
         exit 1
@@ -128,8 +132,56 @@ if [[ "$COMMAND_CHOICE" == "3" ]]; then
     CMD_ARGS+=("$CONNECT_ADDRESS")
 fi
 
-# Config selection (skip for version)
-if [[ "$COMMAND_CHOICE" != "4" ]]; then
+# Database sub-menu: select action and database path
+if [[ "$COMMAND_CHOICE" == "4" ]]; then
+    echo "Select action:"
+    echo "  1) update    Download or update the database"
+    echo "  2) info      Show installed database details"
+    echo ""
+    read -rp "Enter selection (1-2): " DB_ACTION_CHOICE
+    echo ""
+
+    case "$DB_ACTION_CHOICE" in
+        1) CMD_ARGS+=("update") ;;
+        2) CMD_ARGS+=("info") ;;
+        *)
+            echo "ERROR: Invalid selection"
+            exit 1
+            ;;
+    esac
+
+    read -rp "Enter database directory path (e.g., artifacts/db/): " DB_PATH
+    echo ""
+
+    if [[ -z "$DB_PATH" ]]; then
+        echo "ERROR: Database path is required"
+        exit 1
+    fi
+
+    CMD_ARGS+=("--database" "$DB_PATH")
+fi
+
+# Device sub-menu: select verbose mode
+if [[ "$COMMAND_CHOICE" == "5" ]]; then
+    echo "Show detailed tuner parameters?"
+    echo "  1) No       Basic device list"
+    echo "  2) Yes      Detailed tuner parameters (opens each device)"
+    echo ""
+    read -rp "Enter selection (1-2): " DEVICE_VERBOSE_CHOICE
+    echo ""
+
+    case "$DEVICE_VERBOSE_CHOICE" in
+        1) ;;
+        2) CMD_ARGS+=("--verbose") ;;
+        *)
+            echo "ERROR: Invalid selection"
+            exit 1
+            ;;
+    esac
+fi
+
+# Config selection (skip for device and version)
+if [[ "$COMMAND_CHOICE" != "5" && "$COMMAND_CHOICE" != "6" ]]; then
     echo "Select configuration:"
     echo "  1) Single device      aeromux.test-singledevice.yaml"
     echo "  2) Multi-device       aeromux.test-multidevice.yaml"
