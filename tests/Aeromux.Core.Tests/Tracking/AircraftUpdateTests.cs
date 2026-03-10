@@ -136,4 +136,36 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
         after2.Should().NotBeNull();
         after2!.Status.SignalStrength.Should().Be(200);
     }
+
+    [Fact]
+    public void Update_DF20WithBds20_PopulatesCallsign()
+    {
+        // Arrange - DF 20 Comm-B altitude reply with BDS 2,0 (callsign WUK8484, ICAO 407D44)
+        Tracker = CreateTracker();
+        ProcessedFrame frame = CreateFrame(RealFrames.CommB_Altitude_407D44_BDS20, "407D44");
+
+        // Act
+        Tracker.Update(frame);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("407D44");
+        aircraft.Should().NotBeNull();
+        aircraft!.Identification.Callsign.Should().Be("WUK8484");
+    }
+
+    [Fact]
+    public void Update_DF21WithBds20_PopulatesCallsign()
+    {
+        // Arrange - DF 21 Comm-B identity reply with BDS 2,0 (callsign ASL16F, ICAO 4C0177)
+        Tracker = CreateTracker();
+        ProcessedFrame frame = CreateFrame(RealFrames.CommB_Identity_4C0177_BDS20, "4C0177");
+
+        // Act
+        Tracker.Update(frame);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("4C0177");
+        aircraft.Should().NotBeNull();
+        aircraft!.Identification.Callsign.Should().Be("ASL16F");
+    }
 }

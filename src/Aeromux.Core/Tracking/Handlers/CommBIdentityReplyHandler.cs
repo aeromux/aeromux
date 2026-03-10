@@ -27,6 +27,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// Routes BDS register data to appropriate tracking groups (identical logic to DF 20):
 /// - BDS 1,0 → TrackedCapabilities (data link capability bits)
 /// - BDS 1,7 → TrackedCapabilities (supported BDS registers mask)
+/// - BDS 2,0 → TrackedIdentification (callsign from Comm-B, primary source for Mode S-only aircraft)
 /// - BDS 4,0 → TrackedAutopilot (MCP/FMS altitude, pressure setting)
 /// - BDS 4,4 → TrackedMeteo (wind, temperature, pressure)
 /// - BDS 4,5 → TrackedMeteo (turbulence, wind shear, hazards)
@@ -69,6 +70,7 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         {
             Bds10DataLinkCapability data => HandleBds10(aircraft, data, timestamp),
             Bds17GicbCapability data => HandleBds17(aircraft, data, timestamp),
+            Bds20AircraftIdentification data => HandleBds20(aircraft, data),
             Bds40SelectedVerticalIntention data => HandleBds40(aircraft, data, timestamp),
             Bds44MeteorologicalRoutine data => HandleBds44(aircraft, data, timestamp),
             Bds45MeteorologicalHazard data => HandleBds45(aircraft, data, timestamp),
@@ -124,6 +126,31 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         };
 
         return aircraft with { Capabilities = capabilities };
+    }
+
+    /// <summary>
+    /// Handles BDS 2,0 (Aircraft Identification) - updates TrackedIdentification.Callsign.
+    /// Provides: 8-character callsign from Comm-B register (Mode S only, no ADS-B category).
+    /// </summary>
+    /// <remarks>
+    /// Primary callsign source for aircraft that do not transmit ADS-B (e.g., military).
+    /// Only updates callsign if non-empty; does not update Category (only available from TC 1-4).
+    /// </remarks>
+    private static Aircraft HandleBds20(
+        Aircraft aircraft,
+        Bds20AircraftIdentification data)
+    {
+        if (string.IsNullOrEmpty(data.Callsign))
+        {
+            return aircraft;
+        }
+
+        TrackedIdentification identification = aircraft.Identification with
+        {
+            Callsign = data.Callsign
+        };
+
+        return aircraft with { Identification = identification };
     }
 
     /// <summary>

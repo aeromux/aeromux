@@ -21,7 +21,7 @@ namespace Aeromux.Core.Tracking;
 /// <summary>
 /// Aircraft identification information group.
 /// Contains all identity-related fields: ICAO address, callsign, squawk, category, emergency state.
-/// Sources: TC 1-4 (ADS-B Identification), TC 28 (Aircraft Status), DF 5 (Surveillance Identity Reply).
+/// Sources: TC 1-4 (ADS-B Identification), BDS 2,0 (Comm-B Identification), TC 28 (Aircraft Status), DF 5 (Surveillance Identity Reply).
 /// </summary>
 public sealed record TrackedIdentification
 {
@@ -34,7 +34,7 @@ public sealed record TrackedIdentification
     public required string ICAO { get; init; }
 
     /// <summary>
-    /// Flight identification / callsign (TC 1-4).
+    /// Flight identification / callsign (TC 1-4, BDS 2,0).
     /// Format: 8-character string, may contain flight number or registration.
     /// Example: "UAL1234 " or "N12345  " (space-padded).
     /// Null if not yet received.
