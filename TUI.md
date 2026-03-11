@@ -59,25 +59,24 @@ The footer has three rows:
 
 Press `Enter` on a selected aircraft to open its detail view. This shows all available information organized into sections:
 
-- **Identification** — ICAO address, callsign, category, squawk, emergency state, ADS-B version
-- **Aircraft Details** — Registration, operator, manufacturer, type (from [aeromux-db](https://github.com/nandortoth/aeromux-db))
+- **Identification** — ICAO address, callsign, category, squawk, emergency state
+- **Aircraft Database** — Registration, operator, manufacturer, type (from [aeromux-db](https://github.com/nandortoth/aeromux-db))
 - **Status** — First/last seen timestamps, message counts, signal strength
-- **Position** — Latitude, longitude, distance, barometric and geometric altitude, NACp, SIL
-- **Velocity** — Speed, heading, track, vertical rate, Comm-B airspeed data, NACv
+- **Position** — Latitude, longitude, distance, barometric and geometric altitude
+- **Velocity & Dynamics** — Speed, heading, track, vertical rate, roll angle, Mach number, surface movement
 - **Autopilot** — Selected altitude/heading, barometric pressure, autopilot modes
-- **ACAS/TCAS** — TCAS operational status, sensitivity, resolution advisories
-- **Flight Dynamics** — Roll angle, magnetic heading, Mach number, track rate
 - **Meteorology** — Wind speed/direction, temperature, turbulence, icing
-- **Capabilities** — Transponder level, ADS-B capabilities, data link features
-- **Data Quality** — NIC, SIL, NACp accuracy parameters
-- **Operational Mode** — TCAS RA, IDENT switch, ATC services, antenna configuration
+- **ACAS/TCAS** — TCAS operational status, sensitivity, resolution advisories
+- **Capabilities** — Transponder level, ADS-B version, data link features, operational state
+- **Data Quality** — Antenna, NACp, NACv, NICbaro, SIL accuracy and integrity parameters
 
 ```
                                   AIRCRAFT DETAIL (471DBD) - Aeromux
 ┌──────────────────────────────────────────┬───────────────────────────────────────────────────────┬───┐
 │ Field                                    │ Value                                                 │   │
 ├──────────────────────────────────────────┼───────────────────────────────────────────────────────┼───┤
-│ === IDENTIFICATION ===================== │                                                       │ █ │
+│ === IDENTIFICATION ===================== │ ===================================================== │ █ │
+│ --- Identity --------------------------- │ ----------------------------------------------------- │ █ │
 │ ICAO Address                             │ 471DBD                                                │ █ │
 │ Callsign                                 │ WZZ5070                                               │ █ │
 │ Category                                 │ Large                                                 │ █ │
@@ -87,7 +86,7 @@ Press `Enter` on a selected aircraft to open its detail view. This shows all ava
   ↑/↓: Row, ←/→: Page, Home/End                                                     ESC: Back, Q: Quit
 ```
 
-Fields that have not yet been received display `N/A (no data yet)`. The Aircraft Details section requires the [aeromux-db](https://github.com/nandortoth/aeromux-db) database to be configured; without it, a message indicates that no database is available.
+Fields that have not yet been received display `N/A (no data yet)`. The Aircraft Database section requires the [aeromux-db](https://github.com/nandortoth/aeromux-db) database to be configured; without it, a message indicates that no database is available.
 
 ## Keyboard Reference
 
