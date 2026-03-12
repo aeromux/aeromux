@@ -95,6 +95,8 @@ internal static class LiveAircraftDetailBuilder
 
         if (!aircraft.DatabaseEnabled)
         {
+            allRows.Add(new DetailRow("[dim]--- Status -----------------------------[/]",
+                "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
             allRows.Add(new DetailRow("No database configured. See README.md.", "", IsSectionHeader: true));
         }
         else
@@ -291,7 +293,7 @@ internal static class LiveAircraftDetailBuilder
 
         // Last position update timestamp
         string posLastUpdate = aircraft.Position.LastUpdate.HasValue
-            ? aircraft.Position.LastUpdate.Value.ToString("HH:mm:ss")
+            ? $"{(DateTime.UtcNow - aircraft.Position.LastUpdate.Value).TotalSeconds:F1}s ago"
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Last Update", posLastUpdate));
 
@@ -563,7 +565,7 @@ internal static class LiveAircraftDetailBuilder
 
         // Last autopilot update timestamp
         string autopilotLastUpdate = aircraft.Autopilot?.LastUpdate.HasValue == true
-            ? aircraft.Autopilot.LastUpdate.Value.ToString("HH:mm:ss")
+            ? $"{(DateTime.UtcNow - aircraft.Autopilot.LastUpdate.Value).TotalSeconds:F1}s ago"
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Last Update", autopilotLastUpdate));
 
@@ -679,7 +681,7 @@ internal static class LiveAircraftDetailBuilder
 
         // Last meteorological update timestamp
         string meteoLastUpdate = aircraft.Meteo?.LastUpdate.HasValue == true
-            ? aircraft.Meteo.LastUpdate.Value.ToString("HH:mm:ss")
+            ? $"{(DateTime.UtcNow - aircraft.Meteo.LastUpdate.Value).TotalSeconds:F1}s ago"
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Last Update", meteoLastUpdate));
 
@@ -1260,7 +1262,7 @@ internal static class LiveAircraftDetailBuilder
             }
         }
 
-        return max.HasValue ? max.Value.ToString("HH:mm:ss") : "N/A (no data yet)";
+        return max.HasValue ? $"{(DateTime.UtcNow - max.Value).TotalSeconds:F1}s ago" : "N/A (no data yet)";
     }
 
     /// <summary>
