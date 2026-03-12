@@ -256,7 +256,7 @@ internal static class LiveKeyboardHandler
                     state.DetailSearchInput = state.DetailSearchInput[..^1].TrimEnd(' ');
                     if (state.DetailSearchInput.Length > 0)
                     {
-                        var matches = FindDetailSearchMatches(allRows, state.DetailSearchInput);
+                        List<int> matches = FindDetailSearchMatches(allRows, state.DetailSearchInput);
                         if (matches.Count > 0)
                         {
                             state.DetailViewSelectedRow = matches[0];
@@ -269,7 +269,7 @@ internal static class LiveKeyboardHandler
                 if (!string.IsNullOrEmpty(state.DetailSearchInput))
                 {
                     // Cycle to previous match with wrap-around
-                    var matchesUp = FindDetailSearchMatches(allRows, state.DetailSearchInput);
+                    List<int> matchesUp = FindDetailSearchMatches(allRows, state.DetailSearchInput);
                     if (matchesUp.Count > 0)
                     {
                         int prev = matchesUp.LastOrDefault(m => m < state.DetailViewSelectedRow, matchesUp[^1]);
@@ -283,7 +283,7 @@ internal static class LiveKeyboardHandler
                 if (!string.IsNullOrEmpty(state.DetailSearchInput))
                 {
                     // Cycle to next match with wrap-around
-                    var matchesDown = FindDetailSearchMatches(allRows, state.DetailSearchInput);
+                    List<int> matchesDown = FindDetailSearchMatches(allRows, state.DetailSearchInput);
                     if (matchesDown.Count > 0)
                     {
                         int next = matchesDown.FirstOrDefault(m => m > state.DetailViewSelectedRow, matchesDown[0]);
@@ -359,7 +359,7 @@ internal static class LiveKeyboardHandler
                     }
 
                     state.DetailSearchInput += ch;
-                    var matches = FindDetailSearchMatches(allRows, state.DetailSearchInput);
+                    List<int> matches = FindDetailSearchMatches(allRows, state.DetailSearchInput);
                     if (matches.Count > 0)
                     {
                         state.DetailViewSelectedRow = matches[0];

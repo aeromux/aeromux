@@ -62,7 +62,7 @@ internal sealed class LiveTuiDisplay
         using var trackerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         // Subscribe to aircraft lifecycle events for operational visibility
-        tracker.OnAircraftAdded += (sender, e) =>
+        tracker.OnAircraftAdded += (_, e) =>
         {
             Aircraft aircraft = e.Aircraft;
             Log.Information("New aircraft: ICAO={Icao}, Callsign={Callsign}",
@@ -71,7 +71,7 @@ internal sealed class LiveTuiDisplay
         };
 
         // Log significant updates (typically for debug, currently does nothing)
-        tracker.OnAircraftUpdated += (sender, e) =>
+        tracker.OnAircraftUpdated += (_, e) =>
         {
             // Example
             //
