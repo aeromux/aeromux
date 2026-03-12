@@ -78,10 +78,15 @@ internal sealed class LiveTuiState
     public SortColumn SortColumn { get; set; } = SortColumn.ICAO;
     public SortDirection SortDirection { get; set; } = SortDirection.Ascending;
 
-    // Search
+    // Search (table view)
     public bool IsSearchActive { get; set; }
     public string SearchInput { get; set; } = "";
     public string? PreSearchSelectedIcao { get; set; }
+
+    // Search (detail view)
+    public bool IsDetailSearchActive { get; set; }
+    public string DetailSearchInput { get; set; } = "";
+    public int PreSearchDetailSelectedRow { get; set; }
 
     /// <summary>
     /// Resets sort, units, and search to defaults. Preserves selection (FR-RESET-02).
@@ -96,6 +101,9 @@ internal sealed class LiveTuiState
         IsSearchActive = false;
         SearchInput = "";
         PreSearchSelectedIcao = null;
+        IsDetailSearchActive = false;
+        DetailSearchInput = "";
+        PreSearchDetailSelectedRow = 0;
         DetailAircraft = null;
         DetailAircraftExpired = false;
     }

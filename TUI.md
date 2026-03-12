@@ -71,22 +71,45 @@ Press `Enter` on a selected aircraft to open its detail view. This shows all ava
 - **Data Quality** — Antenna, NACp, NACv, NICbaro, SIL accuracy and integrity parameters
 
 ```
-                                  AIRCRAFT DETAIL (471DBD) - Aeromux
+                                   AIRCRAFT DETAIL (471DB6) - Aeromux
 ┌──────────────────────────────────────────┬───────────────────────────────────────────────────────┬───┐
 │ Field                                    │ Value                                                 │   │
 ├──────────────────────────────────────────┼───────────────────────────────────────────────────────┼───┤
 │ === IDENTIFICATION ===================== │ ===================================================== │ █ │
 │ --- Identity --------------------------- │ ----------------------------------------------------- │ █ │
-│ ICAO Address                             │ 471DBD                                                │ █ │
-│ Callsign                                 │ WZZ5070                                               │ █ │
+│ ICAO Address                             │ 471DB6                                                │ █ │
+│ Callsign                                 │ WZZ268                                                │ █ │
 │ Category                                 │ Large                                                 │ █ │
+│ --- Transponder ------------------------ │ ----------------------------------------------------- │ █ │
+│ Squawk                                   │ 5301                                                  │ █ │
+│ Emergency                                │ NoEmergency                                           │ █ │
+│ Flight Status                            │ AirborneNormal                                        │ █ │
+│                                          │                                                       │ █ │
+│ === AIRCRAFT DATABASE ================== │ ===================================================== │ █ │
+│ --- Registration ----------------------- │ ----------------------------------------------------- │ █ │
+│ Registration                             │ HA-LGO                                                │ █ │
+│ Registration Country                     │ Hungary                                               │ █ │
+│ Operator Name                            │ Wizz Air Hungary                                      │ █ │
+│ --- Aircraft Type ---------------------- │ ----------------------------------------------------- │ █ │
+│ Manufacturer ICAO                        │ N/A                                                   │ █ │
+│ Manufacturer Name                        │ AIRBUS                                                │ █ │
+│ Type Class ICAO                          │ L2J                                                   │ ░ │
+│ Type Designator                          │ A21N                                                  │ ░ │
+│ Type Description                         │ AIRBUS A-321neo                                       │ ░ │
+│ Aircraft Model                           │ A321neo                                               │ ░ │
+│ --- Flags ------------------------------ │ ----------------------------------------------------- │ ░ │
+│ FAA PIA (Privacy)                        │ No                                                    │ ░ │
+│ FAA LADD (Limiting)                      │ No                                                    │ ░ │
+│ Military                                 │ No                                                    │ ░ │
 │ ...                                      │ ...                                                   │ ░ │
 └──────────────────────────────────────────┴───────────────────────────────────────────────────────┴───┘
-  Row: 2/156                                                             Dist: mi | Alt: ft | Spd: kts
-  ↑/↓: Row, ←/→: Page, Home/End                                                     ESC: Back, Q: Quit
+  Row: 3/187                                                             Dist: mi | Alt: ft | Spd: kts
+  ↑/↓: Row, ←/→: Page, Home/End                            D/A/S: Units, /: Search, ESC: Back, Q: Quit
 ```
 
 Fields that have not yet been received display `N/A (no data yet)`. The Aircraft Database section requires the [aeromux-db](https://github.com/nandortoth/aeromux-db) database to be configured; without it, a message indicates that no database is available.
+
+Display units (`D`/`A`/`S`) can be toggled directly in the detail view — see [Display Units](#display-units). Press `/` to search field names — see [Detail View Search](#detail-view-search).
 
 ## Keyboard Reference
 
@@ -110,17 +133,33 @@ Fields that have not yet been received display `N/A (no data yet)`. The Aircraft
 
 ### Detail View
 
-| Key            | Action                                         |
-|----------------|------------------------------------------------|
-| `↑` / `↓`      | Move selection up/down (skips section headers) |
-| `←` / `→`      | Move up/down by one page                       |
-| `Page Up/Down` | Same as `←` / `→`                              |
-| `Home`         | Jump to the first field                        |
-| `End`          | Jump to the last field                         |
-| `Esc`          | Return to the aircraft list                    |
-| `Q`            | Quit                                           |
+| Key            | Action                                                            |
+|----------------|-------------------------------------------------------------------|
+| `↑` / `↓`      | Move selection up/down (skips section headers)                    |
+| `←` / `→`      | Move up/down by one page                                          |
+| `Page Up/Down` | Same as `←` / `→`                                                 |
+| `Home`         | Jump to the first field                                           |
+| `End`          | Jump to the last field                                            |
+| `D`            | Toggle distance unit (miles / kilometers)                         |
+| `A`            | Toggle altitude unit (feet / meters)                              |
+| `S`            | Cycle speed unit (knots / km/h / mph)                             |
+| `/`            | Enter search mode (see [Detail View Search](#detail-view-search)) |
+| `Esc`          | Return to the aircraft list                                       |
+| `Q`            | Quit                                                              |
 
-### Search Mode
+### Detail View Search Mode
+
+| Key                                    | Action                                                  |
+|----------------------------------------|---------------------------------------------------------|
+| Letters, digits, `()`, `-`, `,`, space | Append to search input (max 15 chars, shown uppercase)  |
+| `Backspace`                            | Remove last character from search input                 |
+| `↑` / `↓` / `Tab`                      | Cycle through matching fields (wraps around)            |
+| `←` / `→`                              | Move up/down by one page                                |
+| `Home` / `End`                         | Jump to first/last field                                |
+| `Enter`                                | Confirm search and keep current position                |
+| `Esc`                                  | Cancel search and restore previous position             |
+
+### Aircraft List Search Mode
 
 | Key              | Action                                            |
 |------------------|---------------------------------------------------|
@@ -155,7 +194,11 @@ Sorting behavior:
 
 ## Search
 
-Press `/` to enter search mode. Type to filter the aircraft list (up to 8 characters) — the search matches against both ICAO address and callsign as a case-insensitive substring match. For example, typing `WZZ` matches all Wizz Air flights by callsign and any ICAO address containing `WZZ`.
+Both the aircraft list and the detail view support search mode, activated by pressing `/`.
+
+### Aircraft List Search
+
+Type to filter the aircraft list (up to 8 characters) — the search matches against both ICAO address and callsign as a case-insensitive substring match. For example, typing `WZZ` matches all Wizz Air flights by callsign and any ICAO address containing `WZZ`.
 
 Matching substrings are highlighted in the ICAO and callsign columns. The footer shows the search prompt with a match count. Press `Enter` to confirm and open the selected aircraft's detail view, or `Esc` to cancel and restore the previous selection.
 
@@ -175,9 +218,15 @@ Matching substrings are highlighted in the ICAO and callsign columns. The footer
   ↑/↓: Row, ←/→: Page, Home/End                       ENTER: Details, D/A/S: Units, /: Search, Q: Quit
 ```
 
+### Detail View Search
+
+Type to search field names in the detail view (up to 15 characters). Unlike the aircraft list search which filters the list, the detail view search uses a **jump-and-highlight** approach — all rows remain visible, the selection jumps to the first matching field, and matching characters are highlighted in red. This preserves section context around the matched field.
+
+Accepted characters: letters (displayed uppercase), digits, space, parentheses, hyphen, and comma. The search is case-insensitive. Use `↑`/`↓`/`Tab` to cycle through matches (wraps around). Press `Enter` to confirm (keeps current position) or `Esc` to cancel (restores previous position).
+
 ## Display Units
 
-Three display units can be toggled during operation:
+Three display units can be toggled in both the aircraft list and the detail view:
 
 | Key | Unit     | Options                      | Default |
 |-----|----------|------------------------------|---------|

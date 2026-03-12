@@ -21,7 +21,7 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 
 - **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
 
-- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, and unit switching. See the [TUI Guide](TUI.md) for full documentation.
+- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, unit switching, and detail view field search with jump-and-highlight navigation. See the [TUI Guide](TUI.md) for full documentation.
 
 - **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network.
 

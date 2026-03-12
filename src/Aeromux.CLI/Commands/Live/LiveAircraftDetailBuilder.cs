@@ -39,6 +39,8 @@ internal static class LiveAircraftDetailBuilder
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
     /// <param name="selectedRow">Currently selected row index for highlighting (0-based, validated to skip headers).</param>
     /// <param name="isExpired">True if the aircraft has expired (timed out) — shows [EXPIRED] in title.</param>
+    /// <param name="isDetailSearchActive">Whether detail search mode is currently active.</param>
+    /// <param name="detailSearchInput">Current search input text for field name highlighting.</param>
     /// <returns>Spectre.Console Table with detailed aircraft information and fixed 120-character width.</returns>
     public static (Table Table, List<DetailRow> DetailRows) Build(
         Aircraft aircraft,
@@ -47,7 +49,9 @@ internal static class LiveAircraftDetailBuilder
         SpeedUnit speedUnit,
         ReceiverConfig? receiverConfig,
         int selectedRow = 0,
-        bool isExpired = false)
+        bool isExpired = false,
+        bool isDetailSearchActive = false,
+        string detailSearchInput = "")
     {
         // Calculate available viewport rows based on terminal height
         // Layout: title (1) + table header (1) + data rows + footer (2) + padding (3)
@@ -1080,11 +1084,31 @@ internal static class LiveAircraftDetailBuilder
             .AddColumn(new TableColumn("[bold]Value[/]").Width(53).NoWrap().PadLeft(1).PadRight(1))
             .AddColumn(new TableColumn("[bold] [/]").Width(1).Centered().NoWrap());
 
+        // Pre-compute matching row indices for search highlighting
+        var matchingIndices = new HashSet<int>();
+        if (isDetailSearchActive && !string.IsNullOrEmpty(detailSearchInput))
+        {
+            for (int i = 0; i < allRows.Count; i++)
+            {
+                if (allRows[i].IsSectionHeader)
+                {
+                    continue;
+                }
+
+                string plainField = Regex.Replace(allRows[i].Field, @"\[/?[^\]]*\]", "");
+                if (plainField.Contains(detailSearchInput, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchingIndices.Add(i);
+                }
+            }
+        }
+
         // Render rows in viewport
         for (int i = viewportStart; i < viewportEnd; i++)
         {
             DetailRow row = allRows[i];
             bool isSelected = i == selectedRow;
+            bool isMatch = matchingIndices.Contains(i);
 
             // Calculate scrollbar character for this row
             string scrollbarChar;
@@ -1099,15 +1123,23 @@ internal static class LiveAircraftDetailBuilder
                 scrollbarChar = "░";  // Always show track
             }
 
-            // Apply highlighting to selected row (but not scrollbar or section headers)
+            // Apply highlighting to selected and/or matching rows (not section headers)
             if (isSelected && !row.IsSectionHeader)
             {
-                // Strip markup from field name before padding to ensure correct column width
                 string strippedField = Regex.Replace(row.Field, @"\[/?[^\]]*\]", "");
+                string fieldDisplay = isMatch
+                    ? HighlightFieldName(strippedField, detailSearchInput, isSelected: true)
+                    : $"[black on white]{Markup.Escape(strippedField),-40}[/]";
                 table.AddRow(
-                    $"[black on white]{Markup.Escape(strippedField),-40}[/]",
+                    fieldDisplay,
                     $"[black on white]{Markup.Escape(row.Value),-53}[/]",
-                    scrollbarChar);  // Scrollbar keeps normal styling
+                    scrollbarChar);
+            }
+            else if (isMatch && !row.IsSectionHeader)
+            {
+                string strippedField = Regex.Replace(row.Field, @"\[/?[^\]]*\]", "");
+                string fieldDisplay = HighlightFieldName(strippedField, detailSearchInput, isSelected: false);
+                table.AddRow(fieldDisplay, row.Value, scrollbarChar);
             }
             else
             {
@@ -1135,12 +1167,42 @@ internal static class LiveAircraftDetailBuilder
         };
 
         // Footer row 1: left and right sections
-        string footerRow1Left = $"[bold]Row:[/] {selectedRow + 1}/{totalRows}";
+        string footerRow1Left;
+        if (isDetailSearchActive)
+        {
+            if (string.IsNullOrEmpty(detailSearchInput))
+            {
+                int dataFieldCount = allRows.Count(r => !r.IsSectionHeader);
+                string fieldWord = dataFieldCount == 1 ? "field" : "fields";
+                footerRow1Left = $"[white][bold]Search:[/] _ ({dataFieldCount} {fieldWord})[/]";
+            }
+            else
+            {
+                int matchCount = matchingIndices.Count;
+                string matchWord = matchCount == 1 ? "match" : "matches";
+                footerRow1Left = $"[white][bold]Search:[/] {Markup.Escape(detailSearchInput)}_ ({matchCount} {matchWord})[/]";
+            }
+        }
+        else
+        {
+            footerRow1Left = $"[bold]Row:[/] {selectedRow + 1}/{totalRows}";
+        }
+
         string footerRow1Right = $"[bold]Dist:[/] {distUnitLabel} | [bold]Alt:[/] {altUnitLabel} | [bold]Spd:[/] {speedUnitLabel}";
 
         // Footer row 2: left and right sections
-        string footerRow2Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page, [bold]Home/End[/]";
-        string footerRow2Right = "[bold]ESC[/]: Back, [bold]Q[/]: Quit";
+        string footerRow2Left;
+        string footerRow2Right;
+        if (isDetailSearchActive)
+        {
+            footerRow2Left = "[bold]↑/↓/Tab[/]: Match, [bold]←/→[/]: Page, [bold]Home/End[/]";
+            footerRow2Right = "[bold]ESC[/]: Cancel, [bold]Enter[/]: Done";
+        }
+        else
+        {
+            footerRow2Left = "[bold]↑/↓[/]: Row, [bold]←/→[/]: Page, [bold]Home/End[/]";
+            footerRow2Right = "[bold]D/A/S[/]: Units, [bold]/[/]: Search, [bold]ESC[/]: Back, [bold]Q[/]: Quit";
+        }
 
         // Pad footer rows to exactly 100 visible characters (table is 104 wide, 2 indent per side)
         string footerRow1 = PadFooterRow(footerRow1Left, footerRow1Right);
@@ -1199,6 +1261,36 @@ internal static class LiveAircraftDetailBuilder
         }
 
         return max.HasValue ? max.Value.ToString("HH:mm:ss") : "N/A (no data yet)";
+    }
+
+    /// <summary>
+    /// Renders a field name with the search match substring highlighted in red.
+    /// For selected (inverted) rows, uses [red on white] for the match and [black on white] for the rest.
+    /// For normal rows, uses [red] for the match and leaves the rest unstyled.
+    /// </summary>
+    private static string HighlightFieldName(string plainField, string searchInput, bool isSelected)
+    {
+        int matchStart = plainField.IndexOf(searchInput, StringComparison.OrdinalIgnoreCase);
+        if (matchStart < 0)
+        {
+            return isSelected
+                ? $"[black on white]{Markup.Escape(plainField),-40}[/]"
+                : Markup.Escape(plainField);
+        }
+
+        int matchEnd = matchStart + searchInput.Length;
+        string before = Markup.Escape(plainField[..matchStart]);
+        string match = Markup.Escape(plainField[matchStart..matchEnd]);
+        string after = Markup.Escape(plainField[matchEnd..]);
+
+        if (isSelected)
+        {
+            int paddingNeeded = Math.Max(0, 40 - plainField.Length);
+            string paddedAfter = after + new string(' ', paddingNeeded);
+            return $"[black on white]{before}[/][red on white]{match}[/][black on white]{paddedAfter}[/]";
+        }
+
+        return $"{before}[red]{match}[/]{after}";
     }
 
     /// <summary>

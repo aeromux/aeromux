@@ -204,7 +204,9 @@ internal sealed class LiveTuiDisplay
                                     state.SpeedUnit,
                                     receiverConfig,
                                     state.DetailViewSelectedRow,
-                                    state.DetailAircraftExpired);
+                                    state.DetailAircraftExpired,
+                                    state.IsDetailSearchActive,
+                                    state.DetailSearchInput);
 
                                 state.CurrentDetailRows = detailRows;
                                 ctx.UpdateTarget(detailTable);
