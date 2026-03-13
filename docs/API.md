@@ -36,7 +36,7 @@ aeromux daemon --api-enabled false  # disable the API
 Returns a compact summary of all tracked aircraft, suitable for table or map rendering.
 
 ```bash
-curl http://localhost:8080/api/v1/aircraft
+curl -s "http://localhost:8080/api/v1/aircraft"
 ```
 
 ```json
@@ -76,13 +76,13 @@ Returns detailed information for a single aircraft. The ICAO address is case-ins
 
 ```bash
 # All sections
-curl http://localhost:8080/api/v1/aircraft/407F19
+curl -s "http://localhost:8080/api/v1/aircraft/407F19"
 
 # Specific sections only
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,Autopilot"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,Autopilot"
 
 # Single section
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Identification"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Identification"
 ```
 
 ### Available Sections
@@ -107,7 +107,7 @@ Sections that have no data yet (e.g., `Meteorology` for a newly tracked aircraft
 ### Example: Identification
 
 ```bash
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Identification"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Identification"
 ```
 
 ```json
@@ -128,7 +128,7 @@ curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Identification"
 ### Example: Position and VelocityAndDynamics
 
 ```bash
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,VelocityAndDynamics"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,VelocityAndDynamics"
 ```
 
 ```json
@@ -175,7 +175,7 @@ curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,VelocityAnd
 When database enrichment is enabled and the aircraft is found:
 
 ```bash
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=DatabaseRecord"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=DatabaseRecord"
 ```
 
 ```json
@@ -212,7 +212,7 @@ When database enrichment is disabled, `DatabaseRecord` is `null`:
 Sections for which no messages have been received are returned as `null`:
 
 ```bash
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=Meteorology,Autopilot"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Meteorology,Autopilot"
 ```
 
 ```json
@@ -229,16 +229,16 @@ Returns position, altitude, and velocity history for a single aircraft.
 
 ```bash
 # All history types
-curl http://localhost:8080/api/v1/aircraft/407F19/history
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history"
 
 # Position only, last 50 entries
-curl "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&limit=50"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&limit=50"
 
 # Multiple types
-curl "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position,Altitude"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position,Altitude"
 
 # Altitude history only
-curl "http://localhost:8080/api/v1/aircraft/407F19/history?type=Altitude"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Altitude"
 ```
 
 Each history type includes buffer metadata:
@@ -267,7 +267,7 @@ When a history type is disabled: `{ "Enabled": false }` (no `Capacity`, `Count`,
 ### Example: Velocity history with limit
 
 ```bash
-curl "http://localhost:8080/api/v1/aircraft/407F19/history?type=Velocity&limit=2"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Velocity&limit=2"
 ```
 
 ```json
@@ -307,7 +307,7 @@ curl "http://localhost:8080/api/v1/aircraft/407F19/history?type=Velocity&limit=2
 Returns receiver and session statistics.
 
 ```bash
-curl http://localhost:8080/api/v1/stats
+curl -s "http://localhost:8080/api/v1/stats"
 ```
 
 ```json
@@ -336,7 +336,7 @@ curl http://localhost:8080/api/v1/stats
 Lightweight endpoint for Docker health checks, monitoring tools, and readiness probes.
 
 ```bash
-curl http://localhost:8080/api/v1/health
+curl -s "http://localhost:8080/api/v1/health"
 ```
 
 ```json
@@ -378,23 +378,23 @@ All errors use the format `{ "Error": "<message>" }` with the appropriate HTTP s
 
 ```bash
 # Invalid ICAO address
-curl http://localhost:8080/api/v1/aircraft/ZZZZZZ
+curl -s "http://localhost:8080/api/v1/aircraft/ZZZZZZ"
 # {"Error":"Invalid ICAO address: ZZZZZZ"}  (HTTP 400)
 
 # Aircraft not found
-curl http://localhost:8080/api/v1/aircraft/AAAAAA
+curl -s "http://localhost:8080/api/v1/aircraft/AAAAAA"
 # {"Error":"Aircraft not found: AAAAAA"}  (HTTP 404)
 
 # Invalid section name
-curl "http://localhost:8080/api/v1/aircraft/407F19?sections=InvalidName"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=InvalidName"
 # {"Error":"Unknown section: InvalidName"}  (HTTP 400)
 
 # Invalid history type
-curl "http://localhost:8080/api/v1/aircraft/407F19/history?type=InvalidType"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=InvalidType"
 # {"Error":"Unknown history type: InvalidType"}  (HTTP 400)
 
 # Invalid limit
-curl "http://localhost:8080/api/v1/aircraft/407F19/history?limit=-1"
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?limit=-1"
 # {"Error":"Invalid limit: -1. Must be a positive integer."}  (HTTP 400)
 ```
 
@@ -415,7 +415,7 @@ When rate-limited, the server returns HTTP 429 with a `Retry-After` header.
 ```bash
 # Poll every 1 second for map markers
 while true; do
-  curl -s http://localhost:8080/api/v1/aircraft | jq '.Aircraft[] | {ICAO, Coordinate, BarometricAltitude}'
+  curl -s "http://localhost:8080/api/v1/aircraft" | jq '.Aircraft[] | {ICAO, Coordinate, BarometricAltitude}'
   sleep 1
 done
 ```
@@ -423,7 +423,7 @@ done
 ### Get detail for a specific aircraft
 
 ```bash
-curl -s http://localhost:8080/api/v1/aircraft/407F19 | jq .
+curl -s "http://localhost:8080/api/v1/aircraft/407F19" | jq .
 ```
 
 ### Fetch only position and speed
@@ -447,17 +447,17 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Altitude&limi
 ### Count tracked aircraft
 
 ```bash
-curl -s http://localhost:8080/api/v1/aircraft | jq .Count
+curl -s "http://localhost:8080/api/v1/aircraft" | jq .Count
 ```
 
 ### Monitor receiver health
 
 ```bash
-curl -s http://localhost:8080/api/v1/health | jq .Status
+curl -s "http://localhost:8080/api/v1/health" | jq .Status
 ```
 
 ### Check frame rate and error ratio
 
 ```bash
-curl -s http://localhost:8080/api/v1/stats | jq '{FPS: .Stream.FramesPerSecond, Errors: .Stream.CrcErrors, Total: .Stream.TotalFrames}'
+curl -s "http://localhost:8080/api/v1/stats" | jq '{FPS: .Stream.FramesPerSecond, Errors: .Stream.CrcErrors, Total: .Stream.TotalFrames}'
 ```

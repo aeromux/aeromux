@@ -132,19 +132,13 @@ public sealed class OperationalStatusHandler : ITrackingHandler
         //       Scale 0-11: 11=<3m, 10=<10m, 9=<30m, 8=<92.6m, ..., 0=unknown
         // NICbaro: Barometric Altitude Integrity Code (1-bit, indicates cross-check status)
         //          Enum: NotCrossChecked (0) or CrossCheckedOrNonGilham (1)
-        //          Converted to bool: true if cross-checked, false if not, null if unavailable
         // SIL: Source Integrity Level (probability of error containment, bits 83-84)
         //      Scale 0-3: 3=<10^-7 per hour (highest), 2=<10^-5, 1=<10^-3, 0=unknown
-
-        // Convert NICbaro from enum to bool for storage
-        bool? nicBaroValue = msg.NICbaro.HasValue
-            ? msg.NICbaro.Value == ModeS.Enums.BarometricAltitudeIntegrityCode.CrossCheckedOrNonGilham
-            : null;
 
         TrackedPosition position = aircraft.Position with
         {
             NACp = msg.NACp,
-            NICbaro = nicBaroValue,
+            NICbaro = msg.NICbaro ?? aircraft.Position.NICbaro,
             SIL = msg.SIL
         };
 

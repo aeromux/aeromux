@@ -105,14 +105,11 @@ public sealed record TrackedPosition
     /// <summary>
     /// NICbaro (Navigation Integrity Category for Barometric altitude) from TC 31 Operational Status.
     /// Indicates whether barometric altitude is cross-checked with other sensors for integrity.
-    /// True = barometric altitude has been verified against GNSS altitude or other reference,
-    ///        providing confidence that the pressure sensor is working correctly.
-    /// False = barometric altitude is not cross-checked, single-source measurement only.
     /// Extracted from OperationalStatus messages (TC 31) and preserved across position updates.
     /// Values are retained until a new TC 31 message provides updated integrity information.
     /// Null if no TC 31 message received yet.
     /// </summary>
-    public bool? NICbaro { get; init; }
+    public BarometricAltitudeIntegrityCode? NICbaro { get; init; }
 
     /// <summary>
     /// SIL (Source Integrity Level) from TC 31 Operational Status.

@@ -208,7 +208,7 @@ public sealed record DetailDataQuality(
     NavigationAccuracyCategoryPosition? NACp_TC29,
     NavigationAccuracyCategoryVelocity? NACv_TC19,
     NavigationAccuracyCategoryVelocity? NACv_TC31,
-    string? NICbaro_TC918,
+    BarometricAltitudeIntegrityCode? NICbaro_TC918,
     BarometricAltitudeIntegrityCode? NICbaro_TC29,
     bool? NICSupplementA,
     bool? NICSupplementC,

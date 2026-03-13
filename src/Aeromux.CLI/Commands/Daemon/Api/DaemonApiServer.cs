@@ -45,6 +45,7 @@ public static class DaemonApiServer
         Func<StreamStatistics?> getStatistics,
         DateTime startTime)
     {
+        ArgumentNullException.ThrowIfNull(config);
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
         // Suppress ASP.NET Core default logging — use existing Serilog configuration

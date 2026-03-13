@@ -33,6 +33,7 @@ public static class DaemonApiMapper
     /// <returns>A compact list item for the aircraft list endpoint.</returns>
     public static AircraftListItem ToListItem(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         return new AircraftListItem(
             ICAO: aircraft.Identification.ICAO,
             Callsign: aircraft.Identification.Callsign,
@@ -63,6 +64,7 @@ public static class DaemonApiMapper
     /// <returns>The identification detail section.</returns>
     public static DetailIdentification ToIdentification(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         return new DetailIdentification(
             ICAO: aircraft.Identification.ICAO,
             Callsign: aircraft.Identification.Callsign,
@@ -82,6 +84,7 @@ public static class DaemonApiMapper
     /// <returns>The database record, or null if database enrichment is disabled.</returns>
     public static AircraftDatabaseRecord? ToDatabaseRecord(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         if (!aircraft.DatabaseEnabled)
         {
             return null;
@@ -97,6 +100,7 @@ public static class DaemonApiMapper
     /// <returns>The status detail section.</returns>
     public static DetailStatus ToStatus(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         return new DetailStatus(
             FirstSeen: aircraft.Status.FirstSeen,
             LastSeen: aircraft.Status.LastSeen,
@@ -114,6 +118,7 @@ public static class DaemonApiMapper
     /// <returns>The position detail section.</returns>
     public static DetailPosition ToPosition(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         return new DetailPosition(
             Coordinate: aircraft.Position.Coordinate,
             BarometricAltitude: aircraft.Position.BarometricAltitude,
@@ -134,6 +139,7 @@ public static class DaemonApiMapper
     /// <returns>The velocity and dynamics detail section.</returns>
     public static DetailVelocityAndDynamics ToVelocityAndDynamics(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         TrackedFlightDynamics? dynamics = aircraft.FlightDynamics;
 
         return new DetailVelocityAndDynamics(
@@ -167,6 +173,7 @@ public static class DaemonApiMapper
     /// <returns>The autopilot detail section, or null if no data received.</returns>
     public static DetailAutopilot? ToAutopilot(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         TrackedAutopilot? ap = aircraft.Autopilot;
         if (ap == null)
         {
@@ -196,6 +203,7 @@ public static class DaemonApiMapper
     /// <returns>The meteorology detail section, or null if no data received.</returns>
     public static DetailMeteorology? ToMeteorology(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         TrackedMeteo? meteo = aircraft.Meteo;
         if (meteo == null)
         {
@@ -227,6 +235,7 @@ public static class DaemonApiMapper
     /// <returns>The ACAS detail section, or null if no data received.</returns>
     public static DetailAcas? ToAcas(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         TrackedAcas? acas = aircraft.Acas;
         if (acas == null)
         {
@@ -258,6 +267,7 @@ public static class DaemonApiMapper
     /// <returns>The capabilities detail section, or null if no data received.</returns>
     public static DetailCapabilities? ToCapabilities(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         TrackedCapabilities? caps = aircraft.Capabilities;
         TrackedOperationalMode? opMode = aircraft.OperationalMode;
 
@@ -295,6 +305,7 @@ public static class DaemonApiMapper
     /// <returns>The data quality detail section, or null if no data received.</returns>
     public static DetailDataQuality? ToDataQuality(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         TrackedDataQuality? dq = aircraft.DataQuality;
         TrackedCapabilities? caps = aircraft.Capabilities;
         TrackedOperationalMode? opMode = aircraft.OperationalMode;
@@ -311,13 +322,7 @@ public static class DaemonApiMapper
             NACp_TC29: dq?.NACp_TC29,
             NACv_TC19: aircraft.Velocity.NACv,
             NACv_TC31: caps?.NACv,
-            // NICbaro is bool? internally but serialized as a descriptive string per API spec
-            NICbaro_TC918: aircraft.Position.NICbaro switch
-            {
-                true => "Cross-Checked",
-                false => "Not Cross-Checked",
-                null => null
-            },
+            NICbaro_TC918: aircraft.Position.NICbaro,
             NICbaro_TC29: dq?.NICbaro_TC29,
             NICSupplementA: dq?.NICSupplementA,
             NICSupplementC: caps?.NICSupplementC,
@@ -336,6 +341,7 @@ public static class DaemonApiMapper
     /// <returns>Position history with buffer metadata, or disabled wrapper if history is off.</returns>
     public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         CircularBuffer<PositionSnapshot>? buffer = aircraft.History.PositionHistory;
         if (buffer == null)
         {
@@ -359,6 +365,7 @@ public static class DaemonApiMapper
     /// <returns>Position history with buffer metadata, or disabled wrapper if history is off.</returns>
     public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft, int limit)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         CircularBuffer<PositionSnapshot>? buffer = aircraft.History.PositionHistory;
         if (buffer == null)
         {
@@ -381,6 +388,7 @@ public static class DaemonApiMapper
     /// <returns>Altitude history with buffer metadata, or disabled wrapper if history is off.</returns>
     public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         CircularBuffer<AltitudeSnapshot>? buffer = aircraft.History.AltitudeHistory;
         if (buffer == null)
         {
@@ -404,6 +412,7 @@ public static class DaemonApiMapper
     /// <returns>Altitude history with buffer metadata, or disabled wrapper if history is off.</returns>
     public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft, int limit)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         CircularBuffer<AltitudeSnapshot>? buffer = aircraft.History.AltitudeHistory;
         if (buffer == null)
         {
@@ -426,6 +435,7 @@ public static class DaemonApiMapper
     /// <returns>Velocity history with buffer metadata, or disabled wrapper if history is off.</returns>
     public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         CircularBuffer<VelocitySnapshot>? buffer = aircraft.History.VelocityHistory;
         if (buffer == null)
         {
@@ -449,6 +459,7 @@ public static class DaemonApiMapper
     /// <returns>Velocity history with buffer metadata, or disabled wrapper if history is off.</returns>
     public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft, int limit)
     {
+        ArgumentNullException.ThrowIfNull(aircraft);
         CircularBuffer<VelocitySnapshot>? buffer = aircraft.History.VelocityHistory;
         if (buffer == null)
         {
@@ -480,6 +491,7 @@ public static class DaemonApiMapper
         DateTime startTime,
         Core.Configuration.ReceiverConfig? receiverConfig)
     {
+        ArgumentNullException.ThrowIfNull(tracker);
         int uptime = (int)(DateTime.UtcNow - startTime).TotalSeconds;
 
         StatsStream stream;

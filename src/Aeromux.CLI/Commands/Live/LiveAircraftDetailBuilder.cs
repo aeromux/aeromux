@@ -77,14 +77,14 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
         allRows.Add(new DetailRow("ICAO Address", aircraft.Identification.ICAO));
         allRows.Add(new DetailRow("Callsign", aircraft.Identification.Callsign ?? "N/A"));
-        allRows.Add(new DetailRow("Category", aircraft.Identification.Category?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("Category", aircraft.Identification.Category?.ToDisplayString() ?? "N/A"));
 
         // --- Transponder sub-section ---
         allRows.Add(new DetailRow("[dim]--- Transponder ------------------------[/]",
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
         allRows.Add(new DetailRow("Squawk", aircraft.Identification.Squawk ?? "N/A"));
-        allRows.Add(new DetailRow("Emergency", aircraft.Identification.EmergencyState.ToString()));
-        allRows.Add(new DetailRow("Flight Status", aircraft.Identification.FlightStatus?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("Emergency", aircraft.Identification.EmergencyState.ToDisplayString()));
+        allRows.Add(new DetailRow("Flight Status", aircraft.Identification.FlightStatus?.ToDisplayString() ?? "N/A"));
 
         // =====================================================================
         // Section 2: AIRCRAFT DATABASE
@@ -278,12 +278,12 @@ internal static class LiveAircraftDetailBuilder
         allRows.Add(new DetailRow("On Ground", aircraft.Position.IsOnGround.ToString()));
 
         // Movement category (ground only)
-        string movementCategory = aircraft.Position.MovementCategory?.ToString() ?? "N/A (no data yet)";
+        string movementCategory = aircraft.Position.MovementCategory?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Movement Category", movementCategory));
 
         // Position source
         string positionSource = aircraft.Position.PositionSource.HasValue
-            ? aircraft.Position.PositionSource.Value.ToString()
+            ? aircraft.Position.PositionSource.Value.ToDisplayString()
             : "N/A (no position yet)";
         allRows.Add(new DetailRow("Position Source", positionSource));
 
@@ -404,11 +404,11 @@ internal static class LiveAircraftDetailBuilder
         allRows.Add(new DetailRow("Heading", heading));
 
         // Heading Type (TC 31)
-        string headingType = aircraft.DataQuality?.HeadingType?.ToString() ?? "N/A (no data yet)";
+        string headingType = aircraft.DataQuality?.HeadingType?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Heading Type", headingType));
 
         // Horizontal Reference (TC 31)
-        string horizontalReference = aircraft.DataQuality?.HorizontalReference?.ToString() ?? "N/A (no data yet)";
+        string horizontalReference = aircraft.DataQuality?.HorizontalReference?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Horizontal Reference", horizontalReference));
 
         // --- Vertical sub-section ---
@@ -512,7 +512,7 @@ internal static class LiveAircraftDetailBuilder
         allRows.Add(new DetailRow("Selected Altitude", selectedAltitude));
 
         // Altitude Source
-        string altitudeSource = aircraft.Autopilot?.AltitudeSource?.ToString() ?? "N/A (no data yet)";
+        string altitudeSource = aircraft.Autopilot?.AltitudeSource?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Altitude Source", altitudeSource));
 
         // Selected Heading
@@ -532,11 +532,11 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
 
         // Vertical Mode
-        string verticalMode = aircraft.Autopilot?.VerticalMode?.ToString() ?? "N/A (no data yet)";
+        string verticalMode = aircraft.Autopilot?.VerticalMode?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Vertical Mode", verticalMode));
 
         // Horizontal Mode
-        string horizontalMode = aircraft.Autopilot?.HorizontalMode?.ToString() ?? "N/A (no data yet)";
+        string horizontalMode = aircraft.Autopilot?.HorizontalMode?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Horizontal Mode", horizontalMode));
 
         // VNAV Mode
@@ -644,23 +644,23 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
 
         // Turbulence
-        string turbulence = aircraft.Meteo?.Turbulence?.ToString() ?? "N/A (no data yet)";
+        string turbulence = aircraft.Meteo?.Turbulence?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Turbulence", turbulence));
 
         // Wind Shear
-        string windShear = aircraft.Meteo?.WindShear?.ToString() ?? "N/A (no data yet)";
+        string windShear = aircraft.Meteo?.WindShear?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Wind Shear", windShear));
 
         // Microburst
-        string microburst = aircraft.Meteo?.Microburst?.ToString() ?? "N/A (no data yet)";
+        string microburst = aircraft.Meteo?.Microburst?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Microburst", microburst));
 
         // Icing
-        string icing = aircraft.Meteo?.Icing?.ToString() ?? "N/A (no data yet)";
+        string icing = aircraft.Meteo?.Icing?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Icing", icing));
 
         // Wake Vortex
-        string wakeVortex = aircraft.Meteo?.WakeVortex?.ToString() ?? "N/A (no data yet)";
+        string wakeVortex = aircraft.Meteo?.WakeVortex?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Wake Vortex", wakeVortex));
 
         // --- Quality sub-section ---
@@ -716,7 +716,7 @@ internal static class LiveAircraftDetailBuilder
         allRows.Add(new DetailRow("Cross-Link Capability", crossLinkCapability));
 
         // Reply Information
-        string replyInformation = aircraft.Acas?.ReplyInformation?.ToString() ?? "N/A (no data yet)";
+        string replyInformation = aircraft.Acas?.ReplyInformation?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Reply Information", replyInformation));
 
         // --- Resolution Advisory subsection ---
@@ -794,10 +794,10 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
 
         // ADS-B Version
-        allRows.Add(new DetailRow("ADS-B Version", aircraft.Identification.Version?.ToString() ?? "N/A"));
+        allRows.Add(new DetailRow("ADS-B Version", aircraft.Identification.Version?.ToDisplayString() ?? "N/A"));
 
         // Transponder Level
-        string transponderLevel = aircraft.Capabilities?.TransponderLevel?.ToString() ?? "N/A (no data yet)";
+        string transponderLevel = aircraft.Capabilities?.TransponderLevel?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Transponder Level", transponderLevel));
 
         // ADS-B 1090ES
@@ -847,7 +847,7 @@ internal static class LiveAircraftDetailBuilder
         allRows.Add(new DetailRow("Target State Reporting", targetStateReporting));
 
         // Trajectory Change Level
-        string trajectoryChangeLevel = aircraft.Capabilities?.TrajectoryChangeLevel?.ToString() ?? "N/A (no data yet)";
+        string trajectoryChangeLevel = aircraft.Capabilities?.TrajectoryChangeLevel?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Trajectory Change Level", trajectoryChangeLevel));
 
         // Position Offset Applied
@@ -951,18 +951,18 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
 
         // NACp (TC 9-18)
-        allRows.Add(new DetailRow("NACp [grey](TC 9-18)[/]", aircraft.Position.NACp?.ToString() ?? "N/A (no data yet)"));
+        allRows.Add(new DetailRow("NACp [grey](TC 9-18)[/]", aircraft.Position.NACp?.ToDisplayString() ?? "N/A (no data yet)"));
 
         // NACp (TC 29)
-        string nacpTc29 = aircraft.DataQuality?.NACp_TC29?.ToString() ?? "N/A (no data yet)";
+        string nacpTc29 = aircraft.DataQuality?.NACp_TC29?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("NACp [grey](TC 29)[/]", nacpTc29));
 
         // NACv (TC 19)
-        string nacvTc19 = aircraft.Velocity.NACv?.ToString() ?? "N/A (no data yet)";
+        string nacvTc19 = aircraft.Velocity.NACv?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("NACv [grey](TC 19)[/]", nacvTc19));
 
         // NACv (TC 31)
-        string nacvTc31 = aircraft.Capabilities?.NACv?.ToString() ?? "N/A (no data yet)";
+        string nacvTc31 = aircraft.Capabilities?.NACv?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("NACv [grey](TC 31)[/]", nacvTc31));
 
         // --- Integrity sub-section ---
@@ -970,13 +970,11 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
 
         // NICbaro (TC 9-18)
-        string nicBaroTc918 = aircraft.Position.NICbaro.HasValue
-            ? (aircraft.Position.NICbaro.Value ? "Cross-checked" : "Not cross-checked")
-            : "N/A (no data yet)";
+        string nicBaroTc918 = aircraft.Position.NICbaro?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("NICbaro [grey](TC 9-18)[/]", nicBaroTc918));
 
         // NICbaro (TC 29)
-        string nicBaroTc29 = aircraft.DataQuality?.NICbaro_TC29?.ToString() ?? "N/A (no data yet)";
+        string nicBaroTc29 = aircraft.DataQuality?.NICbaro_TC29?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("NICbaro [grey](TC 29)[/]", nicBaroTc29));
 
         // NIC Supplement A
@@ -992,14 +990,14 @@ internal static class LiveAircraftDetailBuilder
         allRows.Add(new DetailRow("NIC Supplement C", nicSupplementC));
 
         // SIL (TC 9-18)
-        allRows.Add(new DetailRow("SIL [grey](TC 9-18)[/]", aircraft.Position.SIL?.ToString() ?? "N/A (no data yet)"));
+        allRows.Add(new DetailRow("SIL [grey](TC 9-18)[/]", aircraft.Position.SIL?.ToDisplayString() ?? "N/A (no data yet)"));
 
         // SIL (TC 29)
-        string silTc29 = aircraft.DataQuality?.SIL_TC29?.ToString() ?? "N/A (no data yet)";
+        string silTc29 = aircraft.DataQuality?.SIL_TC29?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("SIL [grey](TC 29)[/]", silTc29));
 
         // SIL Supplement
-        string silSupplement = aircraft.DataQuality?.SILSupplement?.ToString() ?? "N/A (no data yet)";
+        string silSupplement = aircraft.DataQuality?.SILSupplement?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("SIL Supplement", silSupplement));
 
         // --- Other sub-section ---
@@ -1007,11 +1005,11 @@ internal static class LiveAircraftDetailBuilder
             "[dim]-----------------------------------------------------[/]", IsSectionHeader: true));
 
         // Geometric Vertical Accuracy
-        string geometricVerticalAccuracy = aircraft.DataQuality?.GeometricVerticalAccuracy?.ToString() ?? "N/A (no data yet)";
+        string geometricVerticalAccuracy = aircraft.DataQuality?.GeometricVerticalAccuracy?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("Geometric Vertical Accuracy", geometricVerticalAccuracy));
 
         // System Design Assurance
-        string systemDesignAssurance = aircraft.OperationalMode?.SystemDesignAssurance?.ToString() ?? "N/A (no data yet)";
+        string systemDesignAssurance = aircraft.OperationalMode?.SystemDesignAssurance?.ToDisplayString() ?? "N/A (no data yet)";
         allRows.Add(new DetailRow("System Design Assurance", systemDesignAssurance));
 
         // Last Update = Max(TrackedPosition, TrackedDataQuality, TrackedCapabilities, TrackedOperationalMode)
