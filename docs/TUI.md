@@ -1,34 +1,38 @@
 # Terminal User Interface (TUI)
 
-Aeromux includes an interactive terminal interface for real-time aircraft tracking. The TUI is available in **live mode** and provides two views: the aircraft list (main screen) and the aircraft detail view.
+Aeromux includes an interactive terminal interface for real-time aircraft tracking. The TUI is available in **live mode** and provides two views: the aircraft list, which serves as the main screen and shows all tracked aircraft in a sortable, searchable table, and the aircraft detail view, which displays comprehensive information for a single selected aircraft.
 
 ## Starting the TUI
 
+The TUI is launched through the `live` command, which supports two operating modes depending on your setup:
+
 ```bash
-# Standalone mode — reads directly from your SDR device(s)
+# Standalone mode — reads directly from your RTL-SDR device(s) and displays the TUI
 aeromux live --standalone --config aeromux.yaml
 
-# Connect mode — connects to an existing Beast data source
+# Connect mode — connects to an existing Beast data source over the network and displays the TUI
 aeromux live --connect host:port --config aeromux.yaml
 ```
 
+In standalone mode, Aeromux manages the SDR devices directly and performs all demodulation and decoding locally. In connect mode, it receives pre-demodulated Beast binary data from another instance of Aeromux, dump1090, readsb, or any other Beast-compatible source.
+
 ## Aircraft List
 
-The main screen displays all tracked aircraft in a table with the following columns:
+The main screen displays all currently tracked aircraft in a table format. Each row represents one aircraft, and the columns show the most important tracking data at a glance:
 
-| Column    | Description                                                    |
-|-----------|----------------------------------------------------------------|
-| ICAO      | 24-bit ICAO address (hex)                                      |
-| Callsign  | Flight callsign or `N/A` if not yet received                   |
-| Altitude  | Barometric or geometric altitude                               |
-| Vertical  | Vertical rate in ft/min                                        |
-| Distance  | Distance from receiver (requires receiver location in config)  |
-| Speed     | Ground speed or airspeed                                       |
-| Messages  | Total messages received from this aircraft                     |
-| Signal    | Signal strength in dBFS                                        |
-| Last seen | Time since last message                                        |
+| Column    | Description                                                                                                                                                                    |
+|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ICAO      | The aircraft's 24-bit ICAO address, displayed as a 6-character hexadecimal string                                                                                              |
+| Callsign  | The flight callsign (e.g., `DLH1234`), or `N/A` if no identification message has been received yet                                                                             |
+| Altitude  | Barometric or geometric altitude, displayed in the currently selected unit (feet or meters)                                                                                    |
+| Vertical  | Vertical rate (climb or descent speed) in feet per minute or meters per second                                                                                                 |
+| Distance  | Distance from the receiver to the aircraft, calculated from the configured receiver location. Requires the receiver latitude and longitude to be set in the configuration file |
+| Speed     | Ground speed or airspeed, displayed in the currently selected unit (knots, km/h, or mph)                                                                                       |
+| Messages  | Total number of Mode S messages received from this aircraft since it was first detected                                                                                        |
+| Signal    | Signal strength in dBFS (decibels relative to full scale), indicating reception quality                                                                                        |
+| Last seen | Elapsed time since the most recent message was received from this aircraft                                                                                                     |
 
-The rightmost column is a scrollbar indicating the viewport position when the list exceeds the terminal height.
+The rightmost column displays a scrollbar that indicates the current viewport position within the list, which is useful when the number of tracked aircraft exceeds the terminal height.
 
 ```
                                         AIRCRAFT LIST - Aeromux
@@ -49,26 +53,28 @@ The rightmost column is a scrollbar indicating the viewport position when the li
 
 ### Footer
 
-The footer has three rows:
+The footer occupies the bottom three rows of the terminal and provides contextual information about the current state of the interface:
 
-1. **Sort/Search** — Shows the current sort column with a direction arrow, or the search prompt when searching.
-2. **Status** — Aircraft count, selected row, viewport range, and current display units.
-3. **Navigation** — Keyboard shortcuts reference.
+1. **Sort/Search row** — Displays the available sort columns (`F1` through `F6`) with a direction arrow next to the currently active sort column. When search mode is active, this row shows the search prompt instead.
+2. **Status row** — Shows the total number of tracked aircraft, the currently selected row number, the visible viewport range, and the active display units for distance, altitude, and speed.
+3. **Navigation row** — Provides a quick reference of the most commonly used keyboard shortcuts for the current view.
 
 ## Aircraft Detail View
 
-Press `Enter` on a selected aircraft to open its detail view. This shows all available information organized into sections:
+Pressing `Enter` on a selected aircraft in the list opens the detail view, which displays all available information about that aircraft organized into clearly labeled sections. This view provides a comprehensive overview of everything Aeromux knows about the aircraft, including data that is not shown in the compact list view.
 
-- **Identification** — ICAO address, callsign, category, squawk, emergency state
-- **Aircraft Database** — Registration, operator, manufacturer, type (from [aeromux-db](https://github.com/nandortoth/aeromux-db))
-- **Status** — First/last seen timestamps, message counts, signal strength
-- **Position** — Latitude, longitude, distance, barometric and geometric altitude
-- **Velocity & Dynamics** — Speed, heading, track, vertical rate, roll angle, Mach number, surface movement
-- **Autopilot** — Selected altitude/heading, barometric pressure, autopilot modes
-- **Meteorology** — Wind speed/direction, temperature, turbulence, icing
-- **ACAS/TCAS** — TCAS operational status, sensitivity, resolution advisories
-- **Capabilities** — Transponder level, ADS-B version, data link features, operational state
-- **Data Quality** — Antenna, NACp, NACv, NICbaro, SIL accuracy and integrity parameters
+The detail view is organized into the following sections:
+
+- **Identification** — The aircraft's ICAO address, callsign, wake turbulence category, squawk code, and emergency state.
+- **Aircraft Database** — Static metadata from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database, including registration, operator, manufacturer, aircraft type, and regulatory flags such as FAA PIA and LADD.
+- **Status** — Timestamps for when the aircraft was first and last seen, message counts broken down by type (position, velocity, identification), and the current signal strength.
+- **Position** — Geographic coordinates, distance from the receiver, barometric and geometric altitudes with their delta, ground state, and position source.
+- **Velocity & Dynamics** — Ground speed, airspeed, heading, track angle, vertical rate, roll angle, Mach number, turn rate, and surface movement data.
+- **Autopilot** — Selected altitude and heading, barometric pressure setting, and autopilot mode flags (VNAV, LNAV, altitude hold, approach).
+- **Meteorology** — Wind speed and direction, static and total air temperatures, atmospheric pressure, radio height, and hazard severity levels for turbulence, wind shear, microburst, icing, and wake vortex.
+- **ACAS/TCAS** — TCAS operational status, sensitivity level, cross-link capability, resolution advisory state and complement, and threat encounter details.
+- **Capabilities** — Transponder level, ADS-B version, data link feature support (1090ES, UAT, CDTI), operational flags, aircraft dimensions, and GPS antenna offsets.
+- **Data Quality** — Navigation accuracy (NACp, NACv), navigation integrity (NICbaro, NIC supplements), surveillance integrity (SIL), geometric vertical accuracy, antenna configuration, and system design assurance level.
 
 ```
                                    AIRCRAFT DETAIL (471DB6) - Aeromux
@@ -107,73 +113,81 @@ Press `Enter` on a selected aircraft to open its detail view. This shows all ava
   ↑/↓: Row, ←/→: Page, Home/End                            D/A/S: Units, /: Search, ESC: Back, Q: Quit
 ```
 
-Fields that have not yet been received display `N/A (no data yet)`. The Aircraft Database section requires the [aeromux-db](https://github.com/nandortoth/aeromux-db) database to be configured; without it, a message indicates that no database is available.
+Fields that have not yet been received from the aircraft display `N/A (no data yet)` as their value. The Aircraft Database section requires the [aeromux-db](https://github.com/nandortoth/aeromux-db) database to be configured and enabled; without it, a message is displayed indicating that no database is available.
 
-Display units (`D`/`A`/`S`) can be toggled directly in the detail view — see [Display Units](#display-units). Press `/` to search field names — see [Detail View Search](#detail-view-search).
+Display units for distance, altitude, and speed can be toggled directly within the detail view using the `D`, `A`, and `S` keys — see [Display Units](#display-units) for details. The detail view also supports field name search, activated by pressing `/` — see [Detail View Search](#detail-view-search) for more information.
 
 ## Keyboard Reference
 
 ### Aircraft List
 
-| Key            | Action                                     |
-|----------------|--------------------------------------------|
-| `↑` / `↓`      | Move selection up/down by one row          |
-| `←` / `→`      | Move selection up/down by one page         |
-| `Page Up/Down` | Same as `←` / `→`                          |
-| `Home`         | Jump to the first aircraft                 |
-| `End`          | Jump to the last aircraft                  |
-| `Enter`        | Open detail view for the selected aircraft |
-| `D`            | Toggle distance unit (miles / kilometers)  |
-| `A`            | Toggle altitude unit (feet / meters)       |
-| `S`            | Cycle speed unit (knots / km/h / mph)      |
-| `F1`–`F6`      | Sort by column (see [Sorting](#sorting))   |
-| `F12`          | Reset sort, units, and search to defaults  |
-| `/`            | Enter search mode (see [Search](#search))  |
-| `Q` / `Esc`    | Quit                                       |
+The following keyboard shortcuts are available in the aircraft list view:
+
+| Key            | Action                                                                              |
+|----------------|-------------------------------------------------------------------------------------|
+| `↑` / `↓`      | Move the selection highlight up or down by one row                                  |
+| `←` / `→`      | Move the selection up or down by one full page (the number of visible rows)         |
+| `Page Up/Down` | Same as `←` / `→` — move the selection by one page                                  |
+| `Home`         | Jump the selection to the first aircraft in the list                                |
+| `End`          | Jump the selection to the last aircraft in the list                                 |
+| `Enter`        | Open the detail view for the currently selected aircraft                            |
+| `D`            | Toggle the distance display unit between miles and kilometers                       |
+| `A`            | Toggle the altitude display unit between feet and meters                            |
+| `S`            | Cycle the speed display unit through knots, kilometers per hour, and miles per hour |
+| `F1`–`F6`      | Sort the aircraft list by a column — see [Sorting](#sorting) for details            |
+| `F12`          | Reset all settings (sort column, display units, and search) back to their defaults  |
+| `/`            | Enter search mode to filter the aircraft list — see [Search](#search)               |
+| `Q` / `Esc`    | Quit the TUI and return to the terminal                                             |
 
 ### Detail View
 
-| Key            | Action                                                            |
-|----------------|-------------------------------------------------------------------|
-| `↑` / `↓`      | Move selection up/down (skips section headers)                    |
-| `←` / `→`      | Move up/down by one page                                          |
-| `Page Up/Down` | Same as `←` / `→`                                                 |
-| `Home`         | Jump to the first field                                           |
-| `End`          | Jump to the last field                                            |
-| `D`            | Toggle distance unit (miles / kilometers)                         |
-| `A`            | Toggle altitude unit (feet / meters)                              |
-| `S`            | Cycle speed unit (knots / km/h / mph)                             |
-| `/`            | Enter search mode (see [Detail View Search](#detail-view-search)) |
-| `Esc`          | Return to the aircraft list                                       |
-| `Q`            | Quit                                                              |
+The following keyboard shortcuts are available in the aircraft detail view:
+
+| Key            | Action                                                                                        |
+|----------------|-----------------------------------------------------------------------------------------------|
+| `↑` / `↓`      | Move the selection up or down by one row, automatically skipping section headers and dividers |
+| `←` / `→`      | Move the selection up or down by one full page                                                |
+| `Page Up/Down` | Same as `←` / `→` — move the selection by one page                                            |
+| `Home`         | Jump the selection to the first data field in the detail view                                 |
+| `End`          | Jump the selection to the last data field in the detail view                                  |
+| `D`            | Toggle the distance display unit between miles and kilometers                                 |
+| `A`            | Toggle the altitude display unit between feet and meters                                      |
+| `S`            | Cycle the speed display unit through knots, kilometers per hour, and miles per hour           |
+| `/`            | Enter search mode to search field names — see [Detail View Search](#detail-view-search)       |
+| `Esc`          | Close the detail view and return to the aircraft list                                         |
+| `Q`            | Quit the TUI entirely and return to the terminal                                              |
 
 ### Detail View Search Mode
 
-| Key                                    | Action                                                  |
-|----------------------------------------|---------------------------------------------------------|
-| Letters, digits, `()`, `-`, `,`, space | Append to search input (max 15 chars, shown uppercase)  |
-| `Backspace`                            | Remove last character from search input                 |
-| `↑` / `↓` / `Tab`                      | Cycle through matching fields (wraps around)            |
-| `←` / `→`                              | Move up/down by one page                                |
-| `Home` / `End`                         | Jump to first/last field                                |
-| `Enter`                                | Confirm search and keep current position                |
-| `Esc`                                  | Cancel search and restore previous position             |
+When search mode is active in the detail view, the following keys are available:
+
+| Key                                    | Action                                                                                   |
+|----------------------------------------|------------------------------------------------------------------------------------------|
+| Letters, digits, `()`, `-`, `,`, space | Append the character to the search input (up to 15 characters, displayed in uppercase)   |
+| `Backspace`                            | Remove the last character from the search input                                          |
+| `↑` / `↓` / `Tab`                      | Cycle through the matching fields, wrapping around when reaching the end or beginning    |
+| `←` / `→`                              | Move the selection up or down by one full page while keeping the search active           |
+| `Home` / `End`                         | Jump to the first or last field in the detail view while keeping the search active       |
+| `Enter`                                | Confirm the search and keep the selection at the current matching field                  |
+| `Esc`                                  | Cancel the search and restore the selection to the position it was at before searching   |
 
 ### Aircraft List Search Mode
 
-| Key              | Action                                            |
-|------------------|---------------------------------------------------|
-| `A`–`Z`, `0`–`9` | Append character to search input (max 8 chars)    |
-| `Backspace`      | Remove last character from search input           |
-| `↑` / `↓`        | Navigate the filtered list                        |
-| `Home` / `End`   | Jump to first/last match                          |
-| `Enter`          | Confirm search and open detail view               |
-| `Esc`            | Cancel search and restore previous selection      |
-| `F12`            | Reset all settings to defaults                    |
+When search mode is active in the aircraft list, the following keys are available:
+
+| Key              | Action                                                                                        |
+|------------------|-----------------------------------------------------------------------------------------------|
+| `A`–`Z`, `0`–`9` | Append the character to the search input (up to 8 characters)                                 |
+| `Backspace`      | Remove the last character from the search input                                               |
+| `↑` / `↓`        | Navigate up and down within the filtered list of matching aircraft                            |
+| `Home` / `End`   | Jump to the first or last aircraft in the filtered list                                       |
+| `Enter`          | Confirm the search and open the detail view for the currently selected matching aircraft      |
+| `Esc`            | Cancel the search, restore the original unfiltered list, and return to the previous selection |
+| `F12`            | Reset all settings (sort, units, and search) back to their defaults                           |
 
 ## Sorting
 
-Press `F1`–`F6` to sort the aircraft list by a column:
+The aircraft list can be sorted by any of six columns using the function keys `F1` through `F6`. Each key corresponds to a specific column:
 
 | Key  | Column   |
 |------|----------|
@@ -184,23 +198,19 @@ Press `F1`–`F6` to sort the aircraft list by a column:
 | `F5` | Distance |
 | `F6` | Speed    |
 
-Pressing the same key cycles through: **ascending** (▲) → **descending** (▼) → **default** (ICAO ascending).
+Pressing the same function key repeatedly cycles through three states: **ascending** (indicated by a ▲ arrow), **descending** (indicated by a ▼ arrow), and **default** (which resets the sort to ICAO ascending). The currently active sort column is highlighted in the footer row, with the direction arrow displayed next to the column name.
 
-The active sort column is highlighted in the footer. The direction arrow appears next to the active column name.
-
-Sorting behavior:
-- Aircraft with no data for the sort column (N/A) always appear at the bottom, regardless of sort direction.
-- When values are equal, aircraft are sorted by ICAO address (ascending) as a tiebreaker.
+When sorting by a column, aircraft that have no data for that column (displayed as `N/A`) are always placed at the bottom of the list, regardless of whether the sort direction is ascending or descending. When two aircraft have identical values for the sort column, the ICAO address is used as a tiebreaker, with ascending alphabetical order applied.
 
 ## Search
 
-Both the aircraft list and the detail view support search mode, activated by pressing `/`.
+Both the aircraft list and the detail view support a search mode, activated by pressing the `/` key. The two search modes behave differently to suit their respective contexts.
 
 ### Aircraft List Search
 
-Type to filter the aircraft list (up to 8 characters) — the search matches against both ICAO address and callsign as a case-insensitive substring match. For example, typing `WZZ` matches all Wizz Air flights by callsign and any ICAO address containing `WZZ`.
+In the aircraft list, search mode filters the list to show only aircraft whose ICAO address or callsign contains the search term as a case-insensitive substring. For example, typing `WZZ` would match all Wizz Air flights by callsign (e.g., `WZZ268`, `WZZ5070`) as well as any aircraft whose ICAO address happens to contain those characters.
 
-Matching substrings are highlighted in the ICAO and callsign columns. The footer shows the search prompt with a match count. Press `Enter` to confirm and open the selected aircraft's detail view, or `Esc` to cancel and restore the previous selection.
+The search input accepts up to 8 characters. As you type, the list is immediately filtered and matching substrings are highlighted in both the ICAO and Callsign columns. The footer updates to show the search prompt along with the number of matching aircraft. Press `Enter` to confirm the search and open the detail view for the selected matching aircraft, or press `Esc` to cancel the search and restore the original unfiltered list with the previous selection.
 
 ```
                                         AIRCRAFT LIST - Aeromux
@@ -220,22 +230,22 @@ Matching substrings are highlighted in the ICAO and callsign columns. The footer
 
 ### Detail View Search
 
-Type to search field names in the detail view (up to 15 characters). Unlike the aircraft list search which filters the list, the detail view search uses a **jump-and-highlight** approach — all rows remain visible, the selection jumps to the first matching field, and matching characters are highlighted in red. This preserves section context around the matched field.
+In the detail view, search mode uses a **jump-and-highlight** approach rather than filtering. All rows remain visible at all times, but the selection cursor jumps to the first field whose name matches the search term, and the matching characters are highlighted in red. This design preserves the surrounding section context so you can see related fields near the match.
 
-Accepted characters: letters (displayed uppercase), digits, space, parentheses, hyphen, and comma. The search is case-insensitive. Use `↑`/`↓`/`Tab` to cycle through matches (wraps around). Press `Enter` to confirm (keeps current position) or `Esc` to cancel (restores previous position).
+The search input accepts up to 15 characters, including letters (displayed in uppercase), digits, spaces, parentheses, hyphens, and commas. The matching is case-insensitive. When there are multiple matches, use `↑`, `↓`, or `Tab` to cycle through them — the navigation wraps around from the last match to the first and vice versa. Press `Enter` to confirm the search and keep the selection at the current match, or press `Esc` to cancel and restore the selection to its position before the search was started.
 
 ## Display Units
 
-Three display units can be toggled in both the aircraft list and the detail view:
+Three measurement units can be toggled independently in both the aircraft list and the detail view, allowing you to switch between unit systems without leaving the current view:
 
-| Key | Unit     | Options                      | Default |
-|-----|----------|------------------------------|---------|
-| `D` | Distance | Miles (mi) / Kilometers (km) | Miles   |
-| `A` | Altitude | Feet (ft) / Meters (m)       | Feet    |
-| `S` | Speed    | Knots (kts) / km/h / mph     | Knots   |
+| Key | Unit     | Options                              | Default |
+|-----|----------|--------------------------------------| --------|
+| `D` | Distance | Miles (mi) / Kilometers (km)         | Miles   |
+| `A` | Altitude | Feet (ft) / Meters (m)               | Feet    |
+| `S` | Speed    | Knots (kts) / km/h / mph             | Knots   |
 
-The current units are shown in the status footer row. Press `F12` to reset all units, sort, and search to defaults. The current selection is preserved.
+The currently selected units are displayed in the status footer row on the right side. Pressing `F12` resets all display units, the sort column, and any active search back to their default values. The current row selection is preserved when resetting.
 
 ## Terminal Resize
 
-The TUI adapts to the terminal size. The viewport adjusts automatically when the terminal is resized. The display uses a workaround for a known Spectre.Console resize issue — the screen briefly clears and redraws on resize, which is expected behavior.
+The TUI automatically adapts to changes in the terminal size. When the terminal is resized, the viewport adjusts to accommodate the new dimensions, and the display redraws accordingly. Due to a known limitation in the Spectre.Console library, the screen briefly clears and redraws during a resize operation — this is expected behavior and does not affect the tracking state.

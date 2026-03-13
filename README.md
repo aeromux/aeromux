@@ -14,7 +14,7 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 
 - **Multiple Receiver Support** — Use several RTL-SDR devices at once to improve reception coverage. Multi-device operation is a built-in feature — just list your devices in the configuration file. Frames from all devices are automatically combined and deduplicated.
 
-- **Network Output** — In daemon mode, serves decoded data over TCP in three standard formats:
+- **Network Output** — In daemon mode, serves decoded data over TCP in three standard formats. See the [Broadcast Guide](docs/BROADCAST.md) for full documentation.
   - **Beast** — Binary protocol compatible with dump1090, readsb, and most ADS-B tools
   - **SBS/BaseStation** — Text protocol compatible with Virtual Radar Server
   - **JSON** — Streaming format for web applications and custom integrations
