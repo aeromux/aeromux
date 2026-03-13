@@ -37,7 +37,9 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// - Serializes Aircraft to JSON (not just the message)
 ///
 /// OUTPUT FORMAT (formatted for readability, transmitted as single line over TCP):
+/// Same JSON structure as the REST API detail endpoint (/api/v1/aircraft/{icao}).
 /// {
+///   "Timestamp": "2026-01-04T15:30:45.123Z",
 ///   "Identification": {
 ///     "ICAO": "440CF8",
 ///     "Callsign": "UAL1234 ",
@@ -45,65 +47,68 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 ///     "Category": "LargeTransport",
 ///     "EmergencyState": "NoEmergency",
 ///     "FlightStatus": "AirborneNormal",
-///     "Version": 2
+///     "AdsbVersion": "DO260B"
 ///   },
-///   "Position": {
-///     "Coordinate": {
-///       "Latitude": 37.6213,
-///       "Longitude": -122.3790
-///     },
-///     "BarometricAltitude": {
-///       "Feet": 35000,
-///       "Meters": 10668,
-///       "Type": "Barometric"
-///     },
-///     "GeometricAltitude": null,
-///     "IsOnGround": false,
-///     "NACp": 9,
-///     "NICbaro": true,
-///     "LastUpdate": "2026-01-04T15:30:45.123Z"
-///   },
-///   "Velocity": {
-///     "GroundSpeed": {
-///       "Knots": 450,
-///       "MetersPerSecond": 231.5
-///     },
-///     "Heading": 270.5,
-///     "Track": 268.2,
-///     "VerticalRate": 0,
-///     "LastUpdate": "2026-01-04T15:30:45.123Z"
+///   "DatabaseRecord": {
+///     "Registration": "D-AIZZ",
+///     "TypeCode": "A320",
+///     ...
 ///   },
 ///   "Status": {
-///     "SignalStrength": 125.6,
+///     "FirstSeen": "2026-01-04T15:25:30.000Z",
+///     "LastSeen": "2026-01-04T15:30:45.123Z",
 ///     "TotalMessages": 1234,
 ///     "PositionMessages": 456,
-///     "FirstSeen": "2026-01-04T15:25:30.000Z",
-///     "LastSeen": "2026-01-04T15:30:45.123Z"
+///     "VelocityMessages": 78,
+///     "IdentificationMessages": 12,
+///     "SignalStrength": -28.4
 ///   },
-///   "Autopilot": {
-///     "SelectedAltitude": {
-///       "Feet": 36000,
-///       "Type": "MCP"
-///     },
-///     "AutopilotEngaged": true,
-///     "VNAVMode": true
+///   "Position": {
+///     "Coordinate": { "Latitude": 37.6213, "Longitude": -122.3790 },
+///     "BarometricAltitude": { "Feet": 35000, "Meters": 10668, "Type": "Barometric" },
+///     "GeometricAltitude": null,
+///     "GeometricBarometricDelta": null,
+///     "IsOnGround": false,
+///     "MovementCategory": null,
+///     "Source": "Sdr",
+///     "HadMlatPosition": false,
+///     "LastUpdate": "2026-01-04T15:30:45.123Z"
 ///   },
-///   "Acas": null,               // null in this example - populated when ACAS messages received (DF 0, 16, TC 29)
-///   "FlightDynamics": null,     // null in this example - populated when BDS 5,0/5,3/6,0 messages received
-///   "Meteo": null,              // null in this example - populated when BDS 4,4/4,5 messages received
-///   "Capabilities": {
-///     "TransponderLevel": "Level5",
-///     "TCASCapability": true
+///   "VelocityAndDynamics": {
+///     "Speed": { "Knots": 450, "MetersPerSecond": 231.5, "Type": "GroundSpeed" },
+///     "IndicatedAirspeed": null,
+///     "TrueAirspeed": null,
+///     "GroundSpeed": null,
+///     "MachNumber": null,
+///     "Track": 268.2,
+///     "TrackAngle": null,
+///     "MagneticHeading": null,
+///     "TrueHeading": null,
+///     "Heading": 270.5,
+///     "HeadingType": null,
+///     "HorizontalReference": null,
+///     "VerticalRate": 0,
+///     "BarometricVerticalRate": null,
+///     "InertialVerticalRate": null,
+///     "RollAngle": null,
+///     "TrackRate": null,
+///     "SpeedOnGround": null,
+///     "TrackOnGround": null,
+///     "LastUpdate": "2026-01-04T15:30:45.123Z"
 ///   },
-///   "DataQuality": null,        // null in this example - populated when TC 31 or TC 29 V2 messages received
-///   "OperationalMode": null     // null in this example - populated when TC 31 or DF 20/21 messages received
+///   "Autopilot": null,          // null until TC 29 or BDS 4,0 messages received
+///   "Meteorology": null,        // null until BDS 4,4/4,5 messages received
+///   "Acas": null,               // null until ACAS messages received (DF 0, 16, TC 29)
+///   "Capabilities": null,       // null until DF 11, TC 31, or BDS 1,0/1,7 messages received
+///   "DataQuality": null         // null until TC 31, TC 29 V2, or DF 20/21 messages received
 /// }
 ///
 /// NOTES:
-/// - Original C# property names preserved (ICAO, TCASOperational, etc.)
-/// - Null properties included as "null" (not omitted) - properties become non-null when relevant messages are received
+/// - Format matches the REST API detail endpoint for consumer consistency
+/// - Fields are renamed, regrouped, and combined from multiple tracked classes
+/// - OperationalMode fields distributed into Acas, Capabilities, and DataQuality sections
+/// - Null sections included as "null" (not omitted) - become non-null when relevant messages arrive
 /// - Enums as string names (e.g., "NoEmergency", "Barometric")
-/// - History excluded (for bandwidth efficiency)
 /// - Transmitted as single line with \n terminator (NDJSON format)
 /// - Rate limited: max 1 update/second per aircraft
 /// </remarks>
@@ -166,24 +171,24 @@ public sealed class JsonEncoder : IDisposable
         // Record output time
         _lastOutputTimes[icao] = now;
 
-        // Exclude History by creating anonymous object
-        var aircraftData = new
+        // Map aircraft state to broadcast format (same structure as REST API)
+        var response = new Dictionary<string, object?>
         {
-            aircraft.Identification,
-            aircraft.Position,
-            aircraft.Velocity,
-            aircraft.Status,
-            aircraft.Autopilot,
-            aircraft.Acas,
-            aircraft.FlightDynamics,
-            aircraft.Meteo,
-            aircraft.Capabilities,
-            aircraft.DataQuality,
-            aircraft.OperationalMode
+            ["Timestamp"] = DateTime.UtcNow,
+            ["Identification"] = JsonBroadcastMapper.ToIdentification(aircraft),
+            ["DatabaseRecord"] = JsonBroadcastMapper.ToDatabaseRecord(aircraft),
+            ["Status"] = JsonBroadcastMapper.ToStatus(aircraft),
+            ["Position"] = JsonBroadcastMapper.ToPosition(aircraft),
+            ["VelocityAndDynamics"] = JsonBroadcastMapper.ToVelocityAndDynamics(aircraft),
+            ["Autopilot"] = JsonBroadcastMapper.ToAutopilot(aircraft),
+            ["Meteorology"] = JsonBroadcastMapper.ToMeteorology(aircraft),
+            ["Acas"] = JsonBroadcastMapper.ToAcas(aircraft),
+            ["Capabilities"] = JsonBroadcastMapper.ToCapabilities(aircraft),
+            ["DataQuality"] = JsonBroadcastMapper.ToDataQuality(aircraft)
         };
 
         // Serialize to JSON
-        string json = JsonSerializer.Serialize(aircraftData, _serializerOptions);
+        string json = JsonSerializer.Serialize(response, _serializerOptions);
         return Encoding.UTF8.GetBytes(json + "\n");
     }
 
