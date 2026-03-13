@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -28,10 +30,12 @@ public enum HorizontalReferenceDirection
     /// <summary>
     /// Horizontal directions (heading, track angle) are referenced to True North.
     /// </summary>
+    [JsonStringEnumMemberName("True North")]
     TrueNorth = 0,
 
     /// <summary>
     /// Horizontal directions (heading, track angle) are referenced to Magnetic North.
     /// </summary>
+    [JsonStringEnumMemberName("Magnetic North")]
     MagneticNorth = 1
 }

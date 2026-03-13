@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -33,6 +35,7 @@ public enum SilSupplement
     /// For GNSS position sources, NIC is derived from GNSS Horizontal Protection Level (HPL)
     /// which is based on a probability of 1×10⁻⁷ per hour.
     /// </summary>
+    [JsonStringEnumMemberName("Per Hour")]
     PerHour = 0,
 
     /// <summary>
@@ -43,5 +46,6 @@ public enum SilSupplement
     /// For IRU, DME/DME and DME/DME/LOC position sources, probability may be based on
     /// a per sample basis.
     /// </summary>
+    [JsonStringEnumMemberName("Per Sample")]
     PerSample = 1
 }

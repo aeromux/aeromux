@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -30,23 +32,27 @@ public enum TrajectoryChangeReportCapability
     /// No capability for sending messages to support Trajectory Change Reports.
     /// Aircraft does not transmit trajectory change information.
     /// </summary>
+    [JsonStringEnumMemberName("None")]
     NoCapability = 0,
 
     /// <summary>
     /// Capability of sending messages to support TC+0 Report only.
     /// Aircraft can report trajectory changes at the current time (TC+0).
     /// </summary>
+    [JsonStringEnumMemberName("TC+0 Report Only")]
     Tc0ReportOnly = 1,
 
     /// <summary>
     /// Capability of sending information for multiple TC reports.
     /// Aircraft can report trajectory changes at multiple future time points.
     /// </summary>
+    [JsonStringEnumMemberName("Multiple TC Reports")]
     MultipleTcReports = 2,
 
     /// <summary>
     /// Reserved for future use.
     /// This value is not currently defined in the specification.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved = 3
 }

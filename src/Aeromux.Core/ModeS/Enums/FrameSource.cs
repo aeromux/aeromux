@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -37,6 +39,7 @@ public enum FrameSource
     /// Frame received from local RTL-SDR device through signal processing pipeline.
     /// Includes: IQ demodulation, preamble detection, CRC validation, confidence tracking.
     /// </summary>
+    [JsonStringEnumMemberName("SDR")]
     Sdr,
 
     /// <summary>
@@ -44,6 +47,7 @@ public enum FrameSource
     /// Used in 'aeromux live --connect' mode to receive frames from remote sources.
     /// Includes frames from remote SDR devices and potentially remote MLAT positions.
     /// </summary>
+    [JsonStringEnumMemberName("Beast")]
     Beast,
 
     /// <summary>
@@ -52,5 +56,6 @@ public enum FrameSource
     /// derived from time-difference-of-arrival calculations across multiple receivers.
     /// These frames bypass deduplication and confidence tracking.
     /// </summary>
+    [JsonStringEnumMemberName("MLAT")]
     Mlat
 }

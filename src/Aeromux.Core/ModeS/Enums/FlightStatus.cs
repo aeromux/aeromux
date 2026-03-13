@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -34,45 +36,53 @@ public enum FlightStatus
     /// Airborne, no alert, no SPI.
     /// Normal flight operation.
     /// </summary>
+    [JsonStringEnumMemberName("Airborne")]
     AirborneNormal = 0,
 
     /// <summary>
     /// On ground, no alert, no SPI.
     /// Aircraft on ground (parked, taxiing, etc.).
     /// </summary>
+    [JsonStringEnumMemberName("On Ground")]
     OnGroundNormal = 1,
 
     /// <summary>
     /// Airborne, alert (emergency).
     /// Permanent alert condition (e.g., emergency, radio failure).
     /// </summary>
+    [JsonStringEnumMemberName("Airborne (Alert)")]
     AirborneAlert = 2,
 
     /// <summary>
     /// On ground, alert (emergency).
     /// Permanent alert condition while on ground.
     /// </summary>
+    [JsonStringEnumMemberName("On Ground (Alert)")]
     OnGroundAlert = 3,
 
     /// <summary>
     /// Alert, SPI condition (airborne or on ground).
     /// Special position identification pulse for ATC (Air Traffic Control) radar display.
     /// </summary>
+    [JsonStringEnumMemberName("Alert + SPI")]
     AlertSPI = 4,
 
     /// <summary>
     /// No alert, SPI condition (airborne or on ground).
     /// Special position identification without alert.
     /// </summary>
+    [JsonStringEnumMemberName("SPI")]
     NoAlertSPI = 5,
 
     /// <summary>
     /// Reserved.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved6 = 6,
 
     /// <summary>
     /// Not assigned.
     /// </summary>
+    [JsonStringEnumMemberName("Not Assigned")]
     NotAssigned = 7
 }

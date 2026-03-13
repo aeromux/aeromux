@@ -1,0 +1,284 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Streaming;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+
+namespace Aeromux.CLI.Commands.Daemon.Api;
+
+/// <summary>
+/// Maps all REST API route handlers for the daemon API.
+/// </summary>
+public static partial class DaemonApiRoutes
+{
+    /// <summary>
+    /// Valid 6-character hexadecimal ICAO address pattern.
+    /// </summary>
+    [GeneratedRegex(@"^[0-9A-Fa-f]{6}$")]
+    private static partial Regex IcaoPattern();
+
+    /// <summary>
+    /// Valid section names for the detail endpoint (case-insensitive lookup).
+    /// </summary>
+    private static readonly HashSet<string> ValidSections = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Identification", "DatabaseRecord", "Status", "Position", "VelocityAndDynamics",
+        "Autopilot", "Meteorology", "Acas", "Capabilities", "DataQuality"
+    };
+
+    /// <summary>
+    /// Valid history type names (case-insensitive lookup).
+    /// </summary>
+    private static readonly HashSet<string> ValidHistoryTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Position", "Altitude", "Velocity"
+    };
+
+    /// <summary>
+    /// Maps all API routes to the WebApplication.
+    /// </summary>
+    /// <param name="app">The web application to register routes on.</param>
+    /// <param name="tracker">Aircraft state tracker for data queries.</param>
+    /// <param name="getStatistics">Function to get current stream statistics.</param>
+    /// <param name="startTime">Daemon start time for uptime calculation.</param>
+    /// <param name="config">Validated daemon configuration for receiver and device metadata.</param>
+    /// <param name="jsonOptions">Shared JSON serializer options for dynamic response dictionaries.</param>
+    public static void MapRoutes(
+        WebApplication app,
+        IAircraftStateTracker tracker,
+        Func<StreamStatistics?> getStatistics,
+        DateTime startTime,
+        DaemonValidatedConfig config,
+        JsonSerializerOptions jsonOptions)
+    {
+        // GET /api/v1/aircraft — Aircraft list
+        app.MapGet("/api/v1/aircraft", () =>
+        {
+            IReadOnlyList<Aircraft> aircraft = tracker.GetAllAircraft();
+            AircraftListItem[] items = aircraft.Select(DaemonApiMapper.ToListItem).ToArray();
+
+            return Results.Ok(new AircraftListResponse(
+                Count: items.Length,
+                Timestamp: DateTime.UtcNow,
+                Aircraft: items));
+        }).RequireRateLimiting("aircraft-list");
+
+        // GET /api/v1/aircraft/{icao} — Aircraft detail
+        app.MapGet("/api/v1/aircraft/{icao}", (string icao, HttpContext httpContext) =>
+        {
+            if (!IcaoPattern().IsMatch(icao))
+            {
+                return Results.BadRequest(new ErrorResponse($"Invalid ICAO address: {icao}"));
+            }
+
+            string normalizedIcao = icao.ToUpperInvariant();
+
+            // Parse sections parameter
+            string? sectionsParam = httpContext.Request.Query["sections"].FirstOrDefault();
+            HashSet<string>? requestedSections = null;
+
+            if (!string.IsNullOrEmpty(sectionsParam))
+            {
+                requestedSections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string section in sectionsParam.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (section.Equals("History", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Results.BadRequest(new ErrorResponse($"Unknown section: {section}. Use /api/v1/aircraft/{{icao}}/history for history data."));
+                    }
+
+                    if (!ValidSections.Contains(section))
+                    {
+                        return Results.BadRequest(new ErrorResponse($"Unknown section: {section}"));
+                    }
+
+                    requestedSections.Add(section);
+                }
+            }
+
+            Aircraft? aircraft = tracker.GetAircraft(normalizedIcao);
+            if (aircraft == null)
+            {
+                return Results.NotFound(new ErrorResponse($"Aircraft not found: {normalizedIcao}"));
+            }
+
+            // Build dynamic response dictionary
+            var response = new Dictionary<string, object?>
+            {
+                ["Timestamp"] = DateTime.UtcNow
+            };
+
+            bool includeAll = requestedSections == null;
+
+            if (includeAll || requestedSections!.Contains("Identification"))
+            {
+                response["Identification"] = DaemonApiMapper.ToIdentification(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("DatabaseRecord"))
+            {
+                response["DatabaseRecord"] = DaemonApiMapper.ToDatabaseRecord(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("Status"))
+            {
+                response["Status"] = DaemonApiMapper.ToStatus(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("Position"))
+            {
+                response["Position"] = DaemonApiMapper.ToPosition(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("VelocityAndDynamics"))
+            {
+                response["VelocityAndDynamics"] = DaemonApiMapper.ToVelocityAndDynamics(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("Autopilot"))
+            {
+                response["Autopilot"] = DaemonApiMapper.ToAutopilot(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("Meteorology"))
+            {
+                response["Meteorology"] = DaemonApiMapper.ToMeteorology(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("Acas"))
+            {
+                response["Acas"] = DaemonApiMapper.ToAcas(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("Capabilities"))
+            {
+                response["Capabilities"] = DaemonApiMapper.ToCapabilities(aircraft);
+            }
+
+            if (includeAll || requestedSections!.Contains("DataQuality"))
+            {
+                response["DataQuality"] = DaemonApiMapper.ToDataQuality(aircraft);
+            }
+
+            return Results.Json(response, jsonOptions);
+        }).RequireRateLimiting("per-aircraft");
+
+        // GET /api/v1/aircraft/{icao}/history — Aircraft history
+        app.MapGet("/api/v1/aircraft/{icao}/history", (string icao, HttpContext httpContext) =>
+        {
+            if (!IcaoPattern().IsMatch(icao))
+            {
+                return Results.BadRequest(new ErrorResponse($"Invalid ICAO address: {icao}"));
+            }
+
+            string normalizedIcao = icao.ToUpperInvariant();
+
+            // Parse type parameter
+            string? typeParam = httpContext.Request.Query["type"].FirstOrDefault();
+            HashSet<string>? requestedTypes = null;
+
+            if (!string.IsNullOrEmpty(typeParam))
+            {
+                requestedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string type in typeParam.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!ValidHistoryTypes.Contains(type))
+                    {
+                        return Results.BadRequest(new ErrorResponse($"Unknown history type: {type}"));
+                    }
+
+                    requestedTypes.Add(type);
+                }
+            }
+
+            // Parse limit parameter
+            string? limitParam = httpContext.Request.Query["limit"].FirstOrDefault();
+            int? limit = null;
+
+            if (!string.IsNullOrEmpty(limitParam))
+            {
+                if (!int.TryParse(limitParam, out int parsedLimit) || parsedLimit <= 0)
+                {
+                    return Results.BadRequest(new ErrorResponse($"Invalid limit: {limitParam}. Must be a positive integer."));
+                }
+
+                limit = parsedLimit;
+            }
+
+            Aircraft? aircraft = tracker.GetAircraft(normalizedIcao);
+            if (aircraft == null)
+            {
+                return Results.NotFound(new ErrorResponse($"Aircraft not found: {normalizedIcao}"));
+            }
+
+            // Build dynamic response dictionary
+            var response = new Dictionary<string, object?>
+            {
+                ["ICAO"] = normalizedIcao,
+                ["Timestamp"] = DateTime.UtcNow
+            };
+
+            bool includeAll = requestedTypes == null;
+
+            if (includeAll || requestedTypes!.Contains("Position"))
+            {
+                response["Position"] = limit.HasValue
+                    ? DaemonApiMapper.ToPositionHistory(aircraft, limit.Value)
+                    : DaemonApiMapper.ToPositionHistory(aircraft);
+            }
+
+            if (includeAll || requestedTypes!.Contains("Altitude"))
+            {
+                response["Altitude"] = limit.HasValue
+                    ? DaemonApiMapper.ToAltitudeHistory(aircraft, limit.Value)
+                    : DaemonApiMapper.ToAltitudeHistory(aircraft);
+            }
+
+            if (includeAll || requestedTypes!.Contains("Velocity"))
+            {
+                response["Velocity"] = limit.HasValue
+                    ? DaemonApiMapper.ToVelocityHistory(aircraft, limit.Value)
+                    : DaemonApiMapper.ToVelocityHistory(aircraft);
+            }
+
+            return Results.Json(response, jsonOptions);
+        }).RequireRateLimiting("per-aircraft");
+
+        // GET /api/v1/stats — Statistics
+        app.MapGet("/api/v1/stats", () =>
+        {
+            StreamStatistics? stats = getStatistics();
+            return Results.Ok(DaemonApiMapper.ToStats(
+                stats, tracker, config.EnabledDevices.Count, startTime, config.Config.Receiver));
+        });
+
+        // GET /api/v1/health — Health check
+        app.MapGet("/api/v1/health", () =>
+        {
+            int uptime = (int)(DateTime.UtcNow - startTime).TotalSeconds;
+
+            return Results.Ok(new HealthResponse(
+                Status: "OK",
+                Uptime: uptime,
+                AircraftCount: tracker.Count,
+                Timestamp: DateTime.UtcNow));
+        });
+    }
+}

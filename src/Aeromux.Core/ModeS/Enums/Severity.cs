@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -31,6 +33,7 @@ public enum Severity
     /// NIL - No hazard detected or negligible conditions.
     /// Represents normal flight conditions with no adverse weather impact.
     /// </summary>
+    [JsonStringEnumMemberName("Nil")]
     Nil = 0,
 
     /// <summary>
@@ -38,6 +41,7 @@ public enum Severity
     /// May cause slight, erratic changes in altitude/attitude but minimal passenger discomfort.
     /// Aircraft handling remains normal with no significant performance degradation.
     /// </summary>
+    [JsonStringEnumMemberName("Light")]
     Light = 1,
 
     /// <summary>
@@ -46,6 +50,7 @@ public enum Severity
     /// Passengers feel definite strain against seat belts. Moderate performance impact.
     /// Icing may require activation of anti-ice/de-ice systems.
     /// </summary>
+    [JsonStringEnumMemberName("Moderate")]
     Moderate = 2,
 
     /// <summary>
@@ -55,5 +60,6 @@ public enum Severity
     /// Severe icing can cause rapid accumulation requiring immediate action.
     /// May require immediate altitude/route change for safety.
     /// </summary>
+    [JsonStringEnumMemberName("Severe")]
     Severe = 3
 }

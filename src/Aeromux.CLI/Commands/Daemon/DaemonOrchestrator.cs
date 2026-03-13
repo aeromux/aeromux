@@ -14,9 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Database;
 using Aeromux.Infrastructure.Streaming;
+using Microsoft.AspNetCore.Builder;
 using Serilog;
 
 namespace Aeromux.CLI.Commands.Daemon;
@@ -28,8 +30,10 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// <remarks>
 /// CRITICAL SHUTDOWN ORDER enforced by DisposeAsync:
 /// 1. Stop TCP broadcasters (unsubscribe from device stream)
-/// 2. Stop receiver stream (close RTL-SDR devices, complete broadcast channel)
-/// 3. Dispose aircraft tracker (wait for consumer task, dispose cleanup timer)
+/// 2. Stop REST API server
+/// 3. Stop receiver stream (close RTL-SDR devices, complete broadcast channel)
+/// 4. Dispose aircraft tracker (wait for consumer task, dispose cleanup timer)
+/// 5. Close database connection
 /// </remarks>
 public sealed class DaemonOrchestrator : IAsyncDisposable
 {
@@ -38,6 +42,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     private ReceiverStream? _receiverStream;
     private AircraftStateTracker? _aircraftTracker;
     private DaemonBroadcasterCollection? _broadcasters;
+    private WebApplication? _webApp;
     private bool _disposed;
 
     /// <summary>
@@ -122,6 +127,21 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         _aircraftTracker.StartConsuming(_receiverStream.Subscribe(), cancellationToken);
         Log.Information("Aircraft state tracker started");
 
+        // Start REST API server (if enabled)
+        if (_config.ApiEnabled)
+        {
+            DateTime startTime = DateTime.UtcNow;
+            _webApp = DaemonApiServer.Build(_config, _aircraftTracker,
+                () => _receiverStream?.GetStatistics(), startTime);
+            await _webApp.StartAsync(cancellationToken);
+            Log.Information("REST API listening on http://{Bind}:{Port}/api/v1",
+                _config.BindAddress, _config.ApiPort);
+        }
+        else
+        {
+            Log.Information("REST API disabled");
+        }
+
         // Create and start TCP broadcasters
         _broadcasters = new DaemonBroadcasterCollection();
         return await _broadcasters.StartBroadcastersAsync(_config, _receiverStream, _aircraftTracker, cancellationToken);
@@ -159,7 +179,15 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             await _broadcasters.DisposeAsync();
         }
 
-        // Step 2: Stop device stream
+        // Step 2: Stop REST API server
+        if (_webApp != null)
+        {
+            await _webApp.StopAsync();
+            await _webApp.DisposeAsync();
+            Log.Information("REST API stopped");
+        }
+
+        // Step 3: Stop device stream
         // Closes RTL-SDR devices and completes internal broadcast channel
         // This will complete the trackerChannel, causing the tracker's consumer task to finish
         if (_receiverStream != null)
@@ -167,7 +195,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             await _receiverStream.DisposeAsync();
         }
 
-        // Step 3: Dispose aircraft tracker
+        // Step 4: Dispose aircraft tracker
         // Tracker.Dispose() waits for consumer task to complete, then disposes cleanup timer
         if (_aircraftTracker != null)
         {
@@ -175,7 +203,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             Log.Information("Aircraft state tracker stopped");
         }
 
-        // Step 4: Close database connection
+        // Step 5: Close database connection
         _databaseLookup?.Dispose();
 
         Console.WriteLine("All device workers and TCP broadcasters stopped.");

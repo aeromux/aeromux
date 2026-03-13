@@ -14,34 +14,38 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
 /// Represents the Geometric Vertical Accuracy (GVA) from Aircraft Operational Status Messages.
 /// Indicates the vertical position accuracy of the aircraft.
-/// Reference: DO-282B §2.2.3.2.7.2.8, Table 2.2.3.2.7.2.8
+/// Reference: DO-260B, Table A-2-73a
 /// </summary>
 public enum GeometricVerticalAccuracy
 {
     /// <summary>
-    /// Unknown vertical accuracy or greater than 45 meters.
+    /// Unknown vertical accuracy or GVA ≥ 150 meters.
     /// </summary>
-    UnknownOrGreaterThan45Meters = 0,
+    [JsonStringEnumMemberName("Unknown or ≥ 150 m")]
+    UnknownOrGreaterThanOrEqual150Meters = 0,
 
     /// <summary>
-    /// Vertical accuracy is less than or equal to 45 meters.
+    /// Vertical accuracy is less than 150 meters.
     /// </summary>
-    LessThanOrEqualTo45Meters = 1,
+    [JsonStringEnumMemberName("< 150 m")]
+    LessThan150Meters = 1,
 
     /// <summary>
-    /// Reserved value. Per DO-260B, should be treated as less than 45 meters
-    /// until future versions of MOPS redefine this value.
+    /// Vertical accuracy is less than 45 meters.
     /// </summary>
-    Reserved2 = 2,
+    [JsonStringEnumMemberName("< 45 m")]
+    LessThan45Meters = 2,
 
     /// <summary>
-    /// Reserved value. Per DO-260B, should be treated as less than 45 meters
-    /// until future versions of MOPS redefine this value.
+    /// Reserved for future use.
     /// </summary>
-    Reserved3 = 3
+    [JsonStringEnumMemberName("Reserved")]
+    Reserved = 3
 }

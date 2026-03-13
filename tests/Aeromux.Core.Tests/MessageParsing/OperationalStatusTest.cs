@@ -147,14 +147,14 @@ public class OperationalStatusTest
     }
 
     [Theory]
-    [InlineData(RealFrames.OperationalStatus_471DBC, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_71C011, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_3C55C5, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_4BB027, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_80073B, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_06A081, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_4BB0F4, GeometricVerticalAccuracy.Reserved2)]
-    [InlineData(RealFrames.OperationalStatus_5082A0, GeometricVerticalAccuracy.Reserved2)]
+    [InlineData(RealFrames.OperationalStatus_471DBC, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_71C011, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_3C55C5, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_4BB027, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_80073B, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_06A081, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_4BB0F4, GeometricVerticalAccuracy.LessThan45Meters)]
+    [InlineData(RealFrames.OperationalStatus_5082A0, GeometricVerticalAccuracy.LessThan45Meters)]
     public void ParseMessage_DF17_TC31_OperationalStatus_GeometricVerticalAccuracy(
         string hexFrame,
         GeometricVerticalAccuracy expectedGVA)

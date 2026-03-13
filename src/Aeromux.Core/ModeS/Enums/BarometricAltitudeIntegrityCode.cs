@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -29,6 +31,7 @@ public enum BarometricAltitudeIntegrityCode
     /// cross-checked against another source of pressure altitude.
     /// If no update received within past 5 seconds, this value shall be used.
     /// </summary>
+    [JsonStringEnumMemberName("Not Cross-Checked")]
     NotCrossChecked = 0,
 
     /// <summary>
@@ -38,5 +41,6 @@ public enum BarometricAltitudeIntegrityCode
     /// - Based on a non-Gilham coded source (e.g., Synchro or DADS).
     /// For non-Gilham sources, this value is used whenever the barometric altitude is valid.
     /// </summary>
+    [JsonStringEnumMemberName("Cross-Checked")]
     CrossCheckedOrNonGilham = 1
 }

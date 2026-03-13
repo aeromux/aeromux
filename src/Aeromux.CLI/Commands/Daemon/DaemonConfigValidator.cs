@@ -45,6 +45,8 @@ public static class DaemonConfigValidator
         int beastPort = ValidatePort(settings.BeastPort, config.Network!.BeastPort, "BeastPort");
         int jsonPort = ValidatePort(settings.JsonPort, config.Network.JsonPort, "JsonPort");
         int sbsPort = ValidatePort(settings.SbsPort, config.Network.SbsPort, "SbsPort");
+        int apiPort = ValidatePort(settings.ApiPort, config.Network.ApiPort, "ApiPort");
+        bool apiEnabled = ValidateOutputEnabled(settings.ApiEnabled, config.Network.ApiEnabled, "REST API");
         IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
         Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
         var mlatConfig = MlatConfig.Validate(settings.MlatEnabled, settings.MlatInputPort, config.Mlat);
@@ -58,10 +60,11 @@ public static class DaemonConfigValidator
             settings.SbsOutputEnabled, config.Network.SbsOutputEnabled, "SBS");
 
         Log.Information(
-            "Network configuration: Beast={BeastPort} ({BeastStatus}), JSON={JsonPort} ({JsonStatus}), SBS={SbsPort} ({SbsStatus}), Bind={BindAddress}, MLAT Input={MlatPort} ({MlatStatus})",
+            "Network configuration: Beast={BeastPort} ({BeastStatus}), JSON={JsonPort} ({JsonStatus}), SBS={SbsPort} ({SbsStatus}), API={ApiPort} ({ApiStatus}), Bind={BindAddress}, MLAT Input={MlatPort} ({MlatStatus})",
             beastPort, beastEnabled ? "enabled" : "disabled",
             jsonPort, jsonEnabled ? "enabled" : "disabled",
             sbsPort, sbsEnabled ? "enabled" : "disabled",
+            apiPort, apiEnabled ? "enabled" : "disabled",
             bindAddress,
             mlatConfig.InputPort, mlatConfig.Enabled ? "enabled" : "disabled");
 
@@ -76,6 +79,8 @@ public static class DaemonConfigValidator
             BeastPort = beastPort,
             JsonPort = jsonPort,
             SbsPort = sbsPort,
+            ApiPort = apiPort,
+            ApiEnabled = apiEnabled,
             BindAddress = bindAddress,
             ReceiverUuid = receiverUuid,
             MlatConfig = mlatConfig,
@@ -250,11 +255,11 @@ public static class DaemonConfigValidator
                 $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {config.Network?.SbsPort}");
         }
 
-        // HttpPort always validated (not part of this feature)
-        if (config.Network?.HttpPort is < 1024 or > 65535)
+        // ApiPort always validated (used by REST API)
+        if (config.Network?.ApiPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: HTTP port must be between 1024 and 65535, but was {config.Network?.HttpPort}");
+                $"Cannot start daemon: API port must be between 1024 and 65535, but was {config.Network?.ApiPort}");
         }
 
         // Validate receiver location (optional, but validate if configured)

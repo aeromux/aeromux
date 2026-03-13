@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -35,6 +37,7 @@ public enum SdaSupportedFailureCondition
     /// Probability of undetected fault: > 1×10⁻³ per flight hour or Unknown.
     /// Software and Hardware Design Assurance Level: N/A.
     /// </summary>
+    [JsonStringEnumMemberName("Unknown")]
     Unknown = 0,
 
     /// <summary>
@@ -42,6 +45,7 @@ public enum SdaSupportedFailureCondition
     /// Probability of undetected fault: ≤ 1×10⁻³ per flight hour.
     /// Software and Hardware Design Assurance Level: D.
     /// </summary>
+    [JsonStringEnumMemberName("Minor")]
     Minor = 1,
 
     /// <summary>
@@ -49,6 +53,7 @@ public enum SdaSupportedFailureCondition
     /// Probability of undetected fault: ≤ 1×10⁻⁵ per flight hour.
     /// Software and Hardware Design Assurance Level: C.
     /// </summary>
+    [JsonStringEnumMemberName("Major")]
     Major = 2,
 
     /// <summary>
@@ -56,5 +61,6 @@ public enum SdaSupportedFailureCondition
     /// Probability of undetected fault: ≤ 1×10⁻⁷ per flight hour.
     /// Software and Hardware Design Assurance Level: B.
     /// </summary>
+    [JsonStringEnumMemberName("Hazardous")]
     Hazardous = 3
 }

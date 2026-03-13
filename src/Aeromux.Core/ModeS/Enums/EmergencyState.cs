@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -30,6 +32,7 @@ public enum EmergencyState
     /// No emergency (0).
     /// Normal operations.
     /// </summary>
+    [JsonStringEnumMemberName("No Emergency")]
     NoEmergency = 0,
 
     /// <summary>
@@ -37,6 +40,7 @@ public enum EmergencyState
     /// Indicates any emergency condition not covered by other specific codes (e.g., engine failure, fire, medical).
     /// Triggers immediate ATC priority handling and emergency services coordination.
     /// </summary>
+    [JsonStringEnumMemberName("General Emergency")]
     GeneralEmergency = 1,
 
     /// <summary>
@@ -44,6 +48,7 @@ public enum EmergencyState
     /// Aircraft carrying urgent medical patients or organs.
     /// May request priority routing and expedited handling.
     /// </summary>
+    [JsonStringEnumMemberName("Lifeguard/Medical")]
     LifeguardMedical = 2,
 
     /// <summary>
@@ -51,6 +56,7 @@ public enum EmergencyState
     /// Aircraft has reached minimum fuel state, may need priority landing.
     /// Not yet an emergency but requires expedited handling to prevent fuel exhaustion.
     /// </summary>
+    [JsonStringEnumMemberName("Minimum Fuel")]
     MinimumFuel = 3,
 
     /// <summary>
@@ -58,6 +64,7 @@ public enum EmergencyState
     /// Loss of radio communication with ATC.
     /// Aircraft will follow standard lost-comm procedures.
     /// </summary>
+    [JsonStringEnumMemberName("No Communications")]
     NoCommunications = 4,
 
     /// <summary>
@@ -65,6 +72,7 @@ public enum EmergencyState
     /// Aircraft hijacking or unlawful seizure.
     /// Triggers immediate security and law enforcement response.
     /// </summary>
+    [JsonStringEnumMemberName("Unlawful Interference")]
     UnlawfulInterference = 5,
 
     /// <summary>
@@ -72,11 +80,13 @@ public enum EmergencyState
     /// Aircraft has crashed or made forced landing.
     /// Triggers emergency response and search and rescue operations.
     /// </summary>
+    [JsonStringEnumMemberName("Downed Aircraft")]
     DownedAircraft = 6,
 
     /// <summary>
     /// Reserved (7).
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved = 7
 }

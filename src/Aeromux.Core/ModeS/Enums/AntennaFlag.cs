@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -31,11 +33,13 @@ public enum AntennaFlag
     /// Aircraft equipped with diversity antenna capability (multiple antennas for improved signal reception).
     /// Corresponds to Single Antenna (SA) flag = 0 in ADS-B airborne position messages.
     /// </summary>
+    [JsonStringEnumMemberName("Diversity")]
     DiversityAntenna = 0,
 
     /// <summary>
     /// Aircraft equipped with single antenna only (no diversity capability).
     /// Corresponds to Single Antenna (SA) flag = 1 in ADS-B airborne position messages.
     /// </summary>
+    [JsonStringEnumMemberName("Single")]
     SingleAntenna = 1,
 }

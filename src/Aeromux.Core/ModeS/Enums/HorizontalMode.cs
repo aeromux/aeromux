@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -31,6 +33,7 @@ public enum HorizontalMode
     /// No horizontal mode active or unknown (value 0).
     /// Autopilot may be off or lateral mode not engaged.
     /// </summary>
+    [JsonStringEnumMemberName("None")]
     None = 0,
 
     /// <summary>
@@ -38,6 +41,7 @@ public enum HorizontalMode
     /// Aircraft is turning toward the target heading or track.
     /// Autopilot is actively changing heading to reach the target.
     /// </summary>
+    [JsonStringEnumMemberName("Acquiring")]
     Acquiring = 1,
 
     /// <summary>
@@ -45,6 +49,7 @@ public enum HorizontalMode
     /// Aircraft has reached target heading/track and is holding it,
     /// or is in the process of stabilizing on the target.
     /// </summary>
+    [JsonStringEnumMemberName("Capturing or Maintaining")]
     CapturingOrMaintaining = 2
 
     // Value 3: Reserved for future use (not yet defined by ICAO)

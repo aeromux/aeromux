@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -28,6 +30,7 @@ public enum VelocityType
     /// GS = TAS + wind component (can be higher or lower than TAS depending on wind).
     /// Source: TC 19 (subtype 1-2), TC 5-8 (surface), BDS 5,0.
     /// </summary>
+    [JsonStringEnumMemberName("GroundSpeed")]
     GroundSpeed,
 
     /// <summary>
@@ -36,6 +39,7 @@ public enum VelocityType
     /// TAS = IAS corrected for altitude and temperature (always higher than IAS at altitude).
     /// Source: TC 19 (subtype 3-4), BDS 5,0, BDS 5,3.
     /// </summary>
+    [JsonStringEnumMemberName("TrueAirspeed")]
     TrueAirspeed,
 
     /// <summary>
@@ -45,5 +49,6 @@ public enum VelocityType
     /// At sea level ISA conditions: IAS = TAS, but at altitude: IAS &lt; TAS.
     /// Source: BDS 5,3, BDS 6,0.
     /// </summary>
+    [JsonStringEnumMemberName("IndicatedAirspeed")]
     IndicatedAirspeed
 }

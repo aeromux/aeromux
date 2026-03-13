@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -26,11 +28,13 @@ public enum TargetHeadingType
     /// Target angle represents the aircraft's track over the ground.
     /// Track is the actual path of the aircraft relative to the ground, affected by wind.
     /// </summary>
+    [JsonStringEnumMemberName("Track")]
     Track = 0,
 
     /// <summary>
     /// Target angle represents the aircraft's true heading.
     /// Heading is the direction the aircraft's nose is pointing, regardless of ground track.
     /// </summary>
+    [JsonStringEnumMemberName("Heading")]
     Heading = 1
 }

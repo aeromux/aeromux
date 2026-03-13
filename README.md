@@ -21,9 +21,11 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 
 - **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
 
-- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, unit switching, and detail view field search with jump-and-highlight navigation. See the [TUI Guide](TUI.md) for full documentation.
+- **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints with rate limiting. See the [API Guide](docs/API.md) for full documentation.
 
-- **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network.
+- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, unit switching, and detail view field search with jump-and-highlight navigation. See the [TUI Guide](docs/TUI.md) for full documentation.
+
+- **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network via TCP protocols and the REST API.
 
 - **Cross-Platform** — Runs on macOS (Intel and Apple Silicon) and Linux (x64 and ARM64, including Raspberry Pi 4/5).
 
@@ -56,7 +58,7 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
   ↑/↓: Row, ←/→: Page, Home/End                       ENTER: Details, D/A/S: Units, /: Search, Q: Quit
 ```
 
-See the [TUI Guide](TUI.md) for full keyboard reference, sorting, search, and detail view documentation.
+See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, and detail view documentation.
 
 ## Quick Start
 
@@ -128,7 +130,7 @@ Aeromux uses a YAML configuration file. Copy [`aeromux.example.yaml`](aeromux.ex
 The main sections are:
 
 - **`devices`** — Your RTL-SDR receivers. Configure gain, frequency correction (PPM), preamble sensitivity, and enable or disable individual devices.
-- **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the HTTP port and bind address.
+- **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the REST API port/toggle and bind address.
 - **`tracking`** — Controls how strictly aircraft are filtered. The confidence level determines how many detections are required before an aircraft is reported, reducing false positives from noise.
 - **`receiver`** — Your station's geographic location (latitude, longitude, altitude). This is needed for surface vehicle position decoding and for MLAT triangulation.
 - **`database`** — Aircraft metadata database settings. Configure the storage path and enable database enrichment for aircraft identification data.
@@ -142,7 +144,7 @@ The main sections are:
 | 30005 | Beast      | Binary protocol, compatible with dump1090 and readsb |
 | 30003 | SBS        | BaseStation text format, compatible with VRS         |
 | 30006 | JSON       | Streaming JSON for web applications                  |
-| 8080  | HTTP       | API and web interface (to be implemented)            |
+| 8080  | HTTP       | REST API (JSON, read-only)                           |
 | 30104 | MLAT Input | Receives positions from mlat-client                  |
 
 All ports are configurable in the YAML configuration file. Protocols can be individually enabled or disabled.

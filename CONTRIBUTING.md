@@ -348,6 +348,7 @@ dotnet test --collect:"XPlat Code Coverage"
 # Run a specific test project
 dotnet test tests/Aeromux.Core.Tests
 dotnet test tests/Aeromux.Infrastructure.Tests
+dotnet test tests/Aeromux.CLI.Tests
 ```
 
 ### Test Organization
@@ -357,7 +358,8 @@ Tests mirror the source structure:
 ```
 tests/
 ├── Aeromux.Core.Tests/              # Unit tests for domain logic
-└── Aeromux.Infrastructure.Tests/    # Tests for I/O and networking
+├── Aeromux.Infrastructure.Tests/    # Tests for I/O and networking
+└── Aeromux.CLI.Tests/               # Tests for CLI commands and REST API
 ```
 
 ### Writing Tests

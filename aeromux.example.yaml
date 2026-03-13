@@ -35,7 +35,8 @@ network:                                  # Network server configuration
   jsonOutputEnabled: false                # Enable JSON output (default: false)
   sbsPort: 30003                          # SBS BaseStation text protocol port (default: 30003, VRS-compatible)
   sbsOutputEnabled: false                 # Enable SBS output (default: false)
-  httpPort: 8080                          # HTTP API and web interface port
+  apiPort: 8080                           # REST API port (default: 8080)
+  apiEnabled: true                        # Enable REST API (default: true)
   bindAddress: "0.0.0.0"                  # Network interface to bind (0.0.0.0 = all interfaces, 127.0.0.1 = localhost only)
 
 # Aircraft tracking settings

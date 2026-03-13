@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -31,44 +33,52 @@ public enum NavigationAccuracyCategoryVelocity
     /// <summary>
     /// Unknown velocity accuracy or data not available.
     /// </summary>
+    [JsonStringEnumMemberName("Unknown")]
     Unknown = 0,
 
     /// <summary>
     /// Horizontal velocity error &lt; 10 m/s, vertical velocity error &lt; 15.2 m/s (50 ft/s).
     /// Basic velocity accuracy for general awareness.
     /// </summary>
+    [JsonStringEnumMemberName("< 10 m/s")]
     LessThan10MetersPerSecond = 1,
 
     /// <summary>
     /// Horizontal velocity error &lt; 3 m/s, vertical velocity error &lt; 4.5 m/s (15 ft/s).
     /// Good velocity accuracy for traffic monitoring.
     /// </summary>
+    [JsonStringEnumMemberName("< 3 m/s")]
     LessThan3MetersPerSecond = 2,
 
     /// <summary>
     /// Horizontal velocity error &lt; 1 m/s, vertical velocity error &lt; 1.5 m/s (5 ft/s).
     /// High velocity accuracy for ATC (Air Traffic Control) applications.
     /// </summary>
+    [JsonStringEnumMemberName("< 1 m/s")]
     LessThan1MeterPerSecond = 3,
 
     /// <summary>
     /// Horizontal velocity error &lt; 0.3 m/s, vertical velocity error &lt; 0.46 m/s (1.5 ft/s).
     /// Precision velocity for safety-critical operations.
     /// </summary>
+    [JsonStringEnumMemberName("< 0.3 m/s")]
     LessThan0Point3MetersPerSecond = 4,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved5 = 5,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved6 = 6,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved7 = 7
 }

@@ -55,6 +55,14 @@ public class DaemonSettings : GlobalSettings
         "IP address to bind to (default: 0.0.0.0 for all interfaces)")]
     public string? BindAddress { get; set; } // CLI uses string, parsed to IPAddress in validation
 
+    [CommandOption("--api-port")]
+    [Description("REST API port (default: 8080)")]
+    public int? ApiPort { get; set; }
+
+    [CommandOption("--api-enabled")]
+    [Description("Enable REST API (default: true)")]
+    public bool? ApiEnabled { get; set; }
+
     [CommandOption("--mlat-enabled")]
     [Description("Enable MLAT input from mlat-client (default: true)")]
     public bool? MlatEnabled { get; set; }

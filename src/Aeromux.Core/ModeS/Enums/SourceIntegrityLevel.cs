@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -33,18 +35,21 @@ public enum SourceIntegrityLevel
     /// Position integrity cannot be determined.
     /// Not suitable for safety-critical applications.
     /// </summary>
+    [JsonStringEnumMemberName("Unknown")]
     Unknown = 0,
 
     /// <summary>
     /// Probability of exceeding NACp (Navigation Accuracy Category - Position) radius ≤ 1×10⁻³ per hour.
     /// Low integrity - suitable for traffic awareness only.
     /// </summary>
+    [JsonStringEnumMemberName("10⁻³ per hour")]
     PerHour1E3 = 1,
 
     /// <summary>
     /// Probability of exceeding NACp radius ≤ 1×10⁻⁵ per hour.
     /// Medium integrity - suitable for most ATC (Air Traffic Control) applications.
     /// </summary>
+    [JsonStringEnumMemberName("10⁻⁵ per hour")]
     PerHour1E5 = 2,
 
     /// <summary>
@@ -52,5 +57,6 @@ public enum SourceIntegrityLevel
     /// High integrity - suitable for safety-critical applications (e.g., separation services).
     /// Required for RTCA DO-260B compliance in safety-critical airspace.
     /// </summary>
+    [JsonStringEnumMemberName("10⁻⁷ per hour")]
     PerHour1E7 = 3
 }

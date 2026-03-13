@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -32,6 +34,7 @@ public enum AdsbVersion
     /// Basic ADS-B functionality without version reporting.
     /// Legacy aircraft or transponders that don't report version number.
     /// </summary>
+    [JsonStringEnumMemberName("DO-260")]
     DO260 = 0,
 
     /// <summary>
@@ -41,6 +44,7 @@ public enum AdsbVersion
     /// SIL (Source Integrity Level), operational status messages.
     /// First version to include accuracy and integrity reporting.
     /// </summary>
+    [JsonStringEnumMemberName("DO-260A")]
     DO260A = 1,
 
     /// <summary>
@@ -51,6 +55,7 @@ public enum AdsbVersion
     /// Administration and EASA - European Union Aviation Safety Agency mandates).
     /// Enhanced position accuracy and integrity parameters.
     /// </summary>
+    [JsonStringEnumMemberName("DO-260B")]
     DO260B = 2,
 
     /// <summary>
@@ -58,25 +63,30 @@ public enum AdsbVersion
     /// Reserved for future enhancements to ADS-B protocol.
     /// Specifications not finalized as of 2025.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved3 = 3,
 
     /// <summary>
     /// Reserved for future use (version 4).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved4 = 4,
 
     /// <summary>
     /// Reserved for future use (version 5).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved5 = 5,
 
     /// <summary>
     /// Reserved for future use (version 6).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved6 = 6,
 
     /// <summary>
     /// Reserved for future use (version 7).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved7 = 7
 }

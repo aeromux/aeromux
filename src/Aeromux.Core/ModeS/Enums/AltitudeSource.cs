@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -28,6 +30,7 @@ public enum AltitudeSource
     /// Used for tactical altitude changes and direct pilot intervention.
     /// Sources: TC 29 (both versions), BDS 4,0.
     /// </summary>
+    [JsonStringEnumMemberName("MCP/FCU")]
     McpFcu,
 
     /// <summary>
@@ -36,6 +39,7 @@ public enum AltitudeSource
     /// Used for strategic navigation following the planned vertical profile.
     /// Sources: TC 29 Version 2 only.
     /// </summary>
+    [JsonStringEnumMemberName("FMS")]
     Fms,
 
     /// <summary>
@@ -44,6 +48,7 @@ public enum AltitudeSource
     /// RNAV allows aircraft to fly any desired flight path within coverage of ground-based or satellite navigation aids.
     /// Sources: TC 29 Version 1, BDS 4,0.
     /// </summary>
+    [JsonStringEnumMemberName("FMS/RNAV")]
     FmsRnav,
 
     /// <summary>
@@ -51,11 +56,13 @@ public enum AltitudeSource
     /// Altitude maintained during holding pattern operations.
     /// Sources: TC 29 Version 1 only.
     /// </summary>
+    [JsonStringEnumMemberName("Holding Mode")]
     HoldingMode,
 
     /// <summary>
     /// Unknown or unavailable altitude source.
     /// Used when altitude source information is not available or cannot be determined.
     /// </summary>
+    [JsonStringEnumMemberName("Unknown")]
     Unknown
 }

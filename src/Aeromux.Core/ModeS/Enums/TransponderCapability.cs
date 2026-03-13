@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -38,39 +40,46 @@ public enum TransponderCapability
     /// Level 1 transponder - basic Mode S capability.
     /// Supports only DF 0, 4, 5, 11 messages (no extended squitter).
     /// </summary>
+    [JsonStringEnumMemberName("Level 1")]
     Level1 = 0,
 
     /// <summary>
     /// Reserved for future use (CA = 1).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved1 = 1,
 
     /// <summary>
     /// Reserved for future use (CA = 2).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved2 = 2,
 
     /// <summary>
     /// Reserved for future use (CA = 3).
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved3 = 3,
 
     /// <summary>
     /// Level 2+ transponder, on-ground status.
     /// Enhanced Mode S with extended squitter capability (ADS-B).
     /// </summary>
+    [JsonStringEnumMemberName("Level 2+ (On Ground)")]
     Level2PlusOnGround = 4,
 
     /// <summary>
     /// Level 2+ transponder, airborne status.
     /// Enhanced Mode S with extended squitter capability (ADS-B).
     /// </summary>
+    [JsonStringEnumMemberName("Level 2+ (Airborne)")]
     Level2PlusAirborne = 5,
 
     /// <summary>
     /// Level 2+ transponder, on-ground or airborne (status uncertain).
     /// Enhanced Mode S with extended squitter capability (ADS-B).
     /// </summary>
+    [JsonStringEnumMemberName("Level 2+ (On Ground or Airborne)")]
     Level2PlusOnGroundOrAirborne = 6,
 
     /// <summary>
@@ -79,5 +88,6 @@ public enum TransponderCapability
     /// - Flight status indicates alert/SPI condition (FS = 2, 3, 4, or 5)
     /// Can be airborne or on-ground.
     /// </summary>
+    [JsonStringEnumMemberName("DR \u2260 0 or Special Flight Status")]
     DRNotZeroOrSpecialFlightStatus = 7
 }

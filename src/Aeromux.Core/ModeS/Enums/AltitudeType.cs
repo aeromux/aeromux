@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -29,6 +31,7 @@ public enum AltitudeType
     /// depending on weather. All aircraft in an area use the same pressure reference for safe separation.
     /// Source: TC 9-18, DF 4, DF 20.
     /// </summary>
+    [JsonStringEnumMemberName("Barometric")]
     Barometric,
 
     /// <summary>
@@ -38,6 +41,7 @@ public enum AltitudeType
     /// Typically 50-100 feet higher than barometric altitude due to geoid-ellipsoid separation.
     /// Source: TC 20-22, derived from TC 19 delta.
     /// </summary>
+    [JsonStringEnumMemberName("Geometric")]
     Geometric,
 
     /// <summary>
@@ -45,5 +49,6 @@ public enum AltitudeType
     /// Indicates aircraft is on the ground (taxiing, parked, or ground operations).
     /// Source: TC 5-8 (surface position messages).
     /// </summary>
+    [JsonStringEnumMemberName("Ground")]
     Ground
 }

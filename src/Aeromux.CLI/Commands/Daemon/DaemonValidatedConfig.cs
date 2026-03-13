@@ -55,6 +55,12 @@ public sealed record DaemonValidatedConfig
     /// <summary>Whether SBS output format is enabled.</summary>
     public required bool SbsEnabled { get; init; }
 
+    /// <summary>Validated REST API port (1024-65535).</summary>
+    public required int ApiPort { get; init; }
+
+    /// <summary>Whether the REST API is enabled.</summary>
+    public required bool ApiEnabled { get; init; }
+
     /// <summary>List of enabled device configurations.</summary>
     public required List<DeviceConfig> EnabledDevices { get; init; }
 }

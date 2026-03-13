@@ -48,11 +48,18 @@ public class NetworkConfig
     public int SbsPort { get; set; } = 30003;
 
     /// <summary>
-    /// Gets or sets the HTTP API and web interface port number.
-    /// Used for REST API endpoints and serving the web interface.
+    /// Gets or sets the REST API port number.
+    /// Used for REST API endpoints providing aircraft tracking data.
     /// Default: 8080 (standard non-privileged HTTP port).
     /// </summary>
-    public int HttpPort { get; set; } = 8080;
+    public int ApiPort { get; set; } = 8080;
+
+    /// <summary>
+    /// Gets or sets whether the REST API is enabled.
+    /// When disabled, the API server is not started and the port is not listened on.
+    /// Default: true (REST API enabled).
+    /// </summary>
+    public bool ApiEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether Beast binary protocol output is enabled.

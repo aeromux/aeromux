@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json.Serialization;
+
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
@@ -36,83 +38,99 @@ public enum NavigationAccuracyCategoryPosition
     /// EPU ≥ 18.52 km (10 NM) or unknown.
     /// Lowest accuracy or position source unavailable.
     /// </summary>
+    [JsonStringEnumMemberName("Unknown")]
     Unknown = 0,
 
     /// <summary>
     /// EPU &lt; 18.52 km (10 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 10 NM")]
     LessThan10NM = 1,
 
     /// <summary>
     /// EPU &lt; 7.408 km (4 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 4 NM")]
     LessThan4NM = 2,
 
     /// <summary>
     /// EPU &lt; 3.704 km (2 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 2 NM")]
     LessThan2NM = 3,
 
     /// <summary>
     /// EPU &lt; 1.852 km (1 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 1 NM")]
     LessThan1NM = 4,
 
     /// <summary>
     /// EPU &lt; 0.926 km (0.5 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 0.5 NM")]
     LessThan05NM = 5,
 
     /// <summary>
     /// EPU &lt; 0.556 km (0.3 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 0.3 NM")]
     LessThan03NM = 6,
 
     /// <summary>
     /// EPU &lt; 0.185 km (0.1 NM).
     /// </summary>
+    [JsonStringEnumMemberName("< 0.1 NM")]
     LessThan01NM = 7,
 
     /// <summary>
     /// EPU &lt; 0.093 km (0.05 NM / 93 meters).
     /// </summary>
+    [JsonStringEnumMemberName("< 93 m")]
     LessThan93m = 8,
 
     /// <summary>
     /// EPU &lt; 30 meters.
     /// Good GPS accuracy.
     /// </summary>
+    [JsonStringEnumMemberName("< 30 m")]
     LessThan30m = 9,
 
     /// <summary>
     /// EPU &lt; 10 meters.
     /// High-quality GPS with SBAS augmentation.
     /// </summary>
+    [JsonStringEnumMemberName("< 10 m")]
     LessThan10m = 10,
 
     /// <summary>
     /// EPU &lt; 3 meters.
     /// Precision GPS (DGPS, RTK, or multi-constellation).
     /// </summary>
+    [JsonStringEnumMemberName("< 3 m")]
     LessThan3m = 11,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved12 = 12,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved13 = 13,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved14 = 14,
 
     /// <summary>
     /// Reserved for future use.
     /// </summary>
+    [JsonStringEnumMemberName("Reserved")]
     Reserved15 = 15
 }
