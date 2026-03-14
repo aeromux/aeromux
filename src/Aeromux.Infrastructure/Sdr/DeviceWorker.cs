@@ -194,6 +194,7 @@ public sealed class DeviceWorker : IDisposable
             //   - Relationship: Buffer is 2x request size to provide headroom for USB transfers
             _device.MaxAsyncBufferSize = 512 * 1024;    // 512 KB USB buffer (2x request size)
             _device.DropSamplesOnFullBuffer = true;     // Prevent blocking if processing falls behind
+            _device.UseRawBufferMode = true;            // Zero-copy raw buffer mode (eliminates per-sample IQData allocation)
             _device.ResetDeviceBuffer();                // Clear any stale data from previous operations
 
             Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) configured: Freq={Frequency}MHz, SR={SampleRate}MHz, Gain={Gain}, Mode={GainMode}",
@@ -312,83 +313,96 @@ public sealed class DeviceWorker : IDisposable
 
         try
         {
-            // Get samples from device buffer
-            List<IQData> samples = _device.GetSamplesFromAsyncBuffer(args.SampleCount);
-
-            _totalSamplesReceived += samples.Count;
-
-            // Convert samples to magnitude (IQ → Magnitude)
-            // Fills a linear buffer with prefix from previous buffer for seamless preamble detection
-            // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
-            IQDemodulator.MagnitudeBuffer? magnitudeBuffer = _demodulator.ProcessSamples(samples);
-
-            if (magnitudeBuffer == null)
+            // Get raw buffer from device channel (zero-copy from native callback)
+            RawSampleBuffer? rawBuffer = _device.GetRawSamplesFromAsyncBuffer();
+            if (rawBuffer == null)
             {
-                // Buffer unavailable or invalid sample count
                 return;
             }
 
-            // Detect preambles and extract frames
-            // Scan linear buffer from start (index 0) through new data region
-            // The buffer layout is: [326 prefix samples][new data]
-            // Scanning starts at index 0, allowing detector to access prefix for boundary detection
-            List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer);
-
-            // Validate frames with CRC and extract ICAO addresses
-            foreach (RawFrame rawFrame in frames)
+            try
             {
-                // Extract pre-calculated signal strength from frame for validation and tracking
-                double signalStrength = rawFrame.SignalStrength;
+                _totalSamplesReceived += rawBuffer.SampleCount;
 
-                // CRC validation
-                ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
+                // Convert raw I/Q bytes to magnitude (direct byte access, no IQData intermediary)
+                // Fills a linear buffer with prefix from previous buffer for seamless preamble detection
+                // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
+                IQDemodulator.MagnitudeBuffer? magnitudeBuffer =
+                    _demodulator.ProcessSamples(rawBuffer.Data.AsSpan(0, rawBuffer.ByteLength));
 
-                if (validatedFrame == null)
+                if (magnitudeBuffer == null)
                 {
-                    continue;
+                    // Buffer unavailable or invalid sample count
+                    return;
                 }
 
-                // Confidence tracking (filter noise from real aircraft)
-                bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool isNewConfirmedIcao);
+                // Detect preambles and extract frames
+                // Scan linear buffer from start (index 0) through new data region
+                // The buffer layout is: [326 prefix samples][new data]
+                // Scanning starts at index 0, allowing detector to access prefix for boundary detection
+                List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer);
 
-                // Log when ICAO reaches confidence threshold
-                if (isNewConfirmedIcao)
+                // Validate frames with CRC and extract ICAO addresses
+                foreach (RawFrame rawFrame in frames)
                 {
-                    Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
-                        _config.Name,
-                        _config.DeviceIndex,
-                        validatedFrame.IcaoAddress,
-                        _trackingConfig.ConfidenceLevel,
-                        (int)_trackingConfig.ConfidenceLevel,
-                        (int)validatedFrame.DownlinkFormat,
-                        validatedFrame.UsesPIMode ? "PI" : "AP");
+                    // Extract pre-calculated signal strength from frame for validation and tracking
+                    double signalStrength = rawFrame.SignalStrength;
+
+                    // CRC validation
+                    ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
+
+                    if (validatedFrame == null)
+                    {
+                        continue;
+                    }
+
+                    // Confidence tracking (filter noise from real aircraft)
+                    bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool isNewConfirmedIcao);
+
+                    // Log when ICAO reaches confidence threshold
+                    if (isNewConfirmedIcao)
+                    {
+                        Log.Information("Device '{DeviceName}' (index: {DeviceIndex}) confirmed aircraft: {IcaoAddress} (confidence {Level}, seen {Count}+ times, DF {DownlinkFormat}, {Mode} mode)",
+                            _config.Name,
+                            _config.DeviceIndex,
+                            validatedFrame.IcaoAddress,
+                            _trackingConfig.ConfidenceLevel,
+                            (int)_trackingConfig.ConfidenceLevel,
+                            (int)validatedFrame.DownlinkFormat,
+                            validatedFrame.UsesPIMode ? "PI" : "AP");
+                    }
+
+                    // Only pass confident frames to next steps
+                    if (!isConfident)
+                    {
+                        continue;
+                    }
+
+                    // Deduplication: filter frames seen within deduplication window (FRUIT, multipath, multiple interrogators)
+                    // This prevents expensive parsing of duplicate frames (~30% CPU savings)
+                    if (_frameDeduplicator.IsDuplicate(validatedFrame.Data, validatedFrame.Timestamp))
+                    {
+                        continue;
+                    }
+
+                    // Parse validated frame into structured message
+                    // Noise and unconfident ICAOs are filtered out above
+                    ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
+
+                    // Invoke callback with frame and message (even if message is null)
+                    // Beast format needs ALL frames, JSON/SBS will skip nulls
+                    _onDataParsed?.Invoke(validatedFrame, message);
+
+                    // Message may be null if:
+                    // - Unsupported message type (DF 24 Comm-D, rare formats)
+                    // - Parse error occurred (logged by MessageParser)
+                    // - Validation failure (invalid data in message fields)
                 }
-
-                // Only pass confident frames to next steps
-                if (!isConfident)
-                {
-                    continue;
-                }
-
-                // Deduplication: filter frames seen within deduplication window (FRUIT, multipath, multiple interrogators)
-                // This prevents expensive parsing of duplicate frames (~30% CPU savings)
-                if (_frameDeduplicator.IsDuplicate(validatedFrame.Data, validatedFrame.Timestamp))
-                {
-                    continue;
-                }
-
-                // Parse validated frame into structured message
-                // Noise and unconfident ICAOs are filtered out above
-                ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
-
-                // Invoke callback with frame and message (even if message is null)
-                // Beast format needs ALL frames, JSON/SBS will skip nulls
-                _onDataParsed?.Invoke(validatedFrame, message);
-
-                // Message may be null if:
-                // - Unsupported message type (DF 24 Comm-D, rare formats)
-                // - Parse error occurred (logged by MessageParser)
-                // - Validation failure (invalid data in message fields)
+            }
+            finally
+            {
+                // Always return the pooled buffer, even if processing throws
+                rawBuffer.Return();
             }
         }
         catch (Exception ex)
@@ -740,14 +754,30 @@ public sealed class DeviceWorker : IDisposable
         _demodulator.Dispose();
     }
 
-    // Public properties for session summary (exposed to DaemonCommand for aggregation)
+    /// <summary>Gets the configured device name.</summary>
     public string DeviceName => _config.Name;
+
+    /// <summary>Gets the total number of I/Q samples received since <see cref="StartReceiving"/>.</summary>
     public long TotalSamplesReceived => _totalSamplesReceived;
+
+    /// <summary>Gets the timestamp when sample reception started.</summary>
     public DateTime StartTime => _receptionStartTime;
+
+    /// <summary>Gets the I/Q-to-magnitude demodulator for this device.</summary>
     public IQDemodulator Demodulator => _demodulator;
+
+    /// <summary>Gets the Mode S preamble detector for this device.</summary>
     public PreambleDetector PreambleDetector => _preambleDetector;
+
+    /// <summary>Gets the CRC validation and frame factory for this device.</summary>
     public ValidatedFrameFactory ValidatedFrameFactory => _validatedFrameFactory;
+
+    /// <summary>Gets the ICAO confidence tracker (may be shared across devices for MLAT).</summary>
     public IcaoConfidenceTracker ConfidenceTracker => _confidenceTracker;
+
+    /// <summary>Gets the frame deduplicator for FRUIT/multipath filtering.</summary>
     public FrameDeduplicator FrameDeduplicator => _frameDeduplicator;
+
+    /// <summary>Gets the Mode S/ADS-B message parser for this device.</summary>
     public MessageParser MessageParser => _messageParser;
 }

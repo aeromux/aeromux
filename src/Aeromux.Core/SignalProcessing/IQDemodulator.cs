@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using RtlSdrManager;
-
 namespace Aeromux.Core.SignalProcessing;
 
 /// <summary>
@@ -63,7 +61,6 @@ public sealed class IQDemodulator : IDisposable
         /// Buffer data: [prefix region | new data region]
         /// Allocate total buffer: prefix region (326) + maximum new data region (262,144)
         /// </summary>
-        ///
         public ushort[] Data = new ushort[PrefixSamples + MaxBufferSamples];
 
         /// <summary>Length of new data region only (excludes the 326-sample prefix)</summary>
@@ -76,8 +73,10 @@ public sealed class IQDemodulator : IDisposable
     private readonly MagnitudeBuffer[] _buffers = new MagnitudeBuffer[NumBuffers];
     private int _currentBufferIndex;  // Which buffer we're filling next
 
-    // Statistics (exposed as properties for DeviceWorker to log)
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IQDemodulator"/> class
+    /// with pre-allocated magnitude buffers for continuous sample processing.
+    /// </summary>
     public IQDemodulator()
     {
         // Initialize all buffers
@@ -142,17 +141,20 @@ public sealed class IQDemodulator : IDisposable
     }
 
     /// <summary>
-    /// Processes a batch of IQ samples and converts them to magnitude values.
+    /// Processes raw interleaved I/Q bytes and converts them to magnitude values.
     /// Implements rolling buffer strategy with overlapping prefix regions for continuity.
     /// </summary>
-    /// <param name="samples">IQ samples from RTL-SDR device.</param>
+    /// <param name="rawIqBytes">
+    /// Interleaved I/Q byte pairs from the RTL-SDR device: [I0, Q0, I1, Q1, ...].
+    /// Length must be even and non-zero.
+    /// </param>
     /// <returns>The filled magnitude buffer ready for preamble scanning, or null if buffer unavailable or sample count invalid.</returns>
     /// <remarks>
     /// <para><b>Processing Steps:</b></para>
     /// <list type="number">
     /// <item>Select next available buffer from the 12-buffer pool</item>
     /// <item>Copy trailing 326 samples from previous buffer into current buffer's prefix region</item>
-    /// <item>Convert new IQ samples to magnitude values starting at index 326 (after prefix)</item>
+    /// <item>Convert new I/Q bytes to magnitude values starting at index 326 (after prefix)</item>
     /// <item>Advance to next buffer in rotation for subsequent call</item>
     /// </list>
     ///
@@ -161,11 +163,11 @@ public sealed class IQDemodulator : IDisposable
     /// spanning buffer boundaries without special handling for wraparound conditions.
     /// </para>
     /// </remarks>
-    public MagnitudeBuffer? ProcessSamples(IReadOnlyList<IQData> samples)
+    public MagnitudeBuffer? ProcessSamples(ReadOnlySpan<byte> rawIqBytes)
     {
-        ArgumentNullException.ThrowIfNull(samples);
+        int sampleCount = rawIqBytes.Length / 2;
 
-        if (samples.Count == 0 || samples.Count > MaxBufferSamples)
+        if (sampleCount is 0 or > MaxBufferSamples)
         {
             return null;
         }
@@ -206,20 +208,18 @@ public sealed class IQDemodulator : IDisposable
             Array.Clear(currentBuffer.Data, 0, PrefixSamples);
         }
 
-        // Convert IQ samples to magnitude, placing results after the prefix region (index 326 onwards)
-        for (int i = 0; i < samples.Count; i++)
+        // Convert raw I/Q bytes to magnitude — direct byte indexing, no IQData intermediary
+        for (int i = 0; i < sampleCount; i++)
         {
-            IQData sample = samples[i];
-            // Lookup pre-computed Euclidean magnitude: √(I² + Q²)
-            ushort magnitude = MagnitudeLookup[sample.I, sample.Q];
-            currentBuffer.Data[PrefixSamples + i] = magnitude;
+            int byteIndex = i * 2;
+            currentBuffer.Data[PrefixSamples + i] = MagnitudeLookup[rawIqBytes[byteIndex], rawIqBytes[byteIndex + 1]];
         }
 
         // Update buffer metadata
-        currentBuffer.Length = samples.Count;
-        currentBuffer.Dropped = 0;  // TODO: Implement dropped sample tracking for gap detection
+        currentBuffer.Length = sampleCount;
+        currentBuffer.Dropped = 0;
 
-        TotalSamplesProcessed += samples.Count;
+        TotalSamplesProcessed += sampleCount;
 
         // Advance to next buffer in circular rotation
         _currentBufferIndex = (_currentBufferIndex + 1) % NumBuffers;
@@ -233,9 +233,9 @@ public sealed class IQDemodulator : IDisposable
     /// </summary>
     public long TotalSamplesProcessed { get; private set; }
 
+    /// <inheritdoc />
     public void Dispose()
     {
-        // No unmanaged resources to clean up
-        // Magnitude buffer is managed array
+        // No unmanaged resources — magnitude buffers are managed arrays
     }
 }
