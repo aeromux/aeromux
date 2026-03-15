@@ -135,6 +135,8 @@ src/
 
 **Key dependency rule:** Core has no dependency on Infrastructure or CLI. Infrastructure depends on Core. CLI depends on both.
 
+For a detailed walkthrough of the end-to-end data flow, the signal processing pipeline, the concurrency model, and the startup/shutdown lifecycle, see the [Architecture Guide](docs/ARCHITECTURE.md).
+
 When contributing, place your code in the appropriate layer:
 
 - **Protocol parsing, domain models, signal processing** go in `Aeromux.Core`.

@@ -170,7 +170,7 @@ The build script auto-detects your platform, or you can cross-compile for a spec
 
 Contributions are welcome! Whether it is a bug fix, a new feature, improved documentation, or additional tests, we appreciate your help.
 
-Please read the [Contributing Guide](CONTRIBUTING.md) for development setup, architecture overview, coding standards, and the pull request process. This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+Please read the [Contributing Guide](CONTRIBUTING.md) for development setup, coding standards, and the pull request process. For an in-depth look at the data flow, signal processing pipeline, and concurrency model, see the [Architecture Guide](docs/ARCHITECTURE.md). This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
