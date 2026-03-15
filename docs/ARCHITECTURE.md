@@ -44,19 +44,19 @@ The `aeromux-db` SQLite database is an optional enrichment source that provides 
 ```mermaid
 flowchart LR
     subgraph station["Ground Station"]
-        SDR1["RTL-SDR\nReceiver 1"]
-        SDR2["RTL-SDR\nReceiver 2"]
+        SDR1["RTL-SDR<br/>Receiver 1"]
+        SDR2["RTL-SDR<br/>Receiver 2"]
         AEROMUX["Aeromux"]
         MLATC["mlat-client"]
-        DB["aeromux-db\n(SQLite)"]
+        DB["aeromux-db<br/>(SQLite)"]
     end
 
     subgraph consumers["Consumers"]
         READSB["readsb / dump1090"]
-        TAR1090["tar1090\n(web map)"]
+        TAR1090["tar1090<br/>(web map)"]
         VRS["Virtual Radar Server"]
         WEBAPP["Custom web app"]
-        FEED["Flightradar24 /\nADSB Exchange\nfeeders"]
+        FEED["Flightradar24 /<br/>ADSB Exchange<br/>feeders"]
     end
 
     subgraph mlat_net["MLAT Network"]
@@ -67,15 +67,15 @@ flowchart LR
     SDR2 -->|"USB"| AEROMUX
     DB -.->|"SQLite read"| AEROMUX
 
-    AEROMUX -->|"Beast TCP\n(port 30005)"| READSB
+    AEROMUX -->|"Beast TCP<br/>(port 30005)"| READSB
     AEROMUX -->|"Beast TCP"| TAR1090
     AEROMUX -->|"Beast TCP"| FEED
     AEROMUX -->|"Beast TCP"| MLATC
-    AEROMUX -->|"SBS TCP\n(port 30003)"| VRS
-    AEROMUX -->|"JSON TCP\n(port 30006)"| WEBAPP
-    AEROMUX -->|"REST API\n(port 8080)"| WEBAPP
+    AEROMUX -->|"SBS TCP<br/>(port 30003)"| VRS
+    AEROMUX -->|"JSON TCP<br/>(port 30006)"| WEBAPP
+    AEROMUX -->|"REST API<br/>(port 8080)"| WEBAPP
 
-    MLATC -->|"Beast TCP\n(port 30104)"| AEROMUX
+    MLATC -->|"Beast TCP<br/>(port 30104)"| AEROMUX
     MLATC <-->|"network"| MLATSERV
 ```
 
@@ -87,9 +87,9 @@ Aeromux follows a three-layer architecture with a strict dependency rule: each l
 
 ```mermaid
 flowchart TD
-    CLI["<b>Aeromux.CLI</b>\nCLI commands, terminal user interface, REST API, daemon orchestration"]
-    INFRA["<b>Aeromux.Infrastructure</b>\nSDR device management, TCP networking, streaming, database access"]
-    CORE["<b>Aeromux.Core</b>\nSignal processing, Mode S protocol, aircraft tracking, configuration"]
+    CLI["<b>Aeromux.CLI</b><br/>CLI commands, terminal user interface, REST API, daemon orchestration"]
+    INFRA["<b>Aeromux.Infrastructure</b><br/>SDR device management, TCP networking, streaming, database access"]
+    CORE["<b>Aeromux.Core</b><br/>Signal processing, Mode S protocol, aircraft tracking, configuration"]
 
     CLI --> INFRA
     CLI --> CORE
@@ -120,40 +120,40 @@ flowchart TD
     end
 
     subgraph rtlsdr["RtlSdrManager"]
-        DRV["RtlSdrManagedDevice\n(raw buffer mode)"]
+        DRV["RtlSdrManagedDevice<br/>(raw buffer mode)"]
     end
 
     subgraph dw["DeviceWorker.OnSamplesAvailable — synchronous pipeline"]
-        DEMOD["IQDemodulator\n(magnitude lookup table)"]
-        PREAMBLE["PreambleDetector\n(SIMD pre-check, multiphase correlation)"]
-        VALIDATE["ValidatedFrameFactory\n(CRC validation, error correction)"]
-        CONFIDENCE["IcaoConfidenceTracker\n(noise filtering)"]
-        DEDUP["FrameDeduplicator\n(FRUIT / multipath removal)"]
-        PARSE["MessageParser\n(DF routing, ADS-B / Comm-B decoding)"]
+        DEMOD["IQDemodulator<br/>(magnitude lookup table)"]
+        PREAMBLE["PreambleDetector<br/>(SIMD pre-check, multiphase correlation)"]
+        VALIDATE["ValidatedFrameFactory<br/>(CRC validation, error correction)"]
+        CONFIDENCE["IcaoConfidenceTracker<br/>(noise filtering)"]
+        DEDUP["FrameDeduplicator<br/>(FRUIT / multipath removal)"]
+        PARSE["MessageParser<br/>(DF routing, ADS-B / Comm-B decoding)"]
     end
 
     subgraph mlat["MLAT Input"]
-        MLATCLIENT["mlat-client\n(external process)"]
-        MLATW["MlatWorker\n(Beast TCP listener, port 30104)"]
+        MLATCLIENT["mlat-client<br/>(external process)"]
+        MLATW["MlatWorker<br/>(Beast TCP listener, port 30104)"]
     end
 
     subgraph infra["Aggregation & Streaming"]
-        AGG["FrameAggregator\n(multi-device channel)"]
-        STREAM["ReceiverStream\n(fan-out to subscribers)"]
+        AGG["FrameAggregator<br/>(multi-device channel)"]
+        STREAM["ReceiverStream<br/>(fan-out to subscribers)"]
     end
 
     subgraph tracking["Tracking & Enrichment"]
-        TRACKER["AircraftStateTracker\n(ConcurrentDictionary, handler registry)"]
-        DB["AircraftDatabaseLookup\n(SQLite enrichment)"]
+        TRACKER["AircraftStateTracker<br/>(ConcurrentDictionary, handler registry)"]
+        DB["AircraftDatabaseLookup<br/>(SQLite enrichment)"]
     end
 
     subgraph output["Network Output"]
         direction LR
-        BEAST["Beast Broadcaster\n(port 30005)"]
-        JSON["JSON Broadcaster\n(port 30006)"]
-        SBS["SBS Broadcaster\n(port 30003)"]
-        API["REST API\n(port 8080)"]
-        TUI["Live TUI\n(Spectre.Console)"]
+        BEAST["Beast Broadcaster<br/>(port 30005)"]
+        JSON["JSON Broadcaster<br/>(port 30006)"]
+        SBS["SBS Broadcaster<br/>(port 30003)"]
+        API["REST API<br/>(port 8080)"]
+        TUI["Live TUI<br/>(Spectre.Console)"]
     end
 
     ANT --> SDR
@@ -167,15 +167,15 @@ flowchart TD
     PARSE -->|"ProcessedFrame"| AGG
 
     MLATCLIENT -->|"Beast TCP connection"| MLATW
-    MLATW -->|"ProcessedFrame\n(Source = Mlat)"| AGG
+    MLATW -->|"ProcessedFrame<br/>(Source = Mlat)"| AGG
     MLATW -.->|"marks ICAOs confident"| CONFIDENCE
 
-    AGG -->|"Channel&lt;ProcessedFrame&gt;\n(first async boundary)"| STREAM
+    AGG -->|"Channel&lt;ProcessedFrame&gt;<br/>(first async boundary)"| STREAM
 
     STREAM -->|"ChannelReader"| TRACKER
     TRACKER -.->|"on first detection"| DB
 
-    STREAM -->|"ChannelReader\n(raw frames only)"| BEAST
+    STREAM -->|"ChannelReader<br/>(raw frames only)"| BEAST
     TRACKER -->|"GetAircraft()"| JSON
     TRACKER -->|"GetAircraft()"| SBS
     TRACKER --> API
@@ -195,11 +195,11 @@ Data transforms through a series of types as it moves through the pipeline. Unde
 
 ```mermaid
 flowchart LR
-    A["RawSampleBuffer\n(byte[])"] -->|IQDemodulator| B["MagnitudeBuffer\n(ushort[])"]
-    B -->|PreambleDetector| C["RawFrame\n(7 or 14 bytes)"]
-    C -->|ValidatedFrameFactory| D["ValidatedFrame\n(ICAO, timestamp,\nsignal strength)"]
-    D -->|MessageParser| E["ProcessedFrame\n(frame + message +\ntimestamp + source)"]
-    E -->|AircraftStateTracker| F["Aircraft\n(immutable record)"]
+    A["RawSampleBuffer<br/>(byte[])"] -->|IQDemodulator| B["MagnitudeBuffer<br/>(ushort[])"]
+    B -->|PreambleDetector| C["RawFrame<br/>(7 or 14 bytes)"]
+    C -->|ValidatedFrameFactory| D["ValidatedFrame<br/>(ICAO, timestamp,<br/>signal strength)"]
+    D -->|MessageParser| E["ProcessedFrame<br/>(frame + message +<br/>timestamp + source)"]
+    E -->|AircraftStateTracker| F["Aircraft<br/>(immutable record)"]
 ```
 
 | Type | Stage | Contents | Lifetime |
@@ -398,17 +398,17 @@ Frame ordering across devices is non-deterministic (whichever device's callback 
 
 ```mermaid
 flowchart LR
-    DW1["DeviceWorker 1"] -->|AddData| AGG["FrameAggregator\n(Channel)"]
+    DW1["DeviceWorker 1"] -->|AddData| AGG["FrameAggregator<br/>(Channel)"]
     DW2["DeviceWorker 2"] -->|AddData| AGG
     DWN["DeviceWorker N"] -->|AddData| AGG
     MLAT["MlatWorker"] -->|AddData| AGG
 
-    AGG --> BC["BroadcastToSubscribersAsync\n(copy-on-write snapshot)"]
+    AGG --> BC["BroadcastToSubscribersAsync<br/>(copy-on-write snapshot)"]
 
-    BC -->|ChannelReader| S1["Subscriber 1\n(Beast)"]
-    BC -->|ChannelReader| S2["Subscriber 2\n(JSON)"]
-    BC -->|ChannelReader| S3["Subscriber 3\n(SBS)"]
-    BC -->|ChannelReader| S4["Subscriber 4\n(Tracker)"]
+    BC -->|ChannelReader| S1["Subscriber 1<br/>(Beast)"]
+    BC -->|ChannelReader| S2["Subscriber 2<br/>(JSON)"]
+    BC -->|ChannelReader| S3["Subscriber 3<br/>(SBS)"]
+    BC -->|ChannelReader| S4["Subscriber 4<br/>(Tracker)"]
 ```
 
 ---
@@ -461,16 +461,16 @@ The three broadcast formats differ in what data they need from the system. This 
 
 ```mermaid
 flowchart LR
-    STREAM["ReceiverStream\n(ChannelReader)"]
+    STREAM["ReceiverStream<br/>(ChannelReader)"]
     TRACKER["AircraftStateTracker"]
 
-    STREAM -->|"ProcessedFrame\n(raw ValidatedFrame)"| BEAST["Beast Encoder\n(stateless)"]
-    STREAM -->|"ProcessedFrame\n(triggers encode)"| JSON["JSON Encoder"]
-    STREAM -->|"ProcessedFrame\n(triggers encode)"| SBS["SBS Encoder"]
+    STREAM -->|"ProcessedFrame<br/>(raw ValidatedFrame)"| BEAST["Beast Encoder<br/>(stateless)"]
+    STREAM -->|"ProcessedFrame<br/>(triggers encode)"| JSON["JSON Encoder"]
+    STREAM -->|"ProcessedFrame<br/>(triggers encode)"| SBS["SBS Encoder"]
 
-    TRACKER -->|"GetAircraft(icao)\n(full Aircraft state)"| JSON
-    TRACKER -->|"GetAircraft(icao)\n(full Aircraft state)"| SBS
-    TRACKER -.->|"OnAircraftAdded\nOnAircraftExpired"| SBS
+    TRACKER -->|"GetAircraft(icao)<br/>(full Aircraft state)"| JSON
+    TRACKER -->|"GetAircraft(icao)<br/>(full Aircraft state)"| SBS
+    TRACKER -.->|"OnAircraftAdded<br/>OnAircraftExpired"| SBS
 ```
 
 **Beast** reads only the raw `ValidatedFrame` from each `ProcessedFrame`. It has no dependency on the `AircraftStateTracker` and is completely stateless — it encodes raw Mode S bytes, timestamps, and signal strength. This is what makes Beast the most efficient format and why it is enabled by default.
@@ -536,42 +536,42 @@ Aeromux processes a continuous stream of radio data in real time, which requires
 
 ```mermaid
 flowchart LR
-    subgraph native["Native Thread\n(per device)"]
+    subgraph native["Native Thread<br/>(per device)"]
         direction TB
-        USB["librtlsdr\nUSB callback"]
+        USB["librtlsdr<br/>USB callback"]
     end
 
-    subgraph lib["RtlSdrManager Thread\n(per device)"]
+    subgraph lib["RtlSdrManager Thread<br/>(per device)"]
         direction TB
-        EVT["SamplesAvailable\nevent handler"]
-        DSP["DeviceWorker\nsignal processing\npipeline"]
+        EVT["SamplesAvailable<br/>event handler"]
+        DSP["DeviceWorker<br/>signal processing<br/>pipeline"]
     end
 
     subgraph pool[".NET Thread Pool"]
         direction TB
 
-        BT["ReceiverStream\nBroadcastTo-\nSubscribersAsync"]
+        BT["ReceiverStream<br/>BroadcastTo-<br/>SubscribersAsync"]
 
-        CT["AircraftState-\nTracker\nconsumer task"]
-        BF1["Beast\nBroadcast-\nFramesAsync"]
-        BF2["JSON\nBroadcast-\nFramesAsync"]
-        BF3["SBS\nBroadcast-\nFramesAsync"]
+        CT["AircraftState-<br/>Tracker<br/>consumer task"]
+        BF1["Beast<br/>Broadcast-<br/>FramesAsync"]
+        BF2["JSON<br/>Broadcast-<br/>FramesAsync"]
+        BF3["SBS<br/>Broadcast-<br/>FramesAsync"]
 
-        AT1["Beast\nAcceptClientsAsync"]
-        AT2["JSON\nAcceptClientsAsync"]
-        AT3["SBS\nAcceptClientsAsync"]
+        AT1["Beast<br/>AcceptClientsAsync"]
+        AT2["JSON<br/>AcceptClientsAsync"]
+        AT3["SBS<br/>AcceptClientsAsync"]
 
-        CL["Tracker\ncleanup\ntimer (10s)"]
-        ST["DeviceWorker\nstatistics\ntimer (10s)"]
+        CL["Tracker<br/>cleanup<br/>timer (10s)"]
+        ST["DeviceWorker<br/>statistics<br/>timer (10s)"]
     end
 
-    USB -->|"Channel&lt;RawSampleBuffer&gt;\n(bounded, drop on overflow)"| EVT
+    USB -->|"Channel&lt;RawSampleBuffer&gt;<br/>(bounded, drop on overflow)"| EVT
     EVT --> DSP
-    DSP -->|"Channel&lt;ProcessedFrame&gt;\n(FrameAggregator,\nunbounded, multi-writer)"| BT
-    BT -->|"Channel\n(per subscriber)"| CT
-    BT -->|"Channel\n(per subscriber)"| BF1
-    BT -->|"Channel\n(per subscriber)"| BF2
-    BT -->|"Channel\n(per subscriber)"| BF3
+    DSP -->|"Channel&lt;ProcessedFrame&gt;<br/>(FrameAggregator,<br/>unbounded, multi-writer)"| BT
+    BT -->|"Channel<br/>(per subscriber)"| CT
+    BT -->|"Channel<br/>(per subscriber)"| BF1
+    BT -->|"Channel<br/>(per subscriber)"| BF2
+    BT -->|"Channel<br/>(per subscriber)"| BF3
 ```
 
 Each column represents a thread boundary. Data crosses between threads exclusively through `Channel<T>` instances:
@@ -684,14 +684,14 @@ flowchart TD
     end
 
     subgraph connect["Connect Mode"]
-        TCP["Beast TCP Source\n(dump1090 / readsb / aeromux)"] --> BS["BeastStream"]
+        TCP["Beast TCP Source<br/>(dump1090 / readsb / aeromux)"] --> BS["BeastStream"]
     end
 
     RS2 -->|ChannelReader| TRACKER2["AircraftStateTracker"]
     BS -->|ChannelReader| TRACKER2
 
-    TRACKER2 --> DISPLAY["LiveTuiDisplay\n(Spectre.Console Live)"]
-    KB["LiveKeyboardHandler\n(separate thread)"] --> DISPLAY
+    TRACKER2 --> DISPLAY["LiveTuiDisplay<br/>(Spectre.Console Live)"]
+    KB["LiveKeyboardHandler<br/>(separate thread)"] --> DISPLAY
 ```
 
 ---
