@@ -14,6 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
@@ -126,66 +131,117 @@ public sealed class PreambleDetector
         int pa = 0;      // Current scan position
         int stop = mlen; // Scan boundary: stops BEFORE the suffix region
 
+        // SIMD fast path: test 8 positions per iteration using Vector128<ushort>.
+        // On the ~90% rejection fast path, this replaces ~80 scalar operations with ~11 vector
+        // operations. When a candidate is found, processes it with the existing scalar logic.
+        if (Vector128.IsHardwareAccelerated)
+        {
+            // Obtain a direct reference to the magnitude array for zero-overhead SIMD loads.
+            // Vector128.LoadUnsafe uses element offset from this reference, bypassing span bounds checks.
+            ref readonly ushort mRef = ref MemoryMarshal.GetArrayDataReference(magnitudeBuffer.Data);
+
+            // SIMD loop: process 8 positions per iteration.
+            // Buffer safety: max access is pa + 7 + 15 = pa + 22. The magnitude buffer extends to
+            // PrefixSamples + mlen (= 326 + mlen). Since stop = mlen, pa + 22 ≤ mlen + 14 < 326 + mlen.
+            while (pa + 8 <= stop)
+            {
+                uint mask = SimdPreCheck8(in mRef, pa);
+
+                if (mask == 0)
+                {
+                    // All 8 positions rejected — skip entire batch (fast path)
+                    pa += 8;
+                    continue;
+                }
+
+                // At least one position passed pre-check — process the first match.
+                // Extract the offset of the lowest set bit (first candidate position).
+                int offset = BitOperations.TrailingZeroCount(mask);
+                int testPos = pa + offset;
+
+                // Full phase correlation and frame extraction (same as scalar path)
+                RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, out bool hadPreamble);
+
+                if (hadPreamble)
+                {
+                    _preambleCandidates++;
+
+                    if (frame != null)
+                    {
+                        _frameBuffer.Add(frame);
+                        _framesExtracted++;
+
+                        // Advance past frame to prevent re-detection of the same transmission.
+                        // At 2.4 MSPS: preamble (8µs × 2.4 = 19.2 samples) + data (N bits × 2.4)
+                        int preambleSamples = 19;
+                        int dataSamples = frame.LengthBits * 12 / 5;  // bits × 2.4
+                        const int safetyMargin = 10;
+                        int skipAmount = offset + preambleSamples + dataSamples + safetyMargin;
+                        pa += skipAmount;
+                    }
+                    else
+                    {
+                        // Preamble confirmed but frame extraction failed — advance past match
+                        pa += offset + 1;
+                    }
+                }
+                else
+                {
+                    // Pre-check passed but full phase correlation rejected — advance past match
+                    pa += offset + 1;
+                }
+            }
+        }
+
+        // Scalar tail loop: handles remaining positions when fewer than 8 remain,
+        // or all positions when SIMD is not available.
         while (pa < stop)
         {
             int idx = pa;
 
-            // Pre-check filter: test 10 consecutive positions for preamble-like magnitude pattern
-            // This fast rejection filter reduces false positives by ~90% before expensive phase correlation
-            // Pattern test: pulse peaks at relative positions 1 and 12 should exceed valleys at 7, 14, 15
+            // Try up to 10 sub-positions per stride, looking for preamble-like pattern
             bool foundPattern = false;
             for (int offset = 0; offset < 10 && !foundPattern; offset++)
             {
                 int testPos = idx + offset;
 
-                // Pre-check filter: Fast magnitude relationship test rejects 90% of non-preambles
-                // before expensive phase correlation. Indices 1,7,12,14,15 correspond to Mode S
-                // preamble pulse/valley timing where peaks must exceed valleys for valid signal.
+                // Preamble pre-check: 3 magnitude comparisons at key pulse positions.
+                // Offsets +1,+7 span the preamble high/low boundary;
+                // offsets +12,+14,+15 test for data-start energy pattern.
                 if (m[testPos + 1] > m[testPos + 7] &&
                     m[testPos + 12] > m[testPos + 14] &&
                     m[testPos + 12] > m[testPos + 15])
                 {
-                    // Pre-check passed - attempt full phase correlation and frame extraction
+                    // Pre-check passed — run full phase correlation and frame extraction
                     RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, out bool hadPreamble);
 
-                    // Preamble detection: count if ANY phase exceeded noise threshold
-                    // (hadPreamble == true means at least one phase alignment was successful)
                     if (hadPreamble)
                     {
                         _preambleCandidates++;
 
                         if (frame != null)
                         {
-                            // Valid frame extracted - add to output and skip past frame data
                             _frameBuffer.Add(frame);
                             _framesExtracted++;
 
-                            // Advance past frame to prevent re-detection
-                            // At 2.4 MSPS: preamble (8µs) + data (N µs) = (8 + N) × 2.4 samples
-                            // Preamble: 8 µs × 2.4 = 19.2 samples
-                            // Data: N bits × 1 µs × 2.4 = N × 2.4 samples
-                            // Using integer math: 19 + (N × 12 / 5) ≈ actual frame length
-                            // Add safety margin to account for:
-                            // 1. Integer rounding (can be short by ~1 sample)
-                            // 2. Trailing noise/interference after frame
-                            // 3. Adjacent frame preambles that might overlap
+                            // Advance past frame to prevent re-detection of the same transmission.
+                            // At 2.4 MSPS: preamble (8µs × 2.4 = 19.2 samples) + data (N bits × 2.4)
                             int preambleSamples = 19;
-                            int dataSamples = frame.LengthBits * 12 / 5;  // More accurate: bits × 2.4
-                            const int safetyMargin = 10;  // Additional samples to ensure clean separation
+                            int dataSamples = frame.LengthBits * 12 / 5;  // bits × 2.4
+                            const int safetyMargin = 10;
                             int skipAmount = offset + preambleSamples + dataSamples + safetyMargin;
                             pa += skipAmount;
                         }
                         else
                         {
-                            // Preamble detected but frame rejected (CRC failure, unknown ICAO, etc.)
-                            // Advance minimally to search for next preamble
+                            // Preamble confirmed but frame extraction failed — advance past match
                             pa += offset + 1;
                         }
                         foundPattern = true;
                     }
                     else
                     {
-                        // Pre-check passed but no phase exceeded threshold (weak signal or noise)
+                        // Pre-check passed but full phase correlation rejected — advance past match
                         pa += offset + 1;
                         foundPattern = true;
                     }
@@ -194,12 +250,78 @@ public sealed class PreambleDetector
 
             if (!foundPattern)
             {
-                // No pre-check match in 10-sample window - skip entire window
+                // No preamble candidate in this 10-position stride — skip entire stride
                 pa += 10;
             }
         }
 
         return _frameBuffer;
+    }
+
+    /// <summary>
+    /// Tests 8 consecutive positions for preamble-like magnitude patterns using SIMD.
+    /// Performs the same 3 comparisons as the scalar pre-check, but for 8 positions simultaneously
+    /// using Vector128 operations. Returns a bitmask where bit N is set if position (pa + N) passed
+    /// all 3 conditions.
+    /// </summary>
+    /// <param name="mRef">Reference to the start of the magnitude buffer array</param>
+    /// <param name="pa">Starting position for the batch of 8 positions to test</param>
+    /// <returns>
+    /// Bitmask of matching positions (bits 0-7). Zero means all 8 positions were rejected.
+    /// Use BitOperations.TrailingZeroCount to find the first matching position offset.
+    /// </returns>
+    /// <remarks>
+    /// <para><b>Why SIMD works for the pre-check:</b></para>
+    /// <para>
+    /// The scalar pre-check at a single position accesses non-contiguous offsets: m[pos+1], m[pos+7],
+    /// m[pos+12], m[pos+14], m[pos+15]. This cannot be vectorized directly. However, when testing
+    /// 8 consecutive starting positions p, p+1, ..., p+7, each offset becomes a contiguous load:
+    /// </para>
+    /// <code>
+    /// m[pos+1]  for 8 positions → m[p+1], m[p+2], ..., m[p+8]   (contiguous from p+1)
+    /// m[pos+7]  for 8 positions → m[p+7], m[p+8], ..., m[p+14]  (contiguous from p+7)
+    /// m[pos+12] for 8 positions → m[p+12], m[p+13], ..., m[p+19] (contiguous from p+12)
+    /// m[pos+14] for 8 positions → m[p+14], m[p+15], ..., m[p+21] (contiguous from p+14)
+    /// m[pos+15] for 8 positions → m[p+15], m[p+16], ..., m[p+22] (contiguous from p+15)
+    /// </code>
+    /// <para>
+    /// Each operand maps to a single Vector128&lt;ushort&gt; load (8 x 16-bit elements),
+    /// enabling 3 parallel comparisons across 8 positions with 5 loads + 3 compares + 2 ANDs.
+    /// On ARM64 (RPi 4/5), Vector128.GreaterThan&lt;ushort&gt; maps to native NEON CMHI
+    /// (unsigned compare, single instruction).
+    /// </para>
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint SimdPreCheck8(ref readonly ushort mRef, int pa)
+    {
+        // Load magnitudes for 8 consecutive positions at each offset.
+        // For positions p, p+1, ..., p+7, m[pos+N] maps to a contiguous load from m[p+N].
+        //
+        // Condition 1: m[pos + 1] > m[pos + 7]
+        var v1 = Vector128.LoadUnsafe(in mRef, (nuint)(pa + 1));
+        var v7 = Vector128.LoadUnsafe(in mRef, (nuint)(pa + 7));
+        var cmp1 = Vector128.GreaterThan(v1, v7);
+
+        // Early exit: if condition 1 fails for all 8 positions, skip conditions 2 and 3
+        if (cmp1 == Vector128<ushort>.Zero)
+        {
+            return 0;
+        }
+
+        // Condition 2: m[pos + 12] > m[pos + 14]
+        // Condition 3: m[pos + 12] > m[pos + 15]
+        // Note: v12 is loaded once and reused for both conditions 2 and 3
+        var v12 = Vector128.LoadUnsafe(in mRef, (nuint)(pa + 12));
+        var v14 = Vector128.LoadUnsafe(in mRef, (nuint)(pa + 14));
+        var v15 = Vector128.LoadUnsafe(in mRef, (nuint)(pa + 15));
+        var cmp2 = Vector128.GreaterThan(v12, v14);
+        var cmp3 = Vector128.GreaterThan(v12, v15);
+
+        // All 3 conditions must be true simultaneously
+        Vector128<ushort> combined = cmp1 & cmp2 & cmp3;
+
+        // Extract one bit per element: bit N = 1 if position (pa + N) passed all 3 conditions
+        return combined.ExtractMostSignificantBits();
     }
 
     /// <summary>
