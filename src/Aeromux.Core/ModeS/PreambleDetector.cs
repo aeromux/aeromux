@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using Aeromux.Core.Timing;
-
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
@@ -47,7 +45,21 @@ public sealed class PreambleDetector
     private readonly List<RawFrame> _frameBuffer = [];
     private readonly ValidatedFrameFactory _validatedFrameFactory = new(); // For validating extracted messages
     private readonly IcaoConfidenceTracker? _confidenceTracker; // Optional: for filtering AP mode from unknown aircraft
-    private readonly ITimeProvider _timeProvider; // High-precision timestamp provider
+
+    /// <summary>
+    /// RTL-SDR sample rate in samples per second (2.4 MSPS, industry standard for Mode S/ADS-B).
+    /// This value matches the hardcoded sample rate in DeviceWorker and the phase correlation
+    /// coefficients tuned throughout this class.
+    /// </summary>
+    private const int SampleRate = 2_400_000;
+
+    /// <summary>
+    /// Pre-computed ticks per sample for sample-offset timestamp calculation.
+    /// At 2.4 MSPS: 10,000,000 ticks/second / 2,400,000 samples/second = ~4.1667 ticks/sample.
+    /// Stored as double to avoid integer truncation drift across buffer positions.
+    /// Maximum rounding error per frame: 0.5 tick = 50 nanoseconds (from double to long conversion).
+    /// </summary>
+    private const double TicksPerSample = (double)TimeSpan.TicksPerSecond / SampleRate;
 
     // Statistics
     private long _preambleCandidates;
@@ -59,12 +71,10 @@ public sealed class PreambleDetector
     /// </summary>
     /// <param name="preambleThreshold">Signal-to-noise threshold for preamble detection (1.5-10.0, default 1.8125)</param>
     /// <param name="confidenceTracker">Optional ICAO confidence tracker for filtering unknown aircraft in AP mode</param>
-    /// <param name="timeProvider">Optional time provider for frame timestamps (defaults to StopwatchTimeProvider for high-precision timing)</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when preambleThreshold is outside valid range (1.5-10.0)</exception>
     public PreambleDetector(
         double preambleThreshold = 1.8125,
-        IcaoConfidenceTracker? confidenceTracker = null,
-        ITimeProvider? timeProvider = null)
+        IcaoConfidenceTracker? confidenceTracker = null)
     {
         if (preambleThreshold is < 1.5 or > 10.0)
         {
@@ -74,7 +84,6 @@ public sealed class PreambleDetector
 
         _preambleThreshold = preambleThreshold;
         _confidenceTracker = confidenceTracker;
-        _timeProvider = timeProvider ?? new StopwatchTimeProvider();
     }
 
     /// <summary>
@@ -82,6 +91,11 @@ public sealed class PreambleDetector
     /// Uses linear buffer scanning with overlapping prefix for seamless boundary detection.
     /// </summary>
     /// <param name="magnitudeBuffer">Magnitude buffer containing [326-sample prefix | new data]</param>
+    /// <param name="bufferTimestamp">
+    /// Wall-clock timestamp anchoring the start of the current IQ buffer.
+    /// Captured once per buffer in DeviceWorker via StopwatchTimeProvider.
+    /// Per-frame timestamps are computed as: bufferTimestamp + (samplePosition - prefixLength) x ticksPerSample.
+    /// </param>
     /// <returns>List of successfully extracted and validated raw frames.</returns>
     /// <remarks>
     /// <para>
@@ -91,7 +105,9 @@ public sealed class PreambleDetector
     /// buffer's trailing 326 samples, providing detection continuity.
     /// </para>
     /// </remarks>
-    public List<RawFrame> DetectAndExtract(SignalProcessing.IQDemodulator.MagnitudeBuffer magnitudeBuffer)
+    public List<RawFrame> DetectAndExtract(
+        SignalProcessing.IQDemodulator.MagnitudeBuffer magnitudeBuffer,
+        DateTime bufferTimestamp)
     {
         ArgumentNullException.ThrowIfNull(magnitudeBuffer);
 
@@ -130,7 +146,7 @@ public sealed class PreambleDetector
                     m[testPos + 12] > m[testPos + 15])
                 {
                     // Pre-check passed - attempt full phase correlation and frame extraction
-                    RawFrame? frame = DetectAndExtractWithPhases(m, testPos, out bool hadPreamble);
+                    RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, out bool hadPreamble);
 
                     // Preamble detection: count if ANY phase exceeded noise threshold
                     // (hadPreamble == true means at least one phase alignment was successful)
@@ -191,10 +207,12 @@ public sealed class PreambleDetector
     /// Tests 5 possible phase alignments (4-8) and extracts the best-scoring frame.
     /// </summary>
     /// <param name="m">Magnitude sample buffer</param>
-    /// <param name="pos">Suspected preamble start position</param>
+    /// <param name="pos">Suspected preamble start position in magnitude buffer</param>
+    /// <param name="bufferTimestamp">Wall-clock anchor for the current IQ buffer</param>
     /// <param name="hadPreamble">Output: true if at least one phase exceeded threshold (indicates valid preamble signal)</param>
     /// <returns>Best extracted frame, or null if all phases failed or were rejected</returns>
-    private RawFrame? DetectAndExtractWithPhases(ReadOnlySpan<ushort> m, int pos, out bool hadPreamble)
+    private RawFrame? DetectAndExtractWithPhases(
+        ReadOnlySpan<ushort> m, int pos, DateTime bufferTimestamp, out bool hadPreamble)
     {
         // Local noise estimation from 5 valley samples (preamble low-points)
         // Samples at offsets 5, 8, 16, 17, 18 represent expected low-magnitude regions in preamble
@@ -257,7 +275,13 @@ public sealed class PreambleDetector
         // Return best message if we found a valid one
         if (bestMessage != null && bestScore > 0)
         {
-            return new RawFrame(bestMessage, _timeProvider.GetCurrentTimestamp(), bestSignalStrength);
+            // Compute frame timestamp from sample position in magnitude buffer.
+            // sampleOffset = pos - PrefixSamples: offset from start of current IQ buffer.
+            // Positive for new data region, negative for prefix (previous buffer's trailing samples).
+            // Both cases produce correct timestamps relative to bufferTimestamp.
+            int sampleOffset = pos - SignalProcessing.IQDemodulator.PrefixSamples;
+            DateTime frameTimestamp = bufferTimestamp.AddTicks((long)(sampleOffset * TicksPerSample));
+            return new RawFrame(bestMessage, frameTimestamp, bestSignalStrength);
         }
 
         // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)

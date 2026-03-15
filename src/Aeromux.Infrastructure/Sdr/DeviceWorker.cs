@@ -87,8 +87,8 @@ public sealed class DeviceWorker : IDisposable
             trackingConfig.ConfidenceLevel,
             trackingConfig.IcaoTimeoutSeconds);
 
-        // Pass confidence tracker and time provider to PreambleDetector for AP mode ICAO filtering
-        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold, _confidenceTracker, _timeProvider);
+        // Pass confidence tracker to PreambleDetector for AP mode ICAO filtering
+        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold, _confidenceTracker);
 
         // Initialize frame deduplicator with config values
         _frameDeduplicator = new FrameDeduplicator(
@@ -324,6 +324,11 @@ public sealed class DeviceWorker : IDisposable
             {
                 _totalSamplesReceived += rawBuffer.SampleCount;
 
+                // Capture wall-clock anchor ONCE per buffer for sample-offset timestamps.
+                // All frames detected in this buffer derive their timestamps from this anchor
+                // plus their sample position, providing deterministic sub-microsecond precision.
+                DateTime bufferTimestamp = _timeProvider.GetCurrentTimestamp();
+
                 // Convert raw I/Q bytes to magnitude (direct byte access, no IQData intermediary)
                 // Fills a linear buffer with prefix from previous buffer for seamless preamble detection
                 // Note: Demodulator does NOT log - DeviceWorker logs all stats in StatisticsLoop
@@ -340,7 +345,7 @@ public sealed class DeviceWorker : IDisposable
                 // Scan linear buffer from start (index 0) through new data region
                 // The buffer layout is: [326 prefix samples][new data]
                 // Scanning starts at index 0, allowing detector to access prefix for boundary detection
-                List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer);
+                List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer, bufferTimestamp);
 
                 // Validate frames with CRC and extract ICAO addresses
                 foreach (RawFrame rawFrame in frames)

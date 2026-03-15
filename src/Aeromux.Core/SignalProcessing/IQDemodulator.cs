@@ -47,7 +47,13 @@ public sealed class IQDemodulator : IDisposable
     // Each buffer layout: [326-sample prefix region][variable-length new data region (up to 262,144 samples)]
     // Prefix region contains copy of previous buffer's trailing samples for preamble detection continuity
     private const int NumBuffers = 12;
-    private const int PrefixSamples = 326;  // Calculated: (8µs preamble + 112-bit max message + 16-bit safety margin) × 2.4 samples/µs = 326
+
+    /// <summary>
+    /// Number of prefix samples copied from the previous buffer for preamble detection continuity.
+    /// Used by PreambleDetector for sample-offset timestamp calculation.
+    /// Calculated: (8 microsecond preamble + 112-bit max message + 16-bit safety margin) x 2.4 samples/microsecond = 326.
+    /// </summary>
+    public const int PrefixSamples = 326;
     private const int MaxBufferSamples = 262144;  // Maximum samples per buffer (actual length varies per callback)
 
     /// <summary>

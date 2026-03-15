@@ -16,52 +16,24 @@
 
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS;
-using Aeromux.Core.Tests.Timing;
-using Aeromux.Core.Timing;
 using FluentAssertions;
 
 namespace Aeromux.Core.Tests.ModeS;
 
 /// <summary>
-/// Tests for PreambleDetector timing behavior with ITimeProvider.
+/// Tests for PreambleDetector sample-offset timestamp behavior.
 /// </summary>
 /// <remarks>
-/// Note: These tests verify that PreambleDetector uses the provided ITimeProvider.
-/// Full integration tests with actual frame detection are in other test files.
+/// PreambleDetector no longer depends on ITimeProvider. Instead, it receives a buffer
+/// timestamp via DetectAndExtract() and computes per-frame timestamps from sample position.
+/// These tests verify the constructor API after the ITimeProvider removal.
 /// </remarks>
 public class PreambleDetectorTimingTests
 {
     [Fact]
-    public void PreambleDetector_AcceptsFixedTimeProvider()
+    public void PreambleDetector_DefaultConstructor_CreatesInstance()
     {
-        // Arrange
-        var fixedTime = new DateTime(2025, 1, 11, 12, 0, 0, DateTimeKind.Utc);
-        var timeProvider = new FixedTimeProvider(fixedTime);
-
-        // Act - Constructor should accept time provider without error
-        var detector = new PreambleDetector(timeProvider: timeProvider);
-
-        // Assert
-        detector.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void PreambleDetector_AcceptsStopwatchTimeProvider()
-    {
-        // Arrange
-        var timeProvider = new StopwatchTimeProvider();
-
-        // Act - Constructor should accept time provider without error
-        var detector = new PreambleDetector(timeProvider: timeProvider);
-
-        // Assert
-        detector.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void PreambleDetector_DefaultsToStopwatchTimeProvider_WhenNoProviderSpecified()
-    {
-        // Act - Constructor should work without time provider
+        // Act
         var detector = new PreambleDetector();
 
         // Assert
@@ -69,20 +41,35 @@ public class PreambleDetectorTimingTests
     }
 
     [Fact]
-    public void PreambleDetector_AcceptsAllConstructorParameters()
+    public void PreambleDetector_WithPreambleThreshold_CreatesInstance()
     {
-        // Arrange
-        var fixedTime = new DateTime(2025, 1, 11, 12, 0, 0, DateTimeKind.Utc);
-        var timeProvider = new FixedTimeProvider(fixedTime);
-        var confidenceTracker = new IcaoConfidenceTracker(ConfidenceLevel.High, 60);
-
-        // Act - Constructor should accept all parameters
-        var detector = new PreambleDetector(
-            preambleThreshold: 2.0,
-            confidenceTracker: confidenceTracker,
-            timeProvider: timeProvider);
+        // Act
+        var detector = new PreambleDetector(preambleThreshold: 2.0);
 
         // Assert
         detector.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void PreambleDetector_WithAllParameters_CreatesInstance()
+    {
+        // Arrange
+        var confidenceTracker = new IcaoConfidenceTracker(ConfidenceLevel.High, 60);
+
+        // Act
+        var detector = new PreambleDetector(
+            preambleThreshold: 2.0,
+            confidenceTracker: confidenceTracker);
+
+        // Assert
+        detector.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void PreambleDetector_InvalidThreshold_ThrowsArgumentOutOfRange()
+    {
+        // Act & Assert
+        var act = () => new PreambleDetector(preambleThreshold: 0.5);
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 }
