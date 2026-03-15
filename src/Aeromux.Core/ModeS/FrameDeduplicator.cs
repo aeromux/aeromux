@@ -14,12 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Buffers.Binary;
+
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
 /// Filters duplicate Mode S frames within a configurable time window.
 /// Prevents expensive parsing operations on frames caused by FRUIT (False Replies
-/// Unsynchronized to Interrogator Transmissions), multipath propagation, and multiple
+/// Non-synchronized to Interrogator Transmissions), multipath propagation, and multiple
 /// interrogator responses.
 /// </summary>
 /// <remarks>
@@ -34,10 +36,10 @@ namespace Aeromux.Core.ModeS;
 ///
 /// <para><b>Deduplication Strategy:</b></para>
 /// <list type="bullet">
-/// <item>Track unique frames by content (byte array value comparison)</item>
+/// <item>Track unique frames by integer key computed from frame content</item>
 /// <item>50ms default window: legitimate Mode S retransmissions are 400-600ms apart</item>
 /// <item>LRU eviction when cache exceeds maxTrackedFrames to prevent unbounded growth</item>
-/// <item>O(1) lookup using Dictionary with ByteArrayComparer</item>
+/// <item>O(1) lookup using Dictionary with (ulong, ulong) value-type key</item>
 /// </list>
 ///
 /// <para><b>Integration Point:</b></para>
@@ -51,15 +53,19 @@ public sealed class FrameDeduplicator
     private readonly long _deduplicationWindowTicks;
     private readonly int _maxTrackedFrames;
 
-    // Node map: frame data → LinkedList node for O(1) lookup and removal
-    private readonly Dictionary<byte[], LinkedListNode<(byte[] Data, long Timestamp)>> _nodeMap;
+    // Node map: frame key → LinkedList node for O(1) lookup and removal
+    private readonly Dictionary<(ulong, ulong), LinkedListNode<((ulong, ulong) Key, long Timestamp)>> _nodeMap;
 
-    // LRU tracking: ordered list of (frame data, timestamp) for eviction
-    private readonly LinkedList<(byte[] Data, long Timestamp)> _lruList;
+    // LRU tracking: ordered list of (frame key, timestamp) for eviction
+    private readonly LinkedList<((ulong, ulong) Key, long Timestamp)> _lruList;
 
-    // Statistics
+    /// <summary>Total frames checked for duplication (both unique and duplicate)</summary>
     public long TotalFramesProcessed { get; private set; }
+
+    /// <summary>Frames identified as duplicates within the deduplication window</summary>
     public long DuplicatesFiltered { get; private set; }
+
+    /// <summary>LRU cache evictions when cache exceeded maxTrackedFrames</summary>
     public long CacheEvictions { get; private set; }
 
     /// <summary>
@@ -67,6 +73,7 @@ public sealed class FrameDeduplicator
     /// </summary>
     /// <param name="deduplicationWindow">Time window in milliseconds for considering frames as duplicates (default: 50ms).</param>
     /// <param name="maxTrackedFrames">Maximum number of unique frames to track before LRU eviction (default: 1000).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when deduplicationWindow or maxTrackedFrames is not positive.</exception>
     public FrameDeduplicator(int deduplicationWindow = 50, int maxTrackedFrames = 1000)
     {
         if (deduplicationWindow <= 0)
@@ -81,8 +88,8 @@ public sealed class FrameDeduplicator
 
         _deduplicationWindowTicks = deduplicationWindow * TimeSpan.TicksPerMillisecond;
         _maxTrackedFrames = maxTrackedFrames;
-        _nodeMap = new Dictionary<byte[], LinkedListNode<(byte[] Data, long Timestamp)>>(maxTrackedFrames, ByteArrayComparer.Instance);
-        _lruList = new LinkedList<(byte[] Data, long Timestamp)>();
+        _nodeMap = new Dictionary<(ulong, ulong), LinkedListNode<((ulong, ulong) Key, long Timestamp)>>(maxTrackedFrames);
+        _lruList = new LinkedList<((ulong, ulong) Key, long Timestamp)>();
     }
 
     /// <summary>
@@ -91,11 +98,12 @@ public sealed class FrameDeduplicator
     /// <param name="frameData">Frame data bytes (7 or 14 bytes).</param>
     /// <param name="currentTimestamp">Current timestamp for the frame.</param>
     /// <returns>true if frame is a duplicate (seen within deduplication window); false if new or outside window.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when frameData is null.</exception>
     /// <remarks>
     /// <para><b>Algorithm:</b></para>
     /// <list type="number">
-    /// <item>Convert timestamp to milliseconds since epoch for comparison</item>
-    /// <item>Look up frame in cache using content-based comparison</item>
+    /// <item>Compute (ulong, ulong) key from frame bytes</item>
+    /// <item>Look up key in dictionary</item>
     /// <item>If found and within window: mark as duplicate, update timestamp</item>
     /// <item>If not found or outside window: add to cache, perform LRU eviction if needed</item>
     /// </list>
@@ -107,9 +115,10 @@ public sealed class FrameDeduplicator
         TotalFramesProcessed++;
 
         long currentTicks = currentTimestamp.Ticks;
+        (ulong, ulong) key = ComputeFrameKey(frameData);
 
         // Check if frame exists in cache
-        if (_nodeMap.TryGetValue(frameData, out LinkedListNode<(byte[] Data, long Timestamp)>? node))
+        if (_nodeMap.TryGetValue(key, out LinkedListNode<((ulong, ulong) Key, long Timestamp)>? node))
         {
             if (currentTicks - node.Value.Timestamp <= _deduplicationWindowTicks)
             {
@@ -117,36 +126,32 @@ public sealed class FrameDeduplicator
                 DuplicatesFiltered++;
 
                 // Update timestamp for this frame (keep it fresh in cache)
-                node.Value = (node.Value.Data, currentTicks);
+                node.Value = (node.Value.Key, currentTicks);
 
                 return true;
             }
-            else
-            {
-                // Outside window - treat as new frame
-                // Reuse existing node: move to tail with updated timestamp
-                // No dictionary update needed — same node reference, same key
-                _lruList.Remove(node);
-                node.Value = (node.Value.Data, currentTicks);
-                _lruList.AddLast(node);
 
-                return false;
-            }
-        }
-        else
-        {
-            // New frame - add to cache
-            AddToCache(frameData, currentTicks);
+            // Outside window - treat as new frame
+            // Reuse existing node: move to tail with updated timestamp
+            // No dictionary update needed — same node reference, same key
+            _lruList.Remove(node);
+            node.Value = (node.Value.Key, currentTicks);
+            _lruList.AddLast(node);
 
             return false;
         }
+
+        // New frame - add to cache
+        AddToCache(key, currentTicks);
+
+        return false;
     }
 
     /// <summary>
     /// Adds a frame to the cache and LRU list.
     /// Performs LRU eviction if cache size exceeds maxTrackedFrames.
     /// </summary>
-    private void AddToCache(byte[] frameData, long timestamp)
+    private void AddToCache((ulong, ulong) key, long timestamp)
     {
         // Check if we need to evict the oldest entry
         if (_nodeMap.Count >= _maxTrackedFrames)
@@ -155,8 +160,8 @@ public sealed class FrameDeduplicator
         }
 
         // Add to LRU list and node map
-        LinkedListNode<(byte[] Data, long Timestamp)> node = _lruList.AddLast((frameData, timestamp));
-        _nodeMap[frameData] = node;
+        LinkedListNode<((ulong, ulong) Key, long Timestamp)> node = _lruList.AddLast((key, timestamp));
+        _nodeMap[key] = node;
     }
 
     /// <summary>
@@ -169,12 +174,56 @@ public sealed class FrameDeduplicator
             return;
         }
 
-        (byte[] oldestData, long _) = _lruList.First.Value;
+        ((ulong, ulong) oldestKey, long _) = _lruList.First.Value;
 
-        _nodeMap.Remove(oldestData);
+        _nodeMap.Remove(oldestKey);
         _lruList.RemoveFirst();
 
         CacheEvictions++;
+    }
+
+    /// <summary>
+    /// Computes a (ulong, ulong) key from frame bytes for use as dictionary key.
+    /// </summary>
+    /// <param name="data">Frame bytes (7 or 14 bytes).</param>
+    /// <returns>Composite key covering all frame content bytes with zero-padding.</returns>
+    /// <remarks>
+    /// <para>
+    /// 7-byte frames:  [b0..b6, 0 | 0, 0, 0, 0, 0, 0, 0, 0]
+    /// 14-byte frames: [b0..b7 | b8..b13, 0, 0]
+    /// </para>
+    /// <para>
+    /// Collision safety: Short (7-byte) and long (14-byte) frames cannot collide because
+    /// the Downlink Format (top 5 bits of byte 0) is different for each frame length:
+    /// - Short frames: DF 0, 4, 5, 11
+    /// - Long frames: DF 16, 17, 18, 19, 20, 21, 24
+    /// Since byte 0 differs, the first ulong always differs between frame sizes.
+    /// Within the same frame size, all content bytes are captured, so no content collision
+    /// is possible.
+    /// </para>
+    /// </remarks>
+    private static (ulong, ulong) ComputeFrameKey(byte[] data)
+    {
+        ulong hi, lo;
+
+        if (data.Length >= 8)
+        {
+            hi = BinaryPrimitives.ReadUInt64BigEndian(data.AsSpan(0, 8));
+            // For 14-byte frames: read remaining 6 bytes, zero-padded to 8
+            Span<byte> padded = stackalloc byte[8];
+            data.AsSpan(8, data.Length - 8).CopyTo(padded);
+            lo = BinaryPrimitives.ReadUInt64BigEndian(padded);
+        }
+        else
+        {
+            // For 7-byte frames: zero-pad to 8 bytes
+            Span<byte> padded = stackalloc byte[8];
+            data.AsSpan().CopyTo(padded);
+            hi = BinaryPrimitives.ReadUInt64BigEndian(padded);
+            lo = 0;
+        }
+
+        return (hi, lo);
     }
 
     /// <summary>

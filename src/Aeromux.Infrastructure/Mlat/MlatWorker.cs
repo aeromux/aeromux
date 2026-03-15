@@ -173,7 +173,7 @@ public sealed class MlatWorker : IDisposable
 
                     // Mark ICAO as confident (MLAT frames are pre-validated by MLAT network)
                     // This enables SDR workers to immediately trust frames from this ICAO
-                    _confidenceTracker?.MarkAsConfident(validatedFrame.IcaoAddress, validatedFrame.Timestamp);
+                    _confidenceTracker?.MarkAsConfident(validatedFrame.IcaoRaw, validatedFrame.Timestamp);
 
                     // Debug: Log first MLAT frame per ICAO (shows MLAT is marking ICAOs as confident)
                     lock (_loggedIcaos)
@@ -185,7 +185,7 @@ public sealed class MlatWorker : IDisposable
                         }
                     }
 
-                    // Parse message (may be null if frame format not supported)
+                    // Parse message (maybe null if frame format not supported)
                     ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
 
                     // Invoke callback (ReceiverStream will wrap in ProcessedFrame with Source=Mlat)

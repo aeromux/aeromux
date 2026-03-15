@@ -69,6 +69,7 @@ public sealed class ValidatedFrameFactory
     /// <param name="rawFrame">Raw frame from preamble detection</param>
     /// <param name="signalStrength">Signal strength for this frame (0.0-255.0)</param>
     /// <returns>ValidatedFrame if valid or correctable, null if corrupted beyond repair</returns>
+    /// <exception cref="ArgumentNullException">Thrown when rawFrame is null.</exception>
     public ValidatedFrame? ValidateFrame(RawFrame rawFrame, double signalStrength)
     {
         ArgumentNullException.ThrowIfNull(rawFrame);
@@ -82,17 +83,17 @@ public sealed class ValidatedFrameFactory
         bool isPIMode = UsesPIMode(df);
 
         // Try validating frame as-is
-        if (TryValidate(data, isPIMode, out string? icaoAddress))
+        if (TryValidate(data, isPIMode, out string? icaoAddress, out uint icaoRaw))
         {
             _framesValid++;
-            return new ValidatedFrame(data, rawFrame.Timestamp, icaoAddress!, signalStrength, false);
+            return new ValidatedFrame(data, rawFrame.Timestamp, icaoRaw, icaoAddress!, signalStrength, false);
         }
 
         // Try single-bit error correction (only for PI mode - AP mode has no validation)
-        if (isPIMode && TryCorrectSingleBitError(data, out icaoAddress))
+        if (isPIMode && TryCorrectSingleBitError(data, out icaoAddress, out icaoRaw))
         {
             _framesCorrected++;
-            return new ValidatedFrame(data, rawFrame.Timestamp, icaoAddress!, signalStrength, true);
+            return new ValidatedFrame(data, rawFrame.Timestamp, icaoRaw, icaoAddress!, signalStrength, true);
         }
 
         // Frame is corrupted beyond repair
@@ -103,7 +104,7 @@ public sealed class ValidatedFrameFactory
     /// <summary>
     /// Attempts to validate a frame and extract ICAO address.
     /// </summary>
-    private bool TryValidate(byte[] data, bool isPIMode, out string? icaoAddress)
+    private bool TryValidate(byte[] data, bool isPIMode, out string? icaoAddress, out uint icaoRaw)
     {
         if (isPIMode)
         {
@@ -112,7 +113,8 @@ public sealed class ValidatedFrameFactory
             if (crc == 0)
             {
                 // Valid! ICAO is in AA field (bytes 1-3)
-                icaoAddress = ExtractIcaoFromAA(data);
+                icaoRaw = ExtractIcaoUintFromAA(data);
+                icaoAddress = FormatIcaoAddress(icaoRaw);
                 return true;
             }
         }
@@ -131,15 +133,16 @@ public sealed class ValidatedFrameFactory
             uint transmittedCrc = ExtractTransmittedCrc(data);
 
             // ICAO = calculated_CRC XOR transmitted_CRC
-            uint icao = rem ^ transmittedCrc;
+            icaoRaw = rem ^ transmittedCrc;
 
             // AP mode has no direct validation for single message
             // Validation comes from ICAO consistency across multiple messages
-            icaoAddress = FormatIcaoAddress(icao);
+            icaoAddress = FormatIcaoAddress(icaoRaw);
             return true;  // AP mode always "valid" (we extract ICAO from CRC)
         }
 
         icaoAddress = null;
+        icaoRaw = 0;
         return false;
     }
 
@@ -150,7 +153,7 @@ public sealed class ValidatedFrameFactory
     /// Pre-computed syndrome tables enable O(1) error correction instead of brute-force O(N).
     /// Only applicable to PI mode messages (AP mode has no validation to check against).
     /// </summary>
-    private bool TryCorrectSingleBitError(byte[] data, out string? icaoAddress)
+    private bool TryCorrectSingleBitError(byte[] data, out string? icaoAddress, out uint icaoRaw)
     {
         // The CRC remainder IS the error syndrome for single-bit errors
         uint syndrome = CalculateCrc(data, data.Length);
@@ -162,12 +165,14 @@ public sealed class ValidatedFrameFactory
         {
             // Flip the errored bit (MSB-first bit ordering)
             data[bitPosition / 8] ^= (byte)(1 << (7 - (bitPosition % 8)));
-            icaoAddress = ExtractIcaoFromAA(data);
+            icaoRaw = ExtractIcaoUintFromAA(data);
+            icaoAddress = FormatIcaoAddress(icaoRaw);
             return true;
         }
 
         // Syndrome not in table → multi-bit error, uncorrectable
         icaoAddress = null;
+        icaoRaw = 0;
         return false;
     }
 
@@ -277,13 +282,10 @@ public sealed class ValidatedFrameFactory
     }
 
     /// <summary>
-    /// Extracts ICAO address from AA field (bytes 1-3) for PI mode messages.
+    /// Extracts ICAO address as uint from AA field (bytes 1-3) for PI mode messages.
     /// </summary>
-    private string ExtractIcaoFromAA(byte[] data)
-    {
-        uint icao = ((uint)data[1] << 16) | ((uint)data[2] << 8) | data[3];
-        return FormatIcaoAddress(icao);
-    }
+    private static uint ExtractIcaoUintFromAA(byte[] data) =>
+        ((uint)data[1] << 16) | ((uint)data[2] << 8) | data[3];
 
     /// <summary>
     /// Extracts transmitted CRC from last 3 bytes of message.
@@ -308,9 +310,15 @@ public sealed class ValidatedFrameFactory
         return cached;
     }
 
-    // Statistics properties for Coordinator Pattern
+    /// <summary>Total frames submitted for CRC validation</summary>
     public long FramesChecked => _framesChecked;
+
+    /// <summary>Frames that passed CRC validation without correction</summary>
     public long FramesValid => _framesValid;
+
+    /// <summary>Frames recovered via single-bit error correction (PI mode only)</summary>
     public long FramesCorrected => _framesCorrected;
+
+    /// <summary>Frames rejected as corrupted beyond repair</summary>
     public long FramesInvalid => _framesInvalid;
 }

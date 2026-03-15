@@ -49,10 +49,10 @@ namespace Aeromux.Core.ModeS;
 /// </remarks>
 public sealed class IcaoConfidenceTracker
 {
-    private readonly Dictionary<string, IcaoRecord> _icaoRecords = new();
+    private readonly Dictionary<uint, IcaoRecord> _icaoRecords = new();
     private readonly ConfidenceLevel _requiredConfidence;
     private readonly TimeSpan _timeout;
-    private readonly List<string> _expiredKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
+    private readonly List<uint> _expiredKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
 
     // Statistics (exposed as properties for DeviceWorker to log)
     private long _totalFrames;
@@ -88,10 +88,10 @@ public sealed class IcaoConfidenceTracker
     /// Checks if an ICAO address is already confident (reached detection threshold).
     /// Used by PreambleDetector to filter AP mode messages from unknown aircraft.
     /// </summary>
-    /// <param name="icaoAddress">ICAO address to check (e.g., "4BC889")</param>
+    /// <param name="icaoRaw">24-bit ICAO address as uint</param>
     /// <returns>True if ICAO has reached confidence threshold</returns>
-    public bool IsConfident(string icaoAddress) =>
-        _icaoRecords.TryGetValue(icaoAddress, out IcaoRecord? record) && record.IsConfident;
+    public bool IsConfident(uint icaoRaw) =>
+        _icaoRecords.TryGetValue(icaoRaw, out IcaoRecord? record) && record.IsConfident;
 
     /// <summary>
     /// Tracks a validated frame and determines if it meets confidence threshold.
@@ -100,6 +100,7 @@ public sealed class IcaoConfidenceTracker
     /// <param name="frame">Validated frame from CRC validation</param>
     /// <param name="isNewConfirmedIcao">True if this ICAO just reached confidence threshold</param>
     /// <returns>True if frame meets confidence threshold and should be passed to parsing</returns>
+    /// <exception cref="ArgumentNullException">Thrown when frame is null.</exception>
     public bool TrackAndValidate(ValidatedFrame frame, out bool isNewConfirmedIcao)
     {
         ArgumentNullException.ThrowIfNull(frame);
@@ -114,7 +115,7 @@ public sealed class IcaoConfidenceTracker
             CleanupExpired(frame.Timestamp);
         }
 
-        string icao = frame.IcaoAddress;
+        uint icao = frame.IcaoRaw;
 
         // Get or create ICAO record
         if (!_icaoRecords.TryGetValue(icao, out IcaoRecord? record))
@@ -155,7 +156,7 @@ public sealed class IcaoConfidenceTracker
     {
         _expiredKeys.Clear();
 
-        foreach (KeyValuePair<string, IcaoRecord> kvp in _icaoRecords)
+        foreach (KeyValuePair<uint, IcaoRecord> kvp in _icaoRecords)
         {
             if (currentTime - kvp.Value.LastSeen > _timeout)
             {
@@ -163,7 +164,7 @@ public sealed class IcaoConfidenceTracker
             }
         }
 
-        foreach (string icao in _expiredKeys)
+        foreach (uint icao in _expiredKeys)
         {
             _icaoRecords.Remove(icao);
         }
@@ -196,25 +197,25 @@ public sealed class IcaoConfidenceTracker
     public int ConfirmedIcaos => _icaoRecords.Values.Count(r => r.IsConfident);
 
     /// <summary>Gets the set of confirmed ICAO addresses for deduplication across devices</summary>
-    public IEnumerable<string> GetConfirmedIcaoAddresses() =>
+    public IEnumerable<uint> GetConfirmedIcaoAddresses() =>
         _icaoRecords.Where(kvp => kvp.Value.IsConfident).Select(kvp => kvp.Key);
 
     /// <summary>Gets the set of all tracked ICAO addresses for deduplication across devices</summary>
-    public IEnumerable<string> GetTrackedIcaoAddresses() => _icaoRecords.Keys;
+    public IEnumerable<uint> GetTrackedIcaoAddresses() => _icaoRecords.Keys;
 
     /// <summary>
     /// Marks an ICAO as confident immediately without requiring detection threshold.
     /// Used for MLAT frames where the ICAO has been pre-validated by the MLAT network.
     /// This enables SDR workers to immediately trust frames from MLAT-known aircraft.
     /// </summary>
-    /// <param name="icaoAddress">ICAO address to mark as confident (e.g., "4BC889")</param>
+    /// <param name="icaoRaw">24-bit ICAO address as uint</param>
     /// <param name="timestamp">Timestamp to use for record creation/update</param>
-    public void MarkAsConfident(string icaoAddress, DateTime timestamp)
+    public void MarkAsConfident(uint icaoRaw, DateTime timestamp)
     {
-        if (!_icaoRecords.TryGetValue(icaoAddress, out IcaoRecord? record))
+        if (!_icaoRecords.TryGetValue(icaoRaw, out IcaoRecord? record))
         {
-            record = new IcaoRecord(icaoAddress, timestamp, (int)_requiredConfidence);
-            _icaoRecords[icaoAddress] = record;
+            record = new IcaoRecord(icaoRaw, timestamp, (int)_requiredConfidence);
+            _icaoRecords[icaoRaw] = record;
         }
         record.ForceConfident(timestamp);
     }
@@ -223,14 +224,15 @@ public sealed class IcaoConfidenceTracker
 /// <summary>
 /// Tracks detection statistics for a single ICAO address.
 /// </summary>
-internal sealed class IcaoRecord
+/// <param name="icao">24-bit ICAO aircraft address as uint.</param>
+/// <param name="firstSeen">Timestamp when this ICAO was first detected.</param>
+/// <param name="confidenceThreshold">Number of detections required to reach confident status.</param>
+internal sealed class IcaoRecord(uint icao, DateTime firstSeen, int confidenceThreshold)
 {
-    private readonly int _confidenceThreshold;
-
-    public string Icao { get; }
+    public uint Icao { get; } = icao;
     public int DetectionCount { get; private set; }
-    public DateTime FirstSeen { get; }
-    public DateTime LastSeen { get; private set; }
+    public DateTime FirstSeen { get; } = firstSeen;
+    public DateTime LastSeen { get; private set; } = firstSeen;
 
     /// <summary>Number of PI mode detections (DF 11, 17, 18, 19) - strong validation</summary>
     public int PICount { get; private set; }
@@ -239,16 +241,12 @@ internal sealed class IcaoRecord
     public int APCount { get; private set; }
 
     /// <summary>True if this ICAO has reached the confidence threshold</summary>
-    public bool IsConfident => DetectionCount >= _confidenceThreshold;
+    public bool IsConfident => DetectionCount >= confidenceThreshold;
 
-    public IcaoRecord(string icao, DateTime firstSeen, int confidenceThreshold)
-    {
-        Icao = icao;
-        FirstSeen = firstSeen;
-        LastSeen = firstSeen;
-        _confidenceThreshold = confidenceThreshold;
-    }
-
+    /// <summary>
+    /// Records a new detection of this ICAO, updating count, last seen time, and PI/AP mode tracking.
+    /// </summary>
+    /// <param name="frame">Validated frame containing the detection.</param>
     public void IncrementDetections(ValidatedFrame frame)
     {
         DetectionCount++;
@@ -274,7 +272,7 @@ internal sealed class IcaoRecord
     {
         if (!IsConfident)
         {
-            DetectionCount = _confidenceThreshold;
+            DetectionCount = confidenceThreshold;
         }
         LastSeen = timestamp;
     }

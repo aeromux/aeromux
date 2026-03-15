@@ -477,7 +477,7 @@ public sealed class PreambleDetector
             // AP mode messages (DF 0,4,5,16,20,21) only accepted if ICAO already confident
             if (!validated.UsesPIMode && _confidenceTracker != null)
             {
-                if (!_confidenceTracker.IsConfident(validated.IcaoAddress))
+                if (!_confidenceTracker.IsConfident(validated.IcaoRaw))
                 {
                     // AP mode with unknown ICAO - score -1 (valid CRC, unknown ICAO)
                     score = -1;

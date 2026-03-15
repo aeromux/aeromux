@@ -91,7 +91,8 @@ public class ValidatedFrameBuilder
     /// </summary>
     public ValidatedFrame Build()
     {
-        return new ValidatedFrame(_data, _timestamp, _icaoAddress, _signalStrength, _wasCorrected);
+        uint icaoRaw = Convert.ToUInt32(_icaoAddress, 16);
+        return new ValidatedFrame(_data, _timestamp, icaoRaw, _icaoAddress, _signalStrength, _wasCorrected);
     }
 
     /// <summary>

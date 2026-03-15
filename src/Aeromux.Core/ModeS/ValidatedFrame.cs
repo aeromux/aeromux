@@ -22,17 +22,21 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <param name="Data">Validated frame bytes (7 or 14 bytes)</param>
 /// <param name="Timestamp">UTC timestamp when frame was received</param>
+/// <param name="IcaoRaw">24-bit ICAO aircraft address as uint (for internal lookups without string overhead)</param>
 /// <param name="IcaoAddress">24-bit ICAO aircraft address (hex string, 6 chars)</param>
 /// <param name="SignalStrength">Signal strength as power value (0.0-255.0, higher = stronger)</param>
 /// <param name="WasCorrected">True if frame had single-bit error that was corrected</param>
 /// <remarks>
 /// ICAO address format: "A1B2C3" (6 hex characters, uppercase)
+/// IcaoRaw: Same 24-bit value as IcaoAddress but as uint — used by IcaoConfidenceTracker for
+/// dictionary lookups to avoid string hashing/comparison overhead.
 /// Signal strength: Power value with full double precision for accurate weak signal representation
 /// CRC validation ensures frame integrity before message parsing
 /// </remarks>
 public sealed record ValidatedFrame(
     byte[] Data,
     DateTime Timestamp,
+    uint IcaoRaw,
     string IcaoAddress,
     double SignalStrength,
     bool WasCorrected)
