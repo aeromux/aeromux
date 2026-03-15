@@ -823,70 +823,135 @@ This section maps each architectural component to its source files and explains 
 
 The hot path lives in these files. Changes here directly affect throughput and must be tested on target hardware (Raspberry Pi).
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| SDR device management | `src/Aeromux.Infrastructure/Sdr/DeviceWorker.cs` | Orchestrates a single RTL-SDR device: opens and configures the device via RtlSdrManager, handles the `SamplesAvailable` callback, and runs the entire synchronous pipeline (demodulate → detect → validate → parse) within that callback. Also runs a background statistics loop. This is the file to start with when tracing the data flow. |
-| IQ → magnitude conversion | `src/Aeromux.Core/SignalProcessing/IQDemodulator.cs` | Converts raw I/Q byte pairs to magnitude values using the pre-computed 256×256 lookup table. Manages the pool of 12 rolling magnitude buffers and the 326-sample prefix overlap between them. |
-| Preamble detection | `src/Aeromux.Core/ModeS/PreambleDetector.cs` | Scans magnitude buffers for Mode S preamble patterns. Contains the SIMD pre-check (`Vector128<ushort>`), the multiphase correlation with hand-tuned coefficients, and the sample-offset timestamp calculation. The most algorithmically complex file in the codebase. |
-| CRC validation | `src/Aeromux.Core/ModeS/ValidatedFrameFactory.cs` | Checks 24-bit CRC parity, performs single-bit error correction, and extracts the ICAO address (PI mode and AP mode). Promotes raw frames to `ValidatedFrame` records. |
-| Confidence filtering | `src/Aeromux.Core/ModeS/IcaoConfidenceTracker.cs` | Tracks per-ICAO detection counts and enforces the confidence threshold. Shared across all devices and MLAT — if you need to understand the cross-source trust model, start here. |
-| Deduplication | `src/Aeromux.Core/ModeS/FrameDeduplicator.cs` | Removes FRUIT, multipath, and multi-interrogator duplicates using a time-windowed dictionary with LRU eviction. One instance per device. |
-| Message decoding | `src/Aeromux.Core/ModeS/MessageParser*.cs` | Seven partial class files, one per protocol family. Routes by downlink format (DF), then by type code (TC) or BDS register. If you are adding support for a new message type, identify the correct partial file by DF and add your decoding logic there. |
-| Processed frame | `src/Aeromux.Core/ModeS/ProcessedFrame.cs` | The record type that bridges signal processing and output. Carries both the raw `ValidatedFrame` and the decoded `ModeSMessage`. Small file, but central to understanding the parse-once architecture. |
+```
+src/
+├── Aeromux.Core/
+│   ├── ModeS/
+│   │   ├── FrameDeduplicator.cs
+│   │   ├── IcaoConfidenceTracker.cs
+│   │   ├── MessageParser*.cs
+│   │   ├── PreambleDetector.cs
+│   │   ├── ProcessedFrame.cs
+│   │   └── ValidatedFrameFactory.cs
+│   └── SignalProcessing/
+│       └── IQDemodulator.cs
+└── Aeromux.Infrastructure/
+    └── Sdr/
+        └── DeviceWorker.cs
+```
+
+- **DeviceWorker.cs** — Orchestrates a single RTL-SDR device: opens and configures the device via RtlSdrManager, handles the `SamplesAvailable` callback, and runs the entire synchronous pipeline (demodulate → detect → validate → parse) within that callback. Also runs a background statistics loop. This is the file to start with when tracing the data flow.
+- **IQDemodulator.cs** — Converts raw I/Q byte pairs to magnitude values using the pre-computed 256×256 lookup table. Manages the pool of 12 rolling magnitude buffers and the 326-sample prefix overlap between them.
+- **PreambleDetector.cs** — Scans magnitude buffers for Mode S preamble patterns. Contains the SIMD pre-check (`Vector128<ushort>`), the multiphase correlation with hand-tuned coefficients, and the sample-offset timestamp calculation. The most algorithmically complex file in the codebase.
+- **ValidatedFrameFactory.cs** — Checks 24-bit CRC parity, performs single-bit error correction, and extracts the ICAO address (PI mode and AP mode). Promotes raw frames to `ValidatedFrame` records.
+- **IcaoConfidenceTracker.cs** — Tracks per-ICAO detection counts and enforces the confidence threshold. Shared across all devices and MLAT — if you need to understand the cross-source trust model, start here.
+- **FrameDeduplicator.cs** — Removes FRUIT, multipath, and multi-interrogator duplicates using a time-windowed dictionary with LRU eviction. One instance per device.
+- **MessageParser\*.cs** — Seven partial class files, one per protocol family. Routes by downlink format (DF), then by type code (TC) or BDS register. If you are adding support for a new message type, identify the correct partial file by DF and add your decoding logic there.
+- **ProcessedFrame.cs** — The record type that bridges signal processing and output. Carries both the raw `ValidatedFrame` and the decoded `ModeSMessage`. Small file, but central to understanding the parse-once architecture.
 
 ### Aggregation and Streaming
 
 These files handle the async boundary between the signal processing thread and the .NET thread pool, and the fan-out to multiple subscribers.
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Frame aggregation | `src/Aeromux.Infrastructure/Aggregation/FrameAggregator.cs` | Merges `ProcessedFrame` records from multiple device workers into a single `Channel<ProcessedFrame>`. Simple pass-through — no filtering or reordering. |
-| Receiver stream | `src/Aeromux.Infrastructure/Streaming/ReceiverStream.cs` | The central hub: creates device workers, manages the shared `IcaoConfidenceTracker`, runs the fan-out broadcast task, and provides `Subscribe()`/`Unsubscribe()` for consumers. If you are adding a new output format, you will subscribe to this stream. |
-| Beast client stream | `src/Aeromux.Infrastructure/Streaming/BeastStream.cs` | Used in live connect mode to receive Beast binary data from a remote source (dump1090, readsb, another Aeromux instance). Parses Beast frames and produces `ProcessedFrame` records, serving as an alternative to `ReceiverStream` for the TUI. |
+```
+src/
+└── Aeromux.Infrastructure/
+    ├── Aggregation/
+    │   └── FrameAggregator.cs
+    └── Streaming/
+        ├── BeastStream.cs
+        └── ReceiverStream.cs
+```
+
+- **FrameAggregator.cs** — Merges `ProcessedFrame` records from multiple device workers into a single `Channel<ProcessedFrame>`. Simple pass-through — no filtering or reordering.
+- **ReceiverStream.cs** — The central hub: creates device workers, manages the shared `IcaoConfidenceTracker`, runs the fan-out broadcast task, and provides `Subscribe()`/`Unsubscribe()` for consumers. If you are adding a new output format, you will subscribe to this stream.
+- **BeastStream.cs** — Used in live connect mode to receive Beast binary data from a remote source (dump1090, readsb, another Aeromux instance). Parses Beast frames and produces `ProcessedFrame` records, serving as an alternative to `ReceiverStream` for the TUI.
 
 ### Aircraft Tracking
 
 The stateful side of the system. These files accumulate per-aircraft state from individual Mode S messages.
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| State tracker | `src/Aeromux.Core/Tracking/AircraftStateTracker.cs` | Maintains the `ConcurrentDictionary<string, Aircraft>` and runs the consumer task that reads from the frame channel. Routes each message to the appropriate handler, manages automatic expiration, and fires lifecycle events (`OnAircraftAdded`, `OnAircraftUpdated`, `OnAircraftExpired`). |
-| Aircraft record | `src/Aeromux.Core/Tracking/Aircraft.cs` | The immutable record that holds all known state for a single aircraft. Organized into grouped property sets (identification, position, velocity, etc.) with optional sections for less common data. If you are adding a new tracked field, define it here. |
-| Tracking handlers | `src/Aeromux.Core/Tracking/Handlers/` | Fourteen handler files, one per message category. Each handler implements `ITrackingHandler` and knows how to update an `Aircraft` record from a specific `ModeSMessage` subclass. To support a new message type end-to-end, add a handler here and register it in `TrackingHandlerRegistry`. |
+```
+src/
+└── Aeromux.Core/
+    └── Tracking/
+        ├── Aircraft.cs
+        ├── AircraftStateTracker.cs
+        └── Handlers/
+```
+
+- **AircraftStateTracker.cs** — Maintains the `ConcurrentDictionary<string, Aircraft>` and runs the consumer task that reads from the frame channel. Routes each message to the appropriate handler, manages automatic expiration, and fires lifecycle events (`OnAircraftAdded`, `OnAircraftUpdated`, `OnAircraftExpired`).
+- **Aircraft.cs** — The immutable record that holds all known state for a single aircraft. Organized into grouped property sets (identification, position, velocity, etc.) with optional sections for less common data. If you are adding a new tracked field, define it here.
+- **Handlers/** — Fourteen handler files, one per message category. Each handler implements `ITrackingHandler` and knows how to update an `Aircraft` record from a specific `ModeSMessage` subclass. To support a new message type end-to-end, add a handler here and register it in `TrackingHandlerRegistry`.
 
 ### Network Output
 
 These files serve decoded data to external consumers over TCP and HTTP.
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| TCP broadcaster | `src/Aeromux.Infrastructure/Network/TcpBroadcaster.cs` | Generic TCP server used by all three broadcast formats. Manages client connections, runs the accept and broadcast background tasks, and dispatches to the format-specific encoder. If you are adding a new broadcast format, you will instantiate a new `TcpBroadcaster` with your encoder. |
-| Beast encoder | `src/Aeromux.Infrastructure/Network/Protocols/BeastEncoder.cs` | Stateless encoder that converts `ValidatedFrame` to Beast binary format. No dependency on the tracker — works purely from raw frame data. |
-| JSON encoder | `src/Aeromux.Infrastructure/Network/Protocols/JsonEncoder.cs` | Encodes full aircraft state as newline-delimited JSON. Depends on `IAircraftStateTracker` to look up consolidated state via `GetAircraft()`. Implements per-aircraft rate limiting (1 update/second). |
-| SBS encoder | `src/Aeromux.Infrastructure/Network/Protocols/SbsEncoder.cs` | Encodes aircraft state as BaseStation CSV. Depends on `IAircraftStateTracker` for state lookups and subscribes to `OnAircraftAdded`/`OnAircraftExpired` events for AIR message lifecycle. |
-| REST API server | `src/Aeromux.CLI/Commands/Daemon/Api/DaemonApiServer.cs` | ASP.NET Core Minimal API host. Configures Kestrel, rate limiting, and JSON serialization. |
-| API route definitions | `src/Aeromux.CLI/Commands/Daemon/Api/DaemonApiRoutes.cs` | Maps HTTP endpoints (`/api/v1/aircraft`, `/api/v1/stats`, etc.) to handler methods that query the tracker. If you are adding a new API endpoint, add it here. |
+```
+src/
+├── Aeromux.CLI/
+│   └── Commands/
+│       └── Daemon/
+│           └── Api/
+│               ├── DaemonApiRoutes.cs
+│               └── DaemonApiServer.cs
+└── Aeromux.Infrastructure/
+    └── Network/
+        ├── TcpBroadcaster.cs
+        └── Protocols/
+            ├── BeastEncoder.cs
+            ├── JsonEncoder.cs
+            └── SbsEncoder.cs
+```
+
+- **TcpBroadcaster.cs** — Generic TCP server used by all three broadcast formats. Manages client connections, runs the accept and broadcast background tasks, and dispatches to the format-specific encoder. If you are adding a new broadcast format, you will instantiate a new `TcpBroadcaster` with your encoder.
+- **BeastEncoder.cs** — Stateless encoder that converts `ValidatedFrame` to Beast binary format. No dependency on the tracker — works purely from raw frame data.
+- **JsonEncoder.cs** — Encodes full aircraft state as newline-delimited JSON. Depends on `IAircraftStateTracker` to look up consolidated state via `GetAircraft()`. Implements per-aircraft rate limiting (1 update/second).
+- **SbsEncoder.cs** — Encodes aircraft state as BaseStation CSV. Depends on `IAircraftStateTracker` for state lookups and subscribes to `OnAircraftAdded`/`OnAircraftExpired` events for AIR message lifecycle.
+- **DaemonApiServer.cs** — ASP.NET Core Minimal API host. Configures Kestrel, rate limiting, and JSON serialization.
+- **DaemonApiRoutes.cs** — Maps HTTP endpoints (`/api/v1/aircraft`, `/api/v1/stats`, etc.) to handler methods that query the tracker. If you are adding a new API endpoint, add it here.
 
 ### MLAT and Database
 
 External data sources that enrich the core tracking pipeline.
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| MLAT input | `src/Aeromux.Infrastructure/Mlat/MlatWorker.cs` | TCP listener that accepts Beast-formatted connections from `mlat-client`. Parses incoming frames, marks ICAOs as confident in the shared tracker, and feeds `ProcessedFrame` records into the aggregator. Supports multiple concurrent clients. |
-| Database lookup | `src/Aeromux.Infrastructure/Database/AircraftDatabaseLookupService.cs` | Read-only SQLite connection to the aeromux-db database. Queried once per aircraft on first detection to retrieve registration, type, operator, and regulatory flags. Thread-safe via lock. |
+```
+src/
+└── Aeromux.Infrastructure/
+    ├── Database/
+    │   └── AircraftDatabaseLookupService.cs
+    └── Mlat/
+        └── MlatWorker.cs
+```
+
+- **MlatWorker.cs** — TCP listener that accepts Beast-formatted connections from `mlat-client`. Parses incoming frames, marks ICAOs as confident in the shared tracker, and feeds `ProcessedFrame` records into the aggregator. Supports multiple concurrent clients.
+- **AircraftDatabaseLookupService.cs** — Read-only SQLite connection to the aeromux-db database. Queried once per aircraft on first detection to retrieve registration, type, operator, and regulatory flags. Thread-safe via lock.
 
 ### Orchestration and CLI
 
 These files wire everything together and manage the application lifecycle.
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Daemon orchestrator | `src/Aeromux.CLI/Commands/Daemon/DaemonOrchestrator.cs` | Controls the startup and shutdown sequence for daemon mode. Creates components in dependency order, manages their lifecycle, and performs ordered disposal. The best file to read for understanding how the system is assembled at runtime. |
-| Broadcaster collection | `src/Aeromux.CLI/Commands/Daemon/DaemonBroadcasterCollection.cs` | Creates and manages the Beast, JSON, and SBS `TcpBroadcaster` instances. Handles the per-broadcaster startup delay required to work around a macOS ARM64 socket race condition. |
-| Live TUI display | `src/Aeromux.CLI/Commands/Live/LiveTuiDisplay.cs` | Main TUI loop for live mode. Reads aircraft state from the tracker on a refresh cycle and renders it using Spectre.Console's `Live` display. |
-| Keyboard handler | `src/Aeromux.CLI/Commands/Live/LiveKeyboardHandler.cs` | Processes keyboard input for table navigation, sorting, search, unit switching, and detail view. Runs on a dedicated thread to keep the display responsive. |
-| Configuration | `src/Aeromux.Core/Configuration/AeromuxConfig.cs` | Root configuration model deserialized from the YAML file. Contains nested models for devices, network, tracking, receiver, MLAT, database, and logging. If you are adding a new configurable option, define it in the appropriate nested model. |
+```
+src/
+├── Aeromux.CLI/
+│   └── Commands/
+│       ├── Daemon/
+│       │   ├── DaemonBroadcasterCollection.cs
+│       │   └── DaemonOrchestrator.cs
+│       └── Live/
+│           ├── LiveKeyboardHandler.cs
+│           └── LiveTuiDisplay.cs
+└── Aeromux.Core/
+    └── Configuration/
+        └── AeromuxConfig.cs
+```
+
+- **DaemonOrchestrator.cs** — Controls the startup and shutdown sequence for daemon mode. Creates components in dependency order, manages their lifecycle, and performs ordered disposal. The best file to read for understanding how the system is assembled at runtime.
+- **DaemonBroadcasterCollection.cs** — Creates and manages the Beast, JSON, and SBS `TcpBroadcaster` instances. Handles the per-broadcaster startup delay required to work around a macOS ARM64 socket race condition.
+- **LiveTuiDisplay.cs** — Main TUI loop for live mode. Reads aircraft state from the tracker on a refresh cycle and renders it using Spectre.Console's `Live` display.
+- **LiveKeyboardHandler.cs** — Processes keyboard input for table navigation, sorting, search, unit switching, and detail view. Runs on a dedicated thread to keep the display responsive.
+- **AeromuxConfig.cs** — Root configuration model deserialized from the YAML file. Contains nested models for devices, network, tracking, receiver, MLAT, database, and logging. If you are adding a new configurable option, define it in the appropriate nested model.
 
 ---
 
