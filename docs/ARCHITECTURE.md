@@ -271,17 +271,17 @@ The pipeline consists of two stages: magnitude conversion and preamble detection
 
 ### IQ Demodulation
 
-`IQDemodulator` converts interleaved I/Q byte pairs into magnitude values. Radio signals are received as pairs of in-phase (I) and quadrature (Q) components, each represented as an unsigned byte (0–255). The magnitude — the signal's instantaneous power — is computed as √(I² + Q²) after centering each component around zero.
+`IQDemodulator` converts interleaved I/Q byte pairs into magnitude values. Radio signals are received as pairs of in-phase (I) and quadrature (Q) components, each represented as an unsigned byte (0–255). The magnitude — the signal's instantaneous power — is computed as $\sqrt{I^2 + Q^2}$ after centering each component around zero.
 
-Rather than computing this for every sample at runtime, `IQDemodulator` uses a pre-computed **256 × 256 lookup table** (128 KB). Each entry maps a byte pair directly to a 16-bit magnitude value, eliminating approximately 4.8 million square-root operations per second at 2.4 MSPS. The conversion reduces to a single array lookup per sample with no floating-point arithmetic.
+Rather than computing this for every sample at runtime, `IQDemodulator` uses a pre-computed $256 \times 256$ **lookup table** (128 KB). Each entry maps a byte pair directly to a 16-bit magnitude value, eliminating approximately 4.8 million square-root operations per second at 2.4 MSPS. The conversion reduces to a single array lookup per sample with no floating-point arithmetic.
 
 #### Rolling Buffers and Prefix Overlap
 
 The demodulator maintains a pool of 12 **rolling magnitude buffers**, cycling through them round-robin. Each buffer has a **326-sample prefix region** that is copied from the tail of the previous buffer. The prefix size is derived from the Mode S frame geometry:
 
-```
-(8 µs preamble + 112-bit max message + 16-bit safety margin) × 2.4 samples/µs = 326 samples
-```
+$$
+(8\,\mu s\ \text{preamble} + 112\,\text{bit max message} + 16\,\text{bit safety margin}) \times 2.4\,\text{samples}/\mu s = 326\,\text{samples}
+$$
 
 This overlap ensures that preambles straddling a buffer boundary are not missed — the preamble detector can scan seamlessly across the join point without special boundary logic. The 12-buffer pool provides enough depth that no buffer is reused while a previous one might still be referenced.
 
@@ -305,11 +305,11 @@ Each phase has a hand-tuned set of weighted correlation coefficients for extract
 
 Each extracted frame receives a timestamp computed from the buffer's reception time plus the frame's sample offset within the buffer. The formula is:
 
-```
-frameTimestamp = bufferTimestamp + (samplePosition − prefixLength) × ticksPerSample
-```
+$$
+T_{\text{frame}} = T_{\text{buffer}} + (P_{\text{sample}} - L_{\text{prefix}}) \times T_{\text{tick}}
+$$
 
-where `ticksPerSample = 10,000,000 / 2,400,000 ≈ 4.1667` (.NET ticks per sample at 2.4 MSPS). This approach provides deterministic sub-microsecond timing precision without calling `Stopwatch.Elapsed` per frame, which would introduce GC safepoint overhead. The maximum rounding error is 50 nanoseconds — well within the requirements for MLAT multilateration.
+where $T_{\text{tick}} = \frac{10{,}000{,}000}{2{,}400{,}000} \approx 4.1667$ (.NET ticks per sample at 2.4 MSPS). This approach provides deterministic sub-microsecond timing precision without calling `Stopwatch.Elapsed` per frame, which would introduce GC safepoint overhead. The maximum rounding error is 50 nanoseconds — well within the requirements for MLAT multilateration.
 
 ---
 
