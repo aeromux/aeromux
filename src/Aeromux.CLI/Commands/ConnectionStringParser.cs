@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Net;
+using System.Text.RegularExpressions;
 using Aeromux.Core.Configuration;
 
 namespace Aeromux.CLI.Commands;
@@ -129,6 +130,14 @@ public static class ConnectionStringParser
     }
 
     /// <summary>
+    /// RFC 1123 DNS hostname regex: each label is alphanumeric + hyphens, 1-63 chars,
+    /// must start and end with alphanumeric. Labels separated by dots, total max 253 chars.
+    /// </summary>
+    private static readonly Regex DnsHostnameRegex = new(
+        @"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$",
+        RegexOptions.Compiled);
+
+    /// <summary>
     /// Validates whether a string is a valid hostname or IP address.
     /// </summary>
     private static bool IsValidHost(string host)
@@ -144,9 +153,7 @@ public static class ConnectionStringParser
             return true;
         }
 
-        // Check if it's a valid DNS hostname
-        // Uri.CheckHostName validates DNS naming rules
-        UriHostNameType hostType = Uri.CheckHostName(host);
-        return hostType == UriHostNameType.Dns;
+        // Check if it's a valid DNS hostname (RFC 1123)
+        return host.Length <= 253 && DnsHostnameRegex.IsMatch(host);
     }
 }
