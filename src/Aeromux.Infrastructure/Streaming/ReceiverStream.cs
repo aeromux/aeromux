@@ -189,6 +189,7 @@ public sealed class ReceiverStream : IFrameStream
                 foreach (BeastSourceConfig beastConfig in _beastSourceConfigs)
                 {
                     await StartBeastSourceAsync(beastConfig, _internalCts.Token);
+                    await Task.Delay(50, _internalCts.Token); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition
                 }
             }
 
