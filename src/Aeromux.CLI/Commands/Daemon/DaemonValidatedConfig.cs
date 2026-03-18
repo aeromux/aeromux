@@ -28,14 +28,14 @@ public sealed record DaemonValidatedConfig
     /// <summary>The fully loaded Aeromux configuration.</summary>
     public required AeromuxConfig Config { get; init; }
 
-    /// <summary>Validated Beast protocol port (1-65535).</summary>
-    public required int BeastPort { get; init; }
+    /// <summary>Validated Beast protocol output port (1-65535).</summary>
+    public required int BeastOutputPort { get; init; }
 
-    /// <summary>Validated JSON streaming port (1-65535).</summary>
-    public required int JsonPort { get; init; }
+    /// <summary>Validated JSON streaming output port (1-65535).</summary>
+    public required int JsonOutputPort { get; init; }
 
-    /// <summary>Validated SBS protocol port (1-65535).</summary>
-    public required int SbsPort { get; init; }
+    /// <summary>Validated SBS protocol output port (1-65535).</summary>
+    public required int SbsOutputPort { get; init; }
 
     /// <summary>Validated bind address for TCP listeners.</summary>
     public required IPAddress BindAddress { get; init; }
@@ -61,6 +61,15 @@ public sealed record DaemonValidatedConfig
     /// <summary>Whether the REST API is enabled.</summary>
     public required bool ApiEnabled { get; init; }
 
-    /// <summary>List of enabled device configurations.</summary>
-    public required List<DeviceConfig> EnabledDevices { get; init; }
+    /// <summary>List of enabled SDR source configurations.</summary>
+    public required List<SdrSourceConfig> EnabledSdrSources { get; init; }
+
+    /// <summary>Beast TCP input source configurations.</summary>
+    public required List<BeastSourceConfig> BeastSources { get; init; }
+
+    /// <summary>Whether SDR sources are active.</summary>
+    public bool UseSdr => EnabledSdrSources.Count > 0;
+
+    /// <summary>Whether Beast sources are active.</summary>
+    public bool UseBeast => BeastSources.Count > 0;
 }

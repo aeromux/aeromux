@@ -24,28 +24,28 @@ namespace Aeromux.Core.Configuration;
 public class NetworkConfig
 {
     /// <summary>
-    /// Gets or sets the Beast binary protocol port number.
+    /// Gets or sets the Beast binary protocol output port number.
     /// Beast format: Raw binary Mode S frames with timestamps.
     /// Used for feeding other ADS-B software (e.g., tar1090, Virtual Radar Server).
     /// Default: 30005.
     /// </summary>
-    public int BeastPort { get; set; } = 30005;
+    public int BeastOutputPort { get; set; } = 30005;
 
     /// <summary>
-    /// Gets or sets the JSON streaming port number.
+    /// Gets or sets the JSON streaming output port number.
     /// JSON format: Line-delimited JSON objects with decoded aircraft data.
     /// Used for web applications and real-time streaming.
     /// Default: 30006 (web-friendly, non-standard port).
     /// </summary>
-    public int JsonPort { get; set; } = 30006;
+    public int JsonOutputPort { get; set; } = 30006;
 
     /// <summary>
-    /// Gets or sets the SBS BaseStation text protocol port number.
+    /// Gets or sets the SBS BaseStation text protocol output port number.
     /// SBS format: CSV text format compatible with Kinetic's BaseStation application.
     /// Used for compatibility with legacy ADS-B applications.
     /// Default: 30003.
     /// </summary>
-    public int SbsPort { get; set; } = 30003;
+    public int SbsOutputPort { get; set; } = 30003;
 
     /// <summary>
     /// Gets or sets the REST API port number.

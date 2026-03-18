@@ -21,7 +21,7 @@ namespace Aeromux.Core.Configuration;
 /// <summary>
 /// RTL-SDR device configuration for ADS-B/Mode S reception.
 /// </summary>
-public class DeviceConfig
+public class SdrSourceConfig
 {
     /// <summary>
     /// Gets or sets a friendly name for this device.

@@ -6,13 +6,13 @@
 
 **A multi-SDR Mode S and ADS-B demodulator and decoder for .NET**
 
-Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-SDR USB receivers, decodes Mode S and ADS-B messages, and serves the decoded aircraft data over the network. It supports multiple SDR devices simultaneously for improved coverage and runs on macOS and Linux, including Raspberry Pi.
+Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-SDR USB receivers, decodes Mode S and ADS-B messages, and serves the decoded aircraft data over the network. It can also connect to external Beast TCP sources (dump1090, readsb, or another Aeromux instance) and aggregate their frames alongside local SDR devices. It supports multiple SDR devices simultaneously for improved coverage and runs on macOS and Linux, including Raspberry Pi.
 
 ## Features
 
 - **Mode S and ADS-B Decoding** — Decodes aircraft identification, position, altitude, speed, heading, and more from transponder broadcasts. Covers all Mode S downlink formats, ADS-B Extended Squitter message types, and Comm-B data registers.
 
-- **Multiple Receiver Support** — Use several RTL-SDR devices at once to improve reception coverage. Multi-device operation is a built-in feature — just list your devices in the configuration file. Frames from all devices are automatically combined and deduplicated.
+- **Multiple Receiver Support** — Use several RTL-SDR devices at once to improve reception coverage, or connect to external Beast TCP sources, or both. Multi-device operation is a built-in feature — just list your sources in the configuration file. Frames from all sources are automatically combined and deduplicated.
 
 - **Network Output** — In daemon mode, serves decoded data over TCP in three standard formats. See the [Broadcast Guide](docs/BROADCAST.md) for full documentation.
   - **Beast** — Binary protocol compatible with dump1090, readsb, and most ADS-B tools
@@ -22,6 +22,8 @@ Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-
 - **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
 
 - **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints with rate limiting. See the [API Guide](docs/API.md) for full documentation.
+
+- **Beast TCP Input** — Connect to one or more external Beast-compatible servers (dump1090, readsb, or another Aeromux daemon) over the network. Beast sources can be used alone or combined with local SDR devices. Includes automatic reconnection with exponential backoff if a connection drops.
 
 - **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, unit switching, and detail view field search with jump-and-highlight navigation. See the [TUI Guide](docs/TUI.md) for full documentation.
 
@@ -103,11 +105,17 @@ Aeromux provides five commands:
 # Daemon mode — runs in the background, serves data on network ports
 aeromux daemon --config aeromux.yaml
 
-# Live mode (standalone) — interactive terminal display reading directly from your SDR device(s)
-aeromux live --standalone --config aeromux.yaml
+# Daemon mode with Beast input — aggregates frames from an external Beast source
+aeromux daemon --beast-source 192.168.1.100:30005 --config aeromux.yaml
 
-# Live mode (connect) — interactive terminal display connecting to an existing Beast data source
-aeromux live --connect host:port --config aeromux.yaml
+# Live mode — interactive terminal display using SDR device(s) from config
+aeromux live --config aeromux.yaml
+
+# Live mode with Beast source — connects to an existing Beast data source
+aeromux live --beast-source host:port --config aeromux.yaml
+
+# Combined mode — SDR devices and Beast sources together
+aeromux live --sdr-source --beast-source host:port --config aeromux.yaml
 
 # Database management — download, update, and verify the aircraft metadata database
 aeromux database update --database artifacts/db/
@@ -121,7 +129,7 @@ aeromux device --verbose
 aeromux version
 ```
 
-**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft. **Database** manages the aircraft metadata database downloaded from GitHub releases, with integrity verification. **Device** lists RTL-SDR hardware detected on the system and, with `--verbose`, shows detailed tuner parameters.
+**Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft. Both commands support SDR sources, Beast TCP sources, or both simultaneously. **Database** manages the aircraft metadata database downloaded from GitHub releases, with integrity verification. **Device** lists RTL-SDR hardware detected on the system and, with `--verbose`, shows detailed tuner parameters. See the [CLI Reference](docs/CLI.md) for all commands, parameters, and the configuration priority model.
 
 ## Configuration
 
@@ -129,7 +137,8 @@ Aeromux uses a YAML configuration file. Copy [`aeromux.example.yaml`](aeromux.ex
 
 The main sections are:
 
-- **`devices`** — Your RTL-SDR receivers. Configure gain, frequency correction (PPM), preamble sensitivity, and enable or disable individual devices.
+- **`sdrSources`** — Your RTL-SDR receivers. Configure gain, frequency correction (PPM), preamble sensitivity, and enable or disable individual devices.
+- **`beastSources`** — External Beast TCP input sources. Connect to dump1090, readsb, or another Aeromux instance. Can be used alongside SDR sources.
 - **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the REST API port/toggle and bind address.
 - **`tracking`** — Controls how strictly aircraft are filtered. The confidence level determines how many detections are required before an aircraft is reported, reducing false positives from noise.
 - **`receiver`** — Your station's geographic location (latitude, longitude, altitude). This is needed for surface vehicle position decoding and for MLAT triangulation.
@@ -170,7 +179,7 @@ The build script auto-detects your platform, or you can cross-compile for a spec
 
 Contributions are welcome! Whether it is a bug fix, a new feature, improved documentation, or additional tests, we appreciate your help.
 
-Please read the [Contributing Guide](CONTRIBUTING.md) for development setup, coding standards, and the pull request process. For an in-depth look at the data flow, signal processing pipeline, and concurrency model, see the [Architecture Guide](docs/ARCHITECTURE.md). This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+Please read the [Contributing Guide](CONTRIBUTING.md) for development setup, coding standards, and the pull request process. For an in-depth look at the data flow, signal processing pipeline, and concurrency model, see the [Architecture Guide](docs/ARCHITECTURE.md). For complete, end-to-end deployment examples — from a single SDR to multi-site aggregation — see the [Deployment Scenarios](docs/SCENARIOS.md) guide. This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

@@ -99,9 +99,9 @@ public class ConfigurationBuilder
                     FileSizeLimitMb = 100
                 }
             },
-            Devices =
+            SdrSources =
             [
-                new DeviceConfig
+                new SdrSourceConfig
                 {
                     Name = "default",
                     DeviceIndex = 0,
@@ -113,9 +113,9 @@ public class ConfigurationBuilder
             ],
             Network = new NetworkConfig
             {
-                BeastPort = 30005,
-                JsonPort = 30006,
-                SbsPort = 30003,
+                BeastOutputPort = 30005,
+                JsonOutputPort = 30006,
+                SbsOutputPort = 30003,
                 ApiPort = 8080,
                 ApiEnabled = true,
                 BindAddress = System.Net.IPAddress.Any,
@@ -151,7 +151,8 @@ public class ConfigurationBuilder
         return new AeromuxConfig
         {
             Logging = yamlConfig.Logging ?? baseConfig.Logging,
-            Devices = yamlConfig.Devices ?? baseConfig.Devices,
+            SdrSources = yamlConfig.SdrSources ?? baseConfig.SdrSources,
+            BeastSources = yamlConfig.BeastSources ?? baseConfig.BeastSources,
             Network = yamlConfig.Network ?? baseConfig.Network,
             Tracking = yamlConfig.Tracking ?? baseConfig.Tracking,
             Receiver = yamlConfig.Receiver ?? baseConfig.Receiver,
@@ -170,7 +171,7 @@ public class ConfigurationBuilder
         // Apply CLI overrides (highest priority)
         // All sections are non-null after merge, so use null-forgiving operator
 
-        // Note: Network port overrides (--beast-port, --json-port, --sbs-port, --bind-address)
+        // Note: Network port overrides (--beast-output-port, --json-output-port, --sbs-output-port, --bind-address)
         // are daemon-specific and handled directly in DaemonCommand.ExecuteAsync()
         // using ValidatePort() and ValidateBindAddress() methods.
 

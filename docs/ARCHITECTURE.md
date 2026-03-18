@@ -2,7 +2,7 @@
 
 Aeromux is a multi-SDR Mode S and ADS-B demodulator and decoder built on .NET. It receives radio signals on 1090 MHz from one or more RTL-SDR USB receivers, demodulates the raw I/Q samples into Mode S frames, decodes the frames into aircraft state, and serves the results over the network in several standard formats. This document describes the internal architecture, the end-to-end data flow from antenna to network output, and the concurrency model that ties everything together.
 
-The intended audience is developers who want to understand how Aeromux works before contributing code. For user-facing documentation, see the [Broadcast Guide](BROADCAST.md), the [REST API Guide](API.md), and the [TUI Guide](TUI.md).
+The intended audience is developers who want to understand how Aeromux works before contributing code. For user-facing documentation, see the [CLI Reference](CLI.md), the [Broadcast Guide](BROADCAST.md), the [REST API Guide](API.md), and the [TUI Guide](TUI.md).
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ The intended audience is developers who want to understand how Aeromux works bef
 - [Signal Processing Pipeline](#signal-processing-pipeline)
 - [Frame Validation and Filtering](#frame-validation-and-filtering)
 - [Message Decoding](#message-decoding)
-- [Multi-Device Aggregation and Streaming](#multi-device-aggregation-and-streaming)
+- [Multi-Source Aggregation and Streaming](#multi-source-aggregation-and-streaming)
 - [Aircraft State Tracking](#aircraft-state-tracking)
 - [Network Output](#network-output)
 - [MLAT Integration](#mlat-integration)
@@ -35,7 +35,7 @@ The intended audience is developers who want to understand how Aeromux works bef
 
 Before diving into internals, it helps to see Aeromux from the outside — what it connects to and what role it plays in a typical ADS-B ground station setup.
 
-Aeromux sits at the center of a ground station. On the input side, it reads from one or more RTL-SDR USB receivers and optionally receives multilateration positions from `mlat-client`. On the output side, it serves decoded data over TCP in three standard formats (Beast, SBS, JSON) and a REST API. Any application that speaks one of these protocols can connect as a client — ADS-B tools like readsb, tar1090, and Virtual Radar Server, feeding services like Flightradar24 and ADS-B Exchange, or custom web applications.
+Aeromux sits at the center of a ground station. On the input side, it reads from one or more RTL-SDR USB receivers, connects to external Beast TCP sources (dump1090, readsb, or another Aeromux instance), and optionally receives multilateration positions from `mlat-client`. SDR and Beast inputs can be used independently or combined. On the output side, it serves decoded data over TCP in three standard formats (Beast, SBS, JSON) and a REST API. Any application that speaks one of these protocols can connect as a client — ADS-B tools like readsb, tar1090, and Virtual Radar Server, feeding services like Flightradar24 and ADS-B Exchange, or custom web applications.
 
 The MLAT data flow is bidirectional: Aeromux sends raw Beast frames to `mlat-client` (which forwards them to an MLAT server for triangulation), and `mlat-client` sends computed positions back to Aeromux on a separate port. This allows Aeromux to track aircraft that do not broadcast their own position via ADS-B.
 
@@ -43,13 +43,14 @@ The `aeromux-db` SQLite database is an optional enrichment source that provides 
 
 ```mermaid
 flowchart LR
-    subgraph station["Ground Station"]
+    subgraph inputs["Input Sources"]
         SDR1["RTL-SDR<br/>Receiver 1"]
         SDR2["RTL-SDR<br/>Receiver 2"]
-        AEROMUX["Aeromux"]
-        MLATC["mlat-client"]
+        BEAST1["Beast TCP Source<br/>(dump1090 / readsb /<br/>aeromux remote)"]
         DB["aeromux-db<br/>(SQLite)"]
     end
+
+    AEROMUX["Aeromux"]
 
     subgraph consumers["Consumers"]
         READSB["readsb / dump1090"]
@@ -60,21 +61,23 @@ flowchart LR
     end
 
     subgraph mlat_net["MLAT Network"]
+        MLATC["mlat-client"]
         MLATSERV["MLAT Server"]
     end
 
     SDR1 -->|"USB"| AEROMUX
     SDR2 -->|"USB"| AEROMUX
+    BEAST1 -->|"Beast TCP"| AEROMUX
     DB -.->|"SQLite read"| AEROMUX
 
     AEROMUX -->|"Beast TCP<br/>(port 30005)"| READSB
     AEROMUX -->|"Beast TCP"| TAR1090
     AEROMUX -->|"Beast TCP"| FEED
-    AEROMUX -->|"Beast TCP"| MLATC
     AEROMUX -->|"SBS TCP<br/>(port 30003)"| VRS
     AEROMUX -->|"JSON TCP<br/>(port 30006)"| WEBAPP
     AEROMUX -->|"REST API<br/>(port 8080)"| WEBAPP
 
+    AEROMUX -->|"Beast TCP"| MLATC
     MLATC -->|"Beast TCP<br/>(port 30104)"| AEROMUX
     MLATC <-->|"network"| MLATSERV
 ```
@@ -98,7 +101,7 @@ flowchart TD
 
 **Aeromux.Core** contains all domain logic and has no dependency on Infrastructure or CLI. This includes I/Q demodulation, preamble detection, CRC validation, message parsing, aircraft state tracking, and the configuration models. Everything in Core is pure computation with no I/O.
 
-**Aeromux.Infrastructure** provides the I/O boundary. It manages RTL-SDR devices through [RtlSdrManager](https://github.com/nandortoth/rtlsdr-manager), operates TCP servers for Beast, SBS, and JSON broadcast, handles multi-device frame aggregation, accepts MLAT input, and provides SQLite-based aircraft database lookups. Infrastructure depends on Core.
+**Aeromux.Infrastructure** provides the I/O boundary. It manages RTL-SDR devices through [RtlSdrManager](https://github.com/nandortoth/rtlsdr-manager), connects to external Beast TCP sources, operates TCP servers for Beast, SBS, and JSON broadcast, handles multi-source frame aggregation, accepts MLAT input, and provides SQLite-based aircraft database lookups. Infrastructure depends on Core.
 
 **Aeromux.CLI** is the executable entry point. It contains the CLI command definitions (daemon, live, database, device, version), the terminal user interface built on Spectre.Console, the REST API built on ASP.NET Core Minimal API, and the daemon orchestrator that wires everything together. CLI depends on both Core and Infrastructure.
 
@@ -108,7 +111,7 @@ When contributing, place your code in the appropriate layer: protocol parsing an
 
 ## End-to-End Data Flow
 
-The following diagram shows the complete path that data takes from the RTL-SDR antenna through to the network output. Each box represents a named processing stage, and the arrows show the data types that flow between them.
+The following diagram shows the complete path that data takes from all input sources through to the network output. Each box represents a named processing stage, and the arrows show the data types that flow between them.
 
 An important architectural detail: the six signal processing stages (from `IQDemodulator` through `MessageParser`) are **not** independent components connected by channels. They run as **synchronous method calls on a single thread** inside `DeviceWorker.OnSamplesAvailable()`. This tight, sequential pipeline minimizes latency and avoids the overhead of cross-thread handoff in the hot path. The first true async boundary is the `FrameAggregator` channel, where processed frames cross from the RtlSdrManager worker thread to the .NET thread pool.
 
@@ -132,13 +135,18 @@ flowchart TD
         PARSE["MessageParser<br/>(DF routing, ADS-B / Comm-B decoding)"]
     end
 
+    subgraph beast_in["Beast TCP Input"]
+        BEASTSRC["Beast TCP Source<br/>(dump1090 / readsb / aeromux)"]
+        BEASTSTREAM["BeastStream<br/>(BeastParser, own IcaoConfidenceTracker,<br/>MessageParser, auto-reconnect)"]
+    end
+
     subgraph mlat["MLAT Input"]
         MLATCLIENT["mlat-client<br/>(external process)"]
         MLATW["MlatWorker<br/>(Beast TCP listener, port 30104)"]
     end
 
     subgraph infra["Aggregation & Streaming"]
-        AGG["FrameAggregator<br/>(multi-device channel)"]
+        AGG["FrameAggregator<br/>(multi-source channel)"]
         STREAM["ReceiverStream<br/>(fan-out to subscribers)"]
     end
 
@@ -165,6 +173,9 @@ flowchart TD
     CONFIDENCE -->|"confident flag"| DEDUP
     DEDUP -->|"unique frames"| PARSE
     PARSE -->|"ProcessedFrame"| AGG
+
+    BEASTSRC -->|"Beast TCP"| BEASTSTREAM
+    BEASTSTREAM -->|"ProcessedFrame<br/>(Source = Beast)"| AGG
 
     MLATCLIENT -->|"Beast TCP connection"| MLATW
     MLATW -->|"ProcessedFrame<br/>(Source = Mlat)"| AGG
@@ -376,21 +387,21 @@ This eliminates redundant parsing across multiple output formats and ensures con
 
 ---
 
-## Multi-Device Aggregation and Streaming
+## Multi-Source Aggregation and Streaming
 
-Aeromux supports multiple RTL-SDR devices operating simultaneously, each covering the same frequency but potentially receiving different aircraft due to antenna placement or orientation. The aggregation and streaming layers combine frames from all sources and distribute them to multiple consumers.
+Aeromux supports multiple input sources operating simultaneously: RTL-SDR devices (each covering the same frequency but potentially receiving different aircraft due to antenna placement), Beast TCP sources (remote dump1090, readsb, or aeromux instances), and optional MLAT input. The aggregation and streaming layers combine frames from all sources and distribute them to multiple consumers.
 
 ### Frame Aggregation
 
-`FrameAggregator` merges frames from all `DeviceWorker` instances (and the optional `MlatWorker`) into a single stream. Each worker calls `AddData(ProcessedFrame)` from its own callback thread, and the aggregator writes each frame into an unbounded `Channel<ProcessedFrame>`. This is the first async boundary in the system — the point where data crosses from the RtlSdrManager worker thread to the .NET thread pool. The channel handles all synchronization internally.
+`FrameAggregator` merges frames from all sources — `DeviceWorker` instances, `BeastStream` instances, and the optional `MlatWorker` — into a single stream. Each source calls `AddData(ProcessedFrame)` from its own thread, and the aggregator writes each frame into an unbounded `Channel<ProcessedFrame>`. This is the first async boundary in the system — the point where data crosses from the source threads to the .NET thread pool. The channel handles all synchronization internally.
 
-Frame ordering across devices is non-deterministic (whichever device's callback fires first gets written first), but this is acceptable because downstream consumers process frames independently by ICAO address and timestamp.
+Frame ordering across sources is non-deterministic (whichever source's callback fires first gets written first), but this is acceptable because downstream consumers process frames independently by ICAO address and timestamp.
 
 ### Receiver Stream
 
-`ReceiverStream` is the central hub that manages device lifecycles and distributes frames to subscribers. It performs three roles:
+`ReceiverStream` is the central hub that manages source lifecycles and distributes frames to subscribers. It performs three roles:
 
-1. **Device management** — Creates and configures `DeviceWorker` instances for each device in the configuration, plus an optional `MlatWorker`. All workers share a single `IcaoConfidenceTracker`.
+1. **Source management** — Creates and configures `DeviceWorker` instances for each SDR device, `BeastStream` instances for each Beast TCP source, and an optional `MlatWorker`. SDR workers share a single `IcaoConfidenceTracker` (MLAT marks ICAOs as confident for SDR workers). Each `BeastStream` has its own independent `IcaoConfidenceTracker`.
 
 2. **Fan-out broadcasting** — Runs a background task (`BroadcastToSubscribersAsync`) that reads from the `FrameAggregator` and writes each frame to every subscriber's dedicated channel. The subscriber list is managed with a copy-on-write snapshot pattern: a volatile array reference is read lock-free during broadcast and only rebuilt when a subscriber is added or removed.
 
@@ -401,6 +412,8 @@ flowchart LR
     DW1["DeviceWorker 1"] -->|AddData| AGG["FrameAggregator<br/>(Channel)"]
     DW2["DeviceWorker 2"] -->|AddData| AGG
     DWN["DeviceWorker N"] -->|AddData| AGG
+    BS1["BeastStream 1"] -->|forwarded| AGG
+    BSN["BeastStream N"] -->|forwarded| AGG
     MLAT["MlatWorker"] -->|AddData| AGG
 
     AGG --> BC["BroadcastToSubscribersAsync<br/>(copy-on-write snapshot)"]
@@ -512,8 +525,8 @@ The REST API is an ASP.NET Core Minimal API that provides on-demand access to th
 `MlatWorker` provides a parallel ingest path for multilateration position data. When enabled, it listens on a configurable TCP port (default 30104) for connections from `mlat-client`, which transmits Beast-formatted frames containing positions computed by the MLAT network.
 
 - **Multi-client** — Multiple `mlat-client` instances can connect simultaneously, each handled by its own background task.
-- **Pipeline bypass** — MLAT frames skip the entire signal processing pipeline (no demodulation or preamble detection) because they arrive pre-processed. The worker parses the Beast binary format, validates the frames, and feeds them into the `FrameAggregator` as `ProcessedFrame` records with `Source = Mlat`. From that point on, they follow the same path as SDR frames through the tracker and broadcasters.
-- **Confidence sharing** — `MlatWorker` shares the same `IcaoConfidenceTracker` as all SDR devices. When an MLAT frame arrives, the worker marks its ICAO address as confident. This means SDR workers will immediately trust AP mode frames (DF 0, 4, 5, 16, 20, 21) from that ICAO — even if the SDR has not yet seen enough PI mode frames to reach the confidence threshold on its own. This cross-source sharing improves tracking coverage, especially for aircraft that transmit few ADS-B messages.
+- **Pipeline bypass** — MLAT frames skip the entire signal processing pipeline (no demodulation or preamble detection) because they arrive pre-processed. The worker parses the Beast binary format, validates the frames, and feeds them into the `FrameAggregator` as `ProcessedFrame` records with `Source = Mlat`. From that point on, they follow the same path as frames from other sources through the tracker and broadcasters.
+- **Confidence sharing** — `MlatWorker` shares the same `IcaoConfidenceTracker` as all SDR devices. When an MLAT frame arrives, the worker marks its ICAO address as confident. This means SDR workers will immediately trust AP mode frames (DF 0, 4, 5, 16, 20, 21) from that ICAO — even if the SDR has not yet seen enough PI mode frames to reach the confidence threshold on its own. This cross-source sharing improves tracking coverage, especially for aircraft that transmit few ADS-B messages. Note: Beast TCP input sources (`BeastStream`) do not participate in this shared tracker — each has its own independent `IcaoConfidenceTracker`.
 
 ---
 
@@ -550,6 +563,9 @@ flowchart LR
     subgraph pool[".NET Thread Pool"]
         direction TB
 
+        BST["BeastStream<br/>BroadcastTo-<br/>SubscribersAsync<br/>(per Beast source)"]
+        FWD["ReceiverStream<br/>ForwardBeast-<br/>FramesAsync<br/>(per Beast source)"]
+
         BT["ReceiverStream<br/>BroadcastTo-<br/>SubscribersAsync"]
 
         CT["AircraftState-<br/>Tracker<br/>consumer task"]
@@ -568,6 +584,8 @@ flowchart LR
     USB -->|"Channel&lt;RawSampleBuffer&gt;<br/>(bounded, drop on overflow)"| EVT
     EVT --> DSP
     DSP -->|"Channel&lt;ProcessedFrame&gt;<br/>(FrameAggregator,<br/>unbounded, multi-writer)"| BT
+    BST -->|"Channel&lt;ProcessedFrame&gt;"| FWD
+    FWD -->|"AddData<br/>(FrameAggregator)"| BT
     BT -->|"Channel<br/>(per subscriber)"| CT
     BT -->|"Channel<br/>(per subscriber)"| BF1
     BT -->|"Channel<br/>(per subscriber)"| BF2
@@ -577,7 +595,7 @@ flowchart LR
 Each column represents a thread boundary. Data crosses between threads exclusively through `Channel<T>` instances:
 
 - **Native → RtlSdrManager** — The librtlsdr USB callback fires on a native thread. RtlSdrManager copies the raw bytes into a pooled buffer and writes it to a bounded channel. The `SamplesAvailable` event handler and the entire signal processing pipeline (demodulation, preamble detection, CRC validation, parsing) run synchronously on the RtlSdrManager worker thread.
-- **RtlSdrManager → Thread Pool** — Each `DeviceWorker` writes `ProcessedFrame` records into the `FrameAggregator` channel. This is the first and only async boundary in the data path. From this point on, all processing runs as async tasks on the .NET thread pool.
+- **RtlSdrManager → Thread Pool** — Each `DeviceWorker` writes `ProcessedFrame` records into the `FrameAggregator` channel. This is the first and only async boundary in the SDR data path. Each `BeastStream` also runs its own async task that parses incoming Beast TCP data and forwards frames into the same aggregator. From this point on, all processing runs as async tasks on the .NET thread pool.
 - **Broadcast fan-out** — `BroadcastToSubscribersAsync` reads from the aggregator and writes to each subscriber's dedicated channel. Each subscriber (tracker, Beast, JSON, SBS) consumes its channel independently on its own async task.
 
 ### Channels
@@ -587,7 +605,7 @@ All data flows through `System.Threading.Channels.Channel<T>`, which provides th
 | Channel | Type | Bounded | Writers | Readers | Backpressure |
 |---------|------|---------|---------|---------|--------------|
 | RtlSdrManager internal | `Channel<RawSampleBuffer>` | Yes | 1 (native callback) | 1 (event handler) | Drop on overflow |
-| FrameAggregator | `Channel<ProcessedFrame>` | No | N (one per device) | 1 (broadcast task) | None (unbounded) |
+| FrameAggregator | `Channel<ProcessedFrame>` | No | N (one per SDR device + Beast forwarding tasks) | 1 (broadcast task) | None (unbounded) |
 | Subscriber | `Channel<ProcessedFrame>` | No | 1 (broadcast task) | 1 (subscriber) | None (unbounded) |
 
 ### Thread Safety Patterns
@@ -617,9 +635,9 @@ sequenceDiagram
     participant B as Broadcasters
     participant A as REST API
 
-    O->>RS: Create (devices not opened)
+    O->>RS: Create (sources not started)
     O->>RS: StartAsync()
-    Note over RS: Opens SDR devices,<br/>starts workers,<br/>starts broadcast task
+    Note over RS: Opens SDR devices,<br/>connects Beast sources,<br/>starts workers,<br/>starts broadcast task
 
     O->>DB: Create (open SQLite)
     O->>T: Create (with database lookup)
@@ -655,7 +673,7 @@ sequenceDiagram
     O->>B: Stop (unsubscribe, close clients)
     O->>A: Stop (close HTTP listener)
     O->>RS: DisposeAsync()
-    Note over RS: Cancel workers,<br/>complete aggregator channel,<br/>wait for broadcast task
+    Note over RS: Cancel all tasks,<br/>dispose Beast streams,<br/>await forwarding tasks,<br/>dispose SDR and MLAT workers,<br/>dispose aggregator,<br/>await broadcast task
 
     O->>T: DisposeAsync()
     Note over T: Wait for consumer task,<br/>dispose cleanup timer
@@ -663,32 +681,29 @@ sequenceDiagram
     O->>DB: Close connection
 ```
 
-Shutdown proceeds in reverse order: broadcasters unsubscribe first (so they stop trying to read from the stream), then the stream closes (which completes the aggregator channel and signals all remaining subscribers to exit), then the tracker waits for its consumer task to finish, and finally the database connection is closed. This ordering ensures that no component attempts to read from a completed channel or write to a disposed resource.
+Shutdown proceeds in reverse order: broadcasters unsubscribe first (so they stop trying to read from the stream), then the stream closes (which stops all frame producers before disposing the aggregator, ensuring no concurrent writes to disposed resources), then the tracker waits for its consumer task to finish, and finally the database connection is closed. This ordering ensures that no component attempts to read from a completed channel or write to a disposed resource.
 
 ---
 
 ## Live TUI Data Flow
 
-The terminal user interface has its own data flow that differs slightly from daemon mode. It supports two operating modes:
+The terminal user interface uses a unified input model. The `live` command creates a `ReceiverStream` that can aggregate frames from SDR devices, Beast TCP sources, or both simultaneously. From the tracker's perspective, the data source is transparent — it consumes the same `ChannelReader<ProcessedFrame>` regardless of which input sources are active.
 
-**Standalone mode** creates a `ReceiverStream` internally and manages SDR devices directly. The data flow is identical to daemon mode, except the only subscriber is the `AircraftStateTracker` — there are no TCP broadcasters.
+When SDR sources are configured, `ReceiverStream` manages the SDR devices directly and performs all demodulation and decoding locally. When Beast sources are configured, `ReceiverStream` creates internal `BeastStream` instances that connect to the remote servers, parse incoming Beast binary data, and apply confidence filtering through their own `IcaoConfidenceTracker`. All frames are merged through the shared `FrameAggregator`. Beast connections include automatic reconnection with exponential backoff if the remote server becomes unavailable.
 
-**Connect mode** uses a `BeastStream` that connects to an existing Beast TCP source (another Aeromux instance, dump1090, or readsb) over the network. The `BeastStream` parses incoming Beast binary data, validates frames through its own `IcaoConfidenceTracker`, and produces `ProcessedFrame` records. From the tracker's perspective, the data source is transparent — it consumes the same `ChannelReader<ProcessedFrame>` regardless of mode.
-
-In both cases, the TUI reads the tracker's aircraft state on a display refresh cycle and renders it using Spectre.Console's `Live` display. Keyboard input is handled on a separate thread to keep the display responsive.
+The TUI reads the tracker's aircraft state on a display refresh cycle and renders it using Spectre.Console's `Live` display. Keyboard input is handled on a separate thread to keep the display responsive.
 
 ```mermaid
 flowchart TD
-    subgraph standalone["Standalone Mode"]
-        SDR2["RTL-SDR Devices"] --> RS2["ReceiverStream"]
+    subgraph sources["Input Sources (any combination)"]
+        SDR2["RTL-SDR Devices"]
+        TCP["Beast TCP Sources<br/>(dump1090 / readsb / aeromux)"]
     end
 
-    subgraph connect["Connect Mode"]
-        TCP["Beast TCP Source<br/>(dump1090 / readsb / aeromux)"] --> BS["BeastStream"]
-    end
+    SDR2 --> RS2["ReceiverStream<br/>(FrameAggregator)"]
+    TCP --> RS2
 
     RS2 -->|ChannelReader| TRACKER2["AircraftStateTracker"]
-    BS -->|ChannelReader| TRACKER2
 
     TRACKER2 --> DISPLAY["LiveTuiDisplay<br/>(Spectre.Console Live)"]
     KB["LiveKeyboardHandler<br/>(separate thread)"] --> DISPLAY
@@ -706,6 +721,7 @@ Aeromux is designed for continuous, unattended operation. The following table su
 | **DeviceWorker** | RtlSdrManager drops samples (USB overflow) | Samples are silently dropped (configured via `DropSamplesOnFullBuffer`). This is preferable to blocking the USB thread, which would cause the kernel to disconnect the device. |
 | **TcpBroadcaster** | Client disconnects or write fails | Failed writes are caught per-client. The client is added to a disconnected list, removed after the broadcast round, and disposed. Other clients are unaffected. |
 | **TcpBroadcaster** | Slow client | No per-client buffering or backpressure. If a write blocks too long, it eventually throws and the client is disconnected. Other clients proceed independently because writes use a snapshot of the client list. |
+| **BeastStream** | Remote Beast source disconnects | Automatic reconnection with persistent retries: 5×5s (startup phase) → 5s, 10s, 20s, 30s, 60s (backoff phase) → 60s (persistent, forever). Startup is non-blocking — the daemon/live command starts normally regardless of Beast source availability. During reconnection, no frames are produced from that source. |
 | **ReceiverStream** | Subscriber stops reading | Subscriber channels are unbounded. Frames accumulate in memory until the subscriber resumes or is unsubscribed. There is no automatic drop or backpressure mechanism for subscriber channels. |
 | **ReceiverStream** | Broadcast task crashes | All subscriber channels are completed in a `finally` block, signaling EOF to all readers. This ensures subscribers exit cleanly rather than hanging. |
 | **MlatWorker** | `mlat-client` disconnects | The per-client reader task exits and the client counter is decremented. The listener remains active for new connections. `mlat-client` is expected to reconnect on its own — MlatWorker is a passive listener. |
@@ -714,7 +730,7 @@ Aeromux is designed for continuous, unattended operation. The following table su
 
 ### Design Implications
 
-The current resilience model is deliberate: Aeromux favors simplicity and predictability over automatic recovery. SDR device reconnection would require re-negotiating USB state and resetting the signal processing pipeline, which is complex and error-prone. Instead, the system is designed to be restarted by an external supervisor (systemd, Docker, etc.) when a device failure occurs. Network clients are expected to handle reconnection on their side, which is the standard pattern in the ADS-B ecosystem.
+The current resilience model is deliberate: Aeromux favors simplicity and predictability over automatic recovery. SDR device reconnection would require re-negotiating USB state and resetting the signal processing pipeline, which is complex and error-prone. Instead, the system is designed to be restarted by an external supervisor (systemd, Docker, etc.) when a device failure occurs. Beast TCP input sources are the exception — they support automatic reconnection with exponential backoff, since TCP reconnection is straightforward and Beast sources are expected to be intermittently available on a network. Network output clients are expected to handle reconnection on their side, which is the standard pattern in the ADS-B ecosystem.
 
 ---
 
@@ -763,7 +779,7 @@ The following principles guide architectural decisions throughout the codebase:
 
 **Parse once, use many times.** Each frame is parsed into a `ProcessedFrame` exactly once at the point of entry. All downstream consumers — Beast encoder, JSON encoder, SBS encoder, aircraft tracker, TUI — share the same parsed result, choosing the representation (raw frame or decoded message) appropriate for their format.
 
-**Shared confidence, independent deduplication.** The `IcaoConfidenceTracker` is shared across all devices and MLAT to maximize cross-source confirmation. The `FrameDeduplicator` runs independently per device because duplicates are device-local (multipath, FRUIT).
+**Shared confidence, independent deduplication.** The `IcaoConfidenceTracker` is shared across all SDR devices and MLAT to maximize cross-source confirmation. Beast TCP input sources each have their own independent `IcaoConfidenceTracker` because they receive pre-filtered frames from a remote system. The `FrameDeduplicator` runs independently per SDR device because duplicates are device-local (multipath, FRUIT).
 
 **Immutable aircraft state.** `Aircraft` records are immutable. State updates create new instances via `with` expressions, and the `ConcurrentDictionary` handles atomic swaps. This eliminates an entire class of race conditions in the multi-reader tracking system.
 
@@ -807,7 +823,7 @@ The following limitations are known and accepted in the current design. They are
 
 **Unbounded subscriber channels can grow in memory.** If a subscriber's consumer task stalls (e.g., due to a deadlock or an unhandled exception), its channel queue grows indefinitely because there is no capacity limit or drop policy. In normal operation this does not occur — TCP broadcasters disconnect slow clients, and the tracker processes frames faster than they arrive. A bounded channel with a drop-oldest policy could be added as a safety net, but has not been needed in practice.
 
-**No cross-device frame deduplication.** When multiple SDR devices receive the same Mode S frame (overlapping antenna coverage), both copies reach the tracker and result in redundant state updates. This is harmless — the tracker's `AddOrUpdate` produces the same result regardless of how many times the same data arrives — but it wastes a small amount of CPU on duplicate parsing and tracking handler invocations.
+**No cross-source frame deduplication.** When multiple input sources (SDR devices with overlapping antenna coverage, or an SDR device and a Beast source receiving from the same area) receive the same Mode S frame, all copies reach the tracker and result in redundant state updates. This is harmless — the tracker's `AddOrUpdate` produces the same result regardless of how many times the same data arrives — but it wastes a small amount of CPU on duplicate parsing and tracking handler invocations.
 
 **Beast receiver ID sent only once.** The Beast broadcaster sends the receiver UUID (`0xe3` message) when the first data frame is broadcast. Clients that connect after this point do not receive the receiver ID, which can affect MLAT identification. A periodic re-broadcast or per-client initial send would address this, but the current behavior matches the convention established by dump1090 and readsb.
 
@@ -865,7 +881,7 @@ src/
 
 - **FrameAggregator.cs** — Merges `ProcessedFrame` records from multiple device workers into a single `Channel<ProcessedFrame>`. Simple pass-through — no filtering or reordering.
 - **ReceiverStream.cs** — The central hub: creates device workers, manages the shared `IcaoConfidenceTracker`, runs the fan-out broadcast task, and provides `Subscribe()`/`Unsubscribe()` for consumers. If you are adding a new output format, you will subscribe to this stream.
-- **BeastStream.cs** — Used in live connect mode to receive Beast binary data from a remote source (dump1090, readsb, another Aeromux instance). Parses Beast frames and produces `ProcessedFrame` records, serving as an alternative to `ReceiverStream` for the TUI.
+- **BeastStream.cs** — Connects to a remote Beast TCP source (dump1090, readsb, another Aeromux instance), parses Beast binary data, applies confidence filtering through its own `IcaoConfidenceTracker`, and produces `ProcessedFrame` records. Used by `ReceiverStream` internally — one instance per configured Beast source. Includes automatic reconnection with exponential backoff.
 
 ### Aircraft Tracking
 
@@ -951,7 +967,7 @@ src/
 - **DaemonBroadcasterCollection.cs** — Creates and manages the Beast, JSON, and SBS `TcpBroadcaster` instances. Handles the per-broadcaster startup delay required to work around a macOS ARM64 socket race condition.
 - **LiveTuiDisplay.cs** — Main TUI loop for live mode. Reads aircraft state from the tracker on a refresh cycle and renders it using Spectre.Console's `Live` display.
 - **LiveKeyboardHandler.cs** — Processes keyboard input for table navigation, sorting, search, unit switching, and detail view. Runs on a dedicated thread to keep the display responsive.
-- **AeromuxConfig.cs** — Root configuration model deserialized from the YAML file. Contains nested models for devices, network, tracking, receiver, MLAT, database, and logging. If you are adding a new configurable option, define it in the appropriate nested model.
+- **AeromuxConfig.cs** — Root configuration model deserialized from the YAML file. Contains nested models for SDR sources, Beast sources, network, tracking, receiver, MLAT, database, and logging. If you are adding a new configurable option, define it in the appropriate nested model.
 
 ---
 

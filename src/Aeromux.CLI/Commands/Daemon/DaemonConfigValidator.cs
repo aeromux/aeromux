@@ -39,12 +39,33 @@ public static class DaemonConfigValidator
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(config);
 
-        Log.Information("Starting device stream for all enabled devices");
+        Log.Information("Starting daemon configuration validation");
+
+        // Resolve Beast input sources (CLI > YAML)
+        List<BeastSourceConfig> beastSources;
+        bool hasBeastFromCli = settings.BeastSource is { Length: > 0 };
+
+        if (hasBeastFromCli)
+        {
+            beastSources = ConnectionStringParser.ParseMultiple(settings.BeastSource);
+        }
+        else if (config.BeastSources is { Count: > 0 })
+        {
+            beastSources = config.BeastSources;
+        }
+        else
+        {
+            beastSources = [];
+        }
+
+        // Resolve SDR usage (same logic as live)
+        bool hasBeast = beastSources.Count > 0;
+        bool useSdr = settings.SdrSource || !hasBeast;
 
         // Validate and resolve network configuration (priority: CLI > YAML > Default)
-        int beastPort = ValidatePort(settings.BeastPort, config.Network!.BeastPort, "BeastPort");
-        int jsonPort = ValidatePort(settings.JsonPort, config.Network.JsonPort, "JsonPort");
-        int sbsPort = ValidatePort(settings.SbsPort, config.Network.SbsPort, "SbsPort");
+        int beastPort = ValidatePort(settings.BeastOutputPort, config.Network!.BeastOutputPort, "BeastOutputPort");
+        int jsonPort = ValidatePort(settings.JsonOutputPort, config.Network.JsonOutputPort, "JsonOutputPort");
+        int sbsPort = ValidatePort(settings.SbsOutputPort, config.Network.SbsOutputPort, "SbsOutputPort");
         int apiPort = ValidatePort(settings.ApiPort, config.Network.ApiPort, "ApiPort");
         bool apiEnabled = ValidateOutputEnabled(settings.ApiEnabled, config.Network.ApiEnabled, "REST API");
         IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
@@ -69,16 +90,18 @@ public static class DaemonConfigValidator
             mlatConfig.InputPort, mlatConfig.Enabled ? "enabled" : "disabled");
 
         // Check daemon-specific preconditions (business logic validation)
-        CheckDaemonPreconditions(config, beastEnabled, jsonEnabled, sbsEnabled);
+        CheckDaemonPreconditions(config, useSdr, beastSources, beastEnabled, jsonEnabled, sbsEnabled);
 
-        var enabledDevices = config.Devices!.Where(d => d.Enabled).ToList();
+        List<SdrSourceConfig> enabledSdrSources = useSdr
+            ? config.SdrSources?.Where(d => d.Enabled).ToList() ?? []
+            : [];
 
         return new DaemonValidatedConfig
         {
             Config = config,
-            BeastPort = beastPort,
-            JsonPort = jsonPort,
-            SbsPort = sbsPort,
+            BeastOutputPort = beastPort,
+            JsonOutputPort = jsonPort,
+            SbsOutputPort = sbsPort,
             ApiPort = apiPort,
             ApiEnabled = apiEnabled,
             BindAddress = bindAddress,
@@ -87,7 +110,8 @@ public static class DaemonConfigValidator
             BeastEnabled = beastEnabled,
             JsonEnabled = jsonEnabled,
             SbsEnabled = sbsEnabled,
-            EnabledDevices = enabledDevices
+            EnabledSdrSources = enabledSdrSources,
+            BeastSources = beastSources
         };
     }
 
@@ -210,49 +234,55 @@ public static class DaemonConfigValidator
     /// Device-specific validation (frequencies, gains, etc.) is done in DeviceWorker.OpenDevice().
     ///
     /// VALIDATION STRATEGY:
-    /// - Devices: At least one must be enabled
+    /// - At least one input source (SDR or Beast) must be available
+    /// - SDR devices: At least one must be enabled when SDR mode is active
     /// - Ports: Must be 1024-65535 (non-privileged, OS will detect conflicts on bind)
     /// - Only validates ports for ENABLED output formats
     /// - Receiver location: Optional, but if provided, lat/lon must both be specified
     /// Port conflict detection is deferred to OS (bind will fail if port is in use).
     /// </summary>
-    /// <param name="config">The configuration to check.</param>
-    /// <param name="beastEnabled">Whether Beast output is enabled.</param>
-    /// <param name="jsonEnabled">Whether JSON output is enabled.</param>
-    /// <param name="sbsEnabled">Whether SBS output is enabled.</param>
-    /// <exception cref="InvalidOperationException">Thrown when daemon preconditions are not met.</exception>
     private static void CheckDaemonPreconditions(
         AeromuxConfig config,
+        bool useSdr,
+        List<BeastSourceConfig> beastSources,
         bool beastEnabled,
         bool jsonEnabled,
         bool sbsEnabled)
     {
-        // Check SDR devices - at least one device must be enabled to run daemon
-        if (config.Devices?.Any(d => d.Enabled) != true)
+        // Check that at least one input source is available
+        if (useSdr && config.SdrSources?.Any(d => d.Enabled) != true)
         {
             throw new InvalidOperationException(
-                "Cannot start daemon: At least one SDR device must be enabled in configuration");
+                "Cannot start daemon: No enabled SDR sources found in configuration. " +
+                "Add SDR sources to sdrSources in YAML, or use --beast-source for Beast-only mode.");
+        }
+
+        if (!useSdr && beastSources.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot start daemon: No input sources configured. " +
+                "Specify --sdr-source, --beast-source, or configure sources in YAML.");
         }
 
         // Check network ports - Only validate ports for ENABLED outputs
         // Ports below 1024 require root/admin privileges, and 65535 is the maximum port number
         // Note: Port conflict validation is deferred to the OS (bind will fail if port is in use)
-        if (beastEnabled && config.Network?.BeastPort is < 1024 or > 65535)
+        if (beastEnabled && config.Network?.BeastOutputPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: Beast port must be between 1024 and 65535, but was {config.Network?.BeastPort}");
+                $"Cannot start daemon: Beast port must be between 1024 and 65535, but was {config.Network?.BeastOutputPort}");
         }
 
-        if (jsonEnabled && config.Network?.JsonPort is < 1024 or > 65535)
+        if (jsonEnabled && config.Network?.JsonOutputPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: JSON port must be between 1024 and 65535, but was {config.Network?.JsonPort}");
+                $"Cannot start daemon: JSON port must be between 1024 and 65535, but was {config.Network?.JsonOutputPort}");
         }
 
-        if (sbsEnabled && config.Network?.SbsPort is < 1024 or > 65535)
+        if (sbsEnabled && config.Network?.SbsOutputPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {config.Network?.SbsPort}");
+                $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {config.Network?.SbsOutputPort}");
         }
 
         // ApiPort always validated (used by REST API)

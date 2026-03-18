@@ -4,17 +4,23 @@ Aeromux includes an interactive terminal interface for real-time aircraft tracki
 
 ## Starting the TUI
 
-The TUI is launched through the `live` command, which supports two operating modes depending on your setup:
+The TUI is launched through the `live` command. Input sources are configured via CLI parameters and/or the YAML configuration file:
 
 ```bash
-# Standalone mode — reads directly from your RTL-SDR device(s) and displays the TUI
-aeromux live --standalone --config aeromux.yaml
+# SDR mode — reads directly from your RTL-SDR device(s) defined in the config
+aeromux live --config aeromux.yaml
 
-# Connect mode — connects to an existing Beast data source over the network and displays the TUI
-aeromux live --connect host:port --config aeromux.yaml
+# Beast mode — connects to an existing Beast data source over the network
+aeromux live --beast-source host:port --config aeromux.yaml
+
+# Combined mode — SDR devices and Beast sources together
+aeromux live --sdr-source --beast-source host:port --config aeromux.yaml
+
+# Multiple Beast sources
+aeromux live --beast-source 192.168.1.100:30005 --beast-source 192.168.1.101:30005 --config aeromux.yaml
 ```
 
-In standalone mode, Aeromux manages the SDR devices directly and performs all demodulation and decoding locally. In connect mode, it receives pre-demodulated Beast binary data from another instance of Aeromux, dump1090, readsb, or any other Beast-compatible source.
+When using SDR sources, Aeromux manages the SDR devices directly and performs all demodulation and decoding locally. When using Beast sources, it receives pre-demodulated Beast binary data from another instance of Aeromux, dump1090, readsb, or any other Beast-compatible source. Both source types can be combined — frames from all sources are aggregated and deduplicated by the tracker.
 
 ## Aircraft List
 

@@ -26,17 +26,25 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// </summary>
 public class DaemonSettings : GlobalSettings
 {
-    [CommandOption("--beast-port")]
-    [Description("Beast protocol port (default: 30005, dump1090-compatible)")]
-    public int? BeastPort { get; set; }
+    [CommandOption("--sdr-source")]
+    [Description("Enable RTL-SDR device input (uses sdrSources from YAML config)")]
+    public bool SdrSource { get; set; }
 
-    [CommandOption("--json-port")]
-    [Description("JSON streaming port (default: 30006, web-friendly)")]
-    public int? JsonPort { get; set; }
+    [CommandOption("--beast-source")]
+    [Description("Connect to Beast TCP source (HOST:PORT, repeatable, default: localhost:30005)")]
+    public string[]? BeastSource { get; set; }
 
-    [CommandOption("--sbs-port")]
-    [Description("SBS protocol port (default: 30003, VRS-compatible)")]
-    public int? SbsPort { get; set; }
+    [CommandOption("--beast-output-port")]
+    [Description("Beast protocol output port (default: 30005, dump1090-compatible)")]
+    public int? BeastOutputPort { get; set; }
+
+    [CommandOption("--json-output-port")]
+    [Description("JSON streaming output port (default: 30006, web-friendly)")]
+    public int? JsonOutputPort { get; set; }
+
+    [CommandOption("--sbs-output-port")]
+    [Description("SBS protocol output port (default: 30003, VRS-compatible)")]
+    public int? SbsOutputPort { get; set; }
 
     [CommandOption("--beast-output-enabled")]
     [Description("Enable Beast binary protocol output (default: true)")]

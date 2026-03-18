@@ -46,7 +46,7 @@ public sealed class DeviceWorker : IDisposable
     /// </summary>
     private const double SampleRate = 2.4;
 
-    private readonly DeviceConfig _config;
+    private readonly SdrSourceConfig _config;
     private readonly TrackingConfig _trackingConfig;
     private readonly RtlSdrDeviceManager _deviceManager = RtlSdrDeviceManager.Instance;
     private readonly ITimeProvider _timeProvider;
@@ -62,7 +62,7 @@ public sealed class DeviceWorker : IDisposable
     private Task? _workerTask;
 
     public DeviceWorker(
-        DeviceConfig deviceConfig,
+        SdrSourceConfig sourceConfig,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig,
         IcaoConfidenceTracker? confidenceTracker = null,
@@ -74,7 +74,7 @@ public sealed class DeviceWorker : IDisposable
         // RtlSdrDeviceManager.SuppressLibraryConsoleOutput = true to suppress if needed.
         RtlSdrDeviceManager.SuppressLibraryConsoleOutput = true;
 
-        _config = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
+        _config = sourceConfig ?? throw new ArgumentNullException(nameof(sourceConfig));
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
         _onDataParsed = onDataParsed;
 
@@ -88,15 +88,15 @@ public sealed class DeviceWorker : IDisposable
             trackingConfig.IcaoTimeoutSeconds);
 
         // Pass confidence tracker to PreambleDetector for AP mode ICAO filtering
-        _preambleDetector = new PreambleDetector(deviceConfig.PreambleThreshold, _confidenceTracker);
+        _preambleDetector = new PreambleDetector(sourceConfig.PreambleThreshold, _confidenceTracker);
 
         // Initialize frame deduplicator with config values
         _frameDeduplicator = new FrameDeduplicator(
-            deviceConfig.DeduplicationWindow,
-            deviceConfig.MaxTrackedFrames);
+            sourceConfig.DeduplicationWindow,
+            sourceConfig.MaxTrackedFrames);
 
         // Initialize MessageParser with device context for logging
-        _messageParser = new MessageParser(deviceConfig.Name, deviceConfig.DeviceIndex);
+        _messageParser = new MessageParser(sourceConfig.Name, sourceConfig.DeviceIndex);
 
         // Configure MessageParser with receiver location if available (for TC 5-8 surface position)
         if (receiverConfig?.Latitude.HasValue == true && receiverConfig?.Longitude.HasValue == true)
@@ -106,7 +106,7 @@ public sealed class DeviceWorker : IDisposable
                 receiverConfig.Longitude.Value);
             _messageParser.SetReceiverLocation(receiverLocation);
             Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}): MessageParser configured with receiver location",
-                deviceConfig.Name, deviceConfig.DeviceIndex);
+                sourceConfig.Name, sourceConfig.DeviceIndex);
         }
     }
 

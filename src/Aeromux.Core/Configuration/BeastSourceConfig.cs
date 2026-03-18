@@ -14,29 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using System.ComponentModel;
-using Aeromux.CLI.Configuration;
-using Spectre.Console.Cli;
-
-namespace Aeromux.CLI.Commands.Live;
+namespace Aeromux.Core.Configuration;
 
 /// <summary>
-/// Settings for the Live command.
+/// Configuration for a single Beast TCP input source.
 /// </summary>
-public sealed class LiveSettings : GlobalSettings
+public class BeastSourceConfig
 {
     /// <summary>
-    /// Gets or sets whether to enable RTL-SDR device input.
+    /// Gets or sets the hostname or IP address of the Beast source.
     /// </summary>
-    [CommandOption("--sdr-source")]
-    [Description("Enable RTL-SDR device input (uses sdrSources from YAML config)")]
-    public bool SdrSource { get; set; }
+    public string Host { get; set; } = "localhost";
 
     /// <summary>
-    /// Gets or sets the Beast TCP source connection strings.
-    /// Repeatable — specify multiple times for multiple sources.
+    /// Gets or sets the TCP port of the Beast source.
+    /// Default: 30005 (Beast protocol standard port).
     /// </summary>
-    [CommandOption("--beast-source")]
-    [Description("Connect to Beast TCP source (HOST:PORT, repeatable, default: localhost:30005)")]
-    public string[]? BeastSource { get; set; }
+    public int Port { get; set; } = 30005;
 }

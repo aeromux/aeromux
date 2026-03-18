@@ -85,7 +85,7 @@ The build script produces a self-contained single-file executable in `artifacts/
 
 # Or run directly via dotnet
 dotnet run --project src/Aeromux.CLI -- daemon --config aeromux.example.yaml
-dotnet run --project src/Aeromux.CLI -- live --standalone --config aeromux.example.yaml
+dotnet run --project src/Aeromux.CLI -- live --config aeromux.example.yaml
 dotnet run --project src/Aeromux.CLI -- database update --database artifacts/db/
 dotnet run --project src/Aeromux.CLI -- version
 ```
@@ -135,7 +135,7 @@ src/
 
 **Key dependency rule:** Core has no dependency on Infrastructure or CLI. Infrastructure depends on Core. CLI depends on both.
 
-For a detailed walkthrough of the end-to-end data flow, the signal processing pipeline, the concurrency model, and the startup/shutdown lifecycle, see the [Architecture Guide](docs/ARCHITECTURE.md).
+For a detailed walkthrough of the end-to-end data flow, the signal processing pipeline, the concurrency model, and the startup/shutdown lifecycle, see the [Architecture Guide](docs/ARCHITECTURE.md). For all CLI commands and parameters, see the [CLI Reference](docs/CLI.md).
 
 When contributing, place your code in the appropriate layer:
 

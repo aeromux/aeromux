@@ -67,9 +67,10 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             {
                 await orchestrator.StartAsync(cancellationToken);
 
-                // Wait for shutdown signal (CTRL+C or SIGTERM)
-                Console.WriteLine(
-                    $"Aeromux daemon running with {orchestrator.DeviceCount} device(s). Press Ctrl+C to stop.");
+                // Print startup summary and running message
+                StartupSummaryPrinter.PrintDaemonSummary(validatedConfig);
+                string sourcesSummary = BuildSourcesSummary(validatedConfig);
+                Console.WriteLine($"Aeromux daemon running with {sourcesSummary}. Press Ctrl+C to stop.");
                 using var shutdown = new DaemonShutdownCoordinator(cancellationToken);
                 await shutdown.WaitForShutdownAsync();
 
@@ -96,5 +97,25 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         {
             return DaemonExceptionHandler.HandleException(ex);
         }
+    }
+
+    /// <summary>
+    /// Builds a human-readable summary of active sources for the startup message.
+    /// </summary>
+    private static string BuildSourcesSummary(DaemonValidatedConfig config)
+    {
+        var parts = new List<string>();
+
+        if (config.UseSdr)
+        {
+            parts.Add($"{config.EnabledSdrSources.Count} SDR source(s)");
+        }
+
+        if (config.UseBeast)
+        {
+            parts.Add($"{config.BeastSources.Count} Beast source(s)");
+        }
+
+        return string.Join(" and ", parts);
     }
 }

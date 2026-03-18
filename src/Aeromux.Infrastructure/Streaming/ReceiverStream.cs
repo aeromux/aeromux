@@ -29,11 +29,16 @@ namespace Aeromux.Infrastructure.Streaming;
 /// <summary>
 /// Streams processed frames from local RTL-SDR device(s) and optional MLAT input.
 /// Uses FrameAggregator to merge all sources (SDR devices + MLAT).
-/// Used by 'aeromux live' standalone mode and 'aeromux daemon'.
+/// Used by both 'aeromux daemon' and 'aeromux live' commands.
 ///
 /// PROCESSING PIPELINE (SDR):
 /// RTL-SDR → IQ Samples → Demodulator → PreambleDetector → ValidatedFrameFactory → ValidatedFrame
 /// → MessageParser → ProcessedFrame (frame + parsed message + timestamp + Source=Sdr)
+///
+/// PROCESSING PIPELINE (Beast Input):
+/// Beast TCP Source → BeastParser → ValidatedFrame → IcaoConfidenceTracker →
+/// MessageParser → ProcessedFrame (frame + parsed message + timestamp + Source=Beast)
+/// Each BeastStream has its own IcaoConfidenceTracker (filters noise from real aircraft).
 ///
 /// PROCESSING PIPELINE (MLAT):
 /// mlat-client → Beast (port 30104) → BeastParser → ValidatedFrame → MessageParser
@@ -53,12 +58,15 @@ namespace Aeromux.Infrastructure.Streaming;
 /// </summary>
 public sealed class ReceiverStream : IFrameStream
 {
-    private readonly List<DeviceConfig> _deviceConfigs;
+    private readonly List<SdrSourceConfig>? _sourceConfigs;
+    private readonly List<BeastSourceConfig>? _beastSourceConfigs;
     private readonly TrackingConfig _trackingConfig;
     private readonly ReceiverConfig? _receiverConfig;
     private readonly MlatConfig? _mlatConfig;
-    private FrameAggregator? _aggregator;  // Always created (for SDR devices + MLAT)
+    private FrameAggregator? _aggregator;  // Always created (for SDR devices + Beast + MLAT)
     private readonly List<DeviceWorker> _workers = [];
+    private readonly List<BeastStream> _beastStreams = [];
+    private readonly List<Task> _forwardTasks = [];  // Beast frame forwarding tasks (must be awaited during disposal)
     private MlatWorker? _mlatWorker;  // Created if MLAT is enabled
     private IcaoConfidenceTracker? _confidenceTracker;  // Shared across all workers
     private volatile bool _started;  // Volatile ensures visibility across threads
@@ -75,30 +83,52 @@ public sealed class ReceiverStream : IFrameStream
     // Lifecycle management: ReceiverStream has its own cancellation independent of consumers
     private CancellationTokenSource? _internalCts;
 
+    /// <summary>
+    /// Creates a new ReceiverStream with the specified input sources.
+    /// At least one input source (SDR or Beast) must be provided.
+    /// </summary>
+    /// <param name="sourceConfigs">SDR device configurations, or null for Beast-only mode.</param>
+    /// <param name="trackingConfig">Tracking configuration for confidence filtering and timeouts.</param>
+    /// <param name="receiverConfig">Receiver location for surface position decoding, or null if not configured.</param>
+    /// <param name="mlatConfig">MLAT input configuration, or null to disable MLAT.</param>
+    /// <param name="beastSourceConfigs">Beast TCP input sources, or null for SDR-only mode.</param>
+    /// <exception cref="ArgumentException">Thrown when no input sources (SDR or Beast) are provided.</exception>
     public ReceiverStream(
-        List<DeviceConfig> deviceConfigs,
+        List<SdrSourceConfig>? sourceConfigs,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig,
-        MlatConfig? mlatConfig = null)
+        MlatConfig? mlatConfig = null,
+        List<BeastSourceConfig>? beastSourceConfigs = null)
     {
-        if (deviceConfigs == null || deviceConfigs.Count == 0)
+        bool hasSdr = sourceConfigs is { Count: > 0 };
+        bool hasBeast = beastSourceConfigs is { Count: > 0 };
+
+        if (!hasSdr && !hasBeast)
         {
-            throw new ArgumentException("At least one device configuration is required", nameof(deviceConfigs));
+            throw new ArgumentException(
+                "At least one input source (SDR or Beast) is required");
         }
 
-        _deviceConfigs = deviceConfigs;
+        _sourceConfigs = hasSdr ? sourceConfigs : null;
+        _beastSourceConfigs = hasBeast ? beastSourceConfigs : null;
         _trackingConfig = trackingConfig;
         _receiverConfig = receiverConfig;
         _mlatConfig = mlatConfig;
     }
 
-    // Convenience constructor for single device
+    /// <summary>
+    /// Creates a new ReceiverStream for a single SDR device (convenience constructor).
+    /// </summary>
+    /// <param name="sourceConfig">Single SDR device configuration.</param>
+    /// <param name="trackingConfig">Tracking configuration for confidence filtering and timeouts.</param>
+    /// <param name="receiverConfig">Receiver location for surface position decoding, or null if not configured.</param>
+    /// <param name="mlatConfig">MLAT input configuration, or null to disable MLAT.</param>
     public ReceiverStream(
-        DeviceConfig deviceConfig,
+        SdrSourceConfig sourceConfig,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig,
         MlatConfig? mlatConfig = null)
-        : this([deviceConfig], trackingConfig, receiverConfig, mlatConfig)
+        : this([sourceConfig], trackingConfig, receiverConfig, mlatConfig)
     {
     }
 
@@ -132,20 +162,34 @@ public sealed class ReceiverStream : IFrameStream
             // Always use FrameAggregator (simplifies logic, minimal overhead)
             _aggregator = new FrameAggregator();
 
-            // Create DeviceWorkers with shared confidence tracker
-            foreach (DeviceConfig deviceConfig in _deviceConfigs)
+            // Create DeviceWorkers with shared confidence tracker (if SDR sources configured)
+            if (_sourceConfigs != null)
             {
-                var worker = new DeviceWorker(
-                    deviceConfig,
-                    _trackingConfig,
-                    _receiverConfig,
-                    _confidenceTracker,  // Shared tracker - MLAT can mark ICAOs as confident
-                    onDataParsed: (frame, message) =>
-                        _aggregator.AddData(new ProcessedFrame(frame, message, DateTime.UtcNow)));
+                foreach (SdrSourceConfig sourceConfig in _sourceConfigs)
+                {
+                    var worker = new DeviceWorker(
+                        sourceConfig,
+                        _trackingConfig,
+                        _receiverConfig,
+                        _confidenceTracker,  // Shared tracker - MLAT can mark ICAOs as confident
+                        onDataParsed: (frame, message) =>
+                            _aggregator.AddData(new ProcessedFrame(frame, message, DateTime.UtcNow)));
 
-                worker.OpenDevice();
-                worker.StartReceiving(_internalCts.Token);
-                _workers.Add(worker);
+                    worker.OpenDevice();
+                    worker.StartReceiving(_internalCts.Token);
+                    _workers.Add(worker);
+                }
+            }
+
+            // Create BeastStream instances (if Beast sources configured)
+            // Each BeastStream has its own IcaoConfidenceTracker (filters noise from real aircraft)
+            // Frames are forwarded into the shared FrameAggregator
+            if (_beastSourceConfigs != null)
+            {
+                foreach (BeastSourceConfig beastConfig in _beastSourceConfigs)
+                {
+                    await StartBeastSourceAsync(beastConfig, _internalCts.Token);
+                }
             }
 
             // Start MLAT input worker (if enabled)
@@ -178,6 +222,13 @@ public sealed class ReceiverStream : IFrameStream
         }
     }
 
+    /// <summary>
+    /// Subscribes to the data stream and returns a dedicated channel for this subscriber.
+    /// Multiple subscribers can call this to receive the same data stream concurrently.
+    /// StartAsync() must be called first, otherwise throws InvalidOperationException.
+    /// </summary>
+    /// <returns>ChannelReader to read ProcessedFrame data from all configured sources.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when StartAsync() has not been called.</exception>
     public ChannelReader<ProcessedFrame> Subscribe()
     {
         if (!_started)
@@ -203,6 +254,12 @@ public sealed class ReceiverStream : IFrameStream
         return subscriberChannel.Reader;
     }
 
+    /// <summary>
+    /// Unsubscribes a channel from the data stream.
+    /// Called by consumers when they no longer need data (typically in dispose).
+    /// Safe to call multiple times with same reader (idempotent).
+    /// </summary>
+    /// <param name="reader">The channel reader to unsubscribe (obtained from Subscribe()).</param>
     public void Unsubscribe(ChannelReader<ProcessedFrame> reader)
     {
         lock (_subscribersLock)
@@ -264,6 +321,51 @@ public sealed class ReceiverStream : IFrameStream
         }
     }
 
+    /// <summary>
+    /// Creates, starts, and registers a single Beast input source.
+    /// StartAsync() is non-blocking — connection happens in the background with persistent retries.
+    /// </summary>
+    private async Task StartBeastSourceAsync(BeastSourceConfig beastConfig, CancellationToken ct)
+    {
+        var beastStream = new BeastStream(beastConfig.Host, beastConfig.Port, _trackingConfig);
+        await beastStream.StartAsync(ct);
+
+        ChannelReader<ProcessedFrame> beastReader = beastStream.Subscribe();
+        _forwardTasks.Add(ForwardBeastFramesAsync(beastReader, ct));
+
+        _beastStreams.Add(beastStream);
+        Log.Information("Beast input source started: {Host}:{Port} (connecting in background)",
+            beastConfig.Host, beastConfig.Port);
+    }
+
+    /// <summary>
+    /// Forwards frames from a BeastStream subscriber channel into the shared FrameAggregator.
+    /// Runs as a fire-and-forget background task for each Beast source.
+    /// </summary>
+    private async Task ForwardBeastFramesAsync(ChannelReader<ProcessedFrame> reader, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (ProcessedFrame frame in reader.ReadAllAsync(ct))
+            {
+                _aggregator?.AddData(frame);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during shutdown
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Beast frame forwarding task failed");
+        }
+    }
+
+    /// <summary>
+    /// Gets current statistics snapshot aggregated from all SDR device workers.
+    /// Returns null when no SDR devices are active (Beast-only mode).
+    /// </summary>
+    /// <returns>Aggregated stream statistics, or null if no SDR devices are active.</returns>
     public StreamStatistics? GetStatistics()
     {
         if (_workers.Count == 0)
@@ -281,18 +383,52 @@ public sealed class ReceiverStream : IFrameStream
             DateTime.UtcNow - _workers.Min(w => w.StartTime));
     }
 
+    /// <summary>
+    /// Disposes all resources in the correct shutdown order.
+    /// All frame producers must be fully stopped before the aggregator is disposed
+    /// to prevent segfaults from concurrent access during shutdown.
+    /// Thread-safe and idempotent.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
-        // Step 1: Cancel internal operations (device workers, MLAT worker, and broadcast task)
+        // Step 1: Cancel internal operations (signals all background tasks to stop)
         await (_internalCts?.CancelAsync() ?? Task.CompletedTask);
 
-        // Step 2: Complete source and dispose aggregator
-        _aggregator?.Dispose();
+        // Step 2: Stop all frame producers BEFORE disposing the aggregator.
+        // ForwardBeastFramesAsync tasks write to the aggregator — they must complete first.
 
-        // Step 3: Dispose MLAT worker if active
+        // Step 2a: Dispose Beast streams (stops background tasks, completes subscriber channels)
+        foreach (BeastStream beastStream in _beastStreams)
+        {
+            await beastStream.DisposeAsync();
+        }
+
+        // Step 2b: Wait for Beast forwarding tasks to finish (they read from Beast subscriber channels)
+        foreach (Task forwardTask in _forwardTasks)
+        {
+            try
+            {
+                await forwardTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during cancellation
+            }
+        }
+
+        // Step 2c: Dispose SDR device workers (stops OnSamplesAvailable callbacks)
+        foreach (DeviceWorker worker in _workers)
+        {
+            worker.Dispose();
+        }
+
+        // Step 2d: Dispose MLAT worker if active
         _mlatWorker?.Dispose();
 
-        // Step 4: Wait for broadcast task to complete (will complete subscriber channels)
+        // Step 3: Now safe to dispose aggregator (all producers have stopped)
+        _aggregator?.Dispose();
+
+        // Step 4: Wait for broadcast task to complete (reads from aggregator, completes subscriber channels)
         if (_broadcastTask != null)
         {
             try
@@ -305,13 +441,7 @@ public sealed class ReceiverStream : IFrameStream
             }
         }
 
-        // Step 5: Dispose workers
-        foreach (DeviceWorker worker in _workers)
-        {
-            worker.Dispose();
-        }
-
-        // Step 6: Dispose resources
+        // Step 5: Dispose resources
         _internalCts?.Dispose();
         _startLock.Dispose();
     }

@@ -15,14 +15,16 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Net;
+using Aeromux.Core.Configuration;
 
-namespace Aeromux.CLI.Commands.Live;
+namespace Aeromux.CLI.Commands;
 
 /// <summary>
 /// Parses connection strings into (host, port) tuples for Beast-compatible sources.
 /// Supports: "HOST:PORT", ":PORT", "PORT", "HOST", "IP", or empty (defaults to localhost:30005).
+/// Shared by both daemon and live commands.
 /// </summary>
-public static class LiveConnectionStringParser
+public static class ConnectionStringParser
 {
     /// <summary>
     /// Parses a connection string into a (host, port) tuple.
@@ -37,7 +39,7 @@ public static class LiveConnectionStringParser
     /// </remarks>
     public static (string Host, int Port) Parse(string? connectString)
     {
-        // Default if just --connect (no value)
+        // Default if no value provided (e.g., bare --beast-source with no argument)
         if (string.IsNullOrWhiteSpace(connectString))
         {
             return ("localhost", 30005);
@@ -56,54 +58,79 @@ public static class LiveConnectionStringParser
                 // Try to parse as port number first
                 if (int.TryParse(value, out int port) && port is > 0 and <= 65535)
                 {
-                    // It's a port number - use localhost
+                    // It's a port number — use localhost
                     return ("localhost", port);
                 }
 
-                // It's a hostname or IP address - validate and use default port
+                // It's a hostname or IP address — validate and use default port
                 if (IsValidHost(value))
                 {
                     return (value, 30005);
                 }
 
-                Console.WriteLine($"Error: Invalid hostname or IP address '{value}'");
                 throw new ArgumentException($"Invalid hostname or IP address: {value}");
             }
             case 2:
             {
-                // HOST:PORT
+                // HOST:PORT format
                 string host = parts[0];
 
-                // Validate host
                 if (!IsValidHost(host))
                 {
-                    Console.WriteLine($"Error: Invalid hostname or IP address '{host}'");
                     throw new ArgumentException($"Invalid hostname or IP address: {host}");
                 }
 
-                // Validate port
                 if (int.TryParse(parts[1], out int port) && port is > 0 and <= 65535)
                 {
                     return (host, port);
                 }
 
-                Console.WriteLine($"Error: Invalid port number '{parts[1]}'");
                 throw new ArgumentException($"Invalid port number: {parts[1]}");
-
             }
             default:
                 // Too many colons (e.g., host:port:extra)
-                Console.WriteLine($"Error: Invalid connection string '{connectString}'");
-                Console.WriteLine("Expected format: HOST:PORT or just PORT");
                 throw new ArgumentException($"Invalid connection string format: {connectString}");
         }
     }
 
     /// <summary>
+    /// Parses multiple connection strings into a list of Beast source configurations.
+    /// Validates each string and checks for duplicates.
+    /// </summary>
+    /// <param name="connectionStrings">Array of connection strings to parse.</param>
+    /// <returns>List of parsed BeastSourceConfig instances.</returns>
+    /// <exception cref="ArgumentException">Thrown when any string is invalid or duplicates are found.</exception>
+    public static List<BeastSourceConfig> ParseMultiple(string[]? connectionStrings)
+    {
+        if (connectionStrings == null || connectionStrings.Length == 0)
+        {
+            return [];
+        }
+
+        var results = new List<BeastSourceConfig>();
+
+        // Track seen host:port pairs for duplicate detection (case-insensitive)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (string connectionString in connectionStrings)
+        {
+            (string host, int port) = Parse(connectionString);
+            string key = $"{host.ToLowerInvariant()}:{port}";
+
+            if (!seen.Add(key))
+            {
+                throw new ArgumentException($"Duplicate Beast source: {host}:{port}");
+            }
+
+            results.Add(new BeastSourceConfig { Host = host, Port = port });
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Validates whether a string is a valid hostname or IP address.
     /// </summary>
-    /// <param name="host">The hostname or IP address to validate.</param>
-    /// <returns>True if the host is valid, false otherwise.</returns>
     private static bool IsValidHost(string host)
     {
         if (string.IsNullOrWhiteSpace(host))

@@ -29,10 +29,16 @@ public class AeromuxConfig
     public LoggingConfig? Logging { get; set; }
 
     /// <summary>
-    /// Gets or sets the list of SDR devices to use.
+    /// Gets or sets the list of SDR device sources.
     /// Multiple devices can be configured for diversity reception.
     /// </summary>
-    public List<DeviceConfig>? Devices { get; set; }
+    public List<SdrSourceConfig>? SdrSources { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Beast TCP input sources (optional).
+    /// When configured, Aeromux connects to these sources and aggregates their frames.
+    /// </summary>
+    public List<BeastSourceConfig>? BeastSources { get; set; }
 
     /// <summary>
     /// Gets or sets the network server configuration.

@@ -29,7 +29,7 @@ namespace Aeromux.Infrastructure.Streaming;
 /// Streams processed frames from a Beast-compatible TCP source.
 /// Connects to any Beast-compatible server (readsb, dump1090, dump1090-fa, aeromux daemon)
 /// and provides ProcessedFrame data via the IFrameStream interface.
-/// Used by 'aeromux live --connect' client mode.
+/// Used by both daemon and live commands via ReceiverStream for Beast TCP input sources.
 ///
 /// PROCESSING PIPELINE:
 /// TCP Beast Source → BeastParser → ValidatedFrame → IcaoConfidenceTracker →
@@ -67,6 +67,30 @@ public sealed class BeastStream : IFrameStream
     private volatile bool _started;
     private readonly SemaphoreSlim _startLock = new(1, 1);
 
+    // Retry configuration: startup → backoff → persistent
+    // Phase 1: Fast retries during startup (5 × 5s = 25s)
+    private static readonly TimeSpan[] StartupDelays =
+    [
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5)
+    ];
+
+    // Phase 2: Escalating backoff (5s → 10s → 20s → 30s → 60s)
+    private static readonly TimeSpan[] BackoffDelays =
+    [
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromSeconds(20),
+        TimeSpan.FromSeconds(30),
+        TimeSpan.FromSeconds(60)
+    ];
+
+    // Phase 3: Persistent retry forever
+    private static readonly TimeSpan PersistentDelay = TimeSpan.FromSeconds(60);
+
     /// <summary>
     /// Creates a new BeastStream that connects to a Beast-compatible TCP source.
     /// </summary>
@@ -97,12 +121,12 @@ public sealed class BeastStream : IFrameStream
     }
 
     /// <summary>
-    /// Starts the Beast TCP connection and begins internal broadcasting.
+    /// Starts the background connection and broadcasting task. Returns immediately (non-blocking).
     /// MUST be called once before any Subscribe() calls. Thread-safe, idempotent.
-    /// Throws SocketException if connection fails (synchronously before starting background task).
+    /// Connection to the Beast source happens in the background with persistent retries:
+    /// 5×5s (startup) → 5s,10s,20s,30s,60s (backoff) → 60s (forever).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token to stop the connection.</param>
-    /// <exception cref="SocketException">Thrown when TCP connection to Beast source fails.</exception>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (_started)
@@ -120,37 +144,46 @@ public sealed class BeastStream : IFrameStream
 
             _internalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            // CRITICAL: Connect to Beast source BEFORE starting background task
-            // This ensures SocketException is thrown synchronously if connection fails
-            // Use 5-second timeout for connection attempt
-            _client = new TcpClient();
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_internalCts.Token, timeoutCts.Token);
-
-            try
-            {
-                await _client.ConnectAsync(_host, _port, linkedCts.Token);
-            }
-            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
-            {
-                // Connection timeout
-                Log.Error("BeastStream: Connection timeout after 5 seconds: {Host}:{Port}", _host, _port);
-                throw new SocketException((int)SocketError.TimedOut);
-            }
-
-            Log.Information("BeastStream: Connected to {Host}:{Port}", _host, _port);
-
-            // Start background broadcast task (connection already established)
-            _broadcastTask = Task.Run(() => BroadcastToSubscribersAsync(_internalCts.Token), _internalCts.Token);
+            // Start background task that connects and broadcasts (non-blocking)
+            // Connection retries happen inside the background task
+            _broadcastTask = Task.Run(() => ConnectAndBroadcastAsync(_internalCts.Token), _internalCts.Token);
 
             _started = true;
 
-            Log.Information("BeastStream started: broadcasting from {Host}:{Port}", _host, _port);
+            Log.Information("BeastStream started: connecting to {Host}:{Port} in background", _host, _port);
         }
         finally
         {
             _startLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Connects to the Beast TCP source with a 5-second timeout.
+    /// </summary>
+    private async Task<TcpClient> ConnectAsync(CancellationToken ct)
+    {
+        var client = new TcpClient();
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+        try
+        {
+            await client.ConnectAsync(_host, _port, linkedCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            client.Dispose();
+            Log.Error("BeastStream: Connection timeout after 5 seconds: {Host}:{Port}", _host, _port);
+            throw new SocketException((int)SocketError.TimedOut);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+
+        return client;
     }
 
     /// <summary>
@@ -222,64 +255,129 @@ public sealed class BeastStream : IFrameStream
     }
 
     /// <summary>
-    /// Background task that parses frames from already-connected Beast source,
-    /// applies confidence filtering, and fans out to all subscribers.
-    /// Connection is established in StartAsync before this task starts.
+    /// Background task that handles the full lifecycle: connect → read/broadcast → reconnect.
+    /// Retries persistently: 5×5s (startup) → 5s,10s,20s,30s,60s (backoff) → 60s (forever).
+    /// On successful connection, the delay index resets so the next disconnect starts fresh.
     /// </summary>
-    /// <param name="ct">Cancellation token to stop the broadcast task.</param>
-    private async Task BroadcastToSubscribersAsync(CancellationToken ct)
+    private async Task ConnectAndBroadcastAsync(CancellationToken ct)
     {
+        int delayIndex = 0;
+
         try
         {
-            // Get stream from already-connected client (connection established in StartAsync)
-            if (_client == null)
+            while (!ct.IsCancellationRequested)
             {
-                throw new InvalidOperationException("BeastStream client not connected (StartAsync must be called first)");
-            }
-
-            NetworkStream stream = _client.GetStream();
-
-            // Parse Beast stream (returns ValidatedFrame)
-            await foreach (ValidatedFrame validatedFrame in _beastParser.ParseStreamAsync(stream, ct))
-            {
-                // CRITICAL: Apply confidence filtering (same as DeviceWorker)
-                // Beast protocol transmits ALL CRC-validated frames (noise + real aircraft)
-                bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool _);
-
-                if (!isConfident)
+                // Try to connect
+                try
                 {
-                    continue; // Skip non-confident frames (noise)
+                    _client = await ConnectAsync(ct);
+                    Log.Information("BeastStream: Connected to {Host}:{Port}", _host, _port);
+                    delayIndex = 0; // Reset retry sequence on successful connection
+                }
+                catch (OperationCanceledException)
+                {
+                    return; // Normal shutdown
+                }
+                catch (Exception ex) when (ex is SocketException or IOException)
+                {
+                    Log.Warning("BeastStream: Connection to {Host}:{Port} failed: {Error}",
+                        _host, _port, ex.Message);
+                    TimeSpan delay = GetRetryDelay(delayIndex++);
+                    Log.Information("BeastStream: Retrying {Host}:{Port} in {Delay}s",
+                        _host, _port, (int)delay.TotalSeconds);
+                    await Task.Delay(delay, ct);
+                    continue; // Back to top — try connecting again
                 }
 
-                // Parse message for confident frames only
-                ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
-
-                // Construct ProcessedFrame with Beast source marking
-                var processedFrame = new ProcessedFrame(validatedFrame, message, DateTime.UtcNow, FrameSource.Beast);
-
-                // Copy-on-write snapshot: volatile read is lock-free and allocation-free
-                // Snapshot array is rebuilt only when subscribers change (Subscribe/Unsubscribe)
-                foreach (Channel<ProcessedFrame> channel in _subscriberSnapshot)
+                // Connected — read and broadcast frames until disconnect
+                try
                 {
-                    channel.Writer.TryWrite(processedFrame);
+                    await ReadAndBroadcastAsync(ct);
+                    // Clean exit — server closed connection gracefully
+                    Log.Information("BeastStream: Server {Host}:{Port} closed connection", _host, _port);
                 }
+                catch (OperationCanceledException)
+                {
+                    return; // Normal shutdown
+                }
+                catch (Exception ex) when (ex is SocketException or IOException)
+                {
+                    Log.Warning("BeastStream: Connection lost to {Host}:{Port}: {Error}",
+                        _host, _port, ex.Message);
+                }
+
+                // Disconnected — clean up client, wait, then retry at top of loop
+                _client?.Close();
+                _client?.Dispose();
+                _client = null;
+
+                TimeSpan reconnectDelay = GetRetryDelay(delayIndex++);
+                Log.Information("BeastStream: Reconnecting to {Host}:{Port} in {Delay}s",
+                    _host, _port, (int)reconnectDelay.TotalSeconds);
+                await Task.Delay(reconnectDelay, ct);
             }
         }
         catch (OperationCanceledException)
         {
             // Normal shutdown
-            Log.Information("BeastStream: Broadcast task cancelled");
-        }
-        catch (SocketException ex)
-        {
-            Log.Error(ex, "BeastStream: TCP connection error: {Message}", ex.Message);
-            throw;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "BeastStream: Unexpected error in broadcast task");
-            throw;
+            Log.Error(ex, "BeastStream: Unexpected error in background task");
         }
+    }
+
+    /// <summary>
+    /// Reads frames from the current TCP connection and broadcasts to subscribers.
+    /// Returns when the stream ends or throws on connection errors.
+    /// </summary>
+    private async Task ReadAndBroadcastAsync(CancellationToken ct)
+    {
+        NetworkStream stream = _client!.GetStream();
+
+        await foreach (ValidatedFrame validatedFrame in _beastParser.ParseStreamAsync(stream, ct))
+        {
+            // CRITICAL: Apply confidence filtering (same as DeviceWorker)
+            // Beast protocol transmits ALL CRC-validated frames (noise + real aircraft)
+            bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool _);
+
+            if (!isConfident)
+            {
+                continue; // Skip non-confident frames (noise)
+            }
+
+            // Parse message for confident frames only
+            ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
+
+            // Construct ProcessedFrame with Beast source marking
+            var processedFrame = new ProcessedFrame(validatedFrame, message, DateTime.UtcNow, FrameSource.Beast);
+
+            // Copy-on-write snapshot: volatile read is lock-free and allocation-free
+            foreach (Channel<ProcessedFrame> channel in _subscriberSnapshot)
+            {
+                channel.Writer.TryWrite(processedFrame);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the retry delay for the given attempt index.
+    /// Phases: StartupDelays (5×5s) → BackoffDelays (5,10,20,30,60) → PersistentDelay (60s forever).
+    /// </summary>
+    private static TimeSpan GetRetryDelay(int index)
+    {
+        if (index < StartupDelays.Length)
+        {
+            return StartupDelays[index];
+        }
+
+        int backoffIndex = index - StartupDelays.Length;
+        if (backoffIndex < BackoffDelays.Length)
+        {
+            return BackoffDelays[backoffIndex];
+        }
+
+        return PersistentDelay;
     }
 
     /// <summary>

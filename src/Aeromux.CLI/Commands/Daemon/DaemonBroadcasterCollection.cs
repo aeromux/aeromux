@@ -64,41 +64,41 @@ public sealed class DaemonBroadcasterCollection : IAsyncDisposable
         if (config.BeastEnabled)
         {
             _beastBroadcaster = new TcpBroadcaster(
-                config.BeastPort,
+                config.BeastOutputPort,
                 config.BindAddress,
                 receiverStream,
                 BroadcastFormat.Beast,
                 config.ReceiverUuid);
             await _beastBroadcaster.StartAsync(cancellationToken);
-            Log.Information("Beast broadcaster started on {BindAddress}:{Port}", config.BindAddress, config.BeastPort);
+            Log.Information("Beast broadcaster started on {BindAddress}:{Port}", config.BindAddress, config.BeastOutputPort);
             await Task.Delay(50, cancellationToken); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition (AccessViolationException)
         }
 
         if (config.JsonEnabled)
         {
             _jsonBroadcaster = new TcpBroadcaster(
-                config.JsonPort,
+                config.JsonOutputPort,
                 config.BindAddress,
                 receiverStream,
                 BroadcastFormat.Json,
                 receiverUuid: null, // JSON doesn't use receiver UUID (Beast only)
                 aircraftTracker: aircraftTracker); // Required for JSON format
             await _jsonBroadcaster.StartAsync(cancellationToken);
-            Log.Information("JSON broadcaster started on {BindAddress}:{Port} (aircraft mode, 1s rate limit)", config.BindAddress, config.JsonPort);
+            Log.Information("JSON broadcaster started on {BindAddress}:{Port} (aircraft mode, 1s rate limit)", config.BindAddress, config.JsonOutputPort);
             await Task.Delay(50, cancellationToken); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition (AccessViolationException)
         }
 
         if (config.SbsEnabled)
         {
             _sbsBroadcaster = new TcpBroadcaster(
-                config.SbsPort,
+                config.SbsOutputPort,
                 config.BindAddress,
                 receiverStream,
                 BroadcastFormat.Sbs,
                 receiverUuid: null, // SBS doesn't use receiver UUID (Beast only)
                 aircraftTracker: aircraftTracker); // Required for SBS format
             await _sbsBroadcaster.StartAsync(cancellationToken);
-            Log.Information("SBS broadcaster started on {BindAddress}:{Port}", config.BindAddress, config.SbsPort);
+            Log.Information("SBS broadcaster started on {BindAddress}:{Port}", config.BindAddress, config.SbsOutputPort);
             await Task.Delay(50, cancellationToken); // Prevent macOS ARM64 Socket.ValidateBlockingMode race condition (AccessViolationException)
         }
 

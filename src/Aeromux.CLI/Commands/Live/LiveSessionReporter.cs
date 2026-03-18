@@ -26,14 +26,19 @@ namespace Aeromux.CLI.Commands.Live;
 public static class LiveSessionReporter
 {
     /// <summary>
-    /// Logs the session start separator with mode info and timestamp.
+    /// Logs the session start separator with source info and timestamp.
     /// </summary>
-    /// <param name="isClientMode">True if running in client mode, false for standalone mode.</param>
-    public static void LogSessionStart(bool isClientMode)
+    /// <param name="settings">Live command settings for source configuration.</param>
+    public static void LogSessionStart(LiveSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        string sources = settings.BeastSource is { Length: > 0 }
+            ? settings.SdrSource ? "SDR + Beast" : "Beast"
+            : "SDR";
+
         Log.Information("═══════════════════════════════════════════════════════════════");
         Log.Information("Aeromux Live Command Starting");
-        Log.Information("Mode: {Mode}", isClientMode ? "Client" : "Standalone");
+        Log.Information("Sources: {Sources}", sources);
         Log.Information("Session: {SessionStart:yyyy-MM-dd HH:mm:ss zzz}", DateTime.Now);
         Log.Information("═══════════════════════════════════════════════════════════════");
     }
@@ -56,17 +61,10 @@ public static class LiveSessionReporter
     /// Logs aggregated session statistics from the live display session.
     /// </summary>
     /// <param name="sessionStart">UTC timestamp when the session started.</param>
-    /// <param name="isClientMode">True if running in client mode, false for standalone mode.</param>
     /// <param name="stats">Stream statistics, or null if unavailable.</param>
     /// <param name="trackedAircraftCount">Number of aircraft tracked during the session.</param>
-    /// <remarks>
-    /// Called from LiveTuiDisplay's finally block to ensure summary is logged even on abnormal exit.
-    /// Statistics are only available in standalone mode (ReceiverStream); client mode (BeastStream)
-    /// does not expose frame-level statistics since decoding happens on the remote source.
-    /// </remarks>
     public static void LogSessionSummary(
         DateTime sessionStart,
-        bool isClientMode,
         StreamStatistics? stats,
         int trackedAircraftCount)
     {
@@ -76,7 +74,6 @@ public static class LiveSessionReporter
         Log.Information("Live Command Session Summary");
         Log.Information("═══════════════════════════════════════════════════════════════");
         Log.Information("Session duration: {Duration}", sessionDuration.ToString(@"hh\:mm\:ss"));
-        Log.Information("Mode: {Mode}", isClientMode ? "Client" : "Standalone");
 
         if (stats != null)
         {
@@ -87,7 +84,7 @@ public static class LiveSessionReporter
         }
         else
         {
-            Log.Information("Statistics not available (client mode)");
+            Log.Information("Statistics not available (Beast-only mode)");
         }
 
         Log.Information("Total aircraft tracked: {AircraftCount}", trackedAircraftCount);

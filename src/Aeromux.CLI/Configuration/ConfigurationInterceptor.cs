@@ -61,8 +61,8 @@ public class ConfigurationInterceptor : ICommandInterceptor
             Program.ConfigureLogging(config.Logging!);
 
             // Log final configuration values
-            Log.Debug("Configuration loaded: BeastPort={BeastPort}, LogLevel={LogLevel}",
-                config.Network!.BeastPort,
+            Log.Debug("Configuration loaded: BeastOutputPort={BeastOutputPort}, LogLevel={LogLevel}",
+                config.Network!.BeastOutputPort,
                 config.Logging!.Level);
         }
         catch (Exception ex)

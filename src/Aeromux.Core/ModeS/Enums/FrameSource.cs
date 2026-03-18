@@ -44,7 +44,7 @@ public enum FrameSource
 
     /// <summary>
     /// Frame received from remote Beast-compatible TCP server.
-    /// Used in 'aeromux live --connect' mode to receive frames from remote sources.
+    /// Used by Beast TCP input sources in both daemon and live commands.
     /// Includes frames from remote SDR devices and potentially remote MLAT positions.
     /// </summary>
     [JsonStringEnumMemberName("Beast")]

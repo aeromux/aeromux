@@ -23,7 +23,6 @@ using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Moq;
 
 namespace Aeromux.CLI.Tests.Api;
@@ -83,9 +82,9 @@ public sealed class ApiTestFixture : IAsyncDisposable
                     Name = "Test"
                 }
             },
-            BeastPort = 30005,
-            JsonPort = 30006,
-            SbsPort = 30003,
+            BeastOutputPort = 30005,
+            JsonOutputPort = 30006,
+            SbsOutputPort = 30003,
             ApiPort = 0,
             ApiEnabled = true,
             BindAddress = IPAddress.Loopback,
@@ -94,7 +93,8 @@ public sealed class ApiTestFixture : IAsyncDisposable
             BeastEnabled = true,
             JsonEnabled = false,
             SbsEnabled = false,
-            EnabledDevices = []
+            EnabledSdrSources = [],
+            BeastSources = []
         };
 
         DateTime startTime = DateTime.UtcNow;

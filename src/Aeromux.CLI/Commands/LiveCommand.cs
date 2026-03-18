@@ -24,19 +24,14 @@ namespace Aeromux.CLI.Commands;
 
 /// <summary>
 /// Live aircraft display command.
-/// Supports standalone mode (direct RTL-SDR) and client mode (connect to Beast source).
+/// Supports unified input model: SDR sources, Beast sources, or both aggregated.
 /// Uses AircraftStateTracker for state management.
-/// Client mode works with any Beast-compatible source (readsb, dump1090, aeromux daemon).
 /// </summary>
 public sealed class LiveCommand : AsyncCommand<LiveSettings>
 {
     /// <summary>
-    /// Executes the live aircraft display command in standalone or client mode.
+    /// Executes the live aircraft display command with unified input sources.
     /// </summary>
-    /// <param name="context">The command context from Spectre.Console CLI.</param>
-    /// <param name="settings">Command settings including mode selection and connection parameters.</param>
-    /// <param name="cancellationToken">Cancellation token to stop the TUI display.</param>
-    /// <returns>Exit code: 0 for success, 1 for error.</returns>
     public override async Task<int> ExecuteAsync(
         CommandContext context,
         LiveSettings settings,
@@ -45,7 +40,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
         ArgumentNullException.ThrowIfNull(settings);
 
         // Log session separator for easy identification of new instances in log files
-        LiveSessionReporter.LogSessionStart(settings.Connect?.IsSet == true);
+        LiveSessionReporter.LogSessionStart(settings);
 
         // Track session start time for summary statistics
         DateTime sessionStart = DateTime.UtcNow;
@@ -56,14 +51,39 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             AeromuxConfig config = ConfigurationProvider.Current;
             LiveValidatedConfig validatedConfig = LiveConfigValidator.Validate(settings, config);
 
-            int exitCode = validatedConfig.Mode == LiveMode.Client
-                ? await RunClientModeAsync(validatedConfig, settings, sessionStart, cancellationToken)
-                : await RunStandaloneModeAsync(validatedConfig, settings, sessionStart, cancellationToken);
+            // Print startup summary
+            StartupSummaryPrinter.PrintLiveSummary(validatedConfig);
 
-            // Log session end separator
-            LiveSessionReporter.LogSessionEnd(sessionStart);
+            // Build running message
+            string sourcesSummary = BuildSourcesSummary(validatedConfig);
+            Console.WriteLine($"Aeromux live running with {sourcesSummary}. Press Q to quit.");
+            Console.WriteLine();
 
-            return exitCode;
+            try
+            {
+                // Create unified ReceiverStream with both SDR and Beast source lists
+                await using var stream = new ReceiverStream(
+                    validatedConfig.UseSdr ? validatedConfig.EnabledSdrSources : null,
+                    validatedConfig.Tracking,
+                    validatedConfig.Receiver,
+                    beastSourceConfigs: validatedConfig.UseBeast ? validatedConfig.BeastSources : null);
+
+                await stream.StartAsync(cancellationToken);
+                Log.Information("Stream started");
+
+                var display = new LiveTuiDisplay();
+                int exitCode = await display.RunAsync(stream, settings, validatedConfig.Receiver, sessionStart, cancellationToken);
+
+                return exitCode;
+            }
+            catch (Exception ex)
+            {
+                return LiveExceptionHandler.HandleStreamException(ex);
+            }
+            finally
+            {
+                LiveSessionReporter.LogSessionEnd(sessionStart);
+            }
         }
         catch (Exception ex)
         {
@@ -72,93 +92,22 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
     }
 
     /// <summary>
-    /// Runs in standalone mode: Direct RTL-SDR access with local signal processing.
+    /// Builds a human-readable summary of active sources for the startup message.
     /// </summary>
-    /// <param name="validatedConfig">Validated configuration with enabled devices.</param>
-    /// <param name="settings">Command settings for TUI display options.</param>
-    /// <param name="sessionStart">Session start time for summary statistics.</param>
-    /// <param name="ct">Cancellation token to stop device processing.</param>
-    /// <returns>Exit code: 0 for success, 1 for error.</returns>
-    /// <remarks>
-    /// Creates ReceiverStream for direct RTL-SDR access. Provides helpful error messages
-    /// suggesting connection to daemon if device is busy.
-    /// </remarks>
-    private async Task<int> RunStandaloneModeAsync(
-        LiveValidatedConfig validatedConfig,
-        LiveSettings settings,
-        DateTime sessionStart,
-        CancellationToken ct)
+    private static string BuildSourcesSummary(LiveValidatedConfig config)
     {
-        Console.WriteLine("Aeromux live starting in standalone mode...");
-        Console.WriteLine($"Aeromux live running with {validatedConfig.EnabledDevices.Count} device(s). Press ESC or Q to stop.");
-        Console.WriteLine();
+        var parts = new List<string>();
 
-        try
+        if (config.UseSdr)
         {
-            // ReceiverStream implements IAsyncDisposable to ensure RTL-SDR device cleanup
-            // Async using ensures StopAsync is called even on exceptions, releasing hardware
-            await using var stream = new ReceiverStream(
-                validatedConfig.EnabledDevices,
-                validatedConfig.Tracking,
-                validatedConfig.Receiver);
-
-            await stream.StartAsync(ct);
-            Log.Information("Device stream started");
-
-            // Standalone mode: Pass receiver config for distance calculation
-            var display = new LiveTuiDisplay();
-            return await display.RunAsync(stream, settings, validatedConfig.Receiver, sessionStart, ct);
+            parts.Add($"{config.EnabledSdrSources.Count} SDR source(s)");
         }
-        catch (Exception ex)
+
+        if (config.UseBeast)
         {
-            return LiveExceptionHandler.HandleStandaloneException(ex);
+            parts.Add($"{config.BeastSources.Count} Beast source(s)");
         }
-    }
 
-    /// <summary>
-    /// Runs in client mode: Connect to Beast-compatible TCP source.
-    /// </summary>
-    /// <param name="validatedConfig">Validated configuration with host and port.</param>
-    /// <param name="settings">Command settings for TUI display options.</param>
-    /// <param name="sessionStart">Session start time for summary statistics.</param>
-    /// <param name="ct">Cancellation token to stop the connection.</param>
-    /// <returns>Exit code: 0 for success, 1 for error.</returns>
-    /// <remarks>
-    /// Connects to any Beast-compatible server (readsb, dump1090, dump1090-fa, aeromux daemon).
-    /// BeastStream includes IcaoConfidenceTracker to filter noise from real aircraft.
-    /// </remarks>
-    private async Task<int> RunClientModeAsync(
-        LiveValidatedConfig validatedConfig,
-        LiveSettings settings,
-        DateTime sessionStart,
-        CancellationToken ct)
-    {
-        string host = validatedConfig.Host!;
-        int port = validatedConfig.Port!.Value;
-
-        Console.WriteLine("Aeromux live starting in client mode...");
-        Console.WriteLine($"Connecting to {host}:{port}...");
-        Console.WriteLine("Aeromux live running, connected to a Beast daemon. Press ESC or Q to stop.");
-        Console.WriteLine();
-
-        try
-        {
-            // BeastStream includes IcaoConfidenceTracker to filter noise from real aircraft
-            // TrackingConfig.ConfidenceLevel determines how many messages required to accept ICAO
-            // This prevents displaying spurious aircraft from corrupted frames or interference
-            await using var stream = new BeastStream(host, port, validatedConfig.Tracking);
-            await stream.StartAsync(ct);
-
-            Log.Information("Connected to Beast source: {Host}:{Port}", host, port);
-
-            // Load receiver config if available (might be null in client mode)
-            // If configured, allows distance calculation even when connected to remote source
-            var display = new LiveTuiDisplay();
-            return await display.RunAsync(stream, settings, validatedConfig.Receiver, sessionStart, ct);
-        }
-        catch (Exception ex)
-        {
-            return LiveExceptionHandler.HandleClientException(ex, host, port);
-        }
+        return string.Join(" and ", parts);
     }
 }

@@ -58,7 +58,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     /// <summary>
     /// Number of enabled RTL-SDR devices.
     /// </summary>
-    public int DeviceCount => _config.EnabledDevices.Count;
+    public int DeviceCount => _config.EnabledSdrSources.Count;
 
     /// <summary>
     /// Creates and starts all daemon services in the correct order.
@@ -67,14 +67,16 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     /// <returns>Number of broadcasters started.</returns>
     public async Task<int> StartAsync(CancellationToken cancellationToken)
     {
-        // Create ReceiverStream (uninitialized - devices not opened yet)
+        // Create ReceiverStream with SDR and/or Beast sources (uninitialized - not started yet)
         _receiverStream = new ReceiverStream(
-            _config.EnabledDevices,
+            _config.UseSdr ? _config.EnabledSdrSources : null,
             _config.Config.Tracking!,
             _config.Config.Receiver,
-            _config.MlatConfig);
+            _config.MlatConfig,
+            _config.UseBeast ? _config.BeastSources : null);
 
-        Log.Information("Device stream created. Devices={DeviceCount}", _config.EnabledDevices.Count);
+        Log.Information("Receiver stream created. SDR={SdrCount}, Beast={BeastCount}",
+            _config.EnabledSdrSources.Count, _config.BeastSources.Count);
 
         // CRITICAL STARTUP ORDER:
         // Start ReceiverStream FIRST (opens RTL-SDR devices and begins internal broadcasting)

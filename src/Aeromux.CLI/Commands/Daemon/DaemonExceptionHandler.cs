@@ -50,7 +50,7 @@ public static class DaemonExceptionHandler
                 Console.WriteLine("Error: Cannot open RTL-SDR device (already in use)");
                 Console.WriteLine("This usually means another instance is running.");
                 Console.WriteLine("Try:");
-                Console.WriteLine("  1. Connect to daemon: aeromux live --connect localhost:30005");
+                Console.WriteLine("  1. Connect to daemon: aeromux live --beast-source localhost:30005");
                 Console.WriteLine("  2. Stop daemon: aeromux daemon stop");
                 break;
 

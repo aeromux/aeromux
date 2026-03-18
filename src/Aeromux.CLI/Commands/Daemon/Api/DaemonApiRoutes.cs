@@ -266,7 +266,7 @@ public static partial class DaemonApiRoutes
         {
             StreamStatistics? stats = getStatistics();
             return Results.Ok(DaemonApiMapper.ToStats(
-                stats, tracker, config.EnabledDevices.Count, startTime, config.Config.Receiver));
+                stats, tracker, config.EnabledSdrSources.Count, startTime, config.Config.Receiver));
         });
 
         // GET /api/v1/health — Health check

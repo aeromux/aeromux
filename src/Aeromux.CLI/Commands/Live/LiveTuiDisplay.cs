@@ -33,7 +33,7 @@ internal sealed class LiveTuiDisplay
     /// <summary>
     /// Runs the TUI display loop with tracker lifecycle management.
     /// </summary>
-    /// <param name="stream">Frame stream (ReceiverStream or BeastStream) providing ProcessedFrame data.</param>
+    /// <param name="stream">ReceiverStream providing ProcessedFrame data from all configured sources.</param>
     /// <param name="settings">Command settings for mode detection in session summary.</param>
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
     /// <param name="sessionStart">Session start time for summary statistics.</param>
@@ -295,7 +295,6 @@ internal sealed class LiveTuiDisplay
             // Display session summary with statistics
             LiveSessionReporter.LogSessionSummary(
                 sessionStart,
-                settings.Connect?.IsSet == true,
                 stream.GetStatistics(),
                 tracker.GetAllAircraft().Count);
         }

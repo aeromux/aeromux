@@ -57,7 +57,7 @@ internal abstract class Program
             {
                 config.SetApplicationName("aeromux");
 
-                // Enable strict parsing to reject unknown options (typos like --connects instead of --connect)
+                // Enable strict parsing to reject unknown options (typos like --beast-sources instead of --beast-source)
                 config.Settings.StrictParsing = true;
 
                 // Use custom help provider (configures plain styles and adds header)
@@ -72,23 +72,23 @@ internal abstract class Program
                       .WithDescription("Start the Aeromux service")
                       .WithExample("daemon")
                       .WithExample("daemon", "--config", "custom.yaml")
-                      .WithExample("daemon", "--beast-output-enabled", "--beast-port", "30005")
-                      .WithExample("daemon", "--sbs-output-enabled", "--sbs-port", "30003")
-                      .WithExample("daemon", "--json-output-enabled", "--json-port", "30006")
-                      .WithExample("daemon", "--beast-output-enabled", "--beast-port", "30005", "--bind-address", "192.168.1.1");
+                      .WithExample("daemon", "--beast-output-enabled", "--beast-output-port", "30005")
+                      .WithExample("daemon", "--sbs-output-enabled", "--sbs-output-port", "30003")
+                      .WithExample("daemon", "--json-output-enabled", "--json-output-port", "30006")
+                      .WithExample("daemon", "--beast-output-enabled", "--beast-output-port", "30005", "--bind-address", "192.168.1.1")
+                      .WithExample("daemon", "--beast-source", "192.168.1.10:30005")
+                      .WithExample("daemon", "--sdr-source", "--beast-source", "piaware:30005");
 
                 // Live command - real-time aircraft display with TUI
                 config.AddCommand<LiveCommand>("live")
                       .WithDescription("Live aircraft display (TUI)")
                       .WithExample("live")
-                      .WithExample("live", "--standalone")
-                      .WithExample("live", "--standalone", "--config", "custom.yaml")
-                      .WithExample("live", "--connect")
-                      .WithExample("live", "--connect", "--config", "custom.yaml")
-                      .WithExample("live", "--connect", "localhost:30005")
-                      .WithExample("live", "--connect", "localhost:30005",  "--config", "custom.yaml")
-                      .WithExample("live", "--connect", "192.168.1.100:30005")
-                      .WithExample("live", "--connect", "192.168.1.100:30005", "--config", "custom.yaml");
+                      .WithExample("live", "--sdr-source")
+                      .WithExample("live", "--sdr-source", "--config", "custom.yaml")
+                      .WithExample("live", "--beast-source", "localhost:30005")
+                      .WithExample("live", "--beast-source", "localhost:30005", "--config", "custom.yaml")
+                      .WithExample("live", "--beast-source", "192.168.1.100:30005")
+                      .WithExample("live", "--sdr-source", "--beast-source", "piaware:30005");
 
                 // Version command - displays version information
                 config.AddCommand<VersionCommand>("version")

@@ -52,7 +52,7 @@ namespace Aeromux.Core.ModeS;
 /// FRAME SOURCE TRACKING:
 /// The Source parameter identifies where the frame originated:
 /// - Sdr: Local RTL-SDR device (default)
-/// - Beast: Remote Beast-compatible server (--connect mode)
+/// - Beast: Remote Beast-compatible server (Beast TCP input)
 /// - Mlat: MLAT-computed position from mlat-client
 /// This enables UI to distinguish MLAT aircraft and JSON output to include source metadata.
 /// </remarks>

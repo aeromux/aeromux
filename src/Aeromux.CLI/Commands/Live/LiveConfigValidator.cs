@@ -21,7 +21,7 @@ namespace Aeromux.CLI.Commands.Live;
 
 /// <summary>
 /// Validates and resolves live command configuration from CLI parameters and YAML config.
-/// Determines operating mode, validates devices or connection string, and logs configuration.
+/// Supports unified input model: SDR sources, Beast sources, or both aggregated.
 /// </summary>
 public static class LiveConfigValidator
 {
@@ -33,66 +33,86 @@ public static class LiveConfigValidator
     /// <returns>Validated and resolved configuration.</returns>
     /// <exception cref="InvalidOperationException">Thrown when validation fails.</exception>
     /// <remarks>
-    /// Validates mutual exclusivity of --standalone and --connect flags, determines operating mode,
-    /// and performs mode-specific validation (device availability for standalone, connection string
-    /// parsing for client). Throws InvalidOperationException for all validation failures, which
-    /// LiveExceptionHandler.HandleException maps to user-friendly error messages.
+    /// Input source resolution follows CLI > YAML > Default priority per setting:
+    /// - CLI --beast-source replaces YAML beastSources entirely.
+    /// - --sdr-source or default (no Beast) enables SDR from YAML sdrSources.
+    /// - Both can be active simultaneously for aggregated mode.
     /// </remarks>
     public static LiveValidatedConfig Validate(LiveSettings settings, AeromuxConfig config)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(config);
 
-        // Validate mutual exclusivity of --standalone and --connect
-        if (settings is { Standalone: true, Connect.IsSet: true })
+        // 1. Resolve Beast sources (CLI > YAML)
+        List<BeastSourceConfig> beastSources;
+        bool hasBeastFromCli = settings.BeastSource is { Length: > 0 };
+
+        if (hasBeastFromCli)
         {
-            throw new InvalidOperationException(
-                "Cannot use both --standalone and --connect (mutually exclusive)");
+            // CLI --beast-source replaces YAML beastSources entirely
+            beastSources = ConnectionStringParser.ParseMultiple(settings.BeastSource);
         }
-
-        // Determine mode
-        bool isClientMode = settings.Connect?.IsSet == true;
-        LiveMode mode = isClientMode ? LiveMode.Client : LiveMode.Standalone;
-
-        // Mode-specific validation
-        List<DeviceConfig> enabledDevices = [];
-        string? host = null;
-        int? port = null;
-
-        if (isClientMode)
+        else if (config.BeastSources is { Count: > 0 })
         {
-            (host, port) = LiveConnectionStringParser.Parse(settings.Connect!);
-            Log.Information("Starting Live command in client mode");
-            Log.Information("Connecting to Beast source: {Host}:{Port}", host, port);
+            // Use YAML beastSources
+            beastSources = config.BeastSources;
         }
         else
         {
-            Log.Information("Starting Live command in standalone mode");
-            enabledDevices = config.Devices!.Where(d => d.Enabled).ToList();
-
-            if (enabledDevices.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    "No enabled devices found in configuration");
-            }
-
-            Log.Information("Device stream created. Devices={DeviceCount}", enabledDevices.Count);
+            beastSources = [];
         }
 
-        // Log tracking config (both modes)
+        // 2. Resolve SDR usage
+        // SDR is implied (default) when no Beast sources are configured.
+        // When Beast sources exist, SDR requires explicit --sdr-source flag.
+        bool hasBeast = beastSources.Count > 0;
+        bool useSdr = settings.SdrSource || !hasBeast;
+
+        // 3. Validate SDR sources
+        List<SdrSourceConfig> enabledSdrSources = [];
+        if (useSdr)
+        {
+            enabledSdrSources = config.SdrSources?.Where(d => d.Enabled).ToList() ?? [];
+
+            if (enabledSdrSources.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "No enabled SDR sources found in configuration. " +
+                    "Add SDR sources to sdrSources in YAML, or use --beast-source for Beast-only mode.");
+            }
+        }
+
+        // 4. Validate at least one input source
+        if (enabledSdrSources.Count == 0 && beastSources.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No input sources configured. Specify --sdr-source, --beast-source, or configure sources in YAML.");
+        }
+
+        // Log configuration
+        if (enabledSdrSources.Count > 0)
+        {
+            Log.Information("SDR sources: {Count} enabled", enabledSdrSources.Count);
+        }
+
+        if (beastSources.Count > 0)
+        {
+            foreach (BeastSourceConfig beast in beastSources)
+            {
+                Log.Information("Beast source: {Host}:{Port}", beast.Host, beast.Port);
+            }
+        }
+
         Log.Information("Tracking config: ConfidenceLevel={Level}, IcaoTimeout={Timeout}s",
             config.Tracking!.ConfidenceLevel, config.Tracking.IcaoTimeoutSeconds);
 
-        // Log receiver location if configured (both modes)
         LogReceiverLocation(config.Receiver);
 
         return new LiveValidatedConfig
         {
             Config = config,
-            Mode = mode,
-            EnabledDevices = enabledDevices,
-            Host = host,
-            Port = port,
+            EnabledSdrSources = enabledSdrSources,
+            BeastSources = beastSources,
             Receiver = config.Receiver,
             Tracking = config.Tracking
         };

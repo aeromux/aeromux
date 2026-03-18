@@ -16,7 +16,7 @@ logging:                                  # Structured logging configuration
     fileSizeLimitMb: 100                  # Maximum size per log file in megabytes
 
 # SDR device configuration
-devices:                                  # List of SDR devices to use (multiple devices supported)
+sdrSources:                               # List of SDR devices to use (multiple devices supported)
   - name: primary                         # Friendly name for this device
     deviceIndex: 0                        # RTL-SDR device index (0 for first device)
     gainMode: manual                      # Gain mode: manual (use tunerGain) | agc (automatic gain control)
@@ -27,13 +27,22 @@ devices:                                  # List of SDR devices to use (multiple
     # deduplicationWindow: 50             # Deduplication time window in milliseconds (default: 50ms)
     # maxTrackedFrames: 1000              # Maximum frames to track for deduplication (default: 1000)
 
+# Beast TCP input sources (optional)
+# Connect to external Beast-compatible servers (readsb, dump1090, dump1090-fa, aeromux daemon)
+# Can be used together with SDR sources for aggregated input
+# beastSources:
+#   - host: "192.168.1.100"               # Beast server hostname or IP address
+#     port: 30005                         # Beast server port (default: 30005)
+#   - host: "192.168.1.101"
+#     port: 30005
+
 # Network ports and binding
 network:                                  # Network server configuration
-  beastPort: 30005                        # Beast binary protocol port (default: 30005, dump1090-compatible)
+  beastOutputPort: 30005                  # Beast binary protocol output port (default: 30005, dump1090-compatible)
   beastOutputEnabled: true                # Enable Beast output (default: true)
-  jsonPort: 30006                         # JSON streaming port (default: 30006, web-friendly)
+  jsonOutputPort: 30006                   # JSON streaming output port (default: 30006, web-friendly)
   jsonOutputEnabled: false                # Enable JSON output (default: false)
-  sbsPort: 30003                          # SBS BaseStation text protocol port (default: 30003, VRS-compatible)
+  sbsOutputPort: 30003                    # SBS BaseStation text protocol output port (default: 30003, VRS-compatible)
   sbsOutputEnabled: false                 # Enable SBS output (default: false)
   apiPort: 8080                           # REST API port (default: 8080)
   apiEnabled: true                        # Enable REST API (default: true)

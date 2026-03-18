@@ -53,6 +53,44 @@ fi
 
 BINARY="$ARTIFACTS_DIR/binaries/$RUNTIME_ID/aeromux"
 
+# Prompts for a Beast source address and appends --beast-source to CMD_ARGS.
+# Defaults to localhost:30005 if the user presses Enter without typing an address.
+prompt_beast_source() {
+    read -rp "Enter Beast source address (host:port, default: localhost:30005): " BEAST_ADDRESS
+    echo ""
+
+    if [[ -z "$BEAST_ADDRESS" ]]; then
+        BEAST_ADDRESS="localhost:30005"
+    fi
+
+    CMD_ARGS+=("--beast-source" "$BEAST_ADDRESS")
+}
+
+# Prompts for input source selection (SDR, Beast, or both) and populates CMD_ARGS.
+# Used by both daemon and live commands.
+prompt_input_source() {
+    echo "Select input source:"
+    echo "  1) SDR only            Use RTL-SDR device(s) from config"
+    echo "  2) Beast only          Connect to Beast TCP source"
+    echo "  3) SDR + Beast         Use both SDR and Beast sources"
+    echo ""
+    read -rp "Enter selection (1-3): " SOURCE_CHOICE
+    echo ""
+
+    case "$SOURCE_CHOICE" in
+        1) ;; # SDR is the default when no Beast flags are present
+        2) prompt_beast_source ;;
+        3)
+            CMD_ARGS+=("--sdr-source")
+            prompt_beast_source
+            ;;
+        *)
+            echo "ERROR: Invalid selection"
+            exit 1
+            ;;
+    esac
+}
+
 clear
 
 echo "================================================"
@@ -96,44 +134,34 @@ fi
 
 # Interactive mode
 echo "Select a command:"
-echo "  1) daemon             Start as background service"
-echo "  2) live --standalone  Live TUI with direct RTL-SDR access"
-echo "  3) live --connect     Live TUI connecting to Beast source"
-echo "  4) database           Manage aircraft metadata database"
-echo "  5) device             List RTL-SDR devices on the system"
-echo "  6) version            Display version information"
+echo "  1) daemon              Start as background service"
+echo "  2) live                Live aircraft display (TUI)"
+echo "  3) database            Manage aircraft metadata database"
+echo "  4) device              List RTL-SDR devices on the system"
+echo "  5) version             Display version information"
 echo ""
-read -rp "Enter selection (1-6): " COMMAND_CHOICE
+read -rp "Enter selection (1-5): " COMMAND_CHOICE
 echo ""
 
 case "$COMMAND_CHOICE" in
     1) CMD_ARGS=("daemon") ;;
-    2) CMD_ARGS=("live" "--standalone") ;;
-    3) CMD_ARGS=("live" "--connect") ;;
-    4) CMD_ARGS=("database") ;;
-    5) CMD_ARGS=("device") ;;
-    6) CMD_ARGS=("version" "--details") ;;
+    2) CMD_ARGS=("live") ;;
+    3) CMD_ARGS=("database") ;;
+    4) CMD_ARGS=("device") ;;
+    5) CMD_ARGS=("version" "--details") ;;
     *)
         echo "ERROR: Invalid selection"
         exit 1
         ;;
 esac
 
-# For live --connect, prompt for address (must come before config so argument order is correct)
-if [[ "$COMMAND_CHOICE" == "3" ]]; then
-    read -rp "Enter Beast source address (host:port): " CONNECT_ADDRESS
-    echo ""
-
-    if [[ -z "$CONNECT_ADDRESS" ]]; then
-        echo "ERROR: Address is required for live --connect mode"
-        exit 1
-    fi
-
-    CMD_ARGS+=("$CONNECT_ADDRESS")
+# Input source sub-menu for daemon and live commands
+if [[ "$COMMAND_CHOICE" == "1" || "$COMMAND_CHOICE" == "2" ]]; then
+    prompt_input_source
 fi
 
 # Database sub-menu: select action and database path
-if [[ "$COMMAND_CHOICE" == "4" ]]; then
+if [[ "$COMMAND_CHOICE" == "3" ]]; then
     echo "Select action:"
     echo "  1) update    Download or update the database"
     echo "  2) info      Show installed database details"
@@ -162,7 +190,7 @@ if [[ "$COMMAND_CHOICE" == "4" ]]; then
 fi
 
 # Device sub-menu: select verbose mode
-if [[ "$COMMAND_CHOICE" == "5" ]]; then
+if [[ "$COMMAND_CHOICE" == "4" ]]; then
     echo "Show detailed tuner parameters?"
     echo "  1) No       Basic device list"
     echo "  2) Yes      Detailed tuner parameters (opens each device)"
@@ -181,7 +209,7 @@ if [[ "$COMMAND_CHOICE" == "5" ]]; then
 fi
 
 # Config selection (skip for device and version)
-if [[ "$COMMAND_CHOICE" != "5" && "$COMMAND_CHOICE" != "6" ]]; then
+if [[ "$COMMAND_CHOICE" != "4" && "$COMMAND_CHOICE" != "5" ]]; then
     echo "Select configuration:"
     echo "  1) Single device      aeromux.test-singledevice.yaml"
     echo "  2) Multi-device       aeromux.test-multidevice.yaml"
