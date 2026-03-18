@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Reflection;
 using Aeromux.CLI.Commands.Version;
 using Spectre.Console.Cli;
 
@@ -36,16 +37,19 @@ public class VersionCommand : Command<VersionSettings>
         // Validate settings parameter (required by CA1062)
         ArgumentNullException.ThrowIfNull(settings);
 
-        // Define the version
-        const string version = "0.1.0";
+        // Read version from assembly metadata (set by Directory.Build.props).
+        // InformationalVersion may include a "+commitHash" suffix appended by the .NET SDK.
+        string fullVersion = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        string version = fullVersion.Split('+')[0];
 
         if (settings.Details)
         {
-            // Display detailed version information
+            // Display detailed version information including commit hash for bug reports
             Console.WriteLine("Aeromux");
             Console.WriteLine("Multi-SDR Mode S and ADS-B Decoder");
             Console.WriteLine();
-            Console.WriteLine($"Version:    Aeromux {version}");
+            Console.WriteLine($"Version:    Aeromux {fullVersion}");
             Console.WriteLine($"Runtime:    Microsoft .NET {Environment.Version}");
             Console.WriteLine("License:    GNU General Public License 3.0");
             Console.WriteLine("Website:    https://www.aeromux.com");
@@ -53,7 +57,7 @@ public class VersionCommand : Command<VersionSettings>
         }
         else
         {
-            // Display only version number
+            // Display only the clean version number
             Console.WriteLine(version);
         }
 

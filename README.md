@@ -8,6 +8,10 @@
 
 Aeromux receives aircraft transponder signals on 1090 MHz using inexpensive RTL-SDR USB receivers, decodes Mode S and ADS-B messages, and serves the decoded aircraft data over the network. It can also connect to external Beast TCP sources (dump1090, readsb, or another Aeromux instance) and aggregate their frames alongside local SDR devices. It supports multiple SDR devices simultaneously for improved coverage and runs on macOS and Linux, including Raspberry Pi.
 
+**Plug in your SDR, edit one YAML file, and start tracking.**
+
+Most ADS-B setups involve chaining separate tools for demodulation, decoding, and output — each with its own quirks, configuration format, and failure modes. Aeromux is a single, self-contained binary controlled by one [fully documented](aeromux.example.yaml) YAML file with sensible defaults. Everything works together out of the box — from raw signal processing to network output — without requiring you to wire up separate components. Seven complete [deployment scenarios](docs/SCENARIOS.md), from a single SDR on a Raspberry Pi to multi-site aggregation across a network, are documented end to end with working configurations.
+
 ## Features
 
 - **Mode S and ADS-B Decoding** — Decodes aircraft identification, position, altitude, speed, heading, and more from transponder broadcasts. Covers all Mode S downlink formats, ADS-B Extended Squitter message types, and Comm-B data registers.
