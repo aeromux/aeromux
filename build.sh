@@ -33,11 +33,16 @@ CONFIGURATION="Release"
 # Parse named parameters
 SILENT=false
 TARGET="auto"
+WITH_DATABASE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --silent)
             SILENT=true
+            shift
+            ;;
+        --with-database)
+            WITH_DATABASE=true
             shift
             ;;
         --target)
@@ -55,6 +60,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
+            echo "  --with-database  Download aeromux-db after building"
             echo "  --silent         Suppress all output (only errors are shown)"
             echo ""
             echo "Supported targets:"
@@ -71,6 +77,7 @@ while [[ $# -gt 0 ]]; do
             echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
             echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
             echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
+            echo "  ./build.sh --with-database              # Build and download database"
             echo "  ./build.sh --silent                     # Auto-detect, no output"
             echo "  ./build.sh --silent --target linux-arm64  # Both flags"
             exit 1
@@ -157,6 +164,7 @@ case "$TARGET" in
         echo ""
         echo "Options:"
         echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
+        echo "  --with-database  Download aeromux-db after building"
         echo "  --silent         Suppress all output (only errors are shown)"
         echo ""
         echo "Supported targets:"
@@ -173,6 +181,7 @@ case "$TARGET" in
         echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
         echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
         echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
+        echo "  ./build.sh --with-database              # Build and download database"
         echo "  ./build.sh --silent                     # Auto-detect, no output"
         echo "  ./build.sh --silent --target linux-arm64  # Both flags"
         exit 1
@@ -253,7 +262,18 @@ fi
 log "✓ Build finalized"
 log ""
 
-# Step 4: Summary
+# Step 4: Download database (optional)
+if [ "$WITH_DATABASE" = true ]; then
+    DB_DIR="$ARTIFACTS_DIR/db"
+    mkdir -p "$DB_DIR"
+    CURRENT_STEP="Database download"
+    log "Downloading aeromux-db..."
+    run_quiet "$BINARIES_DIR/aeromux" database update --database "$DB_DIR"
+    log "✓ Database downloaded"
+    log ""
+fi
+
+# Step 5: Summary
 log "================================================"
 log "BUILD SUMMARY"
 log "================================================"
@@ -261,7 +281,7 @@ log ""
 
 if [ -f "$BINARIES_DIR/aeromux" ]; then
     FILESIZE=$(ls -lh "$BINARIES_DIR/aeromux" | awk '{print $5}')
-    TOTAL_FILES=$(find "$ARTIFACTS_DIR" -type f | wc -l | tr -d ' ')
+    TOTAL_FILES=$(find "$ARTIFACTS_DIR" -type f -not -name ".gitkeep" | wc -l | tr -d ' ')
 
     log "Build completed successfully!"
     log "Architecture: $RUNTIME_ID"
@@ -270,6 +290,16 @@ if [ -f "$BINARIES_DIR/aeromux" ]; then
     log ""
     log "Executable:"
     log "  - binaries/$RUNTIME_ID/aeromux ($FILESIZE)"
+    if [ "$WITH_DATABASE" = true ] && [ -d "$ARTIFACTS_DIR/db" ]; then
+        log ""
+        log "Database:"
+        for dbfile in "$ARTIFACTS_DIR/db/"*; do
+            if [ -f "$dbfile" ]; then
+                DBFILESIZE=$(ls -lh "$dbfile" | awk '{print $5}')
+                log "  - db/$(basename "$dbfile") ($DBFILESIZE)"
+            fi
+        done
+    fi
     log ""
     log "Run with: ./artifacts/binaries/$RUNTIME_ID/aeromux"
 else

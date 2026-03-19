@@ -86,6 +86,9 @@ cd aeromux
 # Build a self-contained executable (auto-detects your platform)
 ./build.sh
 
+# Or build and download the aircraft metadata database in one step
+./build.sh --with-database
+
 # Copy the example configuration and edit it for your setup
 cp aeromux.example.yaml aeromux.yaml
 
