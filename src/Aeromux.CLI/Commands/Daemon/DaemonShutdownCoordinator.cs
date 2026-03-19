@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Runtime.InteropServices;
 using Serilog;
 
 namespace Aeromux.CLI.Commands.Daemon;
@@ -22,16 +23,18 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// Encapsulates CTRL+C / SIGTERM shutdown handling for the daemon.
 /// Creates a linked CancellationTokenSource to handle both interactive (CTRL+C) and
 /// service (SIGTERM) shutdown signals. Properly unregisters the Console.CancelKeyPress
-/// handler on disposal.
+/// handler and SIGTERM registration on disposal.
 /// </summary>
 public sealed class DaemonShutdownCoordinator : IDisposable
 {
     private readonly CancellationTokenSource _shutdownCts;
     private readonly ConsoleCancelEventHandler? _cancelHandler;
+    private readonly PosixSignalRegistration _sigtermRegistration;
 
     /// <summary>
     /// Creates a new shutdown coordinator linked to an external cancellation token.
-    /// Registers a CTRL+C handler if running in interactive mode.
+    /// Registers a CTRL+C handler if running in interactive mode and a SIGTERM handler
+    /// for systemd service shutdown.
     /// </summary>
     /// <param name="externalCancellationToken">External token (e.g., from Spectre.Console.Cli framework).</param>
     public DaemonShutdownCoordinator(CancellationToken externalCancellationToken)
@@ -57,6 +60,23 @@ public sealed class DaemonShutdownCoordinator : IDisposable
             };
             Console.CancelKeyPress += _cancelHandler;
         }
+
+        // Handle SIGTERM for service manager shutdown (systemctl stop, Docker stop, etc.)
+        // PosixSignalRegistration is cross-platform: SIGTERM on Linux/macOS,
+        // CTRL_SHUTDOWN_EVENT on Windows. Available since .NET 6.
+        _sigtermRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTERM, ctx =>
+        {
+            Log.Information("SIGTERM received - requesting shutdown");
+            ctx.Cancel = true; // Prevent immediate process termination
+            try
+            {
+                _shutdownCts.Cancel(); // Trigger graceful shutdown
+            }
+            catch (ObjectDisposedException)
+            {
+                // CTS already disposed - shutdown already in progress
+            }
+        });
     }
 
     /// <summary>
@@ -93,6 +113,7 @@ public sealed class DaemonShutdownCoordinator : IDisposable
             Console.CancelKeyPress -= _cancelHandler;
         }
 
+        _sigtermRegistration.Dispose();
         _shutdownCts.Dispose();
     }
 }

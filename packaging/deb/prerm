@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|upgrade)
+        # Stop service if active
+        if systemctl is-active --quiet aeromux; then
+            systemctl stop aeromux
+        fi
+
+        # Disable service if enabled
+        if systemctl is-enabled --quiet aeromux; then
+            systemctl disable aeromux
+        fi
+        ;;
+esac
+
+exit 0

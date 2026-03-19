@@ -40,13 +40,13 @@ public static class DaemonExceptionHandler
             // Daemon precondition checks failed (device/port validation)
             case InvalidOperationException ioe
                 when ioe.Message.Contains("device") || ioe.Message.Contains("port"):
-                Log.Error(ex, "Daemon preconditions not met");
+                Log.Error("Daemon preconditions not met: {Message}", ex.Message);
                 Console.WriteLine(ex.Message);
                 break;
 
             // RTL-SDR device already in use by another process
             case RtlSdrLibraryExecutionException:
-                Log.Error(ex, "RTL-SDR device already in use");
+                Log.Error("RTL-SDR device already in use");
                 Console.WriteLine("Error: Cannot open RTL-SDR device (already in use)");
                 Console.WriteLine("This usually means another instance is running.");
                 Console.WriteLine("Try:");
@@ -54,9 +54,18 @@ public static class DaemonExceptionHandler
                 Console.WriteLine("  2. Stop daemon: aeromux daemon stop");
                 break;
 
-            // RTL-SDR device not found (string-based matching for external library exceptions)
+            // No RTL-SDR device connected
+            case RtlSdrDeviceException when ex.Message.Contains("There is no supported RTL-SDR device on the system"):
+                Log.Error("No supported RTL-SDR device found on the system");
+                Console.WriteLine("Error: No supported RTL-SDR device found. Please check:");
+                Console.WriteLine("  1. Device is connected via USB");
+                Console.WriteLine("  2. Drivers are installed (librtlsdr)");
+                Console.WriteLine("  3. Run 'rtl_test' to verify device detection");
+                break;
+
+            // RTL-SDR device not found by index (string-based matching for external library exceptions)
             case Exception when ex.GetType().Name.Contains("RtlSdr") && ex.Message.Contains("not found"):
-                Log.Error(ex, "RTL-SDR device not found");
+                Log.Error("RTL-SDR device not found: {Message}", ex.Message);
                 Console.WriteLine("Error: RTL-SDR device not found. Please check:");
                 Console.WriteLine("  1. Device is connected via USB");
                 Console.WriteLine("  2. Drivers are installed (librtlsdr)");
@@ -66,7 +75,7 @@ public static class DaemonExceptionHandler
 
             // Other RTL-SDR errors (string-based matching for external library exceptions)
             case Exception when ex.GetType().Name.Contains("RtlSdr"):
-                Log.Error(ex, "RTL-SDR error");
+                Log.Error("RTL-SDR error: {Message}", ex.Message);
                 Console.WriteLine($"RTL-SDR Error: {ex.Message}");
                 break;
 

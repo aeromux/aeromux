@@ -183,6 +183,8 @@ The build script auto-detects your platform, or you can cross-compile for a spec
 ./build.sh --target linux-arm64
 ```
 
+For Debian-based systems (including Raspberry Pi), Aeromux can also be installed as a `.deb` package. See the [Debian Packaging Guide](docs/PACKAGING-DEB.md) for building packages and installation instructions.
+
 ## Contributing
 
 Contributions are welcome! Whether it is a bug fix, a new feature, improved documentation, or additional tests, we appreciate your help.

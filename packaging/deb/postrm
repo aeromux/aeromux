@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove)
+        systemctl daemon-reload
+        ;;
+    purge)
+        systemctl daemon-reload
+
+        # Remove configuration, data, and log directories
+        rm -rf /etc/aeromux
+        rm -rf /var/lib/aeromux
+        rm -rf /var/log/aeromux
+
+        # Remove aeromux user and group
+        if getent passwd aeromux > /dev/null 2>&1; then
+            deluser --system aeromux 2>/dev/null
+        fi
+        if getent group aeromux > /dev/null 2>&1; then
+            delgroup --system aeromux
+        fi
+        ;;
+esac
+
+exit 0

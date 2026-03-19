@@ -1,0 +1,62 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        # Create data and log directories
+        mkdir -p /var/lib/aeromux
+        mkdir -p /var/log/aeromux
+
+        # Create aeromux system user and group (idempotent)
+        if ! getent passwd aeromux > /dev/null 2>&1; then
+            adduser --system --group --home /var/lib/aeromux --no-create-home aeromux
+        fi
+
+        # Add aeromux to plugdev group for USB device access
+        usermod -aG plugdev aeromux
+
+        # Set directory ownership
+        chown aeromux:aeromux /var/lib/aeromux
+        chown aeromux:aeromux /var/log/aeromux
+
+        # Set configuration file ownership
+        chown root:aeromux /etc/aeromux/aeromux.yaml
+
+        # Reload udev rules
+        udevadm control --reload-rules
+        udevadm trigger
+
+        # Reload systemd daemon
+        systemctl daemon-reload
+
+        # Display post-install message on fresh install only
+        if [ -z "$2" ]; then
+            echo "================================================================================"
+            echo "Aeromux installed successfully!"
+            echo "================================================================================"
+            echo ""
+            echo "Next steps:"
+            echo ""
+            echo "  1. Edit the configuration:"
+            echo "     sudo nano /etc/aeromux/aeromux.yaml"
+            echo ""
+            echo "     - Configure your SDR device(s) under 'sdrSources'"
+            echo "     - Configure your Beast TCP input sources under 'beastSources' (if any)"
+            echo "     - Set your receiver location under 'receiver'"
+            echo ""
+            echo "  2. (Optional) Download the aircraft database:"
+            echo "     sudo -u aeromux aeromux database update --config /etc/aeromux/aeromux.yaml"
+            echo ""
+            echo "  3. Enable and start the service:"
+            echo "     sudo systemctl enable --now aeromux"
+            echo ""
+            echo "  4. View logs:"
+            echo "     journalctl -u aeromux -f"
+            echo ""
+            echo "Documentation: https://github.com/nandortoth/aeromux"
+            echo "================================================================================"
+        fi
+        ;;
+esac
+
+exit 0

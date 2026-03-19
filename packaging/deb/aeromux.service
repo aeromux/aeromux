@@ -1,0 +1,29 @@
+[Unit]
+Description=Aeromux — Multi-SDR Mode S and ADS-B Decoder
+Documentation=https://github.com/nandortoth/aeromux
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=aeromux
+Group=aeromux
+ExecStart=/usr/bin/aeromux daemon --config /etc/aeromux/aeromux.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aeromux /var/log/aeromux
+PrivateTmp=true
+
+# Logging — stdout/stderr captured by journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aeromux
+
+[Install]
+WantedBy=multi-user.target

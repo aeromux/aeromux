@@ -1,0 +1,223 @@
+.\" Aeromux man page
+.\" Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
+.\" Licensed under GPL-3.0-or-later
+.TH AEROMUX 1 "2026-03-19" "aeromux" "User Commands"
+.SH NAME
+Aeromux \- multi-SDR Mode S and ADS-B demodulator and decoder
+.SH SYNOPSIS
+.B aeromux
+.I command
+.RI [ options ]
+.SH DESCRIPTION
+Aeromux receives 1090 MHz ADS-B and Mode S signals from one or more RTL-SDR
+devices, decodes aircraft transponder messages, and provides real-time aircraft
+tracking via a terminal UI, REST API, and network streaming protocols (Beast,
+SBS BaseStation, JSON).
+.PP
+Aeromux supports multiple simultaneous SDR devices and Beast TCP input sources.
+Frames from all active sources are automatically aggregated and deduplicated by
+the tracker.
+.SH COMMANDS
+.TP
+.B daemon
+Run Aeromux as a background service for continuous, unattended operation.
+Decoded aircraft data is made available over TCP protocols (Beast, SBS, JSON)
+and a REST API. This is the primary mode for production deployments and headless
+systems such as Raspberry Pi.
+.TP
+.B live
+Launch an interactive terminal interface that displays tracked aircraft in real
+time. Provides a sortable, searchable aircraft list and a detail view for
+individual aircraft. Supports the same input sources as the daemon command.
+.TP
+.B database update
+Download or update the aircraft metadata database from the aeromux-db GitHub
+releases. Integrity verification is performed automatically during download and
+update operations. The database enriches tracked aircraft with registration,
+operator, manufacturer, and type information.
+.TP
+.B database info
+Display the currently installed database version and statistics, including the
+number of records and the date of the last update.
+.TP
+.B device
+List all RTL-SDR USB receivers detected on the system. Useful for identifying
+device indices before configuring the sdrSources section of the YAML file.
+.TP
+.B version
+Display the Aeromux version number and runtime information.
+.SH GLOBAL OPTIONS
+These options are available on all commands:
+.TP
+.BI \-\-config " path"
+Path to the YAML configuration file. Default:
+.IR aeromux.yaml .
+.TP
+.BI \-\-log\-level " level"
+Logging verbosity: Verbose, Debug, Information, Warning, Error, or Fatal.
+.TP
+.BI \-\-database " path"
+Path to the aircraft metadata database directory. Specifying this option
+implicitly enables database enrichment.
+.SH INPUT OPTIONS
+The
+.B daemon
+and
+.B live
+commands share the same input model. Aeromux can receive data from local
+RTL-SDR devices, from remote Beast TCP sources, or from both simultaneously.
+.TP
+.B \-\-sdr\-source
+Enable RTL-SDR device input using the sdrSources defined in the YAML file.
+Implied when no Beast sources are configured.
+.TP
+.BI \-\-beast\-source " HOST:PORT"
+Connect to a Beast TCP source. Can be specified multiple times for multiple
+sources. If the port is omitted, it defaults to 30005. CLI Beast sources
+override any beastSources defined in the YAML file.
+.SH DAEMON OPTIONS
+These options are specific to the
+.B daemon
+command.
+.TP
+.BI \-\-beast\-output\-port " port"
+TCP port for Beast binary protocol output. Default: 30005.
+.TP
+.BI \-\-beast\-output\-enabled " bool"
+Enable or disable Beast output. Default: true.
+.TP
+.BI \-\-sbs\-output\-port " port"
+TCP port for SBS/BaseStation text protocol output. Default: 30003.
+.TP
+.BI \-\-sbs\-output\-enabled " bool"
+Enable or disable SBS output. Default: false.
+.TP
+.BI \-\-json\-output\-port " port"
+TCP port for streaming JSON output. Default: 30006.
+.TP
+.BI \-\-json\-output\-enabled " bool"
+Enable or disable JSON output. Default: false.
+.TP
+.BI \-\-api\-port " port"
+TCP port for the REST API. Default: 8080.
+.TP
+.BI \-\-api\-enabled " bool"
+Enable or disable the REST API. Default: true.
+.TP
+.BI \-\-bind\-address " ip"
+Network interface to bind all listeners to. Default: 0.0.0.0.
+.TP
+.BI \-\-mlat\-enabled " bool"
+Enable or disable MLAT input from mlat-client. Default: true.
+.TP
+.BI \-\-mlat\-input\-port " port"
+TCP port for receiving MLAT Beast data. Default: 30104.
+.TP
+.BI \-\-receiver\-uuid " uuid"
+Receiver UUID for MLAT triangulation and receiver identification. Must be a
+valid RFC 4122 UUID. Each receiver must have a unique UUID.
+.SH DEVICE OPTIONS
+.TP
+.B \-\-verbose
+Show detailed tuner parameters including supported gains and frequency range
+for each detected device. This can help when fine-tuning the gain settings in
+your configuration.
+.SH VERSION OPTIONS
+.TP
+.B \-\-verbose
+Display verbose version information including commit hash, .NET runtime version,
+license, and repository URL.
+.SH CONFIGURATION PRIORITY
+Every setting follows the resolution order: CLI parameter > YAML configuration >
+built-in default. This priority is applied per-setting, so you can rely on the
+YAML file for most of your configuration while selectively overriding specific
+values on the command line.
+.SH EXAMPLES
+.PP
+Run as a daemon with SDR input from the YAML configuration:
+.RS
+.nf
+aeromux daemon \-\-config /etc/aeromux/aeromux.yaml
+.fi
+.RE
+.PP
+Run as a daemon with a remote Beast source:
+.RS
+.nf
+aeromux daemon \-\-beast\-source 192.168.1.100:30005 \-\-config aeromux.yaml
+.fi
+.RE
+.PP
+Run as a daemon with both SDR and Beast input:
+.RS
+.nf
+aeromux daemon \-\-sdr\-source \-\-beast\-source 192.168.1.100:30005 \-\-config aeromux.yaml
+.fi
+.RE
+.PP
+Launch the interactive terminal interface:
+.RS
+.nf
+aeromux live \-\-config aeromux.yaml
+.fi
+.RE
+.PP
+Download or update the aircraft metadata database:
+.RS
+.nf
+aeromux database update \-\-database /var/lib/aeromux/
+.fi
+.RE
+.PP
+List detected RTL-SDR devices:
+.RS
+.nf
+aeromux device
+.fi
+.RE
+.SH FILES
+.TP
+.I /usr/bin/aeromux
+Self-contained executable.
+.TP
+.I /etc/aeromux/aeromux.yaml
+Default configuration file for the system-installed service.
+.TP
+.I /var/lib/aeromux/
+Aircraft metadata database storage directory.
+.TP
+.I /var/log/aeromux/
+Log file directory.
+.SH SYSTEMD
+When installed as a system package, aeromux runs as a systemd service under a
+dedicated
+.B aeromux
+user.
+.PP
+Enable and start the service:
+.RS
+.nf
+sudo systemctl enable \-\-now aeromux
+.fi
+.RE
+.PP
+Check service status:
+.RS
+.nf
+systemctl status aeromux
+.fi
+.RE
+.PP
+View logs:
+.RS
+.nf
+journalctl \-u aeromux \-f
+.fi
+.RE
+.SH SEE ALSO
+.UR https://github.com/nandortoth/aeromux
+Aeromux on GitHub
+.UE
+.SH COPYRIGHT
+Copyright \(co 2025-2026 Nandor Toth.
+Licensed under the GNU General Public License v3.0 or later.

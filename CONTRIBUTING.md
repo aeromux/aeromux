@@ -74,6 +74,8 @@ dotnet build
 
 The build script produces a self-contained single-file executable in `artifacts/binaries/{runtime_id}/aeromux`. Supported runtime identifiers: `osx-x64`, `osx-arm64`, `linux-x64`, `linux-arm64`.
 
+For building `.deb` packages for Debian-based Linux systems, see the [Debian Packaging Guide](docs/PACKAGING-DEB.md).
+
 ### Running Aeromux
 
 ```bash

@@ -1,0 +1,3 @@
+# Aeromux — RTL-SDR USB device access
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2832", GROUP="aeromux", MODE="0660"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", GROUP="aeromux", MODE="0660"

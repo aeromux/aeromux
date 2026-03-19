@@ -30,7 +30,150 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
 CONFIGURATION="Release"
 
-# Parse named parameters
+# ── Functions ────────────────────────────────────────────────────────────────
+
+usage() {
+    echo "Usage: ./build.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
+    echo "  --with-database  Download aeromux-db after building"
+    echo "  --silent         Suppress all output (only errors are shown)"
+    echo ""
+    echo "Supported targets:"
+    echo "  auto           - Auto-detect current platform and architecture (default)"
+    echo "  linux          - Auto-detect Linux architecture (x64 or arm64)"
+    echo "  macos          - Auto-detect macOS architecture (x64 or arm64)"
+    echo "  linux-x64      - Linux x64 (explicit, for cross-compilation)"
+    echo "  linux-arm64    - Linux ARM64 (Raspberry Pi 4/5, explicit)"
+    echo "  macos-x64      - macOS Intel (explicit, for cross-compilation)"
+    echo "  macos-arm64    - macOS Apple Silicon (explicit, for cross-compilation)"
+    echo "  all            - Build all supported targets sequentially"
+    echo ""
+    echo "Examples:"
+    echo "  ./build.sh                              # Auto-detect current platform"
+    echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
+    echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
+    echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
+    echo "  ./build.sh --target all                 # Build all platforms"
+    echo "  ./build.sh --with-database              # Build and download database"
+    echo "  ./build.sh --silent                     # Auto-detect, no output"
+    echo "  ./build.sh --silent --target linux-arm64  # Both flags"
+    exit 1
+}
+
+# Logging helper (suppressed in silent mode)
+log() { [ "$SILENT" = true ] || echo "$@"; }
+
+# Run a command quietly — suppress output on success, show on failure
+run_quiet() {
+    local output
+    output=$("$@" 2>&1) || {
+        [ -z "$CURRENT_STEP" ] || [ "$SILENT" = true ] || echo "✗ $CURRENT_STEP failed"
+        echo ""
+        echo "================================================"
+        echo "BUILD FAILED"
+        echo "================================================"
+        if [ -n "$output" ]; then
+            echo ""
+            echo "An error occurred during the build. See the log below for details."
+            echo "Paths relative to: $PROJECT_ROOT/"
+            echo ""
+            echo "$output" | sed "s|$PROJECT_ROOT/|./|g" | sed 's/^[[:space:]]*//' | fold -s -w $((TERMINAL_WIDTH - 3)) | sed 's/^/ | /'
+        fi
+        echo ""
+        exit 1
+    }
+}
+
+# Resolve a target name to a .NET runtime identifier (echoes the result)
+resolve_runtime_id() {
+    local target="$1"
+    case "$target" in
+        auto)
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                local arch
+                arch=$(uname -m)
+                if [[ "$arch" == "arm64" ]]; then
+                    echo "osx-arm64"
+                else
+                    echo "osx-x64"
+                fi
+            elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                local arch
+                arch=$(uname -m)
+                if [[ "$arch" == "aarch64" ]]; then
+                    echo "linux-arm64"
+                else
+                    echo "linux-x64"
+                fi
+            else
+                echo "ERROR: Unsupported platform: $OSTYPE" >&2
+                echo "Please specify target explicitly: ./build.sh --target [linux|macos|linux-x64|linux-arm64|macos-x64|macos-arm64]" >&2
+                exit 1
+            fi
+            ;;
+        linux)
+            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                local arch
+                arch=$(uname -m)
+                if [[ "$arch" == "aarch64" ]]; then
+                    echo "linux-arm64"
+                else
+                    echo "linux-x64"
+                fi
+            else
+                echo "ERROR: Cannot auto-detect Linux architecture on non-Linux system" >&2
+                echo "Please specify explicit target: ./build.sh --target linux-x64 or ./build.sh --target linux-arm64" >&2
+                exit 1
+            fi
+            ;;
+        macos)
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                local arch
+                arch=$(uname -m)
+                if [[ "$arch" == "arm64" ]]; then
+                    echo "osx-arm64"
+                else
+                    echo "osx-x64"
+                fi
+            else
+                echo "ERROR: Cannot auto-detect macOS architecture on non-macOS system" >&2
+                echo "Please specify explicit target: ./build.sh --target macos-x64 or ./build.sh --target macos-arm64" >&2
+                exit 1
+            fi
+            ;;
+        linux-x64)    echo "linux-x64" ;;
+        linux-arm64)  echo "linux-arm64" ;;
+        macos-x64)    echo "osx-x64" ;;
+        macos-arm64)  echo "osx-arm64" ;;
+        *)
+            echo "ERROR: Unknown target: $target" >&2
+            echo "" >&2
+            usage
+            ;;
+    esac
+}
+
+# Detect the runtime ID for the current host platform
+detect_host_runtime_id() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if [[ "$(uname -m)" == "arm64" ]]; then
+            echo "osx-arm64"
+        else
+            echo "osx-x64"
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if [[ "$(uname -m)" == "aarch64" ]]; then
+            echo "linux-arm64"
+        else
+            echo "linux-x64"
+        fi
+    fi
+}
+
+# ── Argument parsing ─────────────────────────────────────────────────────────
+
 SILENT=false
 TARGET="auto"
 WITH_DATABASE=false
@@ -56,253 +199,122 @@ while [[ $# -gt 0 ]]; do
         *)
             echo "ERROR: Unknown option: $1"
             echo ""
-            echo "Usage: ./build.sh [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
-            echo "  --with-database  Download aeromux-db after building"
-            echo "  --silent         Suppress all output (only errors are shown)"
-            echo ""
-            echo "Supported targets:"
-            echo "  auto           - Auto-detect current platform and architecture (default)"
-            echo "  linux          - Auto-detect Linux architecture (x64 or arm64)"
-            echo "  macos          - Auto-detect macOS architecture (x64 or arm64)"
-            echo "  linux-x64      - Linux x64 (explicit, for cross-compilation)"
-            echo "  linux-arm64    - Linux ARM64 (Raspberry Pi 4/5, explicit)"
-            echo "  macos-x64      - macOS Intel (explicit, for cross-compilation)"
-            echo "  macos-arm64    - macOS Apple Silicon (explicit, for cross-compilation)"
-            echo ""
-            echo "Examples:"
-            echo "  ./build.sh                              # Auto-detect current platform"
-            echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
-            echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
-            echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
-            echo "  ./build.sh --with-database              # Build and download database"
-            echo "  ./build.sh --silent                     # Auto-detect, no output"
-            echo "  ./build.sh --silent --target linux-arm64  # Both flags"
-            exit 1
+            usage
             ;;
     esac
 done
 
-# Logging helper (suppressed in silent mode)
-log() { [ "$SILENT" = true ] || echo "$@"; }
+# ── Main ─────────────────────────────────────────────────────────────────────
 
-# Clear screen (suppressed in silent mode)
+# Resolve targets into an array of runtime IDs
+if [ "$TARGET" = "all" ]; then
+    TARGETS=(linux-arm64 linux-x64 macos-arm64 macos-x64)
+else
+    TARGETS=("$TARGET")
+fi
+
+RUNTIME_IDS=()
+for t in "${TARGETS[@]}"; do
+    RUNTIME_IDS+=("$(resolve_runtime_id "$t")")
+done
+
+# Clear screen and print header
 [ "$SILENT" = true ] || clear
-
-# Determine runtime identifier
-case "$TARGET" in
-    auto)
-        # Auto-detect based on current platform
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            ARCH=$(uname -m)
-            if [[ "$ARCH" == "arm64" ]]; then
-                RUNTIME_ID="osx-arm64"
-            else
-                RUNTIME_ID="osx-x64"
-            fi
-        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            ARCH=$(uname -m)
-            if [[ "$ARCH" == "aarch64" ]]; then
-                RUNTIME_ID="linux-arm64"
-            else
-                RUNTIME_ID="linux-x64"
-            fi
-        else
-            echo "ERROR: Unsupported platform: $OSTYPE"
-            echo "Please specify target explicitly: ./build.sh --target [linux|macos|linux-x64|linux-arm64|macos-x64|macos-arm64]"
-            exit 1
-        fi
-        ;;
-    linux)
-        # Auto-detect Linux architecture if on Linux, otherwise error
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            ARCH=$(uname -m)
-            if [[ "$ARCH" == "aarch64" ]]; then
-                RUNTIME_ID="linux-arm64"
-            else
-                RUNTIME_ID="linux-x64"
-            fi
-        else
-            echo "ERROR: Cannot auto-detect Linux architecture on non-Linux system"
-            echo "Please specify explicit target: ./build.sh --target linux-x64 or ./build.sh --target linux-arm64"
-            exit 1
-        fi
-        ;;
-    macos)
-        # Auto-detect macOS architecture if on macOS, otherwise error
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            ARCH=$(uname -m)
-            if [[ "$ARCH" == "arm64" ]]; then
-                RUNTIME_ID="osx-arm64"
-            else
-                RUNTIME_ID="osx-x64"
-            fi
-        else
-            echo "ERROR: Cannot auto-detect macOS architecture on non-macOS system"
-            echo "Please specify explicit target: ./build.sh --target macos-x64 or ./build.sh --target macos-arm64"
-            exit 1
-        fi
-        ;;
-    linux-x64)
-        RUNTIME_ID="linux-x64"
-        ;;
-    linux-arm64)
-        RUNTIME_ID="linux-arm64"
-        ;;
-    macos-x64)
-        RUNTIME_ID="osx-x64"
-        ;;
-    macos-arm64)
-        RUNTIME_ID="osx-arm64"
-        ;;
-    *)
-        echo "ERROR: Unknown target: $TARGET"
-        echo ""
-        echo "Usage: ./build.sh [OPTIONS]"
-        echo ""
-        echo "Options:"
-        echo "  --target TARGET  Target platform and architecture (default: auto-detect)"
-        echo "  --with-database  Download aeromux-db after building"
-        echo "  --silent         Suppress all output (only errors are shown)"
-        echo ""
-        echo "Supported targets:"
-        echo "  auto           - Auto-detect current platform and architecture (default)"
-        echo "  linux          - Auto-detect Linux architecture (x64 or arm64)"
-        echo "  macos          - Auto-detect macOS architecture (x64 or arm64)"
-        echo "  linux-x64      - Linux x64 (explicit, for cross-compilation)"
-        echo "  linux-arm64    - Linux ARM64 (Raspberry Pi 4/5, explicit)"
-        echo "  macos-x64      - macOS Intel (explicit, for cross-compilation)"
-        echo "  macos-arm64    - macOS Apple Silicon (explicit, for cross-compilation)"
-        echo ""
-        echo "Examples:"
-        echo "  ./build.sh                              # Auto-detect current platform"
-        echo "  ./build.sh --target linux               # Auto-detect Linux architecture"
-        echo "  ./build.sh --target macos               # Auto-detect macOS architecture"
-        echo "  ./build.sh --target linux-arm64         # Build for Raspberry Pi (cross-compile)"
-        echo "  ./build.sh --with-database              # Build and download database"
-        echo "  ./build.sh --silent                     # Auto-detect, no output"
-        echo "  ./build.sh --silent --target linux-arm64  # Both flags"
-        exit 1
-        ;;
-esac
-
-# Set binaries directory with architecture subdirectory
-BINARIES_DIR="$ARTIFACTS_DIR/binaries/$RUNTIME_ID"
 
 log "================================================"
 log "Aeromux Build Script"
 log "================================================"
 log ""
 
-# Show target determination
-log "Determining target architecture..."
-log "✓ Target architecture: $RUNTIME_ID"
+if [ "${#RUNTIME_IDS[@]}" -gt 1 ]; then
+    log "Building all targets..."
+else
+    log "Determining target architecture..."
+    log "✓ Target architecture: ${RUNTIME_IDS[0]}"
+fi
 log ""
 
-# Clean artifacts directory
+# Clean artifact directories for targets being built
 log "Cleaning artifacts directory..."
-if [ -d "$ARTIFACTS_DIR" ]; then
-    rm -rf "$ARTIFACTS_DIR"
-fi
-mkdir -p "$BINARIES_DIR"
+for rid in "${RUNTIME_IDS[@]}"; do
+    BINARIES_DIR="$ARTIFACTS_DIR/binaries/$rid"
+    if [ -d "$BINARIES_DIR" ]; then
+        rm -rf "$BINARIES_DIR"
+    fi
+    mkdir -p "$BINARIES_DIR"
+done
 touch "$ARTIFACTS_DIR/.gitkeep"
 log "✓ Artifacts directory cleaned"
 log ""
 
-# Run a command quietly — suppress output on success, show on failure
-run_quiet() {
-    local output
-    output=$("$@" 2>&1) || {
-        [ -z "$CURRENT_STEP" ] || [ "$SILENT" = true ] || echo "✗ $CURRENT_STEP failed"
-        echo ""
-        echo "================================================"
-        echo "BUILD FAILED"
-        echo "================================================"
-        if [ -n "$output" ]; then
-            echo ""
-            echo "An error occurred during the build. See the log below for details."
-            echo "Paths relative to: $PROJECT_ROOT/"
-            echo ""
-            echo "$output" | sed "s|$PROJECT_ROOT/|./|g" | sed 's/^[[:space:]]*//' | fold -s -w $((TERMINAL_WIDTH - 3)) | sed 's/^/ | /'
-        fi
-        echo ""
-        exit 1
-    }
-}
-
-# Step 1: Restore dependencies
+# Restore dependencies (once for all targets)
 CURRENT_STEP="Dependency restore"
 log "Restoring dependencies..."
 run_quiet dotnet restore "$PROJECT_ROOT/Aeromux.sln"
 log "✓ Dependencies restored"
 log ""
 
-# Step 2: Publish single-file self-contained executable
-CURRENT_STEP="Publishing"
-log "Publishing self-contained executable..."
-run_quiet dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
-    --configuration "$CONFIGURATION" \
-    --runtime "$RUNTIME_ID" \
-    --self-contained true \
-    --output "$BINARIES_DIR" \
-    -p:PublishSingleFile=true \
-    -p:IncludeNativeLibrariesForSelfExtract=true \
-    -p:EnableCompressionInSingleFile=true \
-    -p:DebugType=embedded
-log "✓ Executable published"
+# Build each target
+if [ "${#RUNTIME_IDS[@]}" -eq 1 ]; then
+    log "Publishing self-contained executable..."
+else
+    log "Publishing self-contained executables..."
+fi
+
+for rid in "${RUNTIME_IDS[@]}"; do
+    BINARIES_DIR="$ARTIFACTS_DIR/binaries/$rid"
+
+    CURRENT_STEP="Publishing ($rid)"
+    run_quiet dotnet publish "$PROJECT_ROOT/src/Aeromux.CLI/Aeromux.CLI.csproj" \
+        --configuration "$CONFIGURATION" \
+        --runtime "$rid" \
+        --self-contained true \
+        --output "$BINARIES_DIR" \
+        -p:PublishSingleFile=true \
+        -p:IncludeNativeLibrariesForSelfExtract=true \
+        -p:EnableCompressionInSingleFile=true \
+        -p:DebugType=embedded
+
+    if [ -f "$BINARIES_DIR/Aeromux.CLI" ]; then
+        mv "$BINARIES_DIR/Aeromux.CLI" "$BINARIES_DIR/aeromux"
+    fi
+
+    log "✓ Executable for $rid is published"
+done
 log ""
 
-# Step 3: Rename the output file to 'aeromux'
 log "Finalizing..."
-if [ -f "$BINARIES_DIR/Aeromux.CLI" ]; then
-    mv "$BINARIES_DIR/Aeromux.CLI" "$BINARIES_DIR/aeromux"
-fi
 log "✓ Build finalized"
 log ""
 
-# Step 4: Download database (optional)
+# Download database (optional, once)
 if [ "$WITH_DATABASE" = true ]; then
     DB_DIR="$ARTIFACTS_DIR/db"
     mkdir -p "$DB_DIR"
     CURRENT_STEP="Database download"
     log "Downloading aeromux-db..."
-    run_quiet "$BINARIES_DIR/aeromux" database update --database "$DB_DIR"
-    log "✓ Database downloaded"
+
+    # Find a binary that can run on the current host
+    HOST_RID=$(detect_host_runtime_id)
+    DB_BINARY="$ARTIFACTS_DIR/binaries/$HOST_RID/aeromux"
+
+    if [ -f "$DB_BINARY" ]; then
+        run_quiet "$DB_BINARY" database update --database "$DB_DIR"
+        log "✓ Database downloaded"
+    else
+        log "✗ Cannot download database: no binary for current platform ($HOST_RID)"
+        log "  Build for this platform first, then run: ./artifacts/binaries/$HOST_RID/aeromux database update --database $DB_DIR"
+    fi
     log ""
 fi
 
-# Step 5: Summary
-log "================================================"
-log "BUILD SUMMARY"
-log "================================================"
-log ""
+# Summary — verify at least one binary exists
+BUILT_COUNT=0
+for rid in "${RUNTIME_IDS[@]}"; do
+    [ -f "$ARTIFACTS_DIR/binaries/$rid/aeromux" ] && BUILT_COUNT=$((BUILT_COUNT + 1))
+done
 
-if [ -f "$BINARIES_DIR/aeromux" ]; then
-    FILESIZE=$(ls -lh "$BINARIES_DIR/aeromux" | awk '{print $5}')
-    TOTAL_FILES=$(find "$ARTIFACTS_DIR" -type f -not -name ".gitkeep" | wc -l | tr -d ' ')
-
-    log "Build completed successfully!"
-    log "Architecture: $RUNTIME_ID"
-    log "Total files created: $TOTAL_FILES"
-    log "All artifacts are in: $ARTIFACTS_DIR"
-    log ""
-    log "Executable:"
-    log "  - binaries/$RUNTIME_ID/aeromux ($FILESIZE)"
-    if [ "$WITH_DATABASE" = true ] && [ -d "$ARTIFACTS_DIR/db" ]; then
-        log ""
-        log "Database:"
-        for dbfile in "$ARTIFACTS_DIR/db/"*; do
-            if [ -f "$dbfile" ]; then
-                DBFILESIZE=$(ls -lh "$dbfile" | awk '{print $5}')
-                log "  - db/$(basename "$dbfile") ($DBFILESIZE)"
-            fi
-        done
-    fi
-    log ""
-    log "Run with: ./artifacts/binaries/$RUNTIME_ID/aeromux"
-else
+if [ "$BUILT_COUNT" -eq 0 ]; then
     echo ""
     echo "================================================"
     echo "BUILD FAILED"
@@ -312,4 +324,53 @@ else
     echo ""
     exit 1
 fi
+
+TOTAL_FILES=0
+for rid in "${RUNTIME_IDS[@]}"; do
+    count=$(find "$ARTIFACTS_DIR/binaries/$rid" -type f | wc -l | tr -d ' ')
+    TOTAL_FILES=$((TOTAL_FILES + count))
+done
+ARCH_LIST="${RUNTIME_IDS[0]}"
+for rid in "${RUNTIME_IDS[@]:1}"; do
+    ARCH_LIST="$ARCH_LIST, $rid"
+done
+
+log "================================================"
+log "BUILD SUMMARY"
+log "================================================"
+log ""
+log "Build completed successfully!"
+log "Architecture: $ARCH_LIST"
+log "Total files created: $TOTAL_FILES"
+log "All artifacts are in: $ARTIFACTS_DIR"
+log ""
+
+if [ "${#RUNTIME_IDS[@]}" -eq 1 ]; then
+    log "Executable:"
+else
+    log "Executables:"
+fi
+for rid in "${RUNTIME_IDS[@]}"; do
+    if [ -f "$ARTIFACTS_DIR/binaries/$rid/aeromux" ]; then
+        FILESIZE=$(ls -lh "$ARTIFACTS_DIR/binaries/$rid/aeromux" | awk '{print $5}')
+        log "  - binaries/$rid/aeromux ($FILESIZE)"
+    fi
+done
+
+if [ "$WITH_DATABASE" = true ] && [ -d "$ARTIFACTS_DIR/db" ]; then
+    log ""
+    log "Database:"
+    for dbfile in "$ARTIFACTS_DIR/db/"*; do
+        if [ -f "$dbfile" ]; then
+            DBFILESIZE=$(ls -lh "$dbfile" | awk '{print $5}')
+            log "  - db/$(basename "$dbfile") ($DBFILESIZE)"
+        fi
+    done
+fi
+
+log ""
+log "Run on the target machine:"
+for rid in "${RUNTIME_IDS[@]}"; do
+    log "  - $rid: ./artifacts/binaries/$rid/aeromux"
+done
 log ""
