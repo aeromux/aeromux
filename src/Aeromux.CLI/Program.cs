@@ -94,7 +94,7 @@ internal abstract class Program
                 config.AddCommand<VersionCommand>("version")
                       .WithDescription("Display version information")
                       .WithExample("version")
-                      .WithExample("version", "--details");
+                      .WithExample("version", "--verbose");
 
                 // Database command - manages aircraft metadata database
                 config.AddCommand<DatabaseCommand>("database")

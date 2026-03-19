@@ -148,7 +148,7 @@ case "$COMMAND_CHOICE" in
     2) CMD_ARGS=("live") ;;
     3) CMD_ARGS=("database") ;;
     4) CMD_ARGS=("device") ;;
-    5) CMD_ARGS=("version" "--details") ;;
+    5) CMD_ARGS=("version" "--verbose") ;;
     *)
         echo "ERROR: Invalid selection"
         exit 1

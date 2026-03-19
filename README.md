@@ -131,6 +131,7 @@ aeromux device --verbose
 
 # Version — shows version and runtime information
 aeromux version
+aeromux version --verbose
 ```
 
 **Daemon mode** is for unattended operation: it decodes signals and makes the data available over the network for other tools to consume. **Live mode** adds a real-time terminal display showing all tracked aircraft. Both commands support SDR sources, Beast TCP sources, or both simultaneously. **Database** manages the aircraft metadata database downloaded from GitHub releases, with integrity verification. **Device** lists RTL-SDR hardware detected on the system and, with `--verbose`, shows detailed tuner parameters. See the [CLI Reference](docs/CLI.md) for all commands, parameters, and the configuration priority model.

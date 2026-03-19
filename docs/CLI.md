@@ -6,21 +6,21 @@ Aeromux is operated entirely through a command-line interface that provides five
 
 The following options are available on all commands. They control how Aeromux locates its configuration file, sets its logging verbosity, and finds the aircraft metadata database:
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--config <path>` | Path to the YAML configuration file | `aeromux.yaml` |
-| `--log-level <level>` | Logging verbosity: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, or `Fatal` | From YAML, or `Information` |
-| `--database <path>` | Path to the aircraft metadata database directory. Specifying this option implicitly enables database enrichment | From YAML |
+| Option                | Description                                                                                                     | Default                     |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------|-----------------------------|
+| `--config <path>`     | Path to the YAML configuration file                                                                             | `aeromux.yaml`              |
+| `--log-level <level>` | Logging verbosity: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, or `Fatal`                            | From YAML, or `Information` |
+| `--database <path>`   | Path to the aircraft metadata database directory. Specifying this option implicitly enables database enrichment | From YAML                   |
 
 ## Configuration Priority
 
 Every individual setting follows the same resolution order: **CLI > YAML > Default**. This priority is applied per-setting rather than globally, which means you can rely on the YAML file for most of your configuration while selectively overriding specific values on the command line. For example, you can use SDR sources defined in the YAML file while overriding the Beast output port via a CLI parameter:
 
-| Priority | Source | Example |
-|----------|--------|---------|
-| 1 (highest) | CLI parameter | `--beast-output-port 31005` |
-| 2 | YAML configuration file | `network.beastOutputPort: 30005` |
-| 3 (lowest) | Built-in default | `30005` |
+| Priority    | Source                  | Example                          |
+|-------------|-------------------------|----------------------------------|
+| 1 (highest) | CLI parameter           | `--beast-output-port 31005`      |
+| 2           | YAML configuration file | `network.beastOutputPort: 30005` |
+| 3 (lowest)  | Built-in default        | `30005`                          |
 
 ## Input Sources
 
@@ -30,14 +30,14 @@ Both the `daemon` and `live` commands support the same unified input model. Aero
 
 The way input sources are resolved depends on which CLI flags are present and what the YAML configuration file contains. The following table describes how Aeromux determines which sources to activate:
 
-| Scenario | Behavior |
-|----------|----------|
-| No CLI flags, YAML has `sdrSources` | SDR sources from the YAML file are used |
-| No CLI flags, YAML has `beastSources` | Beast sources from the YAML file are used |
-| No CLI flags, YAML has both | Both SDR and Beast sources from the YAML file are used |
-| `--beast-source host:port` | The Beast source from the CLI is used, overriding any `beastSources` in YAML. SDR sources are not used unless `--sdr-source` is also specified |
-| `--sdr-source` | Explicitly enables SDR sources from the YAML `sdrSources` section |
-| `--sdr-source --beast-source host:port` | Both SDR sources (from YAML) and the Beast source (from CLI) are used together |
+| Scenario                                | Behavior                                                                                                                                       |
+|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| No CLI flags, YAML has `sdrSources`     | SDR sources from the YAML file are used                                                                                                        |
+| No CLI flags, YAML has `beastSources`   | Beast sources from the YAML file are used                                                                                                      |
+| No CLI flags, YAML has both             | Both SDR and Beast sources from the YAML file are used                                                                                         |
+| `--beast-source host:port`              | The Beast source from the CLI is used, overriding any `beastSources` in YAML. SDR sources are not used unless `--sdr-source` is also specified |
+| `--sdr-source`                          | Explicitly enables SDR sources from the YAML `sdrSources` section                                                                              |
+| `--sdr-source --beast-source host:port` | Both SDR sources (from YAML) and the Beast source (from CLI) are used together                                                                 |
 
 ### Beast Connection String Format
 
@@ -73,36 +73,36 @@ The daemon command runs Aeromux as a background service for continuous, unattend
 
 #### Input Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--sdr-source` | Enable RTL-SDR device input using the `sdrSources` defined in the YAML file | Implied when no Beast sources are configured |
-| `--beast-source <HOST:PORT>` | Connect to a Beast TCP source. Can be specified multiple times for multiple sources | From YAML, or none |
+| Option                       | Description                                                                         | Default                                      |
+|------------------------------|-------------------------------------------------------------------------------------|----------------------------------------------|
+| `--sdr-source`               | Enable RTL-SDR device input using the `sdrSources` defined in the YAML file         | Implied when no Beast sources are configured |
+| `--beast-source <HOST:PORT>` | Connect to a Beast TCP source. Can be specified multiple times for multiple sources | From YAML, or none                           |
 
 #### Network Output Options
 
 The daemon serves decoded data over TCP in up to three standard formats, each independently configurable. It also exposes a read-only REST API for web interfaces and third-party integrations. See the [Broadcast Guide](BROADCAST.md) for protocol details and the [API Guide](API.md) for the REST API documentation.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--beast-output-port <port>` | TCP port for Beast binary protocol output | `30005` |
-| `--beast-output-enabled <bool>` | Enable or disable Beast output | `true` |
-| `--sbs-output-port <port>` | TCP port for SBS/BaseStation text protocol output | `30003` |
-| `--sbs-output-enabled <bool>` | Enable or disable SBS output | `false` |
-| `--json-output-port <port>` | TCP port for streaming JSON output | `30006` |
-| `--json-output-enabled <bool>` | Enable or disable JSON output | `false` |
-| `--api-port <port>` | TCP port for the REST API | `8080` |
-| `--api-enabled <bool>` | Enable or disable the REST API | `true` |
-| `--bind-address <ip>` | Network interface to bind all listeners to | `0.0.0.0` |
+| Option                          | Description                                       | Default   |
+|---------------------------------|---------------------------------------------------|-----------|
+| `--beast-output-port <port>`    | TCP port for Beast binary protocol output         | `30005`   |
+| `--beast-output-enabled <bool>` | Enable or disable Beast output                    | `true`    |
+| `--sbs-output-port <port>`      | TCP port for SBS/BaseStation text protocol output | `30003`   |
+| `--sbs-output-enabled <bool>`   | Enable or disable SBS output                      | `false`   |
+| `--json-output-port <port>`     | TCP port for streaming JSON output                | `30006`   |
+| `--json-output-enabled <bool>`  | Enable or disable JSON output                     | `false`   |
+| `--api-port <port>`             | TCP port for the REST API                         | `8080`    |
+| `--api-enabled <bool>`          | Enable or disable the REST API                    | `true`    |
+| `--bind-address <ip>`           | Network interface to bind all listeners to        | `0.0.0.0` |
 
 #### MLAT Options
 
 When MLAT is enabled, Aeromux can receive multilateration position data from mlat-client for aircraft that do not broadcast ADS-B positions. The receiver UUID is required for MLAT triangulation and must be a valid RFC 4122 UUID.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--mlat-enabled <bool>` | Enable or disable MLAT input from mlat-client | `true` |
-| `--mlat-input-port <port>` | TCP port for receiving MLAT Beast data | `30104` |
-| `--receiver-uuid <uuid>` | Receiver UUID for MLAT triangulation | From YAML, or none |
+| Option                     | Description                                   | Default            |
+|----------------------------|-----------------------------------------------|--------------------|
+| `--mlat-enabled <bool>`    | Enable or disable MLAT input from mlat-client | `true`             |
+| `--mlat-input-port <port>` | TCP port for receiving MLAT Beast data        | `30104`            |
+| `--receiver-uuid <uuid>`   | Receiver UUID for MLAT triangulation          | From YAML, or none |
 
 #### Usage Examples
 
@@ -136,10 +136,10 @@ For the full keyboard reference, sorting, search, and detail view documentation,
 
 #### Input Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--sdr-source` | Enable RTL-SDR device input using the `sdrSources` defined in the YAML file | Implied when no Beast sources are configured |
-| `--beast-source <HOST:PORT>` | Connect to a Beast TCP source. Can be specified multiple times for multiple sources | From YAML, or none |
+| Option                       | Description                                                                         | Default                                      |
+|------------------------------|-------------------------------------------------------------------------------------|----------------------------------------------|
+| `--sdr-source`               | Enable RTL-SDR device input using the `sdrSources` defined in the YAML file         | Implied when no Beast sources are configured |
+| `--beast-source <HOST:PORT>` | Connect to a Beast TCP source. Can be specified multiple times for multiple sources | From YAML, or none                           |
 
 #### Usage Examples
 
@@ -163,10 +163,10 @@ The database command manages the aircraft metadata database that Aeromux uses to
 
 #### Subcommands
 
-| Subcommand | Description |
-|------------|-------------|
-| `update` | Download the latest version of the aircraft metadata database, or update an existing copy if a newer version is available |
-| `info` | Display the currently installed database version and statistics, including the number of records and the date of the last update |
+| Subcommand  | Description                                                                                                                      |
+|-------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `update`    | Download the latest version of the aircraft metadata database, or update an existing copy if a newer version is available        |
+| `info`      | Display the currently installed database version and statistics, including the number of records and the date of the last update |
 
 #### Usage Examples
 
@@ -184,8 +184,8 @@ The device command lists all RTL-SDR USB receivers detected on the system. This 
 
 #### Options
 
-| Option | Description |
-|--------|-------------|
+| Option      | Description                                                                                           |
+|-------------|-------------------------------------------------------------------------------------------------------|
 | `--verbose` | Show detailed tuner parameters including supported gains and frequency range for each detected device |
 
 #### Usage Examples
@@ -202,21 +202,33 @@ aeromux device --verbose
 
 The version command displays the Aeromux version number and runtime information, including the .NET runtime version and the operating system platform. This information is useful for bug reports and verifying that the correct build is running.
 
+#### Options
+
+| Option      | Description                                                                                                  |
+|-------------|--------------------------------------------------------------------------------------------------------------|
+| `--verbose` | Display verbose version information including commit hash, .NET runtime version, license, and repository URL |
+
+#### Usage Examples
+
 ```bash
+# Display the version number
 aeromux version
+
+# Display verbose version information
+aeromux version --verbose
 ```
 
 ## YAML Configuration Reference
 
 The YAML configuration file is organized into the following top-level sections. Each section controls a specific aspect of Aeromux's behavior. See [`aeromux.example.yaml`](../aeromux.example.yaml) for a fully commented template with detailed explanations of every option.
 
-| Section | Description |
-|---------|-------------|
-| `sdrSources` | RTL-SDR device configurations, including friendly name, device index, gain, and PPM frequency correction |
-| `beastSources` | Beast TCP input sources, each specified as a host and port pair |
-| `network` | Output protocol ports and enable/disable flags for Beast, SBS, JSON, and the REST API, plus the bind address |
-| `tracking` | Confidence level for ICAO filtering, aircraft and ICAO timeout durations, and history buffer settings |
-| `receiver` | Station geographic location (latitude, longitude, altitude) and receiver UUID for MLAT triangulation |
-| `mlat` | MLAT input enable/disable flag and the port for receiving positions from mlat-client |
-| `database` | Aircraft metadata database directory path and enable/disable flag |
-| `logging` | Log level, console and file output settings, log rotation, and retention |
+| Section        | Description                                                                                                  |
+|----------------|--------------------------------------------------------------------------------------------------------------|
+| `sdrSources`   | RTL-SDR device configurations, including friendly name, device index, gain, and PPM frequency correction     |
+| `beastSources` | Beast TCP input sources, each specified as a host and port pair                                              |
+| `network`      | Output protocol ports and enable/disable flags for Beast, SBS, JSON, and the REST API, plus the bind address |
+| `tracking`     | Confidence level for ICAO filtering, aircraft and ICAO timeout durations, and history buffer settings        |
+| `receiver`     | Station geographic location (latitude, longitude, altitude) and receiver UUID for MLAT triangulation         |
+| `mlat`         | MLAT input enable/disable flag and the port for receiving positions from mlat-client                         |
+| `database`     | Aircraft metadata database directory path and enable/disable flag                                            |
+| `logging`      | Log level, console and file output settings, log rotation, and retention                                     |

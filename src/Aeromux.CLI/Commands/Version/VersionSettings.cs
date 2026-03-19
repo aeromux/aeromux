@@ -27,9 +27,9 @@ namespace Aeromux.CLI.Commands.Version;
 public class VersionSettings : GlobalSettings
 {
     /// <summary>
-    /// Gets or sets whether to display detailed version information.
+    /// Gets or sets whether to display verbose version information.
     /// </summary>
-    [CommandOption("--details")]
-    [Description("Display detailed version information")]
-    public bool Details { get; set; }
+    [CommandOption("--verbose")]
+    [Description("Display verbose version information")]
+    public bool Verbose { get; set; }
 }

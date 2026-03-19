@@ -29,7 +29,7 @@ public class VersionCommand : Command<VersionSettings>
     /// Executes the version command to display application version information.
     /// </summary>
     /// <param name="context">The command context from Spectre.Console.Cli.</param>
-    /// <param name="settings">Version command settings including --details flag.</param>
+    /// <param name="settings">Version command settings including --verbose flag.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>Exit code: always returns 0 for success.</returns>
     public override int Execute(CommandContext context, VersionSettings settings, CancellationToken cancellationToken)
@@ -43,7 +43,7 @@ public class VersionCommand : Command<VersionSettings>
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
         string version = fullVersion.Split('+')[0];
 
-        if (settings.Details)
+        if (settings.Verbose)
         {
             // Display detailed version information including commit hash for bug reports
             Console.WriteLine("Aeromux");
