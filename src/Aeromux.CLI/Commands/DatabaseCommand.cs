@@ -320,12 +320,21 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
             }
             else if (installed.Metadata == null)
             {
-                // File exists but is corrupted
+                // File exists but cannot be read — check if it's a permission issue
                 Console.WriteLine("Installed database:");
                 Console.WriteLine($"  Version:          {installed.VersionFromFilename} (from filename)");
                 Console.WriteLine($"  Path:             {Path.GetFullPath(installed.FilePath)}");
                 Console.WriteLine($"  File size:        {FormatBytes(installed.FileSize)}");
-                Console.WriteLine("  Error:            Unable to read the database file. It may be corrupted.");
+
+                if (!IsFileReadable(installed.FilePath))
+                {
+                    Console.WriteLine("  Error:            Permission denied — the database file is not readable.");
+                    Console.WriteLine($"                    To fix, run: sudo chown aeromux:aeromux {Path.GetFullPath(installed.FilePath)}");
+                }
+                else
+                {
+                    Console.WriteLine("  Error:            Unable to read the database file. It may be corrupted.");
+                }
             }
             else
             {
@@ -531,6 +540,24 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
     /// </summary>
     private static void PrintSha256Result(IntegrityChecker.CheckResult result) =>
         Console.WriteLine(result.Passed ? "  SHA-256:          OK" : "  SHA-256:          FAILED");
+
+    /// <summary>
+    /// Checks whether a file can be opened for reading by the current process.
+    /// </summary>
+    /// <param name="filePath">Full path to the file to check.</param>
+    /// <returns><c>true</c> if the file is readable; <c>false</c> if access is denied.</returns>
+    private static bool IsFileReadable(string filePath)
+    {
+        try
+        {
+            using FileStream _ = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Formats a byte count into a human-readable string (e.g., <c>142.8 MB</c>).

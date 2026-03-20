@@ -33,7 +33,7 @@ public static class DatabaseLookupFactory
 
     /// <summary>
     /// Attempts to create a database lookup service after validating the database.
-    /// Returns null if the database is not configured, not found, corrupt, or has an unsupported schema version.
+    /// Returns null if the database is not configured, not found, not readable, corrupt, or has an unsupported schema version.
     /// </summary>
     /// <param name="databaseConfig">Database configuration from the application config.</param>
     /// <returns>A ready-to-use lookup service, or null if validation fails.</returns>
@@ -55,6 +55,21 @@ public static class DatabaseLookupFactory
         }
 
         InstalledDatabase db = discovery.Database;
+
+        // Verify file is readable before running further checks
+        try
+        {
+            using FileStream _ = File.Open(db.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            string fullPath = Path.GetFullPath(db.FilePath);
+            Log.Warning(
+                "Database file {FilePath} is not readable — check file ownership. " +
+                "Enrichment disabled. To fix, run: sudo chown aeromux:aeromux {FilePath}",
+                fullPath, fullPath);
+            return null;
+        }
 
         // Verify SQLite integrity
         IntegrityChecker.CheckResult integrityResult = IntegrityChecker.VerifySqliteIntegrity(db.FilePath);
@@ -87,9 +102,17 @@ public static class DatabaseLookupFactory
         }
 
         // All checks passed — create the lookup service
-        Log.Information("Database loaded: version {Version}, {RecordCount} records",
-            db.Metadata.DbVersion, db.Metadata.RecordCount);
+        try
+        {
+            Log.Information("Database loaded: version {Version}, {RecordCount} records",
+                db.Metadata.DbVersion, db.Metadata.RecordCount);
 
-        return new AircraftDatabaseLookupService(db.FilePath, schemaVersion);
+            return new AircraftDatabaseLookupService(db.FilePath, schemaVersion);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to open database {FilePath}, enrichment disabled", db.FilePath);
+            return null;
+        }
     }
 }

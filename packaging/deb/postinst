@@ -31,6 +31,12 @@ case "$1" in
 
         # Display post-install message on fresh install only
         if [ -z "$2" ]; then
+            # Check if sudo is available (present on Raspberry Pi OS, not on pure Debian)
+            HAS_SUDO=false
+            if command -v sudo > /dev/null 2>&1; then
+                HAS_SUDO=true
+            fi
+
             echo "================================================================================"
             echo "Aeromux installed successfully!"
             echo "================================================================================"
@@ -38,20 +44,44 @@ case "$1" in
             echo "Next steps:"
             echo ""
             echo "  1. Edit the configuration:"
-            echo "     sudo nano /etc/aeromux/aeromux.yaml"
+
+            if [ "$HAS_SUDO" = true ]; then
+                echo "     sudo nano /etc/aeromux/aeromux.yaml"
+            else
+                echo "     su -c 'nano /etc/aeromux/aeromux.yaml'"
+            fi
+
             echo ""
             echo "     - Configure your SDR device(s) under 'sdrSources'"
             echo "     - Configure your Beast TCP input sources under 'beastSources' (if any)"
             echo "     - Set your receiver location under 'receiver'"
             echo ""
             echo "  2. (Optional) Download the aircraft database:"
-            echo "     sudo -u aeromux aeromux database update --config /etc/aeromux/aeromux.yaml"
+
+            if [ "$HAS_SUDO" = true ]; then
+                echo "     sudo -u aeromux aeromux database update --config /etc/aeromux/aeromux.yaml"
+            else
+                echo "     su -s /bin/bash -c 'aeromux database update --config /etc/aeromux/aeromux.yaml' aeromux"
+            fi
+
             echo ""
             echo "  3. Enable and start the service:"
-            echo "     sudo systemctl enable --now aeromux"
+
+            if [ "$HAS_SUDO" = true ]; then
+                echo "     sudo systemctl enable --now aeromux"
+            else
+                echo "     su -c 'systemctl enable --now aeromux'"
+            fi
+
             echo ""
             echo "  4. View logs:"
-            echo "     journalctl -u aeromux -f"
+
+            if [ "$HAS_SUDO" = true ]; then
+                echo "     sudo journalctl -u aeromux -f"
+            else
+                echo "     su -c 'journalctl -u aeromux -f'"
+            fi
+
             echo ""
             echo "Documentation: https://github.com/nandortoth/aeromux"
             echo "================================================================================"
