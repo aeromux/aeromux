@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Net;
+using System.Security.Authentication;
 using System.Text.Json;
 using Serilog;
 
@@ -79,6 +80,11 @@ public static class GitHubReleaseClient
         try
         {
             response = await client.GetAsync(url, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.InnerException is AuthenticationException)
+        {
+            Log.Debug(ex, "SSL certificate validation failed for {Url}", url);
+            return new Result { Error = "SSL certificate validation failed. Install ca-certificates: sudo apt install ca-certificates" };
         }
         catch (HttpRequestException ex)
         {

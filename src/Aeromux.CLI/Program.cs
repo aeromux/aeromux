@@ -38,15 +38,15 @@ internal abstract class Program
     /// <returns>Exit code: 0 for success, non-zero for failure.</returns>
     private static async Task<int> Main(string[] args)
     {
-        // Bootstrap logging with minimal config
-        // Only logs warnings and errors during startup before full configuration is loaded
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Warning()
-            .WriteTo.Console()
-            .CreateLogger();
-
         try
         {
+            // Bootstrap logging with minimal config
+            // Only logs warnings and errors during startup before full configuration is loaded
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Warning()
+                .WriteTo.Console()
+                .CreateLogger();
+
             Log.Debug("Aeromux starting.");
 
             // Configure Spectre.Console CLI with available commands
@@ -116,6 +116,14 @@ internal abstract class Program
 
             // Run the CLI and return the exit code from the executed command
             return await app.RunAsync(args);
+        }
+        catch (TypeInitializationException ex) when (ex.InnerException?.Message.Contains("ICU") == true)
+        {
+            // ICU library (libicu) is required by .NET for globalization support
+            Console.Error.WriteLine("Error: ICU globalization library (libicu) is not installed.");
+            Console.Error.WriteLine("Install it with: sudo apt install libicu* (Debian/Ubuntu)");
+            Console.Error.WriteLine("For other distributions, install the equivalent ICU package.");
+            return 1;
         }
         catch (Exception ex)
         {

@@ -3,7 +3,7 @@ Version: {{DEB_VERSION}}
 Section: misc
 Priority: optional
 Architecture: {{DEB_ARCH}}
-Depends: librtlsdr0
+Depends: librtlsdr0, libicu74 | libicu72 | libicu70 | libicu67, ca-certificates
 Installed-Size: {{INSTALLED_SIZE}}
 Maintainer: Nandor Toth <dev@nandortoth.com>
 Homepage: https://github.com/nandortoth/aeromux
