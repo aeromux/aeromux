@@ -1,0 +1,15 @@
+Package: aeromux
+Version: {{DEB_VERSION}}
+Section: misc
+Priority: optional
+Architecture: {{DEB_ARCH}}
+Depends: librtlsdr0
+Installed-Size: {{INSTALLED_SIZE}}
+Maintainer: Nandor Toth <dev@nandortoth.com>
+Homepage: https://github.com/nandortoth/aeromux
+Description: Multi-SDR Mode S and ADS-B demodulator and decoder
+ Multi-SDR Mode S and ADS-B demodulator and decoder for .NET.
+ Aeromux receives 1090 MHz ADS-B and Mode S signals from one or more
+ RTL-SDR devices, decodes aircraft transponder messages, and provides
+ real-time aircraft tracking via a terminal UI, REST API, and network
+ streaming protocols (Beast, SBS BaseStation, JSON).

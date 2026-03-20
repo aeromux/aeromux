@@ -124,27 +124,14 @@ build_package() {
         -e 's|path: "artifacts/db/"                   |path: "/var/lib/aeromux/"               |' \
         "$EXAMPLE_CONFIG" > "$staging/etc/aeromux/aeromux.yaml"
 
-    # Generate control file
+    # Generate control file from template
     local installed_size
     installed_size=$(du -sk "$staging" | awk '{print $1}')
 
-    cat > "$staging/DEBIAN/control" << EOF
-Package: aeromux
-Version: $DEB_VERSION
-Section: misc
-Priority: optional
-Architecture: $deb_arch
-Depends: librtlsdr0
-Installed-Size: $installed_size
-Maintainer: Nandor Toth <dev@nandortoth.com>
-Homepage: https://github.com/nandortoth/aeromux
-Description: Multi-SDR Mode S and ADS-B demodulator and decoder
- Multi-SDR Mode S and ADS-B demodulator and decoder for .NET.
- Aeromux receives 1090 MHz ADS-B and Mode S signals from one or more
- RTL-SDR devices, decodes aircraft transponder messages, and provides
- real-time aircraft tracking via a terminal UI, REST API, and network
- streaming protocols (Beast, SBS BaseStation, JSON).
-EOF
+    sed -e "s/{{DEB_VERSION}}/$DEB_VERSION/" \
+        -e "s/{{DEB_ARCH}}/$deb_arch/" \
+        -e "s/{{INSTALLED_SIZE}}/$installed_size/" \
+        "$DEB_DIR/control" > "$staging/DEBIAN/control"
 
     # Build package
     mkdir -p "$PACKAGES_DIR"
