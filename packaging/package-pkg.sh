@@ -106,7 +106,7 @@ build_package() {
 
     # Sign the binary with Developer ID Application + hardened runtime
     if [ "$SIGN" = true ]; then
-        run_quiet codesign --sign "Developer ID Application" --options runtime --force "$staging/payload/bin/aeromux"
+        run_quiet codesign --sign "Developer ID Application" --options runtime --entitlements "$PKG_DIR/entitlements.plist" --force "$staging/payload/bin/aeromux"
         if ! codesign --verify "$staging/payload/bin/aeromux" > /dev/null 2>&1; then
             echo "ERROR: Binary signature verification failed." >&2
             rm -rf "$staging"
