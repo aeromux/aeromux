@@ -111,7 +111,7 @@ public class BeastStreamReconnectionTests
     public async Task StartAsync_ServerStartsLater_ConnectsAfterRetry()
     {
         // Bind to port 0 to get a free port, then stop listener to simulate "not ready yet"
-        var tempListener = new TcpListener(IPAddress.Loopback, 0);
+        using var tempListener = new TcpListener(IPAddress.Loopback, 0);
         tempListener.Start();
         int port = ((IPEndPoint)tempListener.LocalEndpoint).Port;
         tempListener.Stop();
@@ -212,10 +212,10 @@ public class BeastStreamReconnectionTests
     // ─── Statistics ───
 
     [Fact]
-    public void GetStatistics_ReturnsNull()
+    public async Task GetStatistics_ReturnsNull()
     {
         // Beast source doesn't expose statistics (only raw frames)
-        var stream = new BeastStream("127.0.0.1", 30005, DefaultTracking);
+        await using var stream = new BeastStream("127.0.0.1", 30005, DefaultTracking);
         stream.GetStatistics().Should().BeNull();
     }
 
@@ -224,35 +224,35 @@ public class BeastStreamReconnectionTests
     [Fact]
     public void Constructor_NullHost_Throws()
     {
-        Action act = () => new BeastStream(null!, 30005, DefaultTracking);
+        Action act = () => _ = new BeastStream(null!, 30005, DefaultTracking);
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Constructor_EmptyHost_Throws()
     {
-        Action act = () => new BeastStream("", 30005, DefaultTracking);
+        Action act = () => _ = new BeastStream("", 30005, DefaultTracking);
         act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Constructor_PortZero_Throws()
     {
-        Action act = () => new BeastStream("localhost", 0, DefaultTracking);
+        Action act = () => _ = new BeastStream("localhost", 0, DefaultTracking);
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
     public void Constructor_PortExceedsMax_Throws()
     {
-        Action act = () => new BeastStream("localhost", 65536, DefaultTracking);
+        Action act = () => _ = new BeastStream("localhost", 65536, DefaultTracking);
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
     public void Constructor_NullTrackingConfig_Throws()
     {
-        Action act = () => new BeastStream("localhost", 30005, null!);
+        Action act = () => _ = new BeastStream("localhost", 30005, null!);
         act.Should().Throw<ArgumentNullException>();
     }
 
