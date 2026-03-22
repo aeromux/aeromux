@@ -100,6 +100,15 @@ internal sealed class LiveTuiDisplay
 
         AnsiConsole.Clear();
 
+        // Suppress console logging during TUI to prevent stdout corruption
+        LoggingConfig loggingConfig = config.Logging!;
+        bool wasConsoleEnabled = loggingConfig.Console.Enabled;
+        if (wasConsoleEnabled)
+        {
+            loggingConfig.Console.Enabled = false;
+            Program.ConfigureLogging(loggingConfig);
+        }
+
         // TUI state (consolidates all display state into a single mutable object)
         var state = new LiveTuiState();
 
@@ -280,6 +289,13 @@ internal sealed class LiveTuiDisplay
         finally
         {
             Console.CursorVisible = true;
+
+            // Restore console logging so session summary and post-TUI output appears
+            if (wasConsoleEnabled)
+            {
+                loggingConfig.Console.Enabled = true;
+                Program.ConfigureLogging(loggingConfig);
+            }
 
             // CRITICAL: Cancel tracker consumer task BEFORE disposing
             // This prevents ObjectDisposedException during shutdown
