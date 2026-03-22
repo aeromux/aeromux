@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# Aeromux Uninstall Script for macOS
+# Removes aeromux and optionally all user data.
+#
+# Usage:
+#   sudo /opt/aeromux/bin/aeromux-uninstall            Remove program files
+#   sudo /opt/aeromux/bin/aeromux-uninstall --purge    Remove program files and all user data
+#
+# Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+set -e
+
+# ── Root check ──────────────────────────────────────────────────────────────
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run with sudo:"
+    echo "  sudo /opt/aeromux/bin/aeromux-uninstall"
+    exit 1
+fi
+
+# ── Parse arguments ─────────────────────────────────────────────────────────
+
+PURGE=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --purge)
+            PURGE=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: sudo /opt/aeromux/bin/aeromux-uninstall [--purge]"
+            echo ""
+            echo "Options:"
+            echo "  --purge    Also remove configuration, database, and log files"
+            echo "  -h, --help Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: sudo /opt/aeromux/bin/aeromux-uninstall [--purge]"
+            exit 1
+            ;;
+    esac
+done
+
+# ── Detect logged-in user ───────────────────────────────────────────────────
+
+REAL_USER=$(stat -f "%Su" /dev/console)
+REAL_HOME=$(dscl . -read /Users/"$REAL_USER" NFSHomeDirectory | awk '{print $2}')
+
+# ── Confirmation ────────────────────────────────────────────────────────────
+
+echo "This will remove aeromux from your system."
+echo "The following will be deleted:"
+echo "  /opt/aeromux/                (binary, man page, template)"
+echo "  /usr/local/bin/aeromux       (symlink)"
+
+if [ "$PURGE" = true ]; then
+    echo "  $REAL_HOME/Library/Application Support/aeromux/"
+    echo "  $REAL_HOME/Library/Logs/aeromux/"
+else
+    echo ""
+    echo "User data will be kept:"
+    echo "  $REAL_HOME/Library/Application Support/aeromux/"
+    echo "  $REAL_HOME/Library/Logs/aeromux/"
+    echo "Use --purge to also remove all user data."
+fi
+
+echo ""
+printf "Continue? [y/N] "
+read -r REPLY
+if [ "$REPLY" != "y" ] && [ "$REPLY" != "Y" ]; then
+    echo "Aborted."
+    exit 0
+fi
+
+echo ""
+
+# ── Remove symlink ──────────────────────────────────────────────────────────
+
+rm -f /usr/local/bin/aeromux
+
+# ── Forget package receipt ──────────────────────────────────────────────────
+
+pkgutil --forget com.aeromux 2>/dev/null || true
+
+# ── Purge user data ─────────────────────────────────────────────────────────
+
+if [ "$PURGE" = true ]; then
+    rm -rf "$REAL_HOME/Library/Application Support/aeromux"
+    rm -rf "$REAL_HOME/Library/Logs/aeromux"
+fi
+
+# ── Remove /opt/aeromux/ (self-delete last) ─────────────────────────────────
+
+rm -rf /opt/aeromux/share
+rm -f /opt/aeromux/bin/aeromux
+
+# Self-delete and remove empty directories
+rm -f "$0"
+rmdir /opt/aeromux/bin 2>/dev/null || true
+rmdir /opt/aeromux 2>/dev/null || true
+
+echo "Aeromux has been uninstalled."
+if [ "$PURGE" = true ]; then
+    echo "All user data has been removed."
+fi
+
+exit 0

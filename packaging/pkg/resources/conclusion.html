@@ -1,0 +1,46 @@
+<html>
+<head>
+    <style>
+        body {
+            font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h2>Aeromux has been installed successfully!</h2>
+    <p>
+        <strong>Prerequisite:</strong><br>
+        The library <code>librtlsdr</code> is required for RTL-SDR device access.
+        Install with: <code>brew install librtlsdr</code>.
+    </p>
+    <p>
+        <strong>1. Configure Aeromux:</strong><br>
+        Edit the configuration file to set up your SDR devices, Beast TCP sources, and receiver location:<br>
+        <code>nano ~/Library/Application\ Support/aeromux/aeromux.yaml</code>
+    </p>
+    <p>
+        <strong>2. Download the aircraft database (optional):</strong><br>
+        <code>aeromux database update --config ~/Library/Application\ Support/aeromux/aeromux.yaml</code>
+    </p>
+    <p>
+        <strong>3. Start the live TUI:</strong><br>
+        <code>aeromux live --config ~/Library/Application\ Support/aeromux/aeromux.yaml</code>
+    </p>
+    <p>
+        <strong>Uninstall:</strong><br>
+        <code>sudo /opt/aeromux/bin/aeromux-uninstall</code><br>
+        Add <code>--purge</code> to also remove configuration, database, and log files.
+    </p>
+    <p>
+        <strong>Man page:</strong><br>
+        <code>man aeromux</code>
+    </p>
+    <p>
+        <strong>Documentation and source code:</strong><br>
+        <a href="https://github.com/nandortoth/aeromux">https://github.com/nandortoth/aeromux</a>
+    </p>
+</body>
+</html>

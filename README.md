@@ -66,7 +66,35 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, and detail view documentation.
 
-## Quick Start
+## Installation
+
+Pre-built packages are available on the [GitHub Releases](https://github.com/nandortoth/aeromux/releases) page.
+
+### Debian / Raspberry Pi
+
+Download the `.deb` package for your architecture (ARM64 for Raspberry Pi, x64 for standard Linux) and install:
+
+```bash
+sudo dpkg -i aeromux_0.5.0-1_arm64.deb
+```
+
+The package installs a systemd service that starts automatically. Configuration is at `/etc/aeromux/aeromux.yaml`. Requires `librtlsdr0` — install with `sudo apt-get install librtlsdr0`.
+
+See the [Debian Packaging Guide](docs/PACKAGING-DEB.md) for details on configuration, service management, and upgrade behavior.
+
+### macOS
+
+Download the `.pkg` installer for your architecture (Apple Silicon or Intel) and double-click to install, or use the command line:
+
+```bash
+sudo installer -pkg aeromux_0.5.0_macos_arm64.pkg -target /
+```
+
+The installer places the binary at `/opt/aeromux/bin/aeromux` with a symlink in `/usr/local/bin/` for PATH access. Configuration and data are stored under `~/Library/Application Support/aeromux/`. Requires `librtlsdr` — install with `brew install librtlsdr`.
+
+See the [macOS Packaging Guide](docs/PACKAGING-PKG.md) for details on configuration, uninstall, and upgrade behavior.
+
+## Building from Source
 
 ### Prerequisites
 
@@ -74,7 +102,7 @@ See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, a
 - An RTL-SDR USB receiver (with R820T/R820T2 tuner)
 - The `librtlsdr` native library:
   - **macOS:** `brew install librtlsdr`
-  - **Debian/Ubuntu:** `sudo apt-get install librtlsdr-dev`
+  - **Debian/Ubuntu:** `sudo apt-get install librtlsdr0`
 
 ### Build and Run
 
@@ -170,12 +198,12 @@ All ports are configurable in the YAML configuration file. Protocols can be indi
 
 Aeromux builds as a self-contained, single-file executable for the following platforms:
 
-| Platform             | Architecture | Runtime ID    |
-|----------------------|--------------|---------------|
-| macOS (Apple Silicon)| ARM64        | `osx-arm64`   |
-| macOS (Intel)        | x64          | `osx-x64`     |
-| Linux                | x64          | `linux-x64`   |
-| Linux (Raspberry Pi) | ARM64        | `linux-arm64`  |
+| Platform             | Architecture  | Runtime ID     |
+|----------------------|---------------|----------------|
+| macOS (Apple Silicon)| ARM64         | `osx-arm64`    |
+| macOS (Intel)        | x64           | `osx-x64`      |
+| Linux                | x64           | `linux-x64`    |
+| Linux (Raspberry Pi) | ARM64         | `linux-arm64`  |
 
 The build script auto-detects your platform, or you can cross-compile for a specific target:
 
@@ -183,7 +211,7 @@ The build script auto-detects your platform, or you can cross-compile for a spec
 ./build.sh --target linux-arm64
 ```
 
-For Debian-based systems (including Raspberry Pi), Aeromux can also be installed as a `.deb` package. See the [Debian Packaging Guide](docs/PACKAGING-DEB.md) for building packages and installation instructions.
+Pre-built `.deb` and `.pkg` packages are available on the [GitHub Releases](https://github.com/nandortoth/aeromux/releases) page. See [Installation](#installation) for details.
 
 ## Contributing
 

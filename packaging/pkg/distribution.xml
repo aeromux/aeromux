@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Aeromux</title>
+    <welcome file="welcome.html" mime-type="text/html" />
+    <license file="license.html" mime-type="text/html" />
+    <conclusion file="conclusion.html" mime-type="text/html" />
+    <options customize="never" require-scripts="false" hostArchitectures="{{PKG_ARCH}}" />
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true" />
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.aeromux" />
+        </line>
+    </choices-outline>
+    <choice id="default" />
+    <choice id="com.aeromux" visible="false">
+        <pkg-ref id="com.aeromux" />
+    </choice>
+    <pkg-ref id="com.aeromux" version="{{VERSION}}" onConclusion="none">aeromux-component.pkg</pkg-ref>
+</installer-gui-script>

@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# Aeromux macOS Post-Installation Script
+# This script runs as root after the .pkg payload files are installed.
+#
+# Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+set -e
+
+SCRIPT_DIR="$(dirname "$0")"
+
+# ── Symlink ─────────────────────────────────────────────────────────────────
+
+mkdir -p /usr/local/bin
+ln -sf /opt/aeromux/bin/aeromux /usr/local/bin/aeromux
+
+# ── Detect logged-in user ───────────────────────────────────────────────────
+
+REAL_USER=$(stat -f "%Su" /dev/console)
+REAL_HOME=$(dscl . -read /Users/"$REAL_USER" NFSHomeDirectory | awk '{print $2}')
+
+# ── Create user directories ─────────────────────────────────────────────────
+
+APP_SUPPORT_DIR="$REAL_HOME/Library/Application Support/aeromux"
+LOG_DIR="$REAL_HOME/Library/Logs/aeromux"
+
+mkdir -p "$APP_SUPPORT_DIR"
+mkdir -p "$LOG_DIR"
+
+# ── Place configuration file ────────────────────────────────────────────────
+
+CONFIG_FILE="$APP_SUPPORT_DIR/aeromux.yaml"
+IS_UPGRADE=false
+
+if [ -f "$CONFIG_FILE" ]; then
+    # Upgrade: preserve user's config, place new default alongside
+    IS_UPGRADE=true
+    sed "s|\\\$HOME|$REAL_HOME|g" "$SCRIPT_DIR/aeromux.yaml" > "$CONFIG_FILE.default"
+else
+    # Fresh install: place config
+    sed "s|\\\$HOME|$REAL_HOME|g" "$SCRIPT_DIR/aeromux.yaml" > "$CONFIG_FILE"
+fi
+
+# ── Set ownership ───────────────────────────────────────────────────────────
+
+chown -R "$REAL_USER" "$APP_SUPPORT_DIR"
+chown -R "$REAL_USER" "$LOG_DIR"
+
+# ── Check for librtlsdr ────────────────────────────────────────────────────
+
+HAS_RTLSDR=false
+if [ -f /opt/homebrew/lib/librtlsdr.dylib ] || [ -f /usr/local/lib/librtlsdr.dylib ]; then
+    HAS_RTLSDR=true
+fi
+
+# ── Post-install message (fresh install only) ───────────────────────────────
+
+if [ "$IS_UPGRADE" = false ]; then
+    STEP=1
+
+    echo "================================================================================"
+    echo "Aeromux installed successfully!"
+    echo "================================================================================"
+    echo ""
+    echo "Next steps:"
+    echo ""
+
+    if [ "$HAS_RTLSDR" = false ]; then
+        echo "  $STEP. Install librtlsdr (if not already installed):"
+        echo "     brew install librtlsdr"
+        echo ""
+        STEP=$((STEP + 1))
+    fi
+
+    echo "  $STEP. Edit the configuration:"
+    echo "     nano ~/Library/Application\ Support/aeromux/aeromux.yaml"
+    echo ""
+    echo "     - Configure your SDR device(s) under 'sdrSources'"
+    echo "     - Configure your Beast TCP input sources under 'beastSources' (if any)"
+    echo "     - Set your receiver location under 'receiver'"
+    echo ""
+    STEP=$((STEP + 1))
+
+    echo "  $STEP. (Optional) Download the aircraft database:"
+    echo "     aeromux database update --config ~/Library/Application\ Support/aeromux/aeromux.yaml"
+    echo ""
+    STEP=$((STEP + 1))
+
+    echo "  $STEP. Start the live TUI:"
+    echo "     aeromux live --config ~/Library/Application\ Support/aeromux/aeromux.yaml"
+    echo ""
+    echo "To uninstall:"
+    echo "  sudo /opt/aeromux/bin/aeromux-uninstall"
+    echo ""
+    echo "Documentation: https://github.com/nandortoth/aeromux"
+    echo "================================================================================"
+fi
+
+exit 0
