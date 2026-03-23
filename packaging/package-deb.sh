@@ -119,7 +119,6 @@ build_package() {
 
     # Generate aeromux.yaml from example config with path transformations
     sed -e 's|level: debug                            |level: information                      |' \
-        -e '/^  console:/,/^  [a-z]/ s|enabled: false|enabled: true |' \
         -e 's|path: "logs/aeromux-.log"             |path: "/var/log/aeromux/aeromux-.log" |' \
         -e 's|path: "artifacts/db/"                   |path: "/var/lib/aeromux/"               |' \
         "$EXAMPLE_CONFIG" > "$staging/etc/aeromux/aeromux.yaml"

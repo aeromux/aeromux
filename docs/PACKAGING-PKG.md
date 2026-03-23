@@ -46,7 +46,6 @@ The package ships a default configuration template at `/opt/aeromux/share/aeromu
 | Setting                   | Example Config Value         | Package Config Value                              |
 |---------------------------|------------------------------|---------------------------------------------------|
 | `logging.level`           | `debug`                      | `information`                                     |
-| `logging.console.enabled` | `false`                      | `true`                                            |
 | `logging.file.path`       | `"logs/aeromux-.log"`        | `"$HOME/Library/Logs/aeromux/aeromux-.log"`       |
 | `database.path`           | `"artifacts/db/"`            | `"$HOME/Library/Application Support/aeromux/"`    |
 

@@ -121,7 +121,6 @@ build_package() {
     # Generate config template with macOS path transformations
     # Use $HOME as a placeholder — postinstall expands it to the actual user home
     sed -e 's|level: debug                            |level: information                      |' \
-        -e '/^  console:/,/^  [a-z]/ s|enabled: false|enabled: true |' \
         -e 's|path: "logs/aeromux-.log"             # Log file path with date placeholder|path: "$HOME/Library/Logs/aeromux/aeromux-.log" # Log file path with date placeholder|' \
         -e 's|path: "artifacts/db/"                   # Directory for database storage (relative or absolute path)|path: "$HOME/Library/Application Support/aeromux/" # Directory for database storage (relative or absolute path)|' \
         "$EXAMPLE_CONFIG" > "$staging/payload/share/aeromux.example.yaml"

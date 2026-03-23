@@ -49,7 +49,6 @@ The package ships a default configuration file at `/etc/aeromux/aeromux.yaml`, g
 | Setting                   | Example Config Value         | Package Config Value                 |
 |---------------------------|------------------------------|--------------------------------------|
 | `logging.level`           | `debug`                      | `information`                        |
-| `logging.console.enabled` | `false`                      | `true`                               |
 | `logging.file.path`       | `"logs/aeromux-.log"`        | `"/var/log/aeromux/aeromux-.log"`    |
 | `database.path`           | `"artifacts/db/"`            | `"/var/lib/aeromux/"`                |
 
