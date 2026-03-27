@@ -228,6 +228,11 @@ log ""
 
 if [ "${#RUNTIME_IDS[@]}" -gt 1 ]; then
     log "Building all targets..."
+    ARCH_PREVIEW="${RUNTIME_IDS[0]}"
+    for rid in "${RUNTIME_IDS[@]:1}"; do
+        ARCH_PREVIEW="$ARCH_PREVIEW, $rid"
+    done
+    log "✓ Target architectures: $ARCH_PREVIEW"
 else
     log "Determining target architecture..."
     log "✓ Target architecture: ${RUNTIME_IDS[0]}"

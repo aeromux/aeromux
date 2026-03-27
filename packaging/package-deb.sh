@@ -54,15 +54,15 @@ log() { [ "$SILENT" = true ] || echo "$@"; }
 run_quiet() {
     local output
     output=$("$@" 2>&1) || {
-        echo ""
-        echo "================================================"
-        echo "PACKAGING FAILED"
-        echo "================================================"
+        echo "" >&2
+        echo "================================================" >&2
+        echo "PACKAGING FAILED" >&2
+        echo "================================================" >&2
         if [ -n "$output" ]; then
-            echo ""
-            echo "$output"
+            echo "" >&2
+            echo "$output" >&2
         fi
-        echo ""
+        echo "" >&2
         exit 1
     }
 }
@@ -212,8 +212,16 @@ log ""
 
 if [ "${#TARGETS[@]}" -gt 1 ]; then
     log "Packaging all targets..."
-    log ""
+    ARCH_PREVIEW="${TARGETS[0]}"
+    for t in "${TARGETS[@]:1}"; do
+        ARCH_PREVIEW="$ARCH_PREVIEW, $t"
+    done
+    log "✓ Target architectures: $ARCH_PREVIEW"
+else
+    log "Packaging target..."
+    log "✓ Target architecture: ${TARGETS[0]}"
 fi
+log ""
 
 # Check dpkg-deb (once)
 log "Checking build tools..."
@@ -276,7 +284,7 @@ for i in "${!TARGETS[@]}"; do
     deb_arch="${DEB_ARCHS[$i]}"
     rid="${RUNTIME_IDS[$i]}"
 
-    pkg_filename=$(build_package "$deb_arch" "$rid")
+    pkg_filename=$(build_package "$deb_arch" "$rid") || exit 1
     PKG_FILENAMES+=("$pkg_filename")
 
     log "✓ $pkg_filename packaged"

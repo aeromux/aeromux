@@ -105,14 +105,16 @@ build_package() {
     install -m 0755 "$PKG_DIR/aeromux-uninstall" "$staging/payload/bin/aeromux-uninstall"
 
     # Sign the binary with Developer ID Application + hardened runtime
+    local sign_status="unsigned"
     if [ "$SIGN" = true ]; then
-        run_quiet codesign --sign "Developer ID Application" --options runtime --entitlements "$PKG_DIR/entitlements.plist" --force "$staging/payload/bin/aeromux"
-        if ! codesign --verify "$staging/payload/bin/aeromux" > /dev/null 2>&1; then
-            echo "ERROR: Binary signature verification failed." >&2
-            rm -rf "$staging"
-            exit 1
+        if codesign --sign "Developer ID Application" --options runtime --entitlements "$PKG_DIR/entitlements.plist" --force "$staging/payload/bin/aeromux" > /dev/null 2>&1 \
+            && codesign --verify "$staging/payload/bin/aeromux" > /dev/null 2>&1; then
+            sign_status="binary_signed"
+            log "✓ Binary signed: $runtime_id" >&2
+        else
+            sign_status="signing_failed"
+            log "✗ Binary signing failed: $runtime_id" >&2
         fi
-        log "  ✓ Binary signed: $runtime_id" >&2
     fi
 
     # Compress man page
@@ -155,13 +157,27 @@ build_package() {
     local pkg_filename="aeromux_${VERSION}_macos_${pkg_arch}.pkg"
     local output_path="$PACKAGES_DIR/$pkg_filename"
 
-    if [ "$SIGN" = true ]; then
-        run_quiet productbuild \
-            --distribution "$staging/distribution.xml" \
-            --resources "$staging/resources" \
-            --package-path "$staging" \
-            --sign "Developer ID Installer: Nándor Tóth" \
-            "$output_path"
+    if [ "$sign_status" = "binary_signed" ]; then
+        # Attempt signed productbuild, fall back to unsigned on failure
+        if productbuild \
+                --distribution "$staging/distribution.xml" \
+                --resources "$staging/resources" \
+                --package-path "$staging" \
+                --sign "Developer ID Installer: Nándor Tóth" \
+                "$output_path" > /dev/null 2>&1 \
+            && pkgutil --check-signature "$output_path" > /dev/null 2>&1; then
+            sign_status="signed"
+            log "✓ Package signed: $pkg_filename" >&2
+        else
+            log "✗ Package signing failed: $pkg_filename, building unsigned" >&2
+            rm -f "$output_path"
+            sign_status="signing_failed"
+            run_quiet productbuild \
+                --distribution "$staging/distribution.xml" \
+                --resources "$staging/resources" \
+                --package-path "$staging" \
+                "$output_path"
+        fi
     else
         run_quiet productbuild \
             --distribution "$staging/distribution.xml" \
@@ -170,21 +186,11 @@ build_package() {
             "$output_path"
     fi
 
-    # Verify signature if signed
-    if [ "$SIGN" = true ]; then
-        if ! pkgutil --check-signature "$output_path" > /dev/null 2>&1; then
-            echo "ERROR: Package signature verification failed." >&2
-            rm -f "$output_path"
-            rm -rf "$staging"
-            exit 1
-        fi
-        log "  ✓ Package signed: $pkg_filename" >&2
-    fi
-
     # Cleanup staging
     rm -rf "$staging"
 
-    echo "$pkg_filename"
+    # Return filename and sign status as colon-delimited pair (subshell prevents global vars)
+    echo "${pkg_filename}:${sign_status}"
 }
 
 # Notarize and staple a .pkg package
@@ -296,8 +302,16 @@ log ""
 
 if [ "${#TARGETS[@]}" -gt 1 ]; then
     log "Packaging all targets..."
-    log ""
+    ARCH_PREVIEW="${TARGETS[0]}"
+    for t in "${TARGETS[@]:1}"; do
+        ARCH_PREVIEW="$ARCH_PREVIEW, $t"
+    done
+    log "✓ Target architectures: $ARCH_PREVIEW"
+else
+    log "Packaging target..."
+    log "✓ Target architecture: ${TARGETS[0]}"
 fi
+log ""
 
 # Check pkgbuild and productbuild
 log "Checking build tools..."
@@ -383,16 +397,28 @@ else
 fi
 
 PKG_FILENAMES=()
+PKG_SIGN_STATUSES=()
 for i in "${!TARGETS[@]}"; do
     pkg_arch="${PKG_ARCHS[$i]}"
     rid="${RUNTIME_IDS[$i]}"
 
-    pkg_filename=$(build_package "$pkg_arch" "$rid") || exit 1
-    PKG_FILENAMES+=("$pkg_filename")
+    # Parse colon-delimited "filename:sign_status" from build_package
+    result=$(build_package "$pkg_arch" "$rid") || exit 1
+    pkg_filename="${result%%:*}"
+    sign_status="${result##*:}"
 
-    log "  ✓ $pkg_filename packaged"
+    PKG_FILENAMES+=("$pkg_filename")
+    PKG_SIGN_STATUSES+=("$sign_status")
+
+    log "✓ $pkg_filename packaged"
 done
 log ""
+
+# Initialize notarization status for all packages
+PKG_NOTARY_STATUSES=()
+for i in "${!PKG_FILENAMES[@]}"; do
+    PKG_NOTARY_STATUSES+=("")
+done
 
 # Notarize packages (parallel when multiple targets)
 if [ "$NOTARIZE" = true ]; then
@@ -404,38 +430,41 @@ if [ "$NOTARIZE" = true ]; then
 
     NOTARY_PIDS=()
     NOTARY_LOGS=()
-    for pkg in "${PKG_FILENAMES[@]}"; do
+    NOTARY_IDX=()   # Maps notarization job index back to package index
+    for i in "${!PKG_FILENAMES[@]}"; do
+        pkg="${PKG_FILENAMES[$i]}"
+        if [ "${PKG_SIGN_STATUSES[$i]}" != "signed" ]; then
+            PKG_NOTARY_STATUSES[$i]="skipped"
+            log "→ Skipped (unsigned): $pkg"
+            continue
+        fi
         notary_log=$(mktemp)
         NOTARY_LOGS+=("$notary_log")
+        NOTARY_IDX+=("$i")
         notarize_package "$pkg" > "$notary_log" 2>&1 &
         NOTARY_PIDS+=($!)
-        log "  → Submitted: $pkg"
+        log "→ Submitted: $pkg"
     done
 
-    # Wait for all notarizations and check results
-    NOTARY_FAILED=false
-    for i in "${!NOTARY_PIDS[@]}"; do
-        pid="${NOTARY_PIDS[$i]}"
+    # Wait for all notarizations and collect results
+    for j in "${!NOTARY_PIDS[@]}"; do
+        pid="${NOTARY_PIDS[$j]}"
+        i="${NOTARY_IDX[$j]}"
         pkg="${PKG_FILENAMES[$i]}"
-        notary_log="${NOTARY_LOGS[$i]}"
+        notary_log="${NOTARY_LOGS[$j]}"
 
         if wait "$pid"; then
-            log "  ✓ $pkg notarized and stapled"
+            PKG_NOTARY_STATUSES[$i]="notarized"
+            log "✓ $pkg notarized and stapled"
         else
-            NOTARY_FAILED=true
-            echo "ERROR: Notarization failed for $pkg" >&2
+            PKG_NOTARY_STATUSES[$i]="notarization_failed"
+            log "✗ Notarization failed: $pkg" >&2
             if [ -s "$notary_log" ]; then
                 cat "$notary_log" >&2
             fi
         fi
         rm -f "$notary_log"
     done
-
-    if [ "$NOTARY_FAILED" = true ]; then
-        echo "" >&2
-        echo "One or more packages failed notarization." >&2
-        exit 1
-    fi
     log ""
 fi
 
@@ -445,48 +474,62 @@ log "PACKAGING SUMMARY"
 log "================================================"
 log ""
 
-if [ "${#PKG_FILENAMES[@]}" -eq 1 ]; then
-    local_arch="${PKG_ARCHS[0]}"
-    local_pkg="${PKG_FILENAMES[0]}"
-    local_path="$PACKAGES_DIR/$local_pkg"
-    local_size=""
-    if [ -f "$local_path" ]; then
-        local_size=$(ls -lh "$local_path" | awk '{print $5}')
-    fi
+ARCH_LIST="${PKG_ARCHS[0]}"
+for arch in "${PKG_ARCHS[@]:1}"; do
+    ARCH_LIST="$ARCH_LIST, $arch"
+done
 
-    log "Package created successfully!"
-    log "Package:      $local_pkg"
-    log "Architecture: $local_arch"
-    log "Version:      $VERSION"
-    if [ "$SIGN" = true ]; then
-        log "Signed:       Yes"
-    else
-        log "Signed:       No"
-    fi
-    if [ "$NOTARIZE" = true ]; then
-        log "Notarized:    Yes"
-    else
-        log "Notarized:    No"
-    fi
-    if [ -n "$local_size" ]; then
-        log "Size:         $local_size"
-    fi
-    log "Output:       artifacts/packages/$local_pkg"
-    log ""
-    log "Install with: sudo installer -pkg artifacts/packages/$local_pkg -target /"
-    log "         or: Double-click the .pkg file in Finder"
+HAS_FAILURES=false
+for i in "${!PKG_FILENAMES[@]}"; do
+    case "${PKG_SIGN_STATUSES[$i]}" in signing_failed) HAS_FAILURES=true ;; esac
+    case "${PKG_NOTARY_STATUSES[$i]}" in notarization_failed) HAS_FAILURES=true ;; esac
+done
+
+if [ "$HAS_FAILURES" = true ]; then
+    log "Packaging completed with warnings!"
 else
-    log "All packages created successfully!"
-    log "Version:      $VERSION"
-    log ""
-    log "Packages:"
-    for pkg in "${PKG_FILENAMES[@]}"; do
-        pkg_path="$PACKAGES_DIR/$pkg"
-        if [ -f "$pkg_path" ]; then
-            pkg_size=$(ls -lh "$pkg_path" | awk '{print $5}')
-            log "  - artifacts/packages/$pkg ($pkg_size)"
-        fi
-    done
+    log "Package created successfully!"
 fi
+log "Architecture: $ARCH_LIST"
+log "Version:      $VERSION"
+log "Output:       artifacts/packages/"
+log ""
+
+if [ "${#PKG_FILENAMES[@]}" -eq 1 ]; then
+    log "Package:"
+else
+    log "Packages:"
+fi
+for i in "${!PKG_FILENAMES[@]}"; do
+    pkg="${PKG_FILENAMES[$i]}"
+    pkg_path="$PACKAGES_DIR/$pkg"
+    pkg_size=""
+    [ -f "$pkg_path" ] && pkg_size=$(ls -lh "$pkg_path" | awk '{print $5}')
+
+    parts=""
+    [ -n "$pkg_size" ] && parts="$pkg_size"
+    case "${PKG_SIGN_STATUSES[$i]}" in
+        signed)         parts="${parts:+$parts, }signed" ;;
+        signing_failed) parts="${parts:+$parts, }signing failed" ;;
+    esac
+    case "${PKG_NOTARY_STATUSES[$i]}" in
+        notarized)           parts="${parts:+$parts, }notarized" ;;
+        notarization_failed) parts="${parts:+$parts, }notarization failed" ;;
+    esac
+
+    suffix=""
+    [ -n "$parts" ] && suffix=" ($parts)"
+    log "  - artifacts/packages/${pkg}${suffix}"
+done
 
 log ""
+log "Install on the target machine:"
+for i in "${!PKG_FILENAMES[@]}"; do
+    log "  - ${TARGETS[$i]}: sudo installer -pkg artifacts/packages/${PKG_FILENAMES[$i]} -target /"
+done
+log "  - You also can double-click the .pkg file in Finder"
+log ""
+
+if [ "$HAS_FAILURES" = true ]; then
+    exit 1
+fi
