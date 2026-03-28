@@ -94,6 +94,29 @@ The installer places the binary at `/opt/aeromux/bin/aeromux` with a symlink in 
 
 See the [macOS Packaging Guide](docs/PACKAGING-PKG.md) for details on configuration, uninstall, and upgrade behavior.
 
+### Docker
+
+A multi-arch Docker image is available on GitHub Container Registry, supporting both ARM64 (Raspberry Pi) and x86-64:
+
+```bash
+# Copy the Compose template and start
+curl -O https://raw.githubusercontent.com/nandortoth/aeromux/main/docker/docker-compose.yaml
+docker compose up -d
+```
+
+The image runs Aeromux in daemon mode with a default configuration. The aircraft database is downloaded automatically on first start. To customize, extract the default config, edit it, and mount it as a volume:
+
+```bash
+docker run --rm ghcr.io/nandortoth/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
+nano aeromux.yaml
+# Uncomment the config volume mount in docker-compose.yaml, then restart
+docker compose up -d
+```
+
+USB device passthrough for RTL-SDR is supported on Linux and Raspberry Pi. On macOS and Windows, USB passthrough is not supported — use Beast TCP input sources instead.
+
+See the [Docker Guide](docs/DOCKER.md) for details on configuration, USB passthrough, database management, and offline installation.
+
 ## Building from Source
 
 ### Prerequisites

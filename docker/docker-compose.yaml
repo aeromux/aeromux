@@ -1,0 +1,53 @@
+# Aeromux Docker Compose Template
+#
+# Quick start:
+#   docker compose up -d
+#
+# The default configuration works out of the box. To customize:
+#   1. Extract the default config:
+#      docker run --rm ghcr.io/nandortoth/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
+#   2. Edit aeromux.yaml — configure SDR devices, receiver location, network ports, etc.
+#   3. Uncomment the config volume mount below
+#   4. Restart: docker compose up -d
+#
+# Update the aircraft database:
+#   Running container:  docker exec aeromux aeromux database update --config /etc/aeromux/aeromux.yaml
+#   Stopped container:  docker compose run --rm aeromux aeromux database update --config /etc/aeromux/aeromux.yaml
+#
+# USB passthrough:
+#   USB device access works on Linux and Raspberry Pi. On macOS (Docker Desktop, OrbStack)
+#   and Windows, USB passthrough is not supported — use Beast TCP input sources (beastSources) instead.
+#   On Synology DSM, use SSH CLI or Portainer (Container Manager GUI does not expose --device).
+
+services:
+  aeromux:
+    image: ghcr.io/nandortoth/aeromux:latest
+    container_name: aeromux
+    hostname: aeromux
+    restart: unless-stopped
+
+    # RTL-SDR USB device passthrough (Linux and Raspberry Pi only).
+    # Remove both if not using a local SDR device.
+    device_cgroup_rules:
+      - 'c 189:* rwm'
+
+    # Ports are mapped as host:container. Change the host (left) side to
+    # expose on a different port, e.g. "22222:30005" for Beast on port 22222.
+    ports:
+      - "30005:30005"       # Beast binary protocol output
+      - "30104:30104"       # MLAT input (from mlat-client)
+      - "8080:8080"         # REST API
+      # - "30006:30006"     # JSON streaming output (enable in aeromux.yaml first)
+      # - "30003:30003"     # SBS BaseStation output (enable in aeromux.yaml first)
+
+
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb           # RTL-SDR USB access (remove if not using local SDR)
+      - aeromux-data:/var/lib/aeromux       # Aircraft database (persistent)
+      - aeromux-logs:/var/log/aeromux       # Log files (persistent)
+      # Uncomment to use a custom configuration file:
+      # - ./aeromux.yaml:/etc/aeromux/aeromux.yaml
+
+volumes:
+  aeromux-data:
+  aeromux-logs:
