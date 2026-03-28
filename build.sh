@@ -30,6 +30,9 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
 CONFIGURATION="Release"
 
+# shellcheck source=platform.sh
+source "$PROJECT_ROOT/platform.sh"
+
 # ── Functions ────────────────────────────────────────────────────────────────
 
 usage() {
@@ -91,57 +94,23 @@ resolve_runtime_id() {
     local target="$1"
     case "$target" in
         auto)
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                local arch
-                arch=$(uname -m)
-                if [[ "$arch" == "arm64" ]]; then
-                    echo "osx-arm64"
-                else
-                    echo "osx-x64"
-                fi
-            elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-                local arch
-                arch=$(uname -m)
-                if [[ "$arch" == "aarch64" ]]; then
-                    echo "linux-arm64"
-                else
-                    echo "linux-x64"
-                fi
-            else
-                echo "ERROR: Unsupported platform: $OSTYPE" >&2
-                echo "Please specify target explicitly: ./build.sh --target [linux|macos|linux-x64|linux-arm64|macos-x64|macos-arm64]" >&2
-                exit 1
-            fi
+            detect_runtime_id
             ;;
         linux)
-            if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-                local arch
-                arch=$(uname -m)
-                if [[ "$arch" == "aarch64" ]]; then
-                    echo "linux-arm64"
-                else
-                    echo "linux-x64"
-                fi
-            else
+            if [ "$(detect_os)" != "linux" ]; then
                 echo "ERROR: Cannot auto-detect Linux architecture on non-Linux system" >&2
                 echo "Please specify explicit target: ./build.sh --target linux-x64 or ./build.sh --target linux-arm64" >&2
                 exit 1
             fi
+            echo "linux-$(detect_arch)"
             ;;
         macos)
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                local arch
-                arch=$(uname -m)
-                if [[ "$arch" == "arm64" ]]; then
-                    echo "osx-arm64"
-                else
-                    echo "osx-x64"
-                fi
-            else
+            if [ "$(detect_os)" != "osx" ]; then
                 echo "ERROR: Cannot auto-detect macOS architecture on non-macOS system" >&2
                 echo "Please specify explicit target: ./build.sh --target macos-x64 or ./build.sh --target macos-arm64" >&2
                 exit 1
             fi
+            echo "osx-$(detect_arch)"
             ;;
         linux-x64)    echo "linux-x64" ;;
         linux-arm64)  echo "linux-arm64" ;;
@@ -153,23 +122,6 @@ resolve_runtime_id() {
             usage
             ;;
     esac
-}
-
-# Detect the runtime ID for the current host platform
-detect_host_runtime_id() {
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if [[ "$(uname -m)" == "arm64" ]]; then
-            echo "osx-arm64"
-        else
-            echo "osx-x64"
-        fi
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        if [[ "$(uname -m)" == "aarch64" ]]; then
-            echo "linux-arm64"
-        else
-            echo "linux-x64"
-        fi
-    fi
 }
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
@@ -208,15 +160,10 @@ done
 
 # Resolve targets into an array of runtime IDs
 if [ "$TARGET" = "all" ]; then
-    TARGETS=(linux-arm64 linux-x64 macos-arm64 macos-x64)
+    RUNTIME_IDS=("${SUPPORTED_RUNTIME_IDS[@]}")
 else
-    TARGETS=("$TARGET")
+    RUNTIME_IDS=("$(resolve_runtime_id "$TARGET")")
 fi
-
-RUNTIME_IDS=()
-for t in "${TARGETS[@]}"; do
-    RUNTIME_IDS+=("$(resolve_runtime_id "$t")")
-done
 
 # Clear screen and print header
 [ "$SILENT" = true ] || clear
@@ -300,7 +247,7 @@ if [ "$WITH_DATABASE" = true ]; then
     log "Downloading aeromux-db..."
 
     # Find a binary that can run on the current host
-    HOST_RID=$(detect_host_runtime_id)
+    HOST_RID=$(detect_runtime_id)
     DB_BINARY="$ARTIFACTS_DIR/binaries/$HOST_RID/aeromux"
 
     if [ -f "$DB_BINARY" ]; then

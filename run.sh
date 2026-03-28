@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Aeromux Run Script
-# This script builds and runs aeromux with an interactive mode selector
+# Aeromux Quick Start Helper
+# Interactive wrapper that guides you through building and launching aeromux.
+# Provides step-by-step menus for selecting commands, input sources, and
+# configuration files — useful for getting started or quick testing.
 #
 # Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
 #
@@ -24,6 +26,9 @@ set -e  # Exit on error
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
 
+# shellcheck source=platform.sh
+source "$PROJECT_ROOT/platform.sh"
+
 # Parse --no-build flag (must be first argument if present)
 NO_BUILD=false
 if [[ "$1" == "--no-build" ]]; then
@@ -32,24 +37,7 @@ if [[ "$1" == "--no-build" ]]; then
 fi
 
 # Detect platform to determine binary path
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "arm64" ]]; then
-        RUNTIME_ID="osx-arm64"
-    else
-        RUNTIME_ID="osx-x64"
-    fi
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "aarch64" ]]; then
-        RUNTIME_ID="linux-arm64"
-    else
-        RUNTIME_ID="linux-x64"
-    fi
-else
-    echo "ERROR: Unsupported platform: $OSTYPE"
-    exit 1
-fi
+RUNTIME_ID=$(detect_runtime_id)
 
 BINARY="$ARTIFACTS_DIR/binaries/$RUNTIME_ID/aeromux"
 
@@ -94,8 +82,11 @@ prompt_input_source() {
 clear
 
 echo "================================================"
-echo "Aeromux Run Script"
+echo "Aeromux Quick Start Helper"
 echo "================================================"
+echo ""
+echo "Interactive wrapper for building and launching aeromux."
+echo "Select a command, input source, and configuration step by step."
 echo ""
 
 # Build step
