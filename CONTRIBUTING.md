@@ -27,10 +27,12 @@ Before you begin, ensure you have the following installed:
 
 - **.NET 10.0 SDK or later** - [Download here](https://dotnet.microsoft.com/download)
 - **Git** - Version control system
-- **librtlsdr** - Native RTL-SDR library for your platform:
+- **Runtime dependencies** for your platform:
   - **macOS:** `brew install librtlsdr`
-  - **Linux (Debian/Ubuntu):** `sudo apt-get install librtlsdr-dev`
-  - **Windows:** `choco install rtl-sdr` or download from [osmocom releases](https://github.com/osmocom/rtl-sdr/releases)
+  - **Linux (Debian/Ubuntu):** `sudo apt-get install librtlsdr0 libicu72 ca-certificates`
+    - `librtlsdr0` — RTL-SDR native library
+    - `libicu72` — ICU internationalization library required by .NET (use `libicu78`, `libicu74`, `libicu70`, or `libicu67` depending on your distro version)
+    - `ca-certificates` — TLS root certificates for HTTPS (database downloads)
 - **IDE** (recommended):
   - JetBrains Rider
   - Visual Studio Code with the C# Dev Kit extension

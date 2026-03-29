@@ -126,6 +126,7 @@ See the [Docker Guide](docs/DOCKER.md) for details on configuration, USB passthr
 - The `librtlsdr` native library:
   - **macOS:** `brew install librtlsdr`
   - **Debian/Ubuntu:** `sudo apt-get install librtlsdr0`
+- For the complete list of runtime dependencies (ICU, certificates), see the [Contributing Guide](CONTRIBUTING.md#prerequisites)
 
 ### Build and Run
 
