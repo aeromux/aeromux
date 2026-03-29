@@ -12,7 +12,9 @@ logs/
 .idea/
 .vs/
 .vscode/
-.claude/
+.claude/*
+!.claude/commands/
+!.claude/skills/
 
 # User-specific files
 *.user
