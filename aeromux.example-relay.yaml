@@ -1,6 +1,7 @@
-# Aeromux Test Configuration (Single Device)
-# Alternative test configuration for single RTL-SDR device testing.
-# For multi-device testing, use aeromux.test-multidevice.yaml instead.
+# Aeromux Configuration — Relay Example
+# Example configuration for relay deployments without a local SDR device.
+# Receives data via Beast TCP from external receivers (aeromux, readsb, dump1090, etc.).
+# Copy to aeromux.yaml and customize for your setup.
 
 # Logging configuration
 logging:                                  # Structured logging configuration
@@ -15,26 +16,14 @@ logging:                                  # Structured logging configuration
     retainedFileCount: 7                  # Number of old log files to keep
     fileSizeLimitMb: 100                  # Maximum size per log file in megabytes
 
-# SDR device configuration
-sdrSources:                               # List of SDR devices to use (multiple devices supported)
-  - name: primary                         # Friendly name for this device
-    deviceIndex: 0                        # RTL-SDR device index (0 for first device)
-    gainMode: manual                      # Gain mode: manual (use tunerGain) | agc (automatic gain control)
-    tunerGain: 49.6                       # Tuner gain in dB (default: 49.6 dB max sensitivity, reduce if near airport)
-    ppmCorrection: 0                      # Frequency correction in parts per million
-    # preambleThreshold: 1.8125           # Preamble detection sensitivity (default: 1.8125, range: 1.5-10.0)
-    enabled: true                         # Enable/disable this device
-    # deduplicationWindow: 50             # Deduplication time window in milliseconds (default: 50ms)
-    # maxTrackedFrames: 1000              # Maximum frames to track for deduplication (default: 1000)
-
 # Beast TCP input sources (optional)
 # Connect to external Beast-compatible servers (readsb, dump1090, dump1090-fa, aeromux daemon)
 # Can be used together with SDR sources for aggregated input
-# beastSources:
-#   - host: "192.168.1.100"               # Beast server hostname or IP address
-#     port: 30005                         # Beast server port (default: 30005)
-#   - host: "192.168.1.101"
-#     port: 30005
+beastSources:
+  - host: "192.168.1.100"               # Beast server hostname or IP address
+    port: 30005                         # Beast server port (default: 30005)
+  - host: "192.168.1.101"
+    port: 30005
 
 # Network ports and binding
 network:                                  # Network server configuration

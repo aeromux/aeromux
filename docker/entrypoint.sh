@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Aeromux Docker Entrypoint
-# Handles automatic database download on first daemon start,
-# then execs the actual command as PID 1.
+# Handles volume permissions, automatic database download on first daemon start,
+# then drops to the aeromux user and execs the actual command as PID 1.
 #
 # Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
 #
@@ -21,15 +21,18 @@
 
 set -e
 
+# Fix volume ownership for bind mounts (e.g., Synology DSM)
+chown aeromux:aeromux /var/lib/aeromux /var/log/aeromux
+
 # Only auto-download the database when running the daemon
 if [ "$1" = "aeromux" ] && [ "$2" = "daemon" ]; then
     # Check if database directory has any files (first-run detection)
     if [ -z "$(ls -A /var/lib/aeromux/ 2>/dev/null)" ]; then
         echo "First run detected — downloading aircraft database..."
-        aeromux database update --config /etc/aeromux/aeromux.yaml
+        gosu aeromux aeromux database update --config /etc/aeromux/aeromux.yaml
         echo "Aircraft database downloaded successfully."
     fi
 fi
 
-# Replace shell with the actual command (PID 1 for signal handling)
-exec "$@"
+# Drop to non-root user and replace shell with the actual command (PID 1)
+exec gosu aeromux "$@"

@@ -23,7 +23,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         librtlsdr0 \
         libicu72 \
-        ca-certificates && \
+        ca-certificates \
+        gosu && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user and directories
@@ -49,7 +50,9 @@ VOLUME ["/var/lib/aeromux", "/var/log/aeromux"]
 # Expose default ports (Beast, API, MLAT)
 EXPOSE 30005 8080 30104
 
-USER aeromux
+# .NET single-file bundle extraction directory — must be writable by the
+# non-root user regardless of volume mount permissions on /var/lib/aeromux.
+ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/dotnet-bundle
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["aeromux", "daemon", "--config", "/etc/aeromux/aeromux.yaml"]

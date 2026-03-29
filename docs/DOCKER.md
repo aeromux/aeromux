@@ -6,57 +6,58 @@ Images are published to GitHub Container Registry (GHCR) at `ghcr.io/nandortoth/
 
 ## Image Metadata
 
-| Field           | Value                                                |
-|-----------------|------------------------------------------------------|
-| Image Name      | `ghcr.io/nandortoth/aeromux`                         |
-| Base Image      | `debian:bookworm-slim`                               |
-| Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)    |
-| License         | GPL-3.0-or-later                                     |
-| Maintainer      | `Nandor Toth <dev@nandortoth.com>`                   |
-| Homepage        | `https://github.com/nandortoth/aeromux`              |
+| Field           | Value                                                 |
+|-----------------|-------------------------------------------------------|
+| Image Name      | `ghcr.io/nandortoth/aeromux`                          |
+| Base Image      | `debian:bookworm-slim`                                |
+| Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)      |
+| License         | GPL-3.0-or-later                                      |
+| Maintainer      | `Nandor Toth <dev@nandortoth.com>`                    |
+| Homepage        | `https://github.com/nandortoth/aeromux`               |
 
 ### Runtime Dependencies
 
 The following packages are installed in the image via `apt-get`:
 
-| Dependency       | Reason                                              |
-|------------------|-----------------------------------------------------|
-| `librtlsdr0`    | RTL-SDR shared library (required by RtlSdrManager)  |
-| `libicu72`       | ICU for .NET globalization                          |
-| `ca-certificates`| HTTPS support (database downloads, etc.)            |
+| Dependency        | Reason                                              |
+|-------------------|-----------------------------------------------------|
+| `librtlsdr0`      | RTL-SDR shared library (required by RtlSdrManager)  |
+| `libicu72`        | ICU for .NET globalization                          |
+| `ca-certificates` | HTTPS support (database downloads, etc.)            |
+| `gosu`            | Lightweight privilege drop (root to aeromux user)   |
 
 ### Image Tags
 
-| Tag       | Description                                            |
-|-----------|--------------------------------------------------------|
-| `0.5.0`   | Version-specific, multi-arch manifest (arm64 + amd64) |
-| `latest`  | Points to the most recent version                     |
+| Tag       | Description                                             |
+|-----------|---------------------------------------------------------|
+| `0.5.0`   | Version-specific, multi-arch manifest (arm64 + amd64)   |
+| `latest`  | Points to the most recent version                       |
 
 Multi-arch manifests are used so that a single tag (e.g., `0.5.0`) automatically resolves to the correct architecture when pulled.
 
 ## Filesystem Layout
 
-| Path                              | Type        | Description                          |
-|-----------------------------------|-------------|--------------------------------------|
-| `/usr/bin/aeromux`                | Binary      | Self-contained executable            |
-| `/etc/aeromux/aeromux.yaml`      | Config      | Default configuration                |
-| `/var/lib/aeromux/`              | Volume      | Database storage (persistent)        |
-| `/var/log/aeromux/`              | Volume      | Log files (persistent)               |
-| `/docker-entrypoint.sh`          | Script      | Entrypoint script                    |
+| Path                               | Type        | Description                          |
+|------------------------------------|-------------|--------------------------------------|
+| `/usr/bin/aeromux`                 | Binary      | Self-contained executable            |
+| `/etc/aeromux/aeromux.yaml`        | Config      | Default configuration                |
+| `/var/lib/aeromux/`                | Volume      | Database storage (persistent)        |
+| `/var/log/aeromux/`                | Volume      | Log files (persistent)               |
+| `/docker-entrypoint.sh`            | Script      | Entrypoint script                    |
 
-The container runs as a dedicated non-root user (`aeromux`) for security.
+The container starts as root for volume permission setup, then drops to a dedicated non-root user (`aeromux`) via `gosu` for security.
 
 ## Configuration
 
 The image ships a default `aeromux.yaml` at `/etc/aeromux/aeromux.yaml` with Docker-appropriate paths. The default configuration is generated at image build time from `aeromux.example.yaml` with the following transformations:
 
-| Setting                    | Example Config Value          | Docker Config Value                    |
-|----------------------------|-------------------------------|----------------------------------------|
-| `logging.level`            | `debug`                       | `information`                          |
-| `logging.console.enabled`  | `false`                       | `true`                                 |
-| `logging.file.path`        | `"logs/aeromux-.log"`        | `"/var/log/aeromux/aeromux-.log"`     |
-| `database.enabled`         | `false`                       | `true`                                 |
-| `database.path`            | `"artifacts/db/"`             | `"/var/lib/aeromux/"`                 |
+| Setting                    | Example Config Value           | Docker Config Value                     |
+|----------------------------|--------------------------------|-----------------------------------------|
+| `logging.level`            | `debug`                        | `information`                           |
+| `logging.console.enabled`  | `false`                        | `true`                                  |
+| `logging.file.path`        | `"logs/aeromux-.log"`          | `"/var/log/aeromux/aeromux-.log"`       |
+| `database.enabled`         | `false`                        | `true`                                  |
+| `database.path`            | `"artifacts/db/"`              | `"/var/lib/aeromux/"`                   |
 
 Console logging is enabled so that `docker logs` captures output. The database is enabled because the entrypoint auto-downloads it on first run.
 
@@ -107,15 +108,16 @@ docker compose run --rm aeromux aeromux database update --config /etc/aeromux/ae
 
 The `docker-entrypoint.sh` script (`docker/entrypoint.sh`) is the container's entrypoint. Docker always runs the entrypoint — only the CMD portion is replaced when the user overrides the command.
 
-1. **Check if running the daemon** — inspects `$1` and `$2` to determine if the default `aeromux daemon` command is being run.
-2. **Auto-download database (daemon only)** — if running the daemon and `/var/lib/aeromux/` is empty, downloads the database. Skipped for non-daemon commands.
-3. **Exec the command** — `exec "$@"` replaces the shell process with the actual command, so aeromux runs as PID 1 and receives signals (SIGTERM, etc.) directly.
+1. **Fix volume ownership** — runs `chown aeromux:aeromux` on `/var/lib/aeromux` and `/var/log/aeromux` to ensure the non-root user can write to bind-mounted volumes (e.g., Synology DSM). This is a no-op when ownership already matches.
+2. **Check if running the daemon** — inspects `$1` and `$2` to determine if the default `aeromux daemon` command is being run.
+3. **Auto-download database (daemon only)** — if running the daemon and `/var/lib/aeromux/` is empty, downloads the database via `gosu aeromux`. Skipped for non-daemon commands.
+4. **Drop privileges and exec** — `exec gosu aeromux "$@"` drops from root to the `aeromux` user, replaces the shell process with the actual command, so aeromux runs as PID 1 and receives signals (SIGTERM, etc.) directly.
 
-| Command | Entrypoint Behavior |
-|---------|---------------------|
-| `docker compose up` (default CMD) | Auto-downloads database if needed, then starts daemon |
-| `docker exec aeromux aeromux database update` | Bypasses entrypoint entirely (exec into running container) |
-| `docker compose run --rm aeromux aeromux database update` | Entrypoint runs but skips auto-download, then execs the override command |
+| Command                                                   | Entrypoint Behavior                                                                   |
+|-----------------------------------------------------------|---------------------------------------------------------------------------------------|
+| `docker compose up` (default CMD)                         | Fixes permissions, auto-downloads database if needed, drops to aeromux, starts daemon |
+| `docker exec aeromux aeromux database update`             | Bypasses entrypoint entirely (exec into running container)                            |
+| `docker compose run --rm aeromux aeromux database update` | Fixes permissions, skips auto-download, drops to aeromux, execs the override command  |
 
 ## USB Device Access
 
@@ -130,14 +132,14 @@ volumes:
 
 The cgroup rule grants access to all USB devices (major number 189), and the volume mount makes the device nodes visible inside the container. This approach survives USB hotplug — if an RTL-SDR disconnects and reconnects, the new device node is automatically accessible without restarting the container.
 
-| Platform               | USB Passthrough                                              |
-|------------------------|--------------------------------------------------------------|
-| Linux (native Docker)  | Works with cgroup rule + volume mount in Compose             |
-| Raspberry Pi           | Same as Linux — works natively                               |
+| Platform               | USB Passthrough                                                            |
+|------------------------|----------------------------------------------------------------------------|
+| Linux (native Docker)  | Works with cgroup rule + volume mount in Compose                           |
+| Raspberry Pi           | Same as Linux — works natively                                             |
 | Synology DSM           | Container Manager GUI has limited device support; use SSH CLI or Portainer |
-| OrbStack (macOS)       | USB passthrough not supported — use Beast TCP input instead   |
-| Docker Desktop (macOS) | USB passthrough not supported — use Beast TCP input instead   |
-| Docker Desktop (Win)   | USB passthrough not supported — use Beast TCP input instead   |
+| OrbStack (macOS)       | USB passthrough not supported — use Beast TCP input instead                |
+| Docker Desktop (macOS) | USB passthrough not supported — use Beast TCP input instead                |
+| Docker Desktop (Win)   | USB passthrough not supported — use Beast TCP input instead                |
 
 For platforms without USB passthrough, Aeromux can receive data via Beast TCP input sources (`beastSources` in the config) from an external receiver.
 
@@ -152,6 +154,27 @@ For platforms without USB passthrough, Aeromux can receive data via Beast TCP in
 | `30104` | TCP      | MLAT input (from mlat-client)            | Enabled   |
 
 The `docker-compose.yaml` template maps the default-enabled ports and includes commented entries for the optional ports.
+
+## Synology DSM
+
+Synology's Container Manager GUI has limitations compared to the Docker CLI:
+
+| Feature                | Limitation                                                                                         |
+|------------------------|----------------------------------------------------------------------------------------------------|
+| Volume mappings        | Not auto-populated from the image — manually add `/var/lib/aeromux` and `/var/log/aeromux` mounts |
+| USB device passthrough | `--device` flag not available in the GUI — use SSH CLI or Portainer                               |
+
+For volumes, click **Add Folder** in the Volume Settings panel and create the following mappings:
+
+| Host folder (example)             | Container path                  | Required |
+|-----------------------------------|---------------------------------|----------|
+| `docker/aeromux/data`             | `/var/lib/aeromux`              | Yes      |
+| `docker/aeromux/logs`             | `/var/log/aeromux`              | Yes      |
+| `docker/aeromux/aeromux.yaml`     | `/etc/aeromux/aeromux.yaml`     | No       |
+
+Without explicit mappings for data and logs, Docker uses anonymous volumes that may be lost on container recreation. The config file mount is only needed when using a custom configuration (see [Custom Configuration](#custom-configuration)).
+
+If not using a local RTL-SDR device, configure Beast TCP input sources (`beastSources` in the config) to receive data from an external receiver.
 
 ## Docker Compose Template
 
