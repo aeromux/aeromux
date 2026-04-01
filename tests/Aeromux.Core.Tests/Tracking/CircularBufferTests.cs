@@ -1175,6 +1175,323 @@ public class CircularBufferTests
 
     #endregion
 
+    #region Sequence ID Tests (7 tests)
+
+    [Fact]
+    public void SequenceId_EmptyBuffer_BothNull()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act & Assert
+        buffer.MinSequenceId.Should().BeNull();
+        buffer.MaxSequenceId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Add_FirstEntry_SequenceIdIsOne()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act
+        buffer.Add(42);
+
+        // Assert
+        buffer.MinSequenceId.Should().Be(1);
+        buffer.MaxSequenceId.Should().Be(1);
+    }
+
+    [Fact]
+    public void Add_SecondEntry_SequenceIdIsTwo()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act
+        buffer.Add(42);
+        buffer.Add(99);
+
+        // Assert
+        buffer.MinSequenceId.Should().Be(1);
+        buffer.MaxSequenceId.Should().Be(2);
+    }
+
+    [Fact]
+    public void Add_MultipleEntries_SequenceIdsAreSequential()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act
+        FillBuffer(buffer, 5);
+
+        // Assert
+        buffer.MinSequenceId.Should().Be(1);
+        buffer.MaxSequenceId.Should().Be(5);
+    }
+
+    [Fact]
+    public void SequenceId_AfterWraparound_MinIncreases()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(3);
+
+        // Act
+        FillBuffer(buffer, 5);
+
+        // Assert
+        buffer.MinSequenceId.Should().Be(3);
+        buffer.MaxSequenceId.Should().Be(5);
+    }
+
+    [Fact]
+    public void SequenceId_AfterMultipleWraparounds_CorrectRange()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(3);
+
+        // Act
+        FillBuffer(buffer, 15);
+
+        // Assert
+        buffer.MinSequenceId.Should().Be(13);
+        buffer.MaxSequenceId.Should().Be(15);
+    }
+
+    [Fact]
+    public void SequenceId_SingleCapacity_MinEqualsMax()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(1);
+
+        // Act
+        FillBuffer(buffer, 5);
+
+        // Assert
+        buffer.MinSequenceId.Should().Be(5);
+        buffer.MaxSequenceId.Should().Be(5);
+    }
+
+    #endregion
+
+    #region GetAfter Method Tests (8 tests)
+
+    [Fact]
+    public void GetAfter_Zero_ReturnsAllEntries()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+        FillBuffer(buffer, 3);
+
+        // Act
+        var result = buffer.GetAfter(0);
+
+        // Assert
+        result.Should().HaveCount(3);
+        result[0].Item.Should().Be(1);
+        result[0].SequenceId.Should().Be(1);
+        result[1].Item.Should().Be(2);
+        result[1].SequenceId.Should().Be(2);
+        result[2].Item.Should().Be(3);
+        result[2].SequenceId.Should().Be(3);
+    }
+
+    [Fact]
+    public void GetAfter_One_ReturnsEntriesTwoAndThree()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+        FillBuffer(buffer, 3);
+
+        // Act
+        var result = buffer.GetAfter(1);
+
+        // Assert
+        result.Should().HaveCount(2);
+        result[0].Item.Should().Be(2);
+        result[0].SequenceId.Should().Be(2);
+        result[1].Item.Should().Be(3);
+        result[1].SequenceId.Should().Be(3);
+    }
+
+    [Fact]
+    public void GetAfter_MaxSequenceId_ReturnsEmpty()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+        FillBuffer(buffer, 3);
+
+        // Act
+        var result = buffer.GetAfter(3);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetAfter_BeyondMaxSequenceId_ReturnsEmpty()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+        FillBuffer(buffer, 3);
+
+        // Act
+        var result = buffer.GetAfter(100);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetAfter_WrappedBuffer_BelowMin_ReturnsAll()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(3);
+        FillBuffer(buffer, 5);
+
+        // Act
+        var result = buffer.GetAfter(0);
+
+        // Assert
+        result.Should().HaveCount(3);
+        result[0].Item.Should().Be(3);
+        result[0].SequenceId.Should().Be(3);
+        result[1].Item.Should().Be(4);
+        result[1].SequenceId.Should().Be(4);
+        result[2].Item.Should().Be(5);
+        result[2].SequenceId.Should().Be(5);
+    }
+
+    [Fact]
+    public void GetAfter_WrappedBuffer_BetweenMinAndMax_ReturnsSubset()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(3);
+        FillBuffer(buffer, 5);
+
+        // Act
+        var result = buffer.GetAfter(3);
+
+        // Assert
+        result.Should().HaveCount(2);
+        result[0].Item.Should().Be(4);
+        result[0].SequenceId.Should().Be(4);
+        result[1].Item.Should().Be(5);
+        result[1].SequenceId.Should().Be(5);
+    }
+
+    [Fact]
+    public void GetAfter_EmptyBuffer_ReturnsEmpty()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act
+        var result = buffer.GetAfter(0);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetAfter_ResultsOrderedChronologically()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(5);
+        FillBuffer(buffer, 7);
+
+        // Act
+        var result = buffer.GetAfter(3);
+
+        // Assert
+        result.Should().HaveCount(4);
+        for (int i = 1; i < result.Length; i++)
+        {
+            result[i].SequenceId.Should().BeGreaterThan(result[i - 1].SequenceId,
+                "items should be ordered oldest-first by sequence ID");
+            result[i].Item.Should().BeGreaterThan(result[i - 1].Item,
+                "items should match sequence ID order");
+        }
+    }
+
+    #endregion
+
+    #region GetAllWithSequenceIds and GetRecentWithSequenceIds Tests (4 tests)
+
+    [Fact]
+    public void GetAllWithSequenceIds_ReturnsItemsAndSequenceIds()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+        FillBuffer(buffer, 3);
+
+        // Act
+        var result = buffer.GetAllWithSequenceIds();
+
+        // Assert
+        result.Should().HaveCount(3);
+        result[0].Item.Should().Be(1);
+        result[0].SequenceId.Should().Be(1);
+        result[1].Item.Should().Be(2);
+        result[1].SequenceId.Should().Be(2);
+        result[2].Item.Should().Be(3);
+        result[2].SequenceId.Should().Be(3);
+    }
+
+    [Fact]
+    public void GetAllWithSequenceIds_AfterWraparound_CorrectIds()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(3);
+        FillBuffer(buffer, 5);
+
+        // Act
+        var result = buffer.GetAllWithSequenceIds();
+
+        // Assert
+        result.Should().HaveCount(3);
+        result[0].Item.Should().Be(3);
+        result[0].SequenceId.Should().Be(3);
+        result[1].Item.Should().Be(4);
+        result[1].SequenceId.Should().Be(4);
+        result[2].Item.Should().Be(5);
+        result[2].SequenceId.Should().Be(5);
+    }
+
+    [Fact]
+    public void GetRecentWithSequenceIds_ReturnsSubsetWithIds()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+        FillBuffer(buffer, 5);
+
+        // Act
+        var result = buffer.GetRecentWithSequenceIds(2);
+
+        // Assert
+        result.Should().HaveCount(2);
+        result[0].Item.Should().Be(4);
+        result[0].SequenceId.Should().Be(4);
+        result[1].Item.Should().Be(5);
+        result[1].SequenceId.Should().Be(5);
+    }
+
+    [Fact]
+    public void GetAllWithSequenceIds_EmptyBuffer_ReturnsEmpty()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act
+        var result = buffer.GetAllWithSequenceIds();
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>

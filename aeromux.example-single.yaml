@@ -48,6 +48,7 @@ tracking:                                 # Aircraft state tracking configuratio
   # enablePositionHistory: true           # Enable position history tracking (circular buffer)
   # enableAltitudeHistory: true           # Enable altitude history tracking (circular buffer)
   # enableVelocityHistory: true           # Enable velocity history tracking (circular buffer)
+  # enableStateHistory: true              # Enable combined state history (position + altitude + velocity)
 
 # Receiver station location (optional)
 receiver:

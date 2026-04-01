@@ -31,6 +31,7 @@ public class TrackingConfigBuilder
     private bool _enablePositionHistory = true;
     private bool _enableAltitudeHistory = true;
     private bool _enableVelocityHistory = true;
+    private bool _enableStateHistory = true;
 
     /// <summary>
     /// Sets the maximum size for history circular buffers.
@@ -45,14 +46,14 @@ public class TrackingConfigBuilder
     }
 
     /// <summary>
-    /// Sets the aircraft timeout in minutes.
+    /// Sets the aircraft timeout in seconds.
     /// Aircraft not seen within this time will be expired and removed.
     /// </summary>
-    /// <param name="minutes">Timeout in minutes (use small values like 1 for fast tests)</param>
+    /// <param name="seconds">Timeout in seconds (use small values like 1 for fast tests)</param>
     /// <returns>This builder for fluent chaining</returns>
-    public TrackingConfigBuilder WithAircraftTimeout(int minutes)
+    public TrackingConfigBuilder WithAircraftTimeout(int seconds)
     {
-        _aircraftTimeoutSeconds = minutes;
+        _aircraftTimeoutSeconds = seconds;
         return this;
     }
 
@@ -77,6 +78,7 @@ public class TrackingConfigBuilder
         _enablePositionHistory = false;
         _enableAltitudeHistory = false;
         _enableVelocityHistory = false;
+        _enableStateHistory = false;
         return this;
     }
 
@@ -111,6 +113,16 @@ public class TrackingConfigBuilder
     }
 
     /// <summary>
+    /// Disables state history only.
+    /// </summary>
+    /// <returns>This builder for fluent chaining</returns>
+    public TrackingConfigBuilder WithStateHistoryDisabled()
+    {
+        _enableStateHistory = false;
+        return this;
+    }
+
+    /// <summary>
     /// Builds a TrackingConfig instance with the configured settings.
     /// </summary>
     /// <returns>TrackingConfig ready for use in tests</returns>
@@ -124,7 +136,8 @@ public class TrackingConfigBuilder
             MaxHistorySize = _maxHistorySize,
             EnablePositionHistory = _enablePositionHistory,
             EnableAltitudeHistory = _enableAltitudeHistory,
-            EnableVelocityHistory = _enableVelocityHistory
+            EnableVelocityHistory = _enableVelocityHistory,
+            EnableStateHistory = _enableStateHistory
         };
     }
 }

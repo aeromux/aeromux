@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.Configuration;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.Tests.Builders;
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
@@ -22,7 +23,7 @@ using Aeromux.Core.Tracking;
 namespace Aeromux.Core.Tests.Tracking;
 
 /// <summary>
-/// Tests for history buffer updates (position, altitude, velocity).
+/// Tests for history buffer updates (position, altitude, velocity, state).
 /// </summary>
 public class HistoryTests : AircraftStateTrackerTestsBase
 {
@@ -120,6 +121,7 @@ public class HistoryTests : AircraftStateTrackerTestsBase
         aircraft!.History.PositionHistory.Should().BeNull();
         aircraft.History.AltitudeHistory.Should().BeNull();
         aircraft.History.VelocityHistory.Should().BeNull();
+        aircraft.History.StateHistory.Should().BeNull();
     }
 
     [Fact]
@@ -302,5 +304,139 @@ public class HistoryTests : AircraftStateTrackerTestsBase
         aircraft.History.VelocityHistory!.Count.Should().BeGreaterThan(0);
         aircraft.History.PositionHistory.Should().BeNull(); // Disabled
         aircraft.History.AltitudeHistory.Should().BeNull(); // Disabled
+    }
+
+    [Fact]
+    public void Update_StateHistory_RecordedOnPositionUpdate()
+    {
+        // Arrange
+        Tracker = CreateTracker();
+        var parser = new MessageParser();
+
+        // Act - Send even/odd position frame pair to trigger position decode
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.StateHistory.Should().NotBeNull();
+        aircraft.History.StateHistory!.Count.Should().BeGreaterThan(0);
+
+        StateSnapshot[] snapshots = aircraft.History.StateHistory.GetAll();
+        snapshots.Should().NotBeEmpty();
+        snapshots[0].Position.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Update_StateHistory_NotRecordedOnVelocityOnlyUpdate()
+    {
+        // Arrange
+        Tracker = CreateTracker();
+
+        // Act - Send only velocity frame (no position)
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB027_Descending, "4BB027"));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("4BB027");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.StateHistory.Should().NotBeNull();
+        aircraft.History.StateHistory!.Count.Should().Be(0); // No position → no state snapshot
+    }
+
+    [Fact]
+    public void Update_StateHistory_IndependentOfPositionBuffer()
+    {
+        // Arrange - Disable position history but keep state enabled
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithPositionHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+        var parser = new MessageParser();
+
+        // Act
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.PositionHistory.Should().BeNull(); // Position disabled
+        aircraft.History.StateHistory.Should().NotBeNull(); // State still enabled
+        aircraft.History.StateHistory!.Count.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Update_StateHistory_Disabled_NullBuffer()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder()
+            .WithStateHistoryDisabled()
+            .Build();
+        Tracker = new AircraftStateTracker(config);
+        Disposables.Add(Tracker);
+        var parser = new MessageParser();
+
+        // Act
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.StateHistory.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_StateHistory_AltitudePreferBarometric()
+    {
+        // Arrange
+        Tracker = CreateTracker();
+        var parser = new MessageParser();
+
+        // Act - 80073B has barometric altitude
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.History.StateHistory!.Count.Should().BeGreaterThan(0);
+
+        StateSnapshot snapshot = aircraft.History.StateHistory.GetAll()[0];
+        snapshot.Altitude.Should().NotBeNull();
+        snapshot.AltitudeType.Should().Be(AltitudeType.Barometric);
+    }
+
+    [Fact]
+    public void Update_SequenceIds_IndependentPerBufferType()
+    {
+        // Arrange
+        Tracker = CreateTracker();
+        var parser = new MessageParser();
+
+        // Act - Send position frames (triggers position + altitude + state snapshots)
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser));
+        Tracker.Update(CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser));
+
+        // Assert - Each buffer has its own independent sequence counter
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+
+        if (aircraft!.History.PositionHistory is { Count: > 0 })
+        {
+            aircraft.History.PositionHistory.MinSequenceId.Should().Be(1);
+        }
+
+        if (aircraft.History.AltitudeHistory is { Count: > 0 })
+        {
+            aircraft.History.AltitudeHistory.MinSequenceId.Should().Be(1);
+        }
+
+        if (aircraft.History.StateHistory is { Count: > 0 })
+        {
+            aircraft.History.StateHistory.MinSequenceId.Should().Be(1);
+        }
     }
 }

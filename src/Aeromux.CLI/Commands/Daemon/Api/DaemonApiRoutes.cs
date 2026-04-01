@@ -48,7 +48,7 @@ public static partial class DaemonApiRoutes
     /// </summary>
     private static readonly HashSet<string> ValidHistoryTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Position", "Altitude", "Velocity"
+        "Position", "Altitude", "Velocity", "State"
     };
 
     /// <summary>
@@ -190,22 +190,23 @@ public static partial class DaemonApiRoutes
 
             string normalizedIcao = icao.ToUpperInvariant();
 
-            // Parse type parameter
+            // Parse type parameter (single value only — comma-separated no longer supported)
             string? typeParam = httpContext.Request.Query["type"].FirstOrDefault();
-            HashSet<string>? requestedTypes = null;
+            string? requestedType = null;
 
             if (!string.IsNullOrEmpty(typeParam))
             {
-                requestedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (string type in typeParam.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                if (typeParam.Contains(','))
                 {
-                    if (!ValidHistoryTypes.Contains(type))
-                    {
-                        return Results.BadRequest(new ErrorResponse($"Unknown history type: {type}"));
-                    }
-
-                    requestedTypes.Add(type);
+                    return Results.BadRequest(new ErrorResponse($"Invalid type: {typeParam}"));
                 }
+
+                if (!ValidHistoryTypes.Contains(typeParam))
+                {
+                    return Results.BadRequest(new ErrorResponse($"Unknown history type: {typeParam}"));
+                }
+
+                requestedType = typeParam;
             }
 
             // Parse limit parameter
@@ -222,6 +223,25 @@ public static partial class DaemonApiRoutes
                 limit = parsedLimit;
             }
 
+            // Parse after parameter
+            string? afterParam = httpContext.Request.Query["after"].FirstOrDefault();
+            long? after = null;
+
+            if (!string.IsNullOrEmpty(afterParam))
+            {
+                if (!long.TryParse(afterParam, out long parsedAfter) || parsedAfter < 0)
+                {
+                    return Results.BadRequest(new ErrorResponse($"Invalid after: {afterParam}"));
+                }
+
+                if (requestedType == null)
+                {
+                    return Results.BadRequest(new ErrorResponse("Parameter 'after' requires a type"));
+                }
+
+                after = parsedAfter;
+            }
+
             Aircraft? aircraft = tracker.GetAircraft(normalizedIcao);
             if (aircraft == null)
             {
@@ -235,27 +255,42 @@ public static partial class DaemonApiRoutes
                 ["Timestamp"] = DateTime.UtcNow
             };
 
-            bool includeAll = requestedTypes == null;
+            bool includeAll = requestedType == null;
 
-            if (includeAll || requestedTypes!.Contains("Position"))
+            if (includeAll || requestedType!.Equals("Position", StringComparison.OrdinalIgnoreCase))
             {
-                response["Position"] = limit.HasValue
-                    ? DaemonApiMapper.ToPositionHistory(aircraft, limit.Value)
-                    : DaemonApiMapper.ToPositionHistory(aircraft);
+                response["Position"] = after.HasValue
+                    ? DaemonApiMapper.ToPositionHistory(aircraft, after.Value)
+                    : limit.HasValue
+                        ? DaemonApiMapper.ToPositionHistory(aircraft, limit.Value)
+                        : DaemonApiMapper.ToPositionHistory(aircraft);
             }
 
-            if (includeAll || requestedTypes!.Contains("Altitude"))
+            if (includeAll || requestedType!.Equals("Altitude", StringComparison.OrdinalIgnoreCase))
             {
-                response["Altitude"] = limit.HasValue
-                    ? DaemonApiMapper.ToAltitudeHistory(aircraft, limit.Value)
-                    : DaemonApiMapper.ToAltitudeHistory(aircraft);
+                response["Altitude"] = after.HasValue
+                    ? DaemonApiMapper.ToAltitudeHistory(aircraft, after.Value)
+                    : limit.HasValue
+                        ? DaemonApiMapper.ToAltitudeHistory(aircraft, limit.Value)
+                        : DaemonApiMapper.ToAltitudeHistory(aircraft);
             }
 
-            if (includeAll || requestedTypes!.Contains("Velocity"))
+            if (includeAll || requestedType!.Equals("Velocity", StringComparison.OrdinalIgnoreCase))
             {
-                response["Velocity"] = limit.HasValue
-                    ? DaemonApiMapper.ToVelocityHistory(aircraft, limit.Value)
-                    : DaemonApiMapper.ToVelocityHistory(aircraft);
+                response["Velocity"] = after.HasValue
+                    ? DaemonApiMapper.ToVelocityHistory(aircraft, after.Value)
+                    : limit.HasValue
+                        ? DaemonApiMapper.ToVelocityHistory(aircraft, limit.Value)
+                        : DaemonApiMapper.ToVelocityHistory(aircraft);
+            }
+
+            if (includeAll || requestedType!.Equals("State", StringComparison.OrdinalIgnoreCase))
+            {
+                response["State"] = after.HasValue
+                    ? DaemonApiMapper.ToStateHistory(aircraft, after.Value)
+                    : limit.HasValue
+                        ? DaemonApiMapper.ToStateHistory(aircraft, limit.Value)
+                        : DaemonApiMapper.ToStateHistory(aircraft);
             }
 
             return Results.Json(response, jsonOptions);

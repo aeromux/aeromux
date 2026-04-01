@@ -33,6 +33,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
 {
     private readonly ConcurrentDictionary<string, Aircraft> _aircraft = new();
     private readonly Timer _cleanupTimer;
+    private TimeSpan _cleanupInterval = TimeSpan.FromSeconds(10);
     private readonly TrackingConfig _trackingConfig;
     private readonly TrackingHandlerRegistry _handlerRegistry;
     private readonly IAircraftDatabaseLookup? _databaseLookup;
@@ -73,9 +74,18 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <summary>
     /// Gets or sets the cleanup interval for expired aircraft removal.
     /// Background timer runs at this frequency to scan and remove stale entries.
+    /// Changing this value reconfigures the running timer immediately.
     /// Default: 10 seconds
     /// </summary>
-    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromSeconds(10);
+    public TimeSpan CleanupInterval
+    {
+        get => _cleanupInterval;
+        set
+        {
+            _cleanupInterval = value;
+            _cleanupTimer.Change(value, value);
+        }
+    }
 
     /// <summary>
     /// Fired when an aircraft's state is updated with new data.
@@ -360,6 +370,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
                 : null,
             VelocityHistory = _trackingConfig.EnableVelocityHistory
                 ? new CircularBuffer<VelocitySnapshot>(_trackingConfig.MaxHistorySize)
+                : null,
+            StateHistory = _trackingConfig.EnableStateHistory
+                ? new CircularBuffer<StateSnapshot>(_trackingConfig.MaxHistorySize)
                 : null
         };
     }
@@ -425,6 +438,28 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
                 velocity.GroundTrack,        // Surface ground track from TC 5-8 (maybe null if airborne)
                 velocity.VerticalRate,       // Vertical rate from TC 19 (maybe null)
                 velocity.VelocitySubtype));  // Velocity subtype from TC 19 (null if only surface data)
+        }
+
+        // === Add state snapshot (if enabled and coordinate available) ===
+        if (history.StateHistory != null && position.Coordinate != null)
+        {
+            history.StateHistory.Add(new StateSnapshot(
+                now,
+                position.Coordinate,
+                position.NACp,
+                position.BarometricAltitude?.Feet          // Prefer barometric, fall back to geometric
+                    ?? position.GeometricAltitude?.Feet,   // Raw feet value (maybe null)
+                position.BarometricAltitude != null        // Determine altitude type
+                    ? AltitudeType.Barometric
+                    : position.GeometricAltitude != null
+                        ? AltitudeType.Geometric
+                        : null,
+                velocity.Speed,                            // Airborne speed from TC 19 (maybe null)
+                velocity.Heading,                          // Heading from TC 19 (maybe null)
+                velocity.Track,                            // Track from TC 19 (maybe null)
+                velocity.GroundSpeed,                      // Surface speed from TC 5-8 (maybe null)
+                velocity.GroundTrack,                      // Surface track from TC 5-8 (maybe null)
+                velocity.VerticalRate));                   // Vertical rate from TC 19 (maybe null)
         }
 
         return history;

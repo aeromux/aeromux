@@ -227,9 +227,22 @@ public sealed record DetailDataQuality(
 /// <typeparam name="T">The history entry type (e.g., position, altitude, velocity).</typeparam>
 public sealed record HistoryTypeWrapper<T>
 {
+    /// <summary>Whether this history type is enabled in the tracking configuration.</summary>
     public required bool Enabled { get; init; }
+
+    /// <summary>Maximum number of entries the circular buffer can hold. Absent when disabled.</summary>
     public int? Capacity { get; init; }
+
+    /// <summary>Total number of entries currently in the buffer. Absent when disabled.</summary>
     public int? Count { get; init; }
+
+    /// <summary>Sequence ID of the oldest entry in the buffer. Null when empty, absent when disabled.</summary>
+    public long? MinSequenceId { get; init; }
+
+    /// <summary>Sequence ID of the newest entry in the buffer. Null when empty, absent when disabled.</summary>
+    public long? MaxSequenceId { get; init; }
+
+    /// <summary>History entries in chronological order (oldest first). Absent when disabled.</summary>
     public IReadOnlyList<T>? Entries { get; init; }
 }
 
@@ -237,6 +250,7 @@ public sealed record HistoryTypeWrapper<T>
 /// Position history entry.
 /// </summary>
 public sealed record PositionHistoryEntry(
+    long SequenceId,
     DateTime Timestamp,
     GeographicCoordinate Position,
     NavigationAccuracyCategoryPosition? NACp);
@@ -245,6 +259,7 @@ public sealed record PositionHistoryEntry(
 /// Altitude history entry.
 /// </summary>
 public sealed record AltitudeHistoryEntry(
+    long SequenceId,
     DateTime Timestamp,
     Altitude Altitude);
 
@@ -252,7 +267,24 @@ public sealed record AltitudeHistoryEntry(
 /// Velocity history entry.
 /// </summary>
 public sealed record VelocityHistoryEntry(
+    long SequenceId,
     DateTime Timestamp,
+    Velocity? Speed,
+    double? Heading,
+    double? Track,
+    Velocity? SpeedOnGround,
+    double? TrackOnGround,
+    int? VerticalRate);
+
+/// <summary>
+/// State history entry — combined position, altitude, and velocity snapshot.
+/// </summary>
+public sealed record StateHistoryEntry(
+    long SequenceId,
+    DateTime Timestamp,
+    GeographicCoordinate Position,
+    NavigationAccuracyCategoryPosition? NACp,
+    Altitude? Altitude,
     Velocity? Speed,
     double? Heading,
     double? Track,

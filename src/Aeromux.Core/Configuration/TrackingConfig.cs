@@ -64,9 +64,15 @@ public class TrackingConfig
     public bool EnableVelocityHistory { get; set; } = true;
 
     /// <summary>
+    /// Enable state history tracking (combined position + altitude + velocity circular buffer).
+    /// Default: true
+    /// </summary>
+    public bool EnableStateHistory { get; set; } = true;
+
+    /// <summary>
     /// Maximum number of historical data points per buffer.
     /// Default: 1000 (per aircraft, per buffer)
-    /// Memory: ~96 KB per aircraft with all histories enabled
+    /// Memory: ~144 KB per aircraft with all histories enabled
     /// </summary>
     public int MaxHistorySize { get; set; } = 1000;
 }

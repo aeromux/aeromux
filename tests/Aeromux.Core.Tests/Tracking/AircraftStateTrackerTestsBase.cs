@@ -82,6 +82,26 @@ public class AircraftStateTrackerTestsBase : IDisposable
     }
 
     /// <summary>
+    /// Polls a condition at short intervals until it becomes true or a timeout is reached.
+    /// Use instead of Thread.Sleep when waiting for asynchronous behavior (timer-based cleanup, events).
+    /// </summary>
+    /// <param name="condition">Condition to check repeatedly</param>
+    /// <param name="timeout">Maximum time to wait before failing</param>
+    /// <param name="because">Failure message describing what was expected</param>
+    protected static void WaitForCondition(Func<bool> condition, TimeSpan timeout, string because)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+                return;
+            Thread.Sleep(50);
+        }
+
+        condition().Should().BeTrue(because);
+    }
+
+    /// <summary>
     /// Cleanup resources after each test.
     /// </summary>
     public void Dispose()

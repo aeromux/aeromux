@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
 
@@ -334,6 +335,8 @@ public static class DaemonApiMapper
             LastUpdate: dq?.LastUpdate ?? caps?.LastUpdate ?? opMode?.LastUpdate);
     }
 
+    // === Position History ===
+
     /// <summary>
     /// Maps position history entries.
     /// </summary>
@@ -353,7 +356,11 @@ public static class DaemonApiMapper
             Enabled = true,
             Capacity = buffer.Capacity,
             Count = buffer.Count,
-            Entries = buffer.GetAll().Select(s => new PositionHistoryEntry(s.Timestamp, s.Position, s.NACp)).ToArray()
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAllWithSequenceIds()
+                .Select(s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp))
+                .ToArray()
         };
     }
 
@@ -377,9 +384,43 @@ public static class DaemonApiMapper
             Enabled = true,
             Capacity = buffer.Capacity,
             Count = buffer.Count,
-            Entries = buffer.GetRecent(limit).Select(s => new PositionHistoryEntry(s.Timestamp, s.Position, s.NACp)).ToArray()
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetRecentWithSequenceIds(limit)
+                .Select(s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp))
+                .ToArray()
         };
     }
+
+    /// <summary>
+    /// Maps position history entries with after-based filtering.
+    /// </summary>
+    /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
+    /// <returns>Position history with buffer metadata, or disabled wrapper if history is off.</returns>
+    public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft, long afterSequenceId)
+    {
+        ArgumentNullException.ThrowIfNull(aircraft);
+        CircularBuffer<PositionSnapshot>? buffer = aircraft.History.PositionHistory;
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<PositionHistoryEntry> { Enabled = false };
+        }
+
+        return new HistoryTypeWrapper<PositionHistoryEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = buffer.Count,
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAfter(afterSequenceId)
+                .Select(s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp))
+                .ToArray()
+        };
+    }
+
+    // === Altitude History ===
 
     /// <summary>
     /// Maps altitude history entries.
@@ -400,7 +441,11 @@ public static class DaemonApiMapper
             Enabled = true,
             Capacity = buffer.Capacity,
             Count = buffer.Count,
-            Entries = buffer.GetAll().Select(s => new AltitudeHistoryEntry(s.Timestamp, s.Altitude)).ToArray()
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAllWithSequenceIds()
+                .Select(s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude))
+                .ToArray()
         };
     }
 
@@ -424,9 +469,43 @@ public static class DaemonApiMapper
             Enabled = true,
             Capacity = buffer.Capacity,
             Count = buffer.Count,
-            Entries = buffer.GetRecent(limit).Select(s => new AltitudeHistoryEntry(s.Timestamp, s.Altitude)).ToArray()
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetRecentWithSequenceIds(limit)
+                .Select(s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude))
+                .ToArray()
         };
     }
+
+    /// <summary>
+    /// Maps altitude history entries with after-based filtering.
+    /// </summary>
+    /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
+    /// <returns>Altitude history with buffer metadata, or disabled wrapper if history is off.</returns>
+    public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft, long afterSequenceId)
+    {
+        ArgumentNullException.ThrowIfNull(aircraft);
+        CircularBuffer<AltitudeSnapshot>? buffer = aircraft.History.AltitudeHistory;
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<AltitudeHistoryEntry> { Enabled = false };
+        }
+
+        return new HistoryTypeWrapper<AltitudeHistoryEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = buffer.Count,
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAfter(afterSequenceId)
+                .Select(s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude))
+                .ToArray()
+        };
+    }
+
+    // === Velocity History ===
 
     /// <summary>
     /// Maps velocity history entries.
@@ -447,7 +526,9 @@ public static class DaemonApiMapper
             Enabled = true,
             Capacity = buffer.Capacity,
             Count = buffer.Count,
-            Entries = buffer.GetAll().Select(MapVelocitySnapshot).ToArray()
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAllWithSequenceIds().Select(MapVelocitySnapshot).ToArray()
         };
     }
 
@@ -471,9 +552,118 @@ public static class DaemonApiMapper
             Enabled = true,
             Capacity = buffer.Capacity,
             Count = buffer.Count,
-            Entries = buffer.GetRecent(limit).Select(MapVelocitySnapshot).ToArray()
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetRecentWithSequenceIds(limit).Select(MapVelocitySnapshot).ToArray()
         };
     }
+
+    /// <summary>
+    /// Maps velocity history entries with after-based filtering.
+    /// </summary>
+    /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
+    /// <returns>Velocity history with buffer metadata, or disabled wrapper if history is off.</returns>
+    public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft, long afterSequenceId)
+    {
+        ArgumentNullException.ThrowIfNull(aircraft);
+        CircularBuffer<VelocitySnapshot>? buffer = aircraft.History.VelocityHistory;
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<VelocityHistoryEntry> { Enabled = false };
+        }
+
+        return new HistoryTypeWrapper<VelocityHistoryEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = buffer.Count,
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAfter(afterSequenceId).Select(MapVelocitySnapshot).ToArray()
+        };
+    }
+
+    // === State History ===
+
+    /// <summary>
+    /// Maps state history entries.
+    /// </summary>
+    /// <param name="aircraft">The aircraft to map.</param>
+    /// <returns>State history with buffer metadata, or disabled wrapper if history is off.</returns>
+    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft)
+    {
+        ArgumentNullException.ThrowIfNull(aircraft);
+        CircularBuffer<StateSnapshot>? buffer = aircraft.History.StateHistory;
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<StateHistoryEntry> { Enabled = false };
+        }
+
+        return new HistoryTypeWrapper<StateHistoryEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = buffer.Count,
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAllWithSequenceIds().Select(MapStateSnapshot).ToArray()
+        };
+    }
+
+    /// <summary>
+    /// Maps state history entries with a limit.
+    /// </summary>
+    /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="limit">Maximum number of recent entries to return.</param>
+    /// <returns>State history with buffer metadata, or disabled wrapper if history is off.</returns>
+    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft, int limit)
+    {
+        ArgumentNullException.ThrowIfNull(aircraft);
+        CircularBuffer<StateSnapshot>? buffer = aircraft.History.StateHistory;
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<StateHistoryEntry> { Enabled = false };
+        }
+
+        return new HistoryTypeWrapper<StateHistoryEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = buffer.Count,
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetRecentWithSequenceIds(limit).Select(MapStateSnapshot).ToArray()
+        };
+    }
+
+    /// <summary>
+    /// Maps state history entries with after-based filtering.
+    /// </summary>
+    /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
+    /// <returns>State history with buffer metadata, or disabled wrapper if history is off.</returns>
+    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft, long afterSequenceId)
+    {
+        ArgumentNullException.ThrowIfNull(aircraft);
+        CircularBuffer<StateSnapshot>? buffer = aircraft.History.StateHistory;
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<StateHistoryEntry> { Enabled = false };
+        }
+
+        return new HistoryTypeWrapper<StateHistoryEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = buffer.Count,
+            MinSequenceId = buffer.MinSequenceId,
+            MaxSequenceId = buffer.MaxSequenceId,
+            Entries = buffer.GetAfter(afterSequenceId).Select(MapStateSnapshot).ToArray()
+        };
+    }
+
+    // === Stats ===
 
     /// <summary>
     /// Maps a StreamStatistics to StatsResponse.
@@ -532,20 +722,45 @@ public static class DaemonApiMapper
             Receiver: receiver);
     }
 
+    // === Private Helpers ===
+
     /// <summary>
-    /// Maps a VelocitySnapshot to a VelocityHistoryEntry.
+    /// Maps a VelocitySnapshot tuple to a VelocityHistoryEntry.
     /// </summary>
-    /// <param name="snapshot">The velocity snapshot to map.</param>
-    /// <returns>A velocity history entry with renamed fields matching the API spec.</returns>
-    private static VelocityHistoryEntry MapVelocitySnapshot(VelocitySnapshot snapshot)
+    private static VelocityHistoryEntry MapVelocitySnapshot((VelocitySnapshot Item, long SequenceId) s)
     {
         return new VelocityHistoryEntry(
-            Timestamp: snapshot.Timestamp,
-            Speed: snapshot.Velocity,
-            Heading: snapshot.Heading,
-            Track: snapshot.Track,
-            SpeedOnGround: snapshot.GroundSpeed,
-            TrackOnGround: snapshot.GroundTrack,
-            VerticalRate: snapshot.VerticalRate);
+            SequenceId: s.SequenceId,
+            Timestamp: s.Item.Timestamp,
+            Speed: s.Item.Velocity,
+            Heading: s.Item.Heading,
+            Track: s.Item.Track,
+            SpeedOnGround: s.Item.GroundSpeed,
+            TrackOnGround: s.Item.GroundTrack,
+            VerticalRate: s.Item.VerticalRate);
+    }
+
+    /// <summary>
+    /// Maps a StateSnapshot tuple to a StateHistoryEntry.
+    /// Reconstructs the Altitude value object from raw int + AltitudeType.
+    /// </summary>
+    private static StateHistoryEntry MapStateSnapshot((StateSnapshot Item, long SequenceId) s)
+    {
+        Altitude? altitude = s.Item is { Altitude: not null, AltitudeType: not null }
+            ? Altitude.FromFeet(s.Item.Altitude.Value, s.Item.AltitudeType.Value)
+            : null;
+
+        return new StateHistoryEntry(
+            SequenceId: s.SequenceId,
+            Timestamp: s.Item.Timestamp,
+            Position: s.Item.Position,
+            NACp: s.Item.NACp,
+            Altitude: altitude,
+            Speed: s.Item.Speed,
+            Heading: s.Item.Heading,
+            Track: s.Item.Track,
+            SpeedOnGround: s.Item.SpeedOnGround,
+            TrackOnGround: s.Item.TrackOnGround,
+            VerticalRate: s.Item.VerticalRate);
     }
 }

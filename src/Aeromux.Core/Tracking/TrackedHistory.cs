@@ -18,9 +18,9 @@ namespace Aeromux.Core.Tracking;
 
 /// <summary>
 /// Aircraft historical data group.
-/// Contains three circular buffers for time-series position, altitude, and velocity tracking.
+/// Contains four circular buffers for time-series position, altitude, velocity, and state tracking.
 /// Each buffer: configurable max size (default 1000 entries), ~96 KB per aircraft total.
-/// Used for trail visualization (planned to be introduced later), time-series graphs, and performance analysis.
+/// Used for trail visualization, time-series graphs, and performance analysis.
 /// Buffers may be null if history tracking disabled in configuration to save memory.
 /// </summary>
 /// <remarks>
@@ -28,7 +28,8 @@ namespace Aeromux.Core.Tracking;
 /// - PositionHistory: ~32 KB (GeographicCoordinate + DateTime + int? per entry)
 /// - AltitudeHistory: ~32 KB (Altitude + DateTime + enum per entry)
 /// - VelocityHistory: ~32 KB (Velocity + DateTime + doubles per entry)
-/// Total: ~96 KB per fully-tracked aircraft
+/// - StateHistory: ~48 KB (all fields per entry)
+/// Total: ~144 KB per fully-tracked aircraft
 /// </remarks>
 public sealed record TrackedHistory
 {
@@ -52,4 +53,11 @@ public sealed record TrackedHistory
     /// Used for speed graphs, acceleration analysis, and performance profiling.
     /// </summary>
     public CircularBuffer<VelocitySnapshot>? VelocityHistory { get; init; }
+
+    /// <summary>
+    /// Combined state snapshots over time (position + altitude + velocity at each position update).
+    /// Null if state history tracking disabled in configuration.
+    /// Used for correlated trail visualization without client-side merging.
+    /// </summary>
+    public CircularBuffer<StateSnapshot>? StateHistory { get; init; }
 }

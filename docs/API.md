@@ -33,7 +33,7 @@ The API exposes five endpoints, all under the `/api/v1/` prefix. All endpoints a
 |---------------------------------------|--------------------------------------------------------------------------------|
 | `GET /api/v1/aircraft`                | Returns a compact list of all currently tracked aircraft                       |
 | `GET /api/v1/aircraft/{icao}`         | Returns detailed information for a single aircraft, organized into 10 sections |
-| `GET /api/v1/aircraft/{icao}/history` | Returns position, altitude, and velocity history for a single aircraft         |
+| `GET /api/v1/aircraft/{icao}/history` | Returns position, altitude, velocity, and state history for a single aircraft  |
 | `GET /api/v1/stats`                   | Returns receiver and session statistics including uptime and frame rates       |
 | `GET /api/v1/health`                  | Lightweight health check for Docker, monitoring tools, and readiness probes    |
 
@@ -243,25 +243,44 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Meteorology,Autop
 
 ## Aircraft History
 
-The history endpoint returns time-series data for a single aircraft, providing a trail of past positions, altitudes, and velocities. This data is useful for rendering flight paths on maps, plotting altitude profiles, and analyzing speed changes over time.
+The history endpoint returns time-series data for a single aircraft, providing a trail of past positions, altitudes, velocities, and combined state snapshots. This data is useful for rendering flight paths on maps, plotting altitude profiles, analyzing speed changes over time, and building correlated views where position, altitude, and speed are needed together.
 
-History data is stored in circular buffers with a configurable capacity. When the buffer is full, the oldest entries are automatically discarded to make room for new ones. The buffer capacity and current entry count are included in the response metadata.
+History data is stored in circular buffers with a configurable capacity. When the buffer is full, the oldest entries are automatically discarded to make room for new ones. The buffer capacity, current entry count, and sequence ID range are included in the response metadata.
+
+Each entry in a history buffer is assigned a **sequence ID** — a monotonically increasing `long` starting at 1, scoped per aircraft per buffer type. Sequence IDs enable efficient incremental polling via the `after` query parameter, so clients only receive entries they have not yet seen.
+
+### Query Parameters
+
+| Parameter | Type   | Default | Description                                                         |
+|-----------|--------|---------|---------------------------------------------------------------------|
+| `type`    | string | (all)   | Single history type: `Position`, `Altitude`, `Velocity`, or `State` |
+| `limit`   | int    | (all)   | Return only the N most recent entries                               |
+| `after`   | long   | (none)  | Return only entries with sequence ID greater than this value        |
+
+- `type` accepts a **single value only**. When omitted, all four types are returned.
+- `after` **requires** `type` — using `after` without `type` returns HTTP 400.
+- When both `after` and `limit` are provided, `after` takes precedence and `limit` is ignored.
 
 ```bash
 # Retrieve all history types for an aircraft
 curl -s "http://localhost:8080/api/v1/aircraft/407F19/history"
 
-# Retrieve only position history, limited to the 50 most recent entries
+# Retrieve only position history
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position"
+
+# Retrieve position history limited to the 50 most recent entries
 curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&limit=50"
 
-# Retrieve both position and altitude history
-curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position,Altitude"
+# Retrieve only new position entries since sequence ID 42
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=42"
 
-# Retrieve only altitude history
-curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Altitude"
+# Retrieve state history (combined position + altitude + velocity)
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=State"
 ```
 
-Each history type in the response includes buffer metadata alongside the entries themselves:
+### Response Structure
+
+Each history type in the response includes buffer metadata alongside the entries. Every entry contains a `SequenceId` field, and the buffer metadata includes `MinSequenceId` and `MaxSequenceId` for the current buffer range:
 
 ```json
 {
@@ -270,11 +289,26 @@ Each history type in the response includes buffer metadata alongside the entries
   "Position": {
     "Enabled": true,
     "Capacity": 1000,
-    "Count": 247,
+    "Count": 3,
+    "MinSequenceId": 1,
+    "MaxSequenceId": 3,
     "Entries": [
       {
+        "SequenceId": 1,
         "Timestamp": "2026-03-13T14:29:50Z",
-        "Position": { "Latitude": 47.3955, "Longitude": 18.5217 },
+        "Position": { "Latitude": 47.3935, "Longitude": 18.5198 },
+        "NACp": "< 3 m"
+      },
+      {
+        "SequenceId": 2,
+        "Timestamp": "2026-03-13T14:29:52Z",
+        "Position": { "Latitude": 47.3955, "Longitude": 18.5218 },
+        "NACp": "< 3 m"
+      },
+      {
+        "SequenceId": 3,
+        "Timestamp": "2026-03-13T14:29:55Z",
+        "Position": { "Latitude": 47.3975, "Longitude": 18.5238 },
         "NACp": "< 3 m"
       }
     ]
@@ -282,7 +316,74 @@ Each history type in the response includes buffer metadata alongside the entries
 }
 ```
 
-When history tracking is disabled for a particular type, the response indicates this with a minimal object: `{ "Enabled": false }`. The `Capacity`, `Count`, and `Entries` fields are not present in this case.
+When history tracking is disabled for a particular type, the response indicates this with a minimal object: `{ "Enabled": false }`. The `Capacity`, `Count`, `MinSequenceId`, `MaxSequenceId`, and `Entries` fields are not present in this case.
+
+When a buffer is enabled but empty, `MinSequenceId` and `MaxSequenceId` are `null`.
+
+### Incremental Polling with `after`
+
+The `after` parameter enables efficient incremental polling by returning only entries with a sequence ID greater than the specified value. The server-side filtering logic works as follows:
+
+- **`after` ≥ `MaxSequenceId`** — no new data. Returns empty `Entries` array.
+- **`after` < `MinSequenceId`** — client missed entries (buffer wrapped). Returns all entries currently in the buffer.
+- **`MinSequenceId` ≤ `after` < `MaxSequenceId`** — returns only entries with `SequenceId` > `after`.
+
+In all cases, `Count` reflects the total number of entries in the buffer, not the number of returned entries.
+
+**Example: Incremental request returning only new entries**
+
+```bash
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=2"
+```
+
+```json
+{
+  "ICAO": "407F19",
+  "Timestamp": "2026-03-13T14:30:01Z",
+  "Position": {
+    "Enabled": true,
+    "Capacity": 1000,
+    "Count": 4,
+    "MinSequenceId": 1,
+    "MaxSequenceId": 4,
+    "Entries": [
+      {
+        "SequenceId": 3,
+        "Timestamp": "2026-03-13T14:29:55Z",
+        "Position": { "Latitude": 47.3975, "Longitude": 18.5238 },
+        "NACp": "< 3 m"
+      },
+      {
+        "SequenceId": 4,
+        "Timestamp": "2026-03-13T14:29:58Z",
+        "Position": { "Latitude": 47.3995, "Longitude": 18.5258 },
+        "NACp": "< 3 m"
+      }
+    ]
+  }
+}
+```
+
+**Example: No new data**
+
+```bash
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=4"
+```
+
+```json
+{
+  "ICAO": "407F19",
+  "Timestamp": "2026-03-13T14:30:02Z",
+  "Position": {
+    "Enabled": true,
+    "Capacity": 1000,
+    "Count": 4,
+    "MinSequenceId": 1,
+    "MaxSequenceId": 4,
+    "Entries": []
+  }
+}
+```
 
 ### Example: Velocity history with limit
 
@@ -300,8 +401,11 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Velocity&limi
     "Enabled": true,
     "Capacity": 1000,
     "Count": 185,
+    "MinSequenceId": 1,
+    "MaxSequenceId": 185,
     "Entries": [
       {
+        "SequenceId": 184,
         "Timestamp": "2026-03-13T14:29:55Z",
         "Speed": { "Type": "GroundSpeed", "Knots": 480, "KilometersPerHour": 889, "MilesPerHour": 552, "MetersPerSecond": 246.93 },
         "Heading": null,
@@ -311,6 +415,7 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Velocity&limi
         "VerticalRate": 0
       },
       {
+        "SequenceId": 185,
         "Timestamp": "2026-03-13T14:29:50Z",
         "Speed": { "Type": "GroundSpeed", "Knots": 478, "KilometersPerHour": 885, "MilesPerHour": 550, "MetersPerSecond": 245.90 },
         "Heading": null,
@@ -318,6 +423,58 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Velocity&limi
         "SpeedOnGround": null,
         "TrackOnGround": null,
         "VerticalRate": -64
+      }
+    ]
+  }
+}
+```
+
+### Example: State history
+
+The State type provides combined snapshots of position, altitude, and velocity captured at each position update. This eliminates the need to merge separate history streams by timestamp when building correlated views like map trails with altitude and speed labels.
+
+A State snapshot is recorded only when a position update is received. The `Position` field is always present; all other fields (`Altitude`, `Speed`, `Heading`, `Track`, etc.) are `null` until the aircraft has reported that data.
+
+```bash
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=State"
+```
+
+```json
+{
+  "ICAO": "407F19",
+  "Timestamp": "2026-03-13T14:30:00Z",
+  "State": {
+    "Enabled": true,
+    "Capacity": 1000,
+    "Count": 2,
+    "MinSequenceId": 1,
+    "MaxSequenceId": 2,
+    "Entries": [
+      {
+        "SequenceId": 1,
+        "Timestamp": "2026-03-13T14:29:50Z",
+        "Position": { "Latitude": 47.3955, "Longitude": 18.5218 },
+        "NACp": "< 3 m",
+        "Altitude": { "Type": "Barometric", "Feet": 38000, "Meters": 11582, "FlightLevel": 380 },
+        "Speed": { "Type": "GroundSpeed", "Knots": 480, "KilometersPerHour": 888, "MilesPerHour": 552, "MetersPerSecond": 246.93 },
+        "Heading": null,
+        "Track": 294.59,
+        "SpeedOnGround": null,
+        "TrackOnGround": null,
+        "VerticalRate": 0
+      },
+      {
+        "SequenceId": 2,
+        "Timestamp": "2026-03-13T14:29:55Z",
+        "Position": { "Latitude": 47.3975, "Longitude": 18.5238 },
+        "NACp": "< 3 m",
+        "Altitude": { "Type": "Barometric", "Feet": 38000, "Meters": 11582, "FlightLevel": 380 },
+        "Speed": { "Type": "GroundSpeed", "Knots": 480, "KilometersPerHour": 888, "MilesPerHour": 552, "MetersPerSecond": 246.93 },
+        "Heading": null,
+        "Track": 294.59,
+        "SpeedOnGround": null,
+        "TrackOnGround": null,
+        "VerticalRate": 0
       }
     ]
   }
@@ -423,6 +580,21 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=InvalidType"
 # Providing a negative or non-numeric limit value
 curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?limit=-1"
 # {"Error":"Invalid limit: -1. Must be a positive integer."}  (HTTP 400)
+
+# Comma-separated types are no longer supported
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position,Altitude"
+# {"Error":"Invalid type: Position,Altitude"}  (HTTP 400)
+
+# Invalid after parameter (negative or non-numeric)
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=-1"
+# {"Error":"Invalid after: -1"}  (HTTP 400)
+
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=abc"
+# {"Error":"Invalid after: abc"}  (HTTP 400)
+
+# Using after without specifying a type
+curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?after=42"
+# {"Error":"Parameter 'after' requires a type"}  (HTTP 400)
 ```
 
 ## Rate Limiting
@@ -459,6 +631,24 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19" | jq .
 
 ```bash
 curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,VelocityAndDynamics" | jq .
+```
+
+### Poll for new position entries using incremental `after` parameter
+
+```bash
+# First request — get all entries and store the MaxSequenceId
+LAST_SEQ=$(curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position" | jq '.Position.MaxSequenceId')
+
+# Subsequent requests — only fetch new entries
+while true; do
+  RESPONSE=$(curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=$LAST_SEQ")
+  NEW_SEQ=$(echo "$RESPONSE" | jq '.Position.MaxSequenceId')
+  if [ "$NEW_SEQ" != "$LAST_SEQ" ] && [ "$NEW_SEQ" != "null" ]; then
+    echo "$RESPONSE" | jq '.Position.Entries[]'
+    LAST_SEQ=$NEW_SEQ
+  fi
+  sleep 1
+done
 ```
 
 ### Extract a position trail for rendering a flight path polyline on a map
