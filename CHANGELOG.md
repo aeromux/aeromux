@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.5.0] — 2026-03-18
+## [0.5.0] — 2026-04-03
 
 Initial public release.
 
