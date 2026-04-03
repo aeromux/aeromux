@@ -245,6 +245,14 @@ if [ "$PUSH" = true ]; then
         --build-arg VERSION="$VERSION" \
         --tag "${IMAGE_NAME}:${VERSION}" \
         --tag "${IMAGE_NAME}:latest" \
+        --annotation "index:org.opencontainers.image.title=Aeromux" \
+        --annotation "index:org.opencontainers.image.description=Multi-SDR Mode S and ADS-B demodulator and decoder" \
+        --annotation "index:org.opencontainers.image.version=${VERSION}" \
+        --annotation "index:org.opencontainers.image.source=https://github.com/aeromux/aeromux" \
+        --annotation "index:org.opencontainers.image.url=https://github.com/aeromux/aeromux" \
+        --annotation "index:org.opencontainers.image.licenses=GPL-3.0-or-later" \
+        --annotation "index:org.opencontainers.image.vendor=Nandor Toth" \
+        --provenance=false \
         --push \
         "$BUILD_CONTEXT"
 
