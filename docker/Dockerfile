@@ -13,8 +13,8 @@ ARG VERSION
 LABEL org.opencontainers.image.title="Aeromux" \
       org.opencontainers.image.description="Multi-SDR Mode S and ADS-B demodulator and decoder" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.source="https://github.com/nandortoth/aeromux" \
-      org.opencontainers.image.url="https://github.com/nandortoth/aeromux" \
+      org.opencontainers.image.source="https://github.com/aeromux/aeromux" \
+      org.opencontainers.image.url="https://github.com/aeromux/aeromux" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.vendor="Nandor Toth"
 

@@ -12,7 +12,7 @@ Packages are built using `pkgbuild` and `productbuild` and can only be built on 
 | Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)    |
 | Install Location| `/opt/aeromux`                                       |
 | Maintainer      | `Nandor Toth <dev@nandortoth.com>`                   |
-| Homepage        | `https://github.com/nandortoth/aeromux`              |
+| Homepage        | `https://github.com/aeromux/aeromux`              |
 | License         | GPL-3.0-or-later                                     |
 
 ## Filesystem Layout

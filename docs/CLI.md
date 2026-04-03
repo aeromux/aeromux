@@ -159,7 +159,7 @@ aeromux live --beast-source 192.168.1.100:30005 --beast-source 192.168.1.101:300
 
 ### `database`
 
-The database command manages the aircraft metadata database that Aeromux uses to enrich tracked aircraft with registration, operator, manufacturer, and type information. The database is downloaded from the [aeromux-db](https://github.com/nandortoth/aeromux-db) GitHub releases and stored locally. Integrity verification is performed automatically during download and update operations.
+The database command manages the aircraft metadata database that Aeromux uses to enrich tracked aircraft with registration, operator, manufacturer, and type information. The database is downloaded from the [aeromux-db](https://github.com/aeromux/aeromux-db) GitHub releases and stored locally. Integrity verification is performed automatically during download and update operations.
 
 #### Subcommands
 

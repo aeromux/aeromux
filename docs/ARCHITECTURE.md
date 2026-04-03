@@ -532,7 +532,7 @@ The REST API is an ASP.NET Core Minimal API that provides on-demand access to th
 
 ## Database Enrichment
 
-When database enrichment is enabled, Aeromux looks up static metadata for each aircraft when it is first detected. `AircraftDatabaseLookupService` maintains a read-only SQLite connection to the [aeromux-db](https://github.com/nandortoth/aeromux-db) database and queries it by ICAO address to retrieve:
+When database enrichment is enabled, Aeromux looks up static metadata for each aircraft when it is first detected. `AircraftDatabaseLookupService` maintains a read-only SQLite connection to the [aeromux-db](https://github.com/aeromux/aeromux-db) database and queries it by ICAO address to retrieve:
 
 - Registration (tail number) and country
 - Aircraft type code, ICAO class, model, and manufacturer

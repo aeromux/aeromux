@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: aeromux
 Upstream-Contact: Nandor Toth <dev@nandortoth.com>
-Source: https://github.com/nandortoth/aeromux
+Source: https://github.com/aeromux/aeromux
 
 Files: *
 Copyright: 2025-2026 Nandor Toth <dev@nandortoth.com>

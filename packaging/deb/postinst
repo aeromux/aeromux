@@ -83,7 +83,7 @@ case "$1" in
             fi
 
             echo ""
-            echo "Documentation: https://github.com/nandortoth/aeromux"
+            echo "Documentation: https://github.com/aeromux/aeromux"
             echo "================================================================================"
         fi
         ;;

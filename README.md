@@ -29,7 +29,7 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 - **Beast TCP Input** — Connect to one or more external Beast-compatible servers (dump1090, readsb, or another Aeromux daemon) over the network. Beast sources can be used alone or combined with local SDR devices. Includes automatic reconnection with exponential backoff if a connection drops.
 
-- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database. Includes column sorting, search, unit switching, and detail view field search with jump-and-highlight navigation. See the [TUI Guide](docs/TUI.md) for full documentation.
+- **Live Mode** — Interactive terminal interface showing tracked aircraft in real time, with a detail view displaying aircraft registration, operator, and type information from the [aeromux-db](https://github.com/aeromux/aeromux-db) database. Includes column sorting, search, unit switching, and detail view field search with jump-and-highlight navigation. See the [TUI Guide](docs/TUI.md) for full documentation.
 
 - **Daemon Mode** — Runs as a background service for continuous, unattended operation with all data served over the network via TCP protocols and the REST API.
 
@@ -68,7 +68,7 @@ See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, a
 
 ## Installation
 
-Pre-built packages are available on the [GitHub Releases](https://github.com/nandortoth/aeromux/releases) page.
+Pre-built packages are available on the [GitHub Releases](https://github.com/aeromux/aeromux/releases) page.
 
 ### Debian / Raspberry Pi
 
@@ -100,14 +100,14 @@ A multi-arch Docker image is available on GitHub Container Registry, supporting 
 
 ```bash
 # Copy the Compose template and start
-curl -O https://raw.githubusercontent.com/nandortoth/aeromux/main/docker/docker-compose.yaml
+curl -O https://raw.githubusercontent.com/aeromux/aeromux/main/docker/docker-compose.yaml
 docker compose up -d
 ```
 
 The image runs Aeromux in daemon mode with a default configuration. The aircraft database is downloaded automatically on first start. To customize, extract the default config, edit it, and mount it as a volume:
 
 ```bash
-docker run --rm ghcr.io/nandortoth/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
+docker run --rm ghcr.io/aeromux/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
 nano aeromux.yaml
 # Uncomment the config volume mount in docker-compose.yaml, then restart
 docker compose up -d
@@ -132,7 +132,7 @@ See the [Docker Guide](docs/DOCKER.md) for details on configuration, USB passthr
 
 ```bash
 # Clone the repository
-git clone https://github.com/nandortoth/aeromux.git
+git clone https://github.com/aeromux/aeromux.git
 cd aeromux
 
 # Build a self-contained executable (auto-detects your platform)
@@ -235,7 +235,7 @@ The build script auto-detects your platform, or you can cross-compile for a spec
 ./build.sh --target linux-arm64
 ```
 
-Pre-built `.deb` and `.pkg` packages are available on the [GitHub Releases](https://github.com/nandortoth/aeromux/releases) page. See [Installation](#installation) for details.
+Pre-built `.deb` and `.pkg` packages are available on the [GitHub Releases](https://github.com/aeromux/aeromux/releases) page. See [Installation](#installation) for details.
 
 ## Contributing
 
@@ -249,7 +249,7 @@ Aeromux is free software, released under the [GNU General Public License v3.0 or
 
 ## Acknowledgments
 
-- **[aeromux-db](https://github.com/nandortoth/aeromux-db)** — Aircraft metadata database for registration, type, and operator enrichment
+- **[aeromux-db](https://github.com/aeromux/aeromux-db)** — Aircraft metadata database for registration, type, and operator enrichment
 - **[readsb](https://github.com/wiedehopf/readsb)** — Reference implementation for Mode S demodulation techniques
 - **[pyModeS](https://github.com/junzis/pyModeS)** — Comprehensive Mode S/ADS-B decoder and reference for decoding algorithms
 - **[Mode S Made Easy](https://mode-s.org)** — Excellent technical documentation on Mode S and ADS-B protocols
@@ -259,4 +259,4 @@ Aeromux is free software, released under the [GNU General Public License v3.0 or
 
 - **Author:** Nandor Toth
 - **Email:** dev@nandortoth.com
-- **Issues:** [github.com/nandortoth/aeromux/issues](https://github.com/nandortoth/aeromux/issues)
+- **Issues:** [github.com/aeromux/aeromux/issues](https://github.com/aeromux/aeromux/issues)

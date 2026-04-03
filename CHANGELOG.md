@@ -19,7 +19,7 @@ Initial public release.
 - **MLAT Support** — Receives multilateration position data from mlat-client for aircraft that do not broadcast ADS-B positions.
 - **Live Mode (TUI)** — Interactive terminal interface with sortable aircraft list (F1–F6), ICAO/callsign search with highlighting, detail view with field search and jump-and-highlight navigation, and display unit switching (distance, altitude, speed).
 - **Daemon Mode** — Background service for continuous, unattended operation with all data served over the network.
-- **Aircraft Database Enrichment** — Integration with the [aeromux-db](https://github.com/nandortoth/aeromux-db) database for registration, operator, manufacturer, and aircraft type metadata. Built-in commands for download, update, and integrity verification.
+- **Aircraft Database Enrichment** — Integration with the [aeromux-db](https://github.com/aeromux/aeromux-db) database for registration, operator, manufacturer, and aircraft type metadata. Built-in commands for download, update, and integrity verification.
 - **Device Discovery** — `aeromux device` command to list detected RTL-SDR hardware with optional detailed tuner parameters.
 - **Configuration** — Single YAML file with per-setting CLI override (CLI > YAML > Default). Fully documented example configuration with sensible defaults.
 - **Cross-Platform** — Self-contained, single-file executables for macOS (Intel and Apple Silicon) and Linux (x64 and ARM64, including Raspberry Pi 4/5).
@@ -29,4 +29,4 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-[0.5.0]: https://github.com/nandortoth/aeromux/releases/tag/v0.5.0
+[0.5.0]: https://github.com/aeromux/aeromux/releases/tag/v0.5.0

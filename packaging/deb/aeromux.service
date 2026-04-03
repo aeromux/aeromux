@@ -1,6 +1,6 @@
 [Unit]
 Description=Aeromux — Multi-SDR Mode S and ADS-B Decoder
-Documentation=https://github.com/nandortoth/aeromux
+Documentation=https://github.com/aeromux/aeromux
 After=network.target
 Wants=network.target
 

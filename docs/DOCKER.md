@@ -2,18 +2,18 @@
 
 Aeromux is distributed as a multi-arch Docker image for containerized deployments, targeting Raspberry Pi 4/5 (ARM64) as the primary platform and x86-64 as a secondary platform. The image runs aeromux as a headless daemon with RTL-SDR USB device passthrough support.
 
-Images are published to GitHub Container Registry (GHCR) at `ghcr.io/nandortoth/aeromux` and saved as `.tar` files for offline distribution.
+Images are published to GitHub Container Registry (GHCR) at `ghcr.io/aeromux/aeromux` and saved as `.tar` files for offline distribution.
 
 ## Image Metadata
 
 | Field           | Value                                                 |
 |-----------------|-------------------------------------------------------|
-| Image Name      | `ghcr.io/nandortoth/aeromux`                          |
+| Image Name      | `ghcr.io/aeromux/aeromux`                          |
 | Base Image      | `debian:bookworm-slim`                                |
 | Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)      |
 | License         | GPL-3.0-or-later                                      |
 | Maintainer      | `Nandor Toth <dev@nandortoth.com>`                    |
-| Homepage        | `https://github.com/nandortoth/aeromux`               |
+| Homepage        | `https://github.com/aeromux/aeromux`               |
 
 ### Runtime Dependencies
 
@@ -67,7 +67,7 @@ The image works out of the box with the default configuration. To customize, ext
 
 ```bash
 # Extract the default config from the image
-docker run --rm ghcr.io/nandortoth/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
+docker run --rm ghcr.io/aeromux/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
 
 # Edit the config
 nano aeromux.yaml

@@ -6,7 +6,7 @@ Architecture: {{DEB_ARCH}}
 Depends: librtlsdr0, libicu78 | libicu74 | libicu72 | libicu70 | libicu67, ca-certificates
 Installed-Size: {{INSTALLED_SIZE}}
 Maintainer: Nandor Toth <dev@nandortoth.com>
-Homepage: https://github.com/nandortoth/aeromux
+Homepage: https://github.com/aeromux/aeromux
 Description: Multi-SDR Mode S and ADS-B demodulator and decoder
  Multi-SDR Mode S and ADS-B demodulator and decoder for .NET.
  Aeromux receives 1090 MHz ADS-B and Mode S signals from one or more

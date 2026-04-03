@@ -47,7 +47,7 @@ Before you begin, ensure you have the following installed:
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/nandortoth/aeromux.git
+   git remote add upstream https://github.com/aeromux/aeromux.git
    ```
 4. Keep your fork up to date:
    ```bash
@@ -436,7 +436,7 @@ Include in your PR description:
 
 ### Before Reporting
 
-- Check if the bug has already been reported in [Issues](https://github.com/nandortoth/aeromux/issues).
+- Check if the bug has already been reported in [Issues](https://github.com/aeromux/aeromux/issues).
 - Ensure you are using the latest version.
 - Verify the issue is reproducible.
 

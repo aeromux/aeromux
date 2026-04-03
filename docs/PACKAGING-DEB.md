@@ -15,7 +15,7 @@ Packages are built using `dpkg-deb` and can be cross-compiled from any platform,
 | Architecture  | `arm64` or `amd64`                                    |
 | Depends       | `librtlsdr0`                                          |
 | Maintainer    | `Nandor Toth <dev@nandortoth.com>`                    |
-| Homepage      | `https://github.com/nandortoth/aeromux`               |
+| Homepage      | `https://github.com/aeromux/aeromux`               |
 | License       | GPL-3.0-or-later                                      |
 
 The version string follows Debian conventions: `<upstream-version>-<debian-revision>` (e.g., `0.5.0-1`). The upstream version is read from `src/Directory.Build.props` at packaging time.

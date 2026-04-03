@@ -72,7 +72,7 @@ Pressing `Enter` on a selected aircraft in the list opens the detail view, which
 The detail view is organized into the following sections:
 
 - **Identification** — The aircraft's ICAO address, callsign, wake turbulence category, squawk code, and emergency state.
-- **Aircraft Database** — Static metadata from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database, including registration, operator, manufacturer, aircraft type, and regulatory flags such as FAA PIA and LADD.
+- **Aircraft Database** — Static metadata from the [aeromux-db](https://github.com/aeromux/aeromux-db) database, including registration, operator, manufacturer, aircraft type, and regulatory flags such as FAA PIA and LADD.
 - **Status** — Timestamps for when the aircraft was first and last seen, message counts broken down by type (position, velocity, identification), and the current signal strength.
 - **Position** — Geographic coordinates, distance from the receiver, barometric and geometric altitudes with their delta, ground state, and position source.
 - **Velocity & Dynamics** — Ground speed, airspeed, heading, track angle, vertical rate, roll angle, Mach number, turn rate, and surface movement data.
@@ -119,7 +119,7 @@ The detail view is organized into the following sections:
   ↑/↓: Row, ←/→: Page, Home/End                            D/A/S: Units, /: Search, ESC: Back, Q: Quit
 ```
 
-Fields that have not yet been received from the aircraft display `N/A (no data yet)` as their value. The Aircraft Database section requires the [aeromux-db](https://github.com/nandortoth/aeromux-db) database to be configured and enabled; without it, a message is displayed indicating that no database is available.
+Fields that have not yet been received from the aircraft display `N/A (no data yet)` as their value. The Aircraft Database section requires the [aeromux-db](https://github.com/aeromux/aeromux-db) database to be configured and enabled; without it, a message is displayed indicating that no database is available.
 
 Display units for distance, altitude, and speed can be toggled directly within the detail view using the `D`, `A`, and `S` keys — see [Display Units](#display-units) for details. The detail view also supports field name search, activated by pressing `/` — see [Detail View Search](#detail-view-search) for more information.
 

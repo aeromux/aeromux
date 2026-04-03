@@ -53,7 +53,7 @@ public class VersionCommand : Command<VersionSettings>
             Console.WriteLine($"Runtime:    Microsoft .NET {Environment.Version}");
             Console.WriteLine("License:    GNU General Public License 3.0");
             Console.WriteLine("Website:    https://www.aeromux.com");
-            Console.WriteLine("Repository: https://github.com/nandortoth/aeromux");
+            Console.WriteLine("Repository: https://github.com/aeromux/aeromux");
         }
         else
         {

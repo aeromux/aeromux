@@ -188,7 +188,7 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,Velocity
 
 ### Example: DatabaseRecord
 
-The DatabaseRecord section provides static aircraft metadata from the [aeromux-db](https://github.com/nandortoth/aeromux-db) database, including registration, aircraft type, manufacturer, and operator information. This data is looked up by ICAO address when the aircraft is first detected.
+The DatabaseRecord section provides static aircraft metadata from the [aeromux-db](https://github.com/aeromux/aeromux-db) database, including registration, aircraft type, manufacturer, and operator information. This data is looked up by ICAO address when the aircraft is first detected.
 
 When database enrichment is enabled and a matching record exists:
 

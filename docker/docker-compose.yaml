@@ -5,7 +5,7 @@
 #
 # The default configuration works out of the box. To customize:
 #   1. Extract the default config:
-#      docker run --rm ghcr.io/nandortoth/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
+#      docker run --rm ghcr.io/aeromux/aeromux:latest cat /etc/aeromux/aeromux.yaml > aeromux.yaml
 #   2. Edit aeromux.yaml — configure SDR devices, receiver location, network ports, etc.
 #   3. Uncomment the config volume mount below
 #   4. Restart: docker compose up -d
@@ -21,7 +21,7 @@
 
 services:
   aeromux:
-    image: ghcr.io/nandortoth/aeromux:latest
+    image: ghcr.io/aeromux/aeromux:latest
     container_name: aeromux
     hostname: aeromux
     restart: unless-stopped

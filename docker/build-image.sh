@@ -27,7 +27,7 @@ ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
 DOCKER_OUTPUT_DIR="$ARTIFACTS_DIR/docker"
 PROPS_FILE="$PROJECT_ROOT/src/Directory.Build.props"
 EXAMPLE_CONFIG="$PROJECT_ROOT/aeromux.example.yaml"
-IMAGE_NAME="ghcr.io/nandortoth/aeromux"
+IMAGE_NAME="ghcr.io/aeromux/aeromux"
 
 # Fixed targets — always build both architectures
 TARGETS=(linux-arm64 linux-x64)

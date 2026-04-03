@@ -27,7 +27,7 @@ namespace Aeromux.Infrastructure.Database;
 /// </summary>
 public static class GitHubReleaseClient
 {
-    private const string RepoOwner = "nandortoth";
+    private const string RepoOwner = "aeromux";
     private const string RepoName = "aeromux-db";
     private const string BaseUrl = $"https://api.github.com/repos/{RepoOwner}/{RepoName}/releases";
     private const string UserAgent = "aeromux";
