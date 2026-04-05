@@ -52,12 +52,12 @@ Aircraft: 12 in view / 34 total
 
 Below the statistics row is a scrollable table of all aircraft visible on the current map viewport. Each row shows:
 
-| Column | Description |
-|--------|-------------|
+| Column   | Description                                                                                  |
+|----------|----------------------------------------------------------------------------------------------|
 | Callsign | The flight callsign (or `N/A` if not yet received), with the ICAO address displayed below it |
-| Altitude | Barometric altitude in the currently selected unit |
-| Speed | Ground speed in the currently selected unit |
-| Distance | Distance from the receiver, when the receiver location is configured |
+| Altitude | Barometric altitude in the currently selected unit                                           |
+| Speed    | Ground speed in the currently selected unit                                                  |
+| Distance | Distance from the receiver, when the receiver location is configured                         |
 
 ### Sorting
 
@@ -76,6 +76,7 @@ Clicking an aircraft in the list or on the map opens the detail view, which repl
   <br>
   <em>Aircraft detail view with collapsible sections</em>
 </div>
+<br>
 
 The detail view is organized into the following sections:
 
@@ -105,6 +106,7 @@ The search input accepts any text and performs a case-insensitive substring matc
   <br>
   <em>Search results with highlighted matching text</em>
 </div>
+<br>
 
 Each result shows the callsign (or ICAO address if no callsign is available) and metadata (ICAO address and registration). The matched portion of the text is highlighted in orange. Clicking a result selects the aircraft and opens its detail view.
 
@@ -122,28 +124,28 @@ The gear icon next to the search input opens the settings dropdown, which provid
 
 Three measurement units can be switched independently:
 
-| Unit | Options | Default |
-|------|---------|---------|
-| Speed | Knots (kts) / km/h / mph | Knots |
-| Altitude | Feet (ft) / Meters (m) | Feet |
+| Unit     | Options                      | Default    |
+|----------|------------------------------|------------|
+| Speed    | Knots (kts) / km/h / mph     | Knots      |
+| Altitude | Feet (ft) / Meters (m)       | Feet       |
 | Distance | Kilometers (km) / Miles (mi) | Kilometers |
 
 Unit changes are applied immediately across the entire interface — the aircraft list, detail view, hover tooltip, and range ring labels all update to reflect the selected units. Unit preferences are persisted in the browser and restored on the next visit.
 
 #### Interface
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| Range rings | Show or hide the range rings on the map | On |
+| Option      | Description                             | Default  |
+|-------------|-----------------------------------------|----------|
+| Range rings | Show or hide the range rings on the map | On       |
 
 ## Browser Requirements
 
 The web map requires a modern browser with WebGL support:
 
-| Browser | Minimum Version |
-|---------|----------------|
-| Chrome | 120+ |
-| Firefox | 117+ |
-| Safari | 17.2+ |
-| Edge | 120+ |
-| Samsung Internet | 25+ |
+| Browser          | Minimum Version |
+|------------------|-----------------|
+| Chrome           | 120+            |
+| Firefox          | 117+            |
+| Safari           | 17.2+           |
+| Edge             | 120+            |
+| Samsung Internet | 25+             |

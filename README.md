@@ -75,6 +75,7 @@ See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, a
   <br>
   <em>The web map showing aircraft list, map with range rings, and control panel</em>
 </div>
+<br>
 
 See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
