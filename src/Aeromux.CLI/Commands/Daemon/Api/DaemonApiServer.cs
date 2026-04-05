@@ -16,12 +16,13 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.RateLimiting;
+using Aeromux.CLI.Commands.Daemon.WebMap;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Serilog;
 
 namespace Aeromux.CLI.Commands.Daemon.Api;
@@ -51,6 +52,13 @@ public static class DaemonApiServer
         // Suppress ASP.NET Core default logging — use existing Serilog configuration
         builder.Host.UseSerilog();
 
+        // Reduce shutdown timeout from default 30s — SignalR WebSocket connections
+        // would otherwise block StopAsync() until the full timeout expires
+        builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(options =>
+        {
+            options.ShutdownTimeout = TimeSpan.FromSeconds(3);
+        });
+
         // Configure JSON serialization for all endpoints
         builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
         {
@@ -59,42 +67,32 @@ public static class DaemonApiServer
             options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
         });
 
-        // Configure rate limiting policies
-        builder.Services.AddRateLimiter(options =>
-        {
-            options.RejectionStatusCode = 429;
-
-            // Per client IP — shared limit for the aircraft list endpoint
-            options.AddPolicy("aircraft-list", httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    httpContext.Connection.RemoteIpAddress?.ToString() ?? "",
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        Window = TimeSpan.FromMilliseconds(500),
-                        PermitLimit = 1
-                    }));
-
-            // Per client IP + ICAO — independent limit per aircraft
-            options.AddPolicy("per-aircraft", httpContext =>
+        // Configure SignalR and web map push service
+        builder.Services.AddSignalR()
+            .AddJsonProtocol(options =>
             {
-                string icao = httpContext.Request.RouteValues["icao"]?.ToString() ?? "";
-                string clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "";
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    $"{clientIp}:{icao}",
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        Window = TimeSpan.FromMilliseconds(500),
-                        PermitLimit = 1
-                    });
+                options.PayloadSerializerOptions.PropertyNamingPolicy = null; // PascalCase to match REST API
+                options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
-        });
+        builder.Services.AddSingleton<IAircraftStateTracker>(tracker);
+        builder.Services.AddSingleton<MapHubPushService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<MapHubPushService>());
 
         // Bind to configured address and port
         builder.WebHost.UseUrls($"http://{config.BindAddress}:{config.ApiPort}");
 
         WebApplication app = builder.Build();
 
-        app.UseRateLimiter();
+        // Serve embedded web map static files from assembly resources
+        ManifestEmbeddedFileProvider embeddedProvider = new(
+            assembly: typeof(DaemonApiServer).Assembly);
+        app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = embeddedProvider });
+        var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+        contentTypes.Mappings[".woff2"] = "font/woff2";
+        app.UseStaticFiles(new StaticFileOptions { FileProvider = embeddedProvider, ContentTypeProvider = contentTypes });
+
+        // Map SignalR hub endpoint
+        app.MapHub<MapHub>("/maphub");
 
         // Build shared JsonSerializerOptions for Results.Json() calls
         JsonSerializerOptions jsonOptions = new()

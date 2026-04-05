@@ -68,17 +68,91 @@ public static partial class DaemonApiRoutes
         DaemonValidatedConfig config,
         JsonSerializerOptions jsonOptions)
     {
-        // GET /api/v1/aircraft — Aircraft list
-        app.MapGet("/api/v1/aircraft", () =>
+        // GET /api/v1/aircraft — Aircraft list (with optional bounds/search filtering)
+        app.MapGet("/api/v1/aircraft", (HttpContext httpContext) =>
         {
-            IReadOnlyList<Aircraft> aircraft = tracker.GetAllAircraft();
-            AircraftListItem[] items = aircraft.Select(DaemonApiMapper.ToListItem).ToArray();
+            string? boundsParam = httpContext.Request.Query["bounds"].FirstOrDefault();
+            string? searchParam = httpContext.Request.Query["search"].FirstOrDefault();
+
+            // Mutual exclusivity check
+            if (!string.IsNullOrEmpty(boundsParam) && !string.IsNullOrEmpty(searchParam))
+            {
+                return Results.BadRequest(new ErrorResponse("Parameters 'bounds' and 'search' are mutually exclusive"));
+            }
+
+            IReadOnlyList<Aircraft> allAircraft = tracker.GetAllAircraft();
+            IEnumerable<Aircraft> filtered;
+
+            if (!string.IsNullOrEmpty(boundsParam))
+            {
+                // Parse bounds=south,west,north,east
+                string[] parts = boundsParam.Split(',');
+                if (parts.Length != 4)
+                {
+                    return Results.BadRequest(new ErrorResponse(
+                        $"Invalid bounds format: expected 4 comma-separated values (south,west,north,east), got {parts.Length}"));
+                }
+
+                if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double south) ||
+                    !double.TryParse(parts[1], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double west) ||
+                    !double.TryParse(parts[2], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double north) ||
+                    !double.TryParse(parts[3], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double east))
+                {
+                    return Results.BadRequest(new ErrorResponse(
+                        $"Invalid bounds values: all values must be valid numbers"));
+                }
+
+                if (south >= north)
+                {
+                    return Results.BadRequest(new ErrorResponse(
+                        $"Invalid bounds: south ({south}) must be less than north ({north})"));
+                }
+
+                if (south < -90 || north > 90)
+                {
+                    return Results.BadRequest(new ErrorResponse(
+                        $"Invalid bounds: latitude must be between -90 and 90"));
+                }
+
+                if (west < -180 || east > 180)
+                {
+                    return Results.BadRequest(new ErrorResponse(
+                        $"Invalid bounds: longitude must be between -180 and 180"));
+                }
+
+                filtered = allAircraft.Where(a =>
+                    a.Position.Coordinate is not null &&
+                    a.Position.Coordinate.Latitude >= south &&
+                    a.Position.Coordinate.Latitude <= north &&
+                    a.Position.Coordinate.Longitude >= west &&
+                    a.Position.Coordinate.Longitude <= east);
+            }
+            else if (!string.IsNullOrEmpty(searchParam))
+            {
+                // Case-insensitive substring match against ICAO, callsign, squawk, registration
+                string query = searchParam.Trim();
+                filtered = allAircraft.Where(a =>
+                    a.Identification.ICAO.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (a.Identification.Callsign?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (a.Identification.Squawk?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (a.DatabaseEnabled && a.DatabaseRecord.Registration?.Contains(query, StringComparison.OrdinalIgnoreCase) == true));
+            }
+            else
+            {
+                filtered = allAircraft;
+            }
+
+            AircraftListItem[] items = filtered.Select(DaemonApiMapper.ToListItem).ToArray();
 
             return Results.Ok(new AircraftListResponse(
                 Count: items.Length,
                 Timestamp: DateTime.UtcNow,
                 Aircraft: items));
-        }).RequireRateLimiting("aircraft-list");
+        });
 
         // GET /api/v1/aircraft/{icao} — Aircraft detail
         app.MapGet("/api/v1/aircraft/{icao}", (string icao, HttpContext httpContext) =>
@@ -178,7 +252,7 @@ public static partial class DaemonApiRoutes
             }
 
             return Results.Json(response, jsonOptions);
-        }).RequireRateLimiting("per-aircraft");
+        });
 
         // GET /api/v1/aircraft/{icao}/history — Aircraft history
         app.MapGet("/api/v1/aircraft/{icao}/history", (string icao, HttpContext httpContext) =>
@@ -294,7 +368,7 @@ public static partial class DaemonApiRoutes
             }
 
             return Results.Json(response, jsonOptions);
-        }).RequireRateLimiting("per-aircraft");
+        });
 
         // GET /api/v1/stats — Statistics
         app.MapGet("/api/v1/stats", () =>

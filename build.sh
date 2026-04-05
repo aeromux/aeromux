@@ -188,15 +188,78 @@ log ""
 
 # Clean artifact directories for targets being built
 log "Cleaning artifacts directory..."
+rm -rf "$ARTIFACTS_DIR/binaries"
 for rid in "${RUNTIME_IDS[@]}"; do
-    BINARIES_DIR="$ARTIFACTS_DIR/binaries/$rid"
-    if [ -d "$BINARIES_DIR" ]; then
-        rm -rf "$BINARIES_DIR"
-    fi
-    mkdir -p "$BINARIES_DIR"
+    mkdir -p "$ARTIFACTS_DIR/binaries/$rid"
 done
 touch "$ARTIFACTS_DIR/.gitkeep"
 log "✓ Artifacts directory cleaned"
+log ""
+
+# Build frontend assets
+WEBMAP_SRC="$PROJECT_ROOT/src/Aeromux.CLI/Commands/Daemon/WebMap"
+WEBMAP_OUT="$ARTIFACTS_DIR/webmap"
+
+log "Building frontend assets..."
+
+if ! command -v npx &>/dev/null; then
+    echo "ERROR: npx not found. Install Node.js to build frontend assets." >&2
+    echo "  macOS:  brew install node" >&2
+    echo "  Linux:  apt install nodejs npm  (or use nvm)" >&2
+    exit 1
+fi
+
+# Clean and recreate webmap output directory
+rm -rf "$WEBMAP_OUT"
+mkdir -p "$WEBMAP_OUT/js" "$WEBMAP_OUT/css" "$WEBMAP_OUT/fonts" "$WEBMAP_OUT/img"
+
+# Install npm dependencies into a build-time directory (keeps node_modules out of src/)
+WEBMAP_BUILD="$ARTIFACTS_DIR/webmap-build"
+rm -rf "$WEBMAP_BUILD"
+mkdir -p "$WEBMAP_BUILD"
+cp "$WEBMAP_SRC/package.json" "$WEBMAP_BUILD/"
+[ -f "$WEBMAP_SRC/package-lock.json" ] && cp "$WEBMAP_SRC/package-lock.json" "$WEBMAP_BUILD/"
+
+CURRENT_STEP="Frontend npm install"
+run_quiet npm install --prefix "$WEBMAP_BUILD"
+log "✓ Frontend dependencies installed"
+
+# Preserve lockfile back to source for reproducible builds
+[ -f "$WEBMAP_BUILD/package-lock.json" ] && cp "$WEBMAP_BUILD/package-lock.json" "$WEBMAP_SRC/"
+
+# Bundle application JS with esbuild
+# Symlink node_modules into the source directory so esbuild can resolve imports.
+# The symlink is temporary — removed immediately after bundling.
+CURRENT_STEP="Frontend esbuild bundle"
+ln -s "$WEBMAP_BUILD/node_modules" "$WEBMAP_SRC/node_modules"
+cleanup_symlink() { rm -f "$WEBMAP_SRC/node_modules"; }
+trap cleanup_symlink EXIT
+run_quiet npx --prefix "$WEBMAP_BUILD" esbuild "$WEBMAP_SRC/Index.jsx" \
+    --bundle --minify \
+    --jsx-factory=h --jsx-fragment=Fragment \
+    --external:maplibre-gl --external:@microsoft/signalr \
+    --outfile="$WEBMAP_OUT/js/app.js"
+cleanup_symlink
+trap - EXIT
+log "✓ Frontend JS bundled"
+
+# Copy vendor files from node_modules
+cp "$WEBMAP_BUILD/node_modules/maplibre-gl/dist/maplibre-gl.js" "$WEBMAP_OUT/js/maplibre-gl.js"
+cp "$WEBMAP_BUILD/node_modules/maplibre-gl/dist/maplibre-gl.css" "$WEBMAP_OUT/css/maplibre-gl.css"
+cp "$WEBMAP_BUILD/node_modules/@microsoft/signalr/dist/browser/signalr.js" "$WEBMAP_OUT/js/signalr.js"
+
+# Clean up build-time directory
+rm -rf "$WEBMAP_BUILD"
+
+# Copy application files
+cp "$WEBMAP_SRC/index.html" "$WEBMAP_OUT/index.html"
+cp "$WEBMAP_SRC/Style.css" "$WEBMAP_OUT/css/style.css"
+
+# Copy assets (font and images)
+cp "$WEBMAP_SRC/Graphics/logo.svg" "$WEBMAP_OUT/img/logo.svg"
+cp "$WEBMAP_SRC/Fonts/InterVariable.woff2" "$WEBMAP_OUT/fonts/inter.woff2"
+
+log "✓ Frontend assets built"
 log ""
 
 # Restore dependencies (once for all targets)
@@ -224,7 +287,6 @@ for rid in "${RUNTIME_IDS[@]}"; do
         --output "$BINARIES_DIR" \
         -p:PublishSingleFile=true \
         -p:IncludeNativeLibrariesForSelfExtract=true \
-        -p:EnableCompressionInSingleFile=true \
         -p:DebugType=embedded
 
     if [ -f "$BINARIES_DIR/Aeromux.CLI" ]; then

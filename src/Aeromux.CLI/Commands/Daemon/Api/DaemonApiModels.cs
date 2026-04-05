@@ -118,6 +118,7 @@ public sealed record DetailVelocityAndDynamics(
     double? TrackRate,
     Velocity? SpeedOnGround,
     double? TrackOnGround,
+    double? MagneticDeclination,
     DateTime? LastUpdate);
 
 /// <summary>
@@ -195,6 +196,10 @@ public sealed record DetailCapabilities(
     AircraftLengthAndWidth? Dimensions,
     LateralGpsAntennaOffset? GPSLateralOffset,
     LongitudinalGpsAntennaOffset? GPSLongitudinalOffset,
+    int? DownlinkRequest,
+    string? UtilityMessage,
+    string? DataLinkCapability,
+    string? SupportedBDSRegisters,
     DateTime? LastUpdate);
 
 /// <summary>
@@ -298,6 +303,7 @@ public sealed record StateHistoryEntry(
 /// Response for GET /api/v1/stats.
 /// </summary>
 public sealed record StatsResponse(
+    string Version,
     DateTime Timestamp,
     int Uptime,
     int AircraftCount,

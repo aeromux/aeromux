@@ -1,0 +1,12 @@
+{
+  "name": "aeromux-webmap",
+  "private": true,
+  "dependencies": {
+    "preact": "^10.25.4",
+    "maplibre-gl": "^5.1.1",
+    "@microsoft/signalr": "^9.0.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.3"
+  }
+}

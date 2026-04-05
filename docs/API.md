@@ -78,6 +78,53 @@ curl -s "http://localhost:8080/api/v1/aircraft"
 
 The response includes a `Count` field for convenience, a `Timestamp` indicating when the response was generated, and an `Aircraft` array containing one entry per tracked aircraft. Aircraft that have timed out (no messages received within the configured timeout period) are automatically removed from the list.
 
+### Query Parameters
+
+The aircraft list endpoint supports optional query parameters for filtering results:
+
+| Parameter | Type   | Default | Description                                                                  |
+|-----------|--------|---------|------------------------------------------------------------------------------|
+| `bounds`  | string | (none)  | Geographic bounding box: `<south>,<west>,<north>,<east>`                     |
+| `search`  | string | (none)  | Case-insensitive substring search across callsign, ICAO, squawk, registration |
+
+The `bounds` and `search` parameters are mutually exclusive. Providing both returns HTTP 400.
+
+**Bounds filtering** returns only aircraft with a known position within the specified bounding box. Aircraft without a decoded position are excluded. Latitude values must be between -90 and 90, longitude values between -180 and 180, and south must be less than north.
+
+```bash
+# Aircraft within a geographic bounding box
+curl -s "http://localhost:8080/api/v1/aircraft?bounds=46.5,18.0,48.0,20.5"
+```
+
+**Search filtering** performs a case-insensitive substring match against ICAO address, callsign, squawk code, and registration (when the aircraft database is enabled). Search queries all tracked aircraft regardless of position — aircraft without a known position are included in search results.
+
+```bash
+# Search by callsign substring
+curl -s "http://localhost:8080/api/v1/aircraft?search=BAW"
+
+# Search by ICAO address
+curl -s "http://localhost:8080/api/v1/aircraft?search=A0B1C2"
+
+# Search by squawk code
+curl -s "http://localhost:8080/api/v1/aircraft?search=7700"
+```
+
+**Error responses:**
+
+```bash
+# Invalid bounds format
+curl -s "http://localhost:8080/api/v1/aircraft?bounds=invalid"
+# → 400: {"Error": "Invalid bounds format: expected 4 comma-separated values (south,west,north,east), got 1"}
+
+# South >= north
+curl -s "http://localhost:8080/api/v1/aircraft?bounds=48.0,18.0,46.5,20.5"
+# → 400: {"Error": "Invalid bounds: south (48) must be less than north (46.5)"}
+
+# Both parameters provided
+curl -s "http://localhost:8080/api/v1/aircraft?bounds=46.5,18.0,48.0,20.5&search=BAW"
+# → 400: {"Error": "Parameters 'bounds' and 'search' are mutually exclusive"}
+```
+
 ## Aircraft Detail
 
 The aircraft detail endpoint returns comprehensive information for a single aircraft, organized into logical sections. The ICAO address in the URL is case-insensitive — `407f19`, `407F19`, and `407f19` all resolve to the same aircraft.
@@ -181,6 +228,7 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,Velocity
     "TrackRate": null,
     "SpeedOnGround": null,
     "TrackOnGround": null,
+    "MagneticDeclination": null,
     "LastUpdate": "2026-03-13T14:29:59Z"
   }
 }
@@ -491,6 +539,7 @@ curl -s "http://localhost:8080/api/v1/stats"
 
 ```json
 {
+  "Version": "0.6.0",
   "Timestamp": "2026-03-13T14:30:00Z",
   "Uptime": 3600,
   "AircraftCount": 42,
@@ -553,7 +602,6 @@ All error responses use a consistent format with a single `Error` field containi
 | 400  | The request was malformed — invalid ICAO address format, unknown section name, or invalid parameter value |
 | 404  | The specified aircraft was not found in the tracker, or the requested route does not exist                |
 | 405  | The request used a method other than GET, which is the only supported HTTP method                         |
-| 429  | The client has exceeded the rate limit and should wait before making another request                      |
 | 503  | The API is not yet ready because the aircraft state tracker has not finished initializing                 |
 
 ### Error Examples
@@ -596,16 +644,6 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&afte
 curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?after=42"
 # {"Error":"Parameter 'after' requires a type"}  (HTTP 400)
 ```
-
-## Rate Limiting
-
-To prevent excessive load from aggressive polling, the API enforces per-client rate limiting on aircraft-related endpoints. Each client IP address is tracked independently, ensuring that one client's polling frequency does not affect other clients.
-
-- **Aircraft list** (`/api/v1/aircraft`): Limited to 1 request per 500 milliseconds per client IP address. This allows polling at up to 2 requests per second, which is sufficient for smooth map or table updates.
-- **Aircraft detail and history** (`/api/v1/aircraft/{icao}` and `/api/v1/aircraft/{icao}/history`): Limited to 1 request per 500 milliseconds per client IP address per ICAO address. Each aircraft has its own independent rate limit, so requesting data for multiple aircraft in parallel is not penalized.
-- **Stats and health** endpoints are not rate-limited, as they are lightweight and typically used for monitoring rather than continuous polling.
-
-When a client exceeds the rate limit, the server returns HTTP 429 (Too Many Requests) with a `Retry-After` header indicating how many seconds the client should wait before retrying.
 
 ## Common Usage Patterns
 

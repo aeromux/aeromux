@@ -25,7 +25,9 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 - **MLAT Support** — Accepts multilateration position data from mlat-client, enabling position tracking of aircraft that do not broadcast ADS-B.
 
-- **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints with rate limiting. See the [API Guide](docs/API.md) for full documentation.
+- **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints. See the [API Guide](docs/API.md) for full documentation.
+
+- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, and range rings. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
 - **Beast TCP Input** — Connect to one or more external Beast-compatible servers (dump1090, readsb, or another Aeromux daemon) over the network. Beast sources can be used alone or combined with local SDR devices. Includes automatic reconnection with exponential backoff if a connection drops.
 
@@ -65,6 +67,16 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 ```
 
 See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, and detail view documentation.
+
+### Web Map Preview
+
+<div align="center">
+  <img src="docs/images/webmap/overview.png" alt="Web Map" width="800">
+  <br>
+  <em>The web map showing aircraft list, map with range rings, and control panel</em>
+</div>
+
+See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
 ## Installation
 

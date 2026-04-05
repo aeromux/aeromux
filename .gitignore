@@ -4,6 +4,8 @@
 artifacts/binaries/
 artifacts/docker/
 artifacts/packages/
+artifacts/webmap/
+artifacts/db/
 
 # Logs
 logs/

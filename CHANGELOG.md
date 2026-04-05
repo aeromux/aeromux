@@ -2,6 +2,30 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.6.0] — Unreleased
+
+### Added
+
+- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, position trails, and real-time updates via SignalR. Served directly by the daemon with no external web server required. See the [Web Map Guide](docs/WEBMAP.md).
+- **Web Map Range Rings** — Three range rings (115/175/235 mi) centered on the receiver location with distance labels and a center point marker. Distances follow the selected unit (miles or kilometers). Toggleable from the settings panel.
+- **Web Map Search Highlighting** — Matched text is highlighted in orange in the search dropdown across callsign, ICAO, and registration fields.
+- **Web Map Sortable Columns** — Aircraft list columns (callsign, altitude, speed, distance) are sortable by clicking headers, with sort preferences persisted in the browser.
+- **Web Map Settings Panel** — Unified control panel with search input, unit switching (speed, altitude, distance), and interface settings behind a gear icon.
+- **Web Map Dark Overlay** — Semi-transparent dark overlay on map tiles for improved aircraft marker contrast.
+- **Web Map Hover Tooltip** — Tooltip showing callsign, ICAO, speed, and altitude when hovering over aircraft markers, tracking the aircraft position continuously.
+
+### Changed
+
+- **Substring Search** — Aircraft search API changed from prefix matching to substring matching, allowing queries like "65" to find "WZZ652".
+- **Rate Limiting Removed** — Removed API rate limiting. Rate limiting belongs at the reverse proxy layer for local network APIs.
+- **Aircraft Detail Fields** — Added magnetic declination, downlink request, utility message, data link capability, and supported BDS registers to the detail endpoint and web map detail view.
+
+### Documentation
+
+- Added [Web Map Guide](docs/WEBMAP.md) with screenshots.
+- Updated [API Guide](docs/API.md) for substring search and new VelocityAndDynamics fields.
+- Updated [README](README.md) with Web Map feature and screenshot.
+
 ## [0.5.0] — 2026-04-03
 
 Initial public release.
@@ -29,4 +53,5 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.6.0]: https://github.com/aeromux/aeromux/releases/tag/v0.6.0
 [0.5.0]: https://github.com/aeromux/aeromux/releases/tag/v0.5.0

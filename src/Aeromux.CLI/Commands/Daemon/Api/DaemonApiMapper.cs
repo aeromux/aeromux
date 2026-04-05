@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Reflection;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
@@ -27,6 +28,10 @@ namespace Aeromux.CLI.Commands.Daemon.Api;
 /// </summary>
 public static class DaemonApiMapper
 {
+    private static readonly string AppVersion = (Assembly.GetExecutingAssembly()
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown")
+        .Split('+')[0];
+
     /// <summary>
     /// Maps an Aircraft to a compact list item projection.
     /// </summary>
@@ -163,6 +168,7 @@ public static class DaemonApiMapper
             TrackRate: dynamics?.TrackRate,
             SpeedOnGround: aircraft.Velocity.GroundSpeed,
             TrackOnGround: aircraft.Velocity.GroundTrack,
+            MagneticDeclination: dynamics?.MagneticDeclination?.Declination,
             LastUpdate: aircraft.Velocity.LastUpdate);
     }
 
@@ -294,6 +300,13 @@ public static class DaemonApiMapper
             Dimensions: caps?.Dimensions,
             GPSLateralOffset: opMode?.GPSLateralOffset,
             GPSLongitudinalOffset: opMode?.GPSLongitudinalOffset,
+            DownlinkRequest: opMode?.DownlinkRequest,
+            UtilityMessage: opMode?.UtilityMessage.HasValue == true
+                ? $"0x{opMode.UtilityMessage.Value:X2}" : null,
+            DataLinkCapability: caps?.DataLinkCapabilityBits.HasValue == true
+                ? $"0x{caps.DataLinkCapabilityBits.Value:X4}" : null,
+            SupportedBDSRegisters: caps?.SupportedBDSRegisters.HasValue == true
+                ? $"0x{caps.SupportedBDSRegisters.Value:X14}" : null,
             LastUpdate: caps?.LastUpdate ?? opMode?.LastUpdate);
     }
 
@@ -714,6 +727,7 @@ public static class DaemonApiMapper
         }
 
         return new StatsResponse(
+            Version: AppVersion,
             Timestamp: DateTime.UtcNow,
             Uptime: uptime,
             AircraftCount: tracker.Count,
