@@ -137,7 +137,7 @@ The following keyboard shortcuts are available in the aircraft list view:
 | `Home`         | Jump the selection to the first aircraft in the list                                |
 | `End`          | Jump the selection to the last aircraft in the list                                 |
 | `Enter`        | Open the detail view for the currently selected aircraft                            |
-| `D`            | Toggle the distance display unit between miles and kilometers                       |
+| `D`            | Cycle the distance display unit through nautical miles, miles, and kilometers       |
 | `A`            | Toggle the altitude display unit between feet and meters                            |
 | `S`            | Cycle the speed display unit through knots, kilometers per hour, and miles per hour |
 | `F1`–`F6`      | Sort the aircraft list by a column — see [Sorting](#sorting) for details            |
@@ -156,7 +156,7 @@ The following keyboard shortcuts are available in the aircraft detail view:
 | `Page Up/Down` | Same as `←` / `→` — move the selection by one page                                            |
 | `Home`         | Jump the selection to the first data field in the detail view                                 |
 | `End`          | Jump the selection to the last data field in the detail view                                  |
-| `D`            | Toggle the distance display unit between miles and kilometers                                 |
+| `D`            | Cycle the distance display unit through nautical miles, miles, and kilometers                 |
 | `A`            | Toggle the altitude display unit between feet and meters                                      |
 | `S`            | Cycle the speed display unit through knots, kilometers per hour, and miles per hour           |
 | `/`            | Enter search mode to search field names — see [Detail View Search](#detail-view-search)       |
@@ -244,11 +244,11 @@ The search input accepts up to 15 characters, including letters (displayed in up
 
 Three measurement units can be toggled independently in both the aircraft list and the detail view, allowing you to switch between unit systems without leaving the current view:
 
-| Key | Unit     | Options                              | Default |
-|-----|----------|--------------------------------------| --------|
-| `D` | Distance | Miles (mi) / Kilometers (km)         | Miles   |
-| `A` | Altitude | Feet (ft) / Meters (m)               | Feet    |
-| `S` | Speed    | Knots (kts) / km/h / mph             | Knots   |
+| Key | Unit     | Options                                            | Default        |
+|-----|----------|----------------------------------------------------|----------------|
+| `D` | Distance | Nautical miles (nm) / Miles (mi) / Kilometers (km) | Nautical miles |
+| `A` | Altitude | Feet (ft) / Meters (m)                             | Feet           |
+| `S` | Speed    | Knots (kts) / km/h / mph                           | Knots          |
 
 The currently selected units are displayed in the status footer row on the right side. Pressing `F12` resets all display units, the sort column, and any active search back to their default values. The current row selection is preserved when resetting.
 

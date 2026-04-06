@@ -322,9 +322,9 @@ export function getViewportBounds() {
     };
 }
 
-// Range rings — distances in statute miles, converted to km for haversine calculations
-const RANGE_MI = [115, 175, 235];
-const MI_TO_KM = 1.60934;
+// Range rings — distances in nautical miles, converted to km for haversine calculations
+const RANGE_NM = [100, 150, 200];
+const NM_TO_KM = 1.852;
 let rangeRingsAdded = false;
 let pendingRangeRings = null;
 
@@ -439,24 +439,26 @@ export function updateRangeRings(lat, lon, visible, distanceUnit) {
         return;
     }
 
-    // Build ring polygons — convert statute miles to km for the haversine circle generator
-    const ringFeatures = RANGE_MI.map(mi => ({
+    // Build ring polygons — convert nautical miles to km for the haversine circle generator
+    const ringFeatures = RANGE_NM.map(nm => ({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: generateCircleCoords(lat, lon, mi * MI_TO_KM) },
+        geometry: { type: 'LineString', coordinates: generateCircleCoords(lat, lon, nm * NM_TO_KM) },
         properties: {}
     }));
 
     // Build label points (at north edge of each ring)
-    const labelFeatures = RANGE_MI.map(mi => {
-        const radiusKm = mi * MI_TO_KM;
+    const labelFeatures = RANGE_NM.map(nm => {
+        const radiusKm = nm * NM_TO_KM;
         const coords = generateCircleCoords(lat, lon, radiusKm, 64);
         // North point is at index 0 (bearing 0)
         const northPt = coords[0];
         let label;
-        if (distanceUnit === 'mi') {
-            label = `${mi} mi`;
+        if (distanceUnit === 'nm') {
+            label = `${nm} nm`;
+        } else if (distanceUnit === 'mi') {
+            label = `${Math.round(nm * 1.15078)} mi`;
         } else {
-            label = `${Math.round(mi * MI_TO_KM)} km`;
+            label = `${Math.round(nm * NM_TO_KM)} km`;
         }
         return {
             type: 'Feature',

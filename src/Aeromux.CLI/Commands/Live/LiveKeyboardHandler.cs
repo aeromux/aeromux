@@ -176,9 +176,13 @@ internal static class LiveKeyboardHandler
                 break;
 
             case ConsoleKey.D:
-                state.DistanceUnit = state.DistanceUnit == DistanceUnit.Miles
-                    ? DistanceUnit.Kilometers
-                    : DistanceUnit.Miles;
+                state.DistanceUnit = state.DistanceUnit switch
+                {
+                    DistanceUnit.NauticalMiles => DistanceUnit.Miles,
+                    DistanceUnit.Miles => DistanceUnit.Kilometers,
+                    DistanceUnit.Kilometers => DistanceUnit.NauticalMiles,
+                    _ => DistanceUnit.NauticalMiles
+                };
                 Log.Debug("Distance unit changed to: {Unit}", state.DistanceUnit);
                 break;
 
@@ -564,9 +568,13 @@ internal static class LiveKeyboardHandler
                 }
                 break;
             case ConsoleKey.D:
-                state.DistanceUnit = state.DistanceUnit == DistanceUnit.Miles
-                    ? DistanceUnit.Kilometers
-                    : DistanceUnit.Miles;
+                state.DistanceUnit = state.DistanceUnit switch
+                {
+                    DistanceUnit.NauticalMiles => DistanceUnit.Miles,
+                    DistanceUnit.Miles => DistanceUnit.Kilometers,
+                    DistanceUnit.Kilometers => DistanceUnit.NauticalMiles,
+                    _ => DistanceUnit.NauticalMiles
+                };
                 Log.Debug("Distance unit changed to: {Unit}", state.DistanceUnit);
                 break;
             case ConsoleKey.A:

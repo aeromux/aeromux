@@ -38,7 +38,7 @@ When an aircraft is selected, a blue gradient trail is drawn along its recent fl
 
 ### Range Rings
 
-Three range rings centered on the receiver location indicate distances of 115, 175, and 235 miles from the receiver. Each ring is labeled with its distance, displayed in the currently selected distance unit (miles or kilometers). The receiver location is marked with a small blue circle at the center.
+Three range rings centered on the receiver location indicate distances of 100, 150, and 200 nautical miles from the receiver. Each ring is labeled with its distance, displayed in the currently selected distance unit (nautical miles, kilometers, or miles). The receiver location is marked with a small blue circle at the center.
 
 Range rings can be toggled on or off from the settings panel. They are enabled by default. When the receiver location is not configured, range rings are not displayed.
 
@@ -124,11 +124,11 @@ The gear icon next to the search input opens the settings dropdown, which provid
 
 Three measurement units can be switched independently:
 
-| Unit     | Options                      | Default    |
-|----------|------------------------------|------------|
-| Speed    | Knots (kts) / km/h / mph     | Knots      |
-| Altitude | Feet (ft) / Meters (m)       | Feet       |
-| Distance | Kilometers (km) / Miles (mi) | Kilometers |
+| Unit     | Options                                            | Default        |
+|----------|----------------------------------------------------|----------------|
+| Speed    | Knots (kts) / km/h / mph                           | Knots          |
+| Altitude | Feet (ft) / Meters (m)                             | Feet           |
+| Distance | Nautical miles (nm) / Kilometers (km) / Miles (mi) | Nautical miles |
 
 Unit changes are applied immediately across the entire interface — the aircraft list, detail view, hover tooltip, and range ring labels all update to reflect the selected units. Unit preferences are persisted in the browser and restored on the next visit.
 

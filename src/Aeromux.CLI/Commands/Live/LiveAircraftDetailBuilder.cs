@@ -190,11 +190,21 @@ internal static class LiveAircraftDetailBuilder
                 receiverConfig.Latitude.Value,
                 receiverConfig.Longitude.Value);
 
-            double dist = distanceUnit == DistanceUnit.Miles
-                ? receiverLocation.DistanceToMiles(aircraft.Position.Coordinate)
-                : receiverLocation.DistanceToKilometers(aircraft.Position.Coordinate);
+            double dist = distanceUnit switch
+            {
+                DistanceUnit.NauticalMiles => receiverLocation.DistanceToNauticalMiles(aircraft.Position.Coordinate),
+                DistanceUnit.Miles => receiverLocation.DistanceToMiles(aircraft.Position.Coordinate),
+                DistanceUnit.Kilometers => receiverLocation.DistanceToKilometers(aircraft.Position.Coordinate),
+                _ => receiverLocation.DistanceToNauticalMiles(aircraft.Position.Coordinate)
+            };
 
-            string unitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
+            string unitLabel = distanceUnit switch
+            {
+                DistanceUnit.NauticalMiles => "nm",
+                DistanceUnit.Miles => "mi",
+                DistanceUnit.Kilometers => "km",
+                _ => "nm"
+            };
             distance = $"{dist:F1} {unitLabel}";
         }
         else if (aircraft.Position.Coordinate != null)
@@ -1156,7 +1166,13 @@ internal static class LiveAircraftDetailBuilder
         }
 
         // Build footer (2 rows with left/right alignment)
-        string distUnitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
+        string distUnitLabel = distanceUnit switch
+        {
+            DistanceUnit.NauticalMiles => "nm",
+            DistanceUnit.Miles => "mi",
+            DistanceUnit.Kilometers => "km",
+            _ => "nm"
+        };
         string altUnitLabel = altitudeUnit == AltitudeUnit.Feet ? "ft" : "m";
         string speedUnitLabel = speedUnit switch
         {

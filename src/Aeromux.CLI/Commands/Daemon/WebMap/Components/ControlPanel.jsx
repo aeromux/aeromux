@@ -168,6 +168,7 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                         <button class={`unit-btn${units.altitude === 'm' ? ' active' : ''}`} onClick={() => setUnit('altitude', 'm')}>m</button>
                     </div>
                     <div class="unit-group">
+                        <button class={`unit-btn${units.distance === 'nm' ? ' active' : ''}`} onClick={() => setUnit('distance', 'nm')}>nm</button>
                         <button class={`unit-btn${units.distance === 'km' ? ' active' : ''}`} onClick={() => setUnit('distance', 'km')}>km</button>
                         <button class={`unit-btn${units.distance === 'mi' ? ' active' : ''}`} onClick={() => setUnit('distance', 'mi')}>mi</button>
                     </div>

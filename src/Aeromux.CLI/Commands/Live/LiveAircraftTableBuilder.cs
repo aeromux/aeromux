@@ -202,11 +202,21 @@ internal static class LiveAircraftTableBuilder
                     receiverConfig.Latitude.Value,
                     receiverConfig.Longitude.Value);
 
-                double distanceValue = distanceUnit == DistanceUnit.Miles
-                    ? receiverLocation.DistanceToMiles(aircraft.Position.Coordinate)
-                    : receiverLocation.DistanceToKilometers(aircraft.Position.Coordinate);
+                double distanceValue = distanceUnit switch
+                {
+                    DistanceUnit.NauticalMiles => receiverLocation.DistanceToNauticalMiles(aircraft.Position.Coordinate),
+                    DistanceUnit.Miles => receiverLocation.DistanceToMiles(aircraft.Position.Coordinate),
+                    DistanceUnit.Kilometers => receiverLocation.DistanceToKilometers(aircraft.Position.Coordinate),
+                    _ => receiverLocation.DistanceToNauticalMiles(aircraft.Position.Coordinate)
+                };
 
-                string unitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
+                string unitLabel = distanceUnit switch
+                {
+                    DistanceUnit.NauticalMiles => "nm",
+                    DistanceUnit.Miles => "mi",
+                    DistanceUnit.Kilometers => "km",
+                    _ => "nm"
+                };
                 distance = $"{distanceValue:F1} {unitLabel}";
             }
             distance = distance.PadLeft(9);
@@ -292,7 +302,13 @@ internal static class LiveAircraftTableBuilder
         }
 
         // Build footer (3 rows with left/right alignment)
-        string distUnitLabel = distanceUnit == DistanceUnit.Miles ? "mi" : "km";
+        string distUnitLabel = distanceUnit switch
+        {
+            DistanceUnit.NauticalMiles => "nm",
+            DistanceUnit.Miles => "mi",
+            DistanceUnit.Kilometers => "km",
+            _ => "nm"
+        };
         string altUnitLabel = altitudeUnit == AltitudeUnit.Feet ? "ft" : "m";
         string speedUnitLabel = speedUnit switch
         {

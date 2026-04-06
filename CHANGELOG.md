@@ -7,7 +7,7 @@ All notable changes to Aeromux will be documented in this file.
 ### Added
 
 - **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, position trails, and real-time updates via SignalR. Served directly by the daemon with no external web server required. See the [Web Map Guide](docs/WEBMAP.md).
-- **Web Map Range Rings** — Three range rings (115/175/235 mi) centered on the receiver location with distance labels and a center point marker. Distances follow the selected unit (miles or kilometers). Toggleable from the settings panel.
+- **Web Map Range Rings** — Three range rings (100/150/200 nm) centered on the receiver location with distance labels and a center point marker. Distances follow the selected unit (nautical miles, kilometers, or miles). Toggleable from the settings panel.
 - **Web Map Search Highlighting** — Matched text is highlighted in orange in the search dropdown across callsign, ICAO, and registration fields.
 - **Web Map Sortable Columns** — Aircraft list columns (callsign, altitude, speed, distance) are sortable by clicking headers, with sort preferences persisted in the browser.
 - **Web Map Settings Panel** — Unified control panel with search input, unit switching (speed, altitude, distance), and interface settings behind a gear icon.
@@ -19,6 +19,7 @@ All notable changes to Aeromux will be documented in this file.
 - **Substring Search** — Aircraft search API changed from prefix matching to substring matching, allowing queries like "65" to find "WZZ652".
 - **Rate Limiting Removed** — Removed API rate limiting. Rate limiting belongs at the reverse proxy layer for local network APIs.
 - **Aircraft Detail Fields** — Added magnetic declination, downlink request, utility message, data link capability, and supported BDS registers to the detail endpoint and web map detail view.
+- **Nautical Miles** — Added nautical miles (nm) as a distance unit in the web map and TUI, now the default. Distance can be toggled between nautical miles, statute miles, and kilometers.
 
 ### Documentation
 

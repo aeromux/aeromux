@@ -107,18 +107,19 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, onBac
                 ) : (
                     <div class="section-fields">
                         <DetailField label="Registration" value={db.Registration} />
-                        <DetailField label="Country" value={db.RegistrationCountry} />
+                        <DetailField label="Country" value={db.Country} />
                         <DetailField label="Operator" value={db.OperatorName} />
-                        <DetailField label="Manufacturer" value={db.ManufacturerName || db.ManufacturerICAO} />
-                        <DetailField label="Type" value={db.TypeDescription || db.TypeDesignator} />
-                        <DetailField label="Model" value={db.AircraftModel} />
+                        <DetailField label="Manufacturer Name" value={db.ManufacturerName} />
+                        <DetailField label="Type Description" value={db.TypeDescription} />
+                        <DetailField label="Aircraft Model" value={db.Model} />
                         {showMore.db && (
                             <>
-                                <DetailField label="Type Class ICAO" value={db.TypeClassICAO} />
-                                <DetailField label="Type Designator" value={db.TypeDesignator} />
-                                <DetailField label="FAA PIA" value={fmtBool(db.FlagPIA)} />
-                                <DetailField label="FAA LADD" value={fmtBool(db.FlagLADD)} />
-                                <DetailField label="Military" value={fmtBool(db.FlagMilitary)} />
+                                <DetailField label="Manufacturer ICAO" value={db.ManufacturerIcao} />
+                                <DetailField label="Type Class ICAO" value={db.TypeIcaoClass} />
+                                <DetailField label="Type Designator" value={db.TypeCode} />
+                                <DetailField label="FAA PIA" value={fmtBool(db.Pia)} />
+                                <DetailField label="FAA LADD" value={fmtBool(db.Ladd)} />
+                                <DetailField label="Military" value={fmtBool(db.Military)} />
                             </>
                         )}
                     </div>

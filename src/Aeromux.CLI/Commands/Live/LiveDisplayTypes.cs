@@ -21,7 +21,7 @@ namespace Aeromux.CLI.Commands.Live;
 /// <summary>
 /// Unit for distance display (miles or kilometers).
 /// </summary>
-internal enum DistanceUnit { Miles, Kilometers }
+internal enum DistanceUnit { NauticalMiles, Miles, Kilometers }
 
 /// <summary>
 /// Unit for altitude display (feet or meters).
@@ -70,7 +70,7 @@ internal sealed class LiveTuiState
     public bool DetailAircraftExpired { get; set; }
 
     // Display units
-    public DistanceUnit DistanceUnit { get; set; } = DistanceUnit.Miles;
+    public DistanceUnit DistanceUnit { get; set; } = DistanceUnit.NauticalMiles;
     public AltitudeUnit AltitudeUnit { get; set; } = AltitudeUnit.Feet;
     public SpeedUnit SpeedUnit { get; set; } = SpeedUnit.Knots;
 
@@ -95,7 +95,7 @@ internal sealed class LiveTuiState
     {
         SortColumn = SortColumn.ICAO;
         SortDirection = SortDirection.Ascending;
-        DistanceUnit = DistanceUnit.Miles;
+        DistanceUnit = DistanceUnit.NauticalMiles;
         AltitudeUnit = AltitudeUnit.Feet;
         SpeedUnit = SpeedUnit.Knots;
         IsSearchActive = false;

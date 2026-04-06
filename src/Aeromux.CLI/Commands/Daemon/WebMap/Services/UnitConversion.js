@@ -20,7 +20,7 @@ const STORAGE_KEY = 'aeromux-units';
 const DEFAULTS = {
     speed: 'kts',
     altitude: 'ft',
-    distance: 'km'
+    distance: 'nm'
 };
 
 // Aircraft list sort column and direction persisted across sessions
@@ -80,6 +80,8 @@ export function saveSettings(settings) {
 
 export function convertNauticalMiles(nm, unit) {
     switch (unit) {
+        case 'nm':
+            return { value: Math.round(nm), label: 'nm' };
         case 'mi':
             return { value: Math.round(nm * 1.15078), label: 'mi' };
         default:
@@ -137,6 +139,8 @@ export function convertAltitude(feet, unit) {
 export function convertDistance(km, unit) {
     if (km == null) return { value: null, label: unit };
     switch (unit) {
+        case 'nm':
+            return { value: (km / 1.852).toFixed(1), label: 'nm' };
         case 'mi':
             return { value: (km * 0.621371).toFixed(1), label: 'mi' };
         default:

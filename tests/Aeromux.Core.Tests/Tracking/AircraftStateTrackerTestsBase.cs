@@ -90,6 +90,8 @@ public class AircraftStateTrackerTestsBase : IDisposable
     /// <param name="because">Failure message describing what was expected</param>
     protected static void WaitForCondition(Func<bool> condition, TimeSpan timeout, string because)
     {
+        ArgumentNullException.ThrowIfNull(condition);
+
         DateTime deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
