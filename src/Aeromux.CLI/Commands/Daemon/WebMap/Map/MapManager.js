@@ -206,7 +206,7 @@ function addLayers() {
 
 export function setCenter(lat, lon, zoom) {
     if (map) {
-        map.flyTo({ center: [lon, lat], zoom: zoom || 8 });
+        map.jumpTo({ center: [lon, lat], zoom: zoom || 8 });
     }
 }
 
@@ -281,8 +281,11 @@ export function clearSelection() {
 
 export function panTo(lat, lon, keepZoom = false) {
     if (map) {
-        const zoom = keepZoom ? map.getZoom() : Math.max(map.getZoom(), 8);
-        map.flyTo({ center: [lon, lat], zoom });
+        if (keepZoom) {
+            map.jumpTo({ center: [lon, lat], zoom: map.getZoom() });
+        } else {
+            map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 8), duration: 500 });
+        }
     }
 }
 
