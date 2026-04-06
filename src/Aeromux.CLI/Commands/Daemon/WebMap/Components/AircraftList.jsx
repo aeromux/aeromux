@@ -15,8 +15,8 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 import { h } from 'preact';
-import { useState, useMemo, useCallback } from 'preact/hooks';
-import { formatAltitude, formatSpeed, haversineDistance, convertDistance, loadSort, saveSort } from '../Services/UnitConversion.js';
+import { useMemo, useCallback } from 'preact/hooks';
+import { formatAltitude, formatSpeed, haversineDistance, convertDistance } from '../Services/UnitConversion.js';
 
 function getRawValue(item, column) {
     switch (column) {
@@ -35,18 +35,13 @@ function getRawValue(item, column) {
     }
 }
 
-export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, units, onSelect, viewCount, totalCount }) {
-    const [sort, setSort] = useState(loadSort);
-
+export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, units, sort, onSortChange, onSelect, viewCount, totalCount }) {
     const handleHeaderClick = useCallback((column) => {
-        setSort(prev => {
-            const next = prev.column === column
-                ? { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
-                : { column, direction: 'asc' };
-            saveSort(next);
-            return next;
-        });
-    }, []);
+        const next = sort.column === column
+            ? { column, direction: sort.direction === 'asc' ? 'desc' : 'asc' }
+            : { column, direction: 'asc' };
+        onSortChange(next);
+    }, [sort, onSortChange]);
 
     const sortedAircraft = useMemo(() => {
         const items = [];

@@ -32,12 +32,18 @@ function highlightMatch(text, query) {
     );
 }
 
-export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect }) {
+export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [confirmingReset, setConfirmingReset] = useState(false);
+
+    // Reset confirmation state when settings dropdown closes
+    useEffect(() => {
+        if (!settingsOpen) setConfirmingReset(false);
+    }, [settingsOpen]);
     const debounceRef = useRef(null);
     const wrapperRef = useRef(null);
 
@@ -179,6 +185,18 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                         </div>
                         Range rings
                     </div>
+                    <div class="settings-separator" />
+                    {confirmingReset ? (
+                        <div class="reset-confirm">
+                            <span class="reset-confirm-text">Are you sure?</span>
+                            <div class="reset-confirm-buttons">
+                                <button class="reset-yes" onClick={() => { onReset(); setConfirmingReset(false); }}>Yes</button>
+                                <button class="reset-no" onClick={() => setConfirmingReset(false)}>No</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button class="reset-btn" onClick={() => setConfirmingReset(true)}>Reset to defaults</button>
+                    )}
                 </div>
             )}
         </div>

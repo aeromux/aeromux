@@ -10,7 +10,7 @@ All notable changes to Aeromux will be documented in this file.
 - **Web Map Range Rings** — Three range rings (100/150/200 nm) centered on the receiver location with distance labels and a center point marker. Distances follow the selected unit (nautical miles, kilometers, or miles). Toggleable from the settings panel.
 - **Web Map Search Highlighting** — Matched text is highlighted in orange in the search dropdown across callsign, ICAO, and registration fields.
 - **Web Map Sortable Columns** — Aircraft list columns (callsign, altitude, speed, distance) are sortable by clicking headers, with sort preferences persisted in the browser.
-- **Web Map Settings Panel** — Unified control panel with search input, unit switching (speed, altitude, distance), and interface settings behind a gear icon.
+- **Web Map Settings Panel** — Unified control panel with search input, unit switching (speed, altitude, distance), interface settings, and reset to defaults behind a gear icon.
 - **Web Map Dark Overlay** — Semi-transparent dark overlay on map tiles for improved aircraft marker contrast.
 - **Web Map Hover Tooltip** — Tooltip showing callsign, ICAO, speed, and altitude when hovering over aircraft markers, tracking the aircraft position continuously.
 

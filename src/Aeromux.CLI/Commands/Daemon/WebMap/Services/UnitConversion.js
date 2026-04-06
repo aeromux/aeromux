@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-// Display unit preferences (speed, altitude, distance) persisted across sessions
+// User preferences (units, sort, interface settings) persisted across sessions
 const STORAGE_KEY = 'aeromux-units';
 
 const DEFAULTS = {
@@ -73,6 +73,17 @@ export function loadSettings() {
 export function saveSettings(settings) {
     try {
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+        // Ignore storage errors
+    }
+}
+
+// Clears all persisted preferences so load functions fall back to defaults
+export function resetAllSettings() {
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(SORT_STORAGE_KEY);
+        localStorage.removeItem(SETTINGS_STORAGE_KEY);
     } catch (e) {
         // Ignore storage errors
     }

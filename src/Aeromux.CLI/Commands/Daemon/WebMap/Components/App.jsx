@@ -19,7 +19,7 @@ import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { fetchStats, fetchAircraft, fetchDetail, fetchHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
-import { loadUnits, saveUnits, loadSettings, saveSettings } from '../Services/UnitConversion.js';
+import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings } from '../Services/UnitConversion.js';
 import { HoverTooltip } from './HoverTooltip.jsx';
 import { AircraftList } from './AircraftList.jsx';
 import { AircraftDetail } from './AircraftDetail.jsx';
@@ -37,6 +37,7 @@ export function App() {
     const [trail, setTrail] = useState([]);
     const [version, setVersion] = useState(null);
     const [settings, setSettings] = useState(loadSettings);
+    const [sort, setSort] = useState(loadSort);
     const aircraftMapRef = useRef(new Map());
     const selectedRef = useRef(null);
     const trailRef = useRef([]);
@@ -135,6 +136,20 @@ export function App() {
     const handleSettingsChange = useCallback((newSettings) => {
         setSettings(newSettings);
         saveSettings(newSettings);
+    }, []);
+
+    // Sort change handler
+    const handleSortChange = useCallback((newSort) => {
+        setSort(newSort);
+        saveSort(newSort);
+    }, []);
+
+    // Reset all settings to defaults
+    const handleReset = useCallback(() => {
+        resetAllSettings();
+        setUnits(loadUnits());
+        setSettings(loadSettings());
+        setSort(loadSort());
     }, []);
 
     // Initialize on mount
@@ -305,6 +320,8 @@ export function App() {
                         receiverLocation={receiverLocation}
                         selectedIcao={selectedIcao}
                         units={units}
+                        sort={sort}
+                        onSortChange={handleSortChange}
                         onSelect={handleSelect}
                         viewCount={viewCount}
                         totalCount={totalCount}
@@ -318,6 +335,7 @@ export function App() {
                 settings={settings}
                 onSettingsChange={handleSettingsChange}
                 onSelect={handleSelect}
+                onReset={handleReset}
             />
         </div>
     );

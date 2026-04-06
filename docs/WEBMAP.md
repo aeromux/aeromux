@@ -112,7 +112,7 @@ Each result shows the callsign (or ICAO address if no callsign is available) and
 
 ### Settings
 
-The gear icon next to the search input opens the settings dropdown, which provides controls for display units and interface options.
+The gear icon next to the search input opens the settings dropdown, which provides controls for display units, interface options, and a reset to defaults.
 
 <div align="center">
   <img src="images/webmap/settings.png" alt="Settings Dropdown" width="350">
@@ -137,6 +137,10 @@ Unit changes are applied immediately across the entire interface — the aircraf
 | Option      | Description                             | Default  |
 |-------------|-----------------------------------------|----------|
 | Range rings | Show or hide the range rings on the map | On       |
+
+#### Reset
+
+The "Reset to defaults" button at the bottom of the settings dropdown restores all units, interface options, and sort preferences to their default values and clears them from the browser. An inline confirmation prompt ("Are you sure?") prevents accidental resets.
 
 ## Browser Requirements
 
