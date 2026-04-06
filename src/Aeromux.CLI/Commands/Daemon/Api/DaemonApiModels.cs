@@ -52,7 +52,10 @@ public sealed record AircraftListItem(
     bool DatabaseEnabled,
     string? Registration,
     string? TypeCode,
-    string? OperatorName);
+    string? OperatorName,
+    bool? Military,
+    bool? Ladd,
+    bool? Pia);
 
 // === Aircraft Detail Sections ===
 

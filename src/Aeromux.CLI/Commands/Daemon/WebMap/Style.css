@@ -554,6 +554,34 @@ body {
     background: var(--color-hover-bg);
 }
 
+/* ── Legend ───────────────────────────────────────────────────────────────── */
+
+.legend-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 var(--spacing-sm);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
+}
+
+.legend-label {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
 /* ── Stats Row (Left Panel) ──────────────────────────────────────────────── */
 
 .aircraft-list-stats {

@@ -235,7 +235,10 @@ export function updateMarkers(aircraftMap) {
                 altitude: aircraft.BarometricAltitude ? aircraft.BarometricAltitude.Feet : 0,
                 speed: aircraft.Speed ? aircraft.Speed.Knots : 0,
                 heading: aircraft.Track || aircraft.TrackOnGround || 0,
-                selected: icao === selectedIcao
+                selected: icao === selectedIcao,
+                category: aircraft.Military ? 'military'
+                    : (aircraft.Ladd || aircraft.Pia) ? 'privacy'
+                    : 'normal'
             }
         });
     });

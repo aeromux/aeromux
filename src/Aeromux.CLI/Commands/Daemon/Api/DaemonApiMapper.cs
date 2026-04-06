@@ -60,7 +60,10 @@ public static class DaemonApiMapper
             DatabaseEnabled: aircraft.DatabaseEnabled,
             Registration: aircraft.DatabaseRecord.Registration,
             TypeCode: aircraft.DatabaseRecord.TypeCode,
-            OperatorName: aircraft.DatabaseRecord.OperatorName);
+            OperatorName: aircraft.DatabaseRecord.OperatorName,
+            Military: aircraft.DatabaseRecord.Military,
+            Ladd: aircraft.DatabaseRecord.Ladd,
+            Pia: aircraft.DatabaseRecord.Pia);
     }
 
     /// <summary>
