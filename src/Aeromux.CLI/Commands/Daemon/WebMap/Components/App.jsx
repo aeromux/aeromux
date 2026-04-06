@@ -87,23 +87,30 @@ export function App() {
         MapManager.highlightSelected(icao);
         MapManager.updateMarkers(aircraftMapRef.current);
 
-        // Fetch detail and history in parallel
+        // Fetch detail and history independently — one failure must not block the other
+        let detailData = null;
+        let historyData = null;
+
         try {
-            const [detailData, historyData] = await Promise.all([
-                fetchDetail(icao),
-                fetchHistory(icao)
-            ]);
-            if (selectedRef.current === icao) {
-                setDetail(detailData);
-                if (historyData.Position && historyData.Position.Entries) {
-                    const positions = historyData.Position.Entries.map(e => e.Position);
-                    trailRef.current = positions;
-                    setTrail(positions);
-                    MapManager.updateTrail(positions);
-                }
-            }
+            detailData = await fetchDetail(icao);
         } catch (e) {
-            // Ignore fetch errors
+            console.error('Failed to fetch detail:', e);
+        }
+
+        try {
+            historyData = await fetchHistory(icao);
+        } catch (e) {
+            console.error('Failed to fetch history:', e);
+        }
+
+        if (selectedRef.current === icao) {
+            if (detailData) setDetail(detailData);
+            if (historyData?.Position?.Entries) {
+                const positions = historyData.Position.Entries.map(e => e.Position);
+                trailRef.current = positions;
+                setTrail(positions);
+                MapManager.updateTrail(positions);
+            }
         }
 
         // Tell SignalR we want detail pushes

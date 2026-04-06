@@ -32,6 +32,7 @@ public sealed class CircularBuffer<T>
     private readonly T[] _buffer;
     private readonly long[] _sequenceIds;  // Parallel array storing sequence ID per slot
     private readonly int _capacity;
+    private readonly Func<T, T, bool>? _isDuplicate;  // Optional duplicate check function
     private int _head;    // Next write position (wraps around using modulo)
     private int _count;   // Current item count (0 to _capacity)
     private long _nextSequenceId = 1;      // Next sequence ID to assign (starts at 1)
@@ -41,8 +42,10 @@ public sealed class CircularBuffer<T>
     /// Creates a new circular buffer with the specified capacity.
     /// </summary>
     /// <param name="capacity">Maximum number of items to store</param>
+    /// <param name="isDuplicate">Optional function to compare two items for equality.
+    /// When provided, consecutive duplicate items are silently skipped on Add.</param>
     /// <exception cref="ArgumentException">Thrown if capacity is not positive</exception>
-    public CircularBuffer(int capacity)
+    public CircularBuffer(int capacity, Func<T, T, bool>? isDuplicate = null)
     {
         if (capacity <= 0)
         {
@@ -50,6 +53,7 @@ public sealed class CircularBuffer<T>
         }
 
         _capacity = capacity;
+        _isDuplicate = isDuplicate;
         _buffer = new T[capacity];
         _sequenceIds = new long[capacity];
         _head = 0;
@@ -58,6 +62,8 @@ public sealed class CircularBuffer<T>
 
     /// <summary>
     /// Adds an item to the buffer. If full, overwrites the oldest entry.
+    /// When a duplicate check function was provided at construction, consecutive
+    /// duplicate items are silently skipped.
     /// Thread-safe and lock-protected. O(1) time complexity.
     /// </summary>
     /// <param name="item">Item to add to the buffer</param>
@@ -65,6 +71,16 @@ public sealed class CircularBuffer<T>
     {
         lock (_lock)
         {
+            // Skip consecutive duplicates when a comparison function is provided
+            if (_isDuplicate != null && _count > 0)
+            {
+                int newest = (_head - 1 + _capacity) % _capacity;
+                if (_isDuplicate(_buffer[newest], item))
+                {
+                    return;
+                }
+            }
+
             _buffer[_head] = item;
             _sequenceIds[_head] = _nextSequenceId++;
             _head = (_head + 1) % _capacity;  // Wrap around
@@ -200,6 +216,25 @@ public sealed class CircularBuffer<T>
                 int newest = (_head - 1 + _capacity) % _capacity;
                 return _sequenceIds[newest];
             }
+        }
+    }
+
+    /// <summary>
+    /// Returns the most recent item in the buffer, or default if empty.
+    /// Thread-safe and lock-protected. O(1) time complexity.
+    /// </summary>
+    /// <returns>The most recently added item, or default(T) if the buffer is empty</returns>
+    public T? PeekLast()
+    {
+        lock (_lock)
+        {
+            if (_count == 0)
+            {
+                return default;
+            }
+
+            int newest = (_head - 1 + _capacity) % _capacity;
+            return _buffer[newest];
         }
     }
 

@@ -173,7 +173,7 @@ function addLayers() {
             'line-width': 3,
             'line-gradient': [
                 'interpolate', ['linear'], ['line-progress'],
-                0, 'rgba(0, 97, 146, 0)',
+                0, 'rgba(0, 97, 146, 0.15)',
                 1, 'rgba(0, 97, 146, 1)'
             ]
         }

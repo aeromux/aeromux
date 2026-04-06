@@ -20,6 +20,7 @@ All notable changes to Aeromux will be documented in this file.
 - **Rate Limiting Removed** — Removed API rate limiting. Rate limiting belongs at the reverse proxy layer for local network APIs.
 - **Aircraft Detail Fields** — Added magnetic declination, downlink request, utility message, data link capability, and supported BDS registers to the detail endpoint and web map detail view.
 - **Nautical Miles** — Added nautical miles (nm) as a distance unit in the web map and TUI, now the default. Distance can be toggled between nautical miles, statute miles, and kilometers.
+- **History Buffers** — Circular buffers now skip consecutive duplicate entries, preserving more meaningful data for position trails, altitude graphs, and velocity analysis.
 
 ### Documentation
 

@@ -1492,6 +1492,89 @@ public class CircularBufferTests
 
     #endregion
 
+    #region Duplicate Check
+
+    [Fact]
+    public void Add_WithDuplicateCheck_SkipsConsecutiveDuplicate()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10, (a, b) => a == b);
+
+        // Act
+        buffer.Add(42);
+        buffer.Add(42);
+
+        // Assert
+        buffer.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void Add_WithDuplicateCheck_AllowsDifferentItems()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10, (a, b) => a == b);
+
+        // Act
+        buffer.Add(1);
+        buffer.Add(2);
+
+        // Assert
+        buffer.Count.Should().Be(2);
+        buffer.GetAll().Should().Equal(1, 2);
+    }
+
+    [Fact]
+    public void Add_WithDuplicateCheck_AllowsSameItemAfterDifferent()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10, (a, b) => a == b);
+
+        // Act
+        buffer.Add(1);
+        buffer.Add(2);
+        buffer.Add(1);
+
+        // Assert - Non-consecutive duplicates are allowed
+        buffer.Count.Should().Be(3);
+        buffer.GetAll().Should().Equal(1, 2, 1);
+    }
+
+    [Fact]
+    public void Add_WithoutDuplicateCheck_AllowsDuplicates()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10);
+
+        // Act
+        buffer.Add(42);
+        buffer.Add(42);
+
+        // Assert - No dedup without a check function
+        buffer.Count.Should().Be(2);
+        buffer.GetAll().Should().Equal(42, 42);
+    }
+
+    [Fact]
+    public void Add_WithDuplicateCheck_SequenceIdsOnlyIncrementOnInsert()
+    {
+        // Arrange
+        var buffer = new CircularBuffer<int>(10, (a, b) => a == b);
+
+        // Act
+        buffer.Add(1);
+        buffer.Add(1);  // Skipped
+        buffer.Add(2);
+
+        // Assert - Sequence IDs should be 1 and 2 (no gap from the skipped duplicate)
+        buffer.Count.Should().Be(2);
+        var entries = buffer.GetAllWithSequenceIds();
+        entries.Should().HaveCount(2);
+        entries[0].SequenceId.Should().Be(1);
+        entries[1].SequenceId.Should().Be(2);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>

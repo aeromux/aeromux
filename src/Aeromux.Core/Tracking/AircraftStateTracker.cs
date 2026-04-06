@@ -363,16 +363,25 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         return new TrackedHistory
         {
             PositionHistory = _trackingConfig.EnablePositionHistory
-                ? new CircularBuffer<PositionSnapshot>(_trackingConfig.MaxHistorySize)
+                ? new CircularBuffer<PositionSnapshot>(_trackingConfig.MaxHistorySize,
+                    (a, b) => a.Position == b.Position)
                 : null,
             AltitudeHistory = _trackingConfig.EnableAltitudeHistory
-                ? new CircularBuffer<AltitudeSnapshot>(_trackingConfig.MaxHistorySize)
+                ? new CircularBuffer<AltitudeSnapshot>(_trackingConfig.MaxHistorySize,
+                    (a, b) => a.Altitude == b.Altitude && a.AltitudeType == b.AltitudeType)
                 : null,
             VelocityHistory = _trackingConfig.EnableVelocityHistory
-                ? new CircularBuffer<VelocitySnapshot>(_trackingConfig.MaxHistorySize)
+                ? new CircularBuffer<VelocitySnapshot>(_trackingConfig.MaxHistorySize,
+                    (a, b) => a.Velocity == b.Velocity &&
+                              a.Heading == b.Heading &&
+                              a.Track == b.Track &&
+                              a.GroundSpeed == b.GroundSpeed &&
+                              a.GroundTrack == b.GroundTrack &&
+                              a.VerticalRate == b.VerticalRate)
                 : null,
             StateHistory = _trackingConfig.EnableStateHistory
-                ? new CircularBuffer<StateSnapshot>(_trackingConfig.MaxHistorySize)
+                ? new CircularBuffer<StateSnapshot>(_trackingConfig.MaxHistorySize,
+                    (a, b) => a.Position == b.Position)
                 : null
         };
     }
