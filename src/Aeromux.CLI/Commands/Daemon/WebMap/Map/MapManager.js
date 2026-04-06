@@ -279,9 +279,10 @@ export function clearSelection() {
     selectedIcao = null;
 }
 
-export function panTo(lat, lon) {
+export function panTo(lat, lon, keepZoom = false) {
     if (map) {
-        map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 8) });
+        const zoom = keepZoom ? map.getZoom() : Math.max(map.getZoom(), 8);
+        map.flyTo({ center: [lon, lat], zoom });
     }
 }
 

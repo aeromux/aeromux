@@ -96,11 +96,11 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
         }, 300);
     }, []);
 
-    const handleSelectResult = useCallback((icao) => {
+    const handleSelectResult = useCallback((icao, coordinate) => {
         setQuery('');
         setResults(null);
         setSearchOpen(false);
-        onSelect(icao);
+        onSelect(icao, coordinate);
     }, [onSelect]);
 
     const toggleSettings = useCallback(() => {
@@ -142,7 +142,7 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                                 <div
                                     key={a.ICAO}
                                     class="search-result"
-                                    onClick={() => handleSelectResult(a.ICAO)}
+                                    onClick={() => handleSelectResult(a.ICAO, a.Coordinate)}
                                 >
                                     <div class="search-result-callsign">{highlightMatch(a.Callsign || a.ICAO, query)}</div>
                                     <div class="search-result-meta">

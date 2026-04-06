@@ -76,7 +76,7 @@ export function App() {
     }, [flushUpdates]);
 
     // Select aircraft handler
-    const handleSelect = useCallback(async (icao) => {
+    const handleSelect = useCallback(async (icao, { panTo: shouldPan = false, coordinate } = {}) => {
         selectedRef.current = icao;
         setSelectedIcao(icao);
         setExpired(false);
@@ -86,6 +86,13 @@ export function App() {
 
         MapManager.highlightSelected(icao);
         MapManager.updateMarkers(aircraftMapRef.current);
+
+        if (shouldPan) {
+            const coord = coordinate || aircraftMapRef.current.get(icao)?.Coordinate;
+            if (coord) {
+                MapManager.panTo(coord.Latitude, coord.Longitude, true);
+            }
+        }
 
         // Fetch detail and history independently — one failure must not block the other
         let detailData = null;
@@ -329,7 +336,7 @@ export function App() {
                         units={units}
                         sort={sort}
                         onSortChange={handleSortChange}
-                        onSelect={handleSelect}
+                        onSelect={(icao) => handleSelect(icao, { panTo: true })}
                         viewCount={viewCount}
                         totalCount={totalCount}
                     />
@@ -341,7 +348,7 @@ export function App() {
                 onUnitsChange={handleUnitsChange}
                 settings={settings}
                 onSettingsChange={handleSettingsChange}
-                onSelect={handleSelect}
+                onSelect={(icao, coordinate) => handleSelect(icao, { panTo: true, coordinate })}
                 onReset={handleReset}
             />
         </div>
