@@ -82,6 +82,7 @@ The detail view is organized into the following sections:
 
 - **Identification** — The aircraft's ICAO address, callsign, wake turbulence category, squawk code, and emergency state.
 - **Aircraft Database** — Static metadata from the [aeromux-db](https://github.com/aeromux/aeromux-db) database, including registration, operator, manufacturer, aircraft type, and regulatory flags such as FAA PIA and LADD.
+- **Flight Profile** — A dual-axis chart showing barometric altitude (blue line, left axis) and ground speed (orange line, right axis) over time. The chart loads historical data on selection and extends in real-time as new state updates arrive. A legend above the chart indicates the color and unit for each series. When state history is not enabled or no data is available, an informational message is shown instead.
 - **Status** — Timestamps for when the aircraft was first and last seen, message counts broken down by type (position, velocity, identification), and the current signal strength.
 - **Position** — Geographic coordinates, distance from the receiver, barometric and geometric altitudes with their delta, ground state, and position source.
 - **Velocity & Dynamics** — Ground speed, airspeed, heading, track angle, vertical rate, roll angle, Mach number, magnetic declination, turn rate, and surface movement data.
@@ -91,7 +92,7 @@ The detail view is organized into the following sections:
 - **Capabilities** — Transponder level, ADS-B version, data link feature support (1090ES, UAT, CDTI), operational flags, aircraft dimensions, GPS antenna offsets, downlink request, utility message, data link capability, and supported BDS registers.
 - **Data Quality** — Navigation accuracy (NACp, NACv), navigation integrity (NICbaro, NIC supplements), surveillance integrity (SIL), geometric vertical accuracy, antenna configuration, and system design assurance level.
 
-Sections 1 through 5 are expanded by default; sections 6 through 10 are collapsed. Sections with many fields include a "See more" link to reveal additional details. The detail view updates in real-time as new data is received. If the selected aircraft expires (no messages received within the timeout period), an `[EXPIRED]` banner is displayed at the top of the detail view.
+Sections 1 through 6 are expanded by default; sections 7 through 11 are collapsed. Sections with many fields include a "See more" link to reveal additional details. The detail view updates in real-time as new data is received. If the selected aircraft expires (no messages received within the timeout period), an `[EXPIRED]` banner is displayed at the top of the detail view.
 
 ## Control Panel (Top Right)
 

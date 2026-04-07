@@ -6,13 +6,14 @@ All notable changes to Aeromux will be documented in this file.
 
 ### Added
 
-- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, position trails, and real-time updates via SignalR. Served directly by the daemon with no external web server required. See the [Web Map Guide](docs/WEBMAP.md).
+- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, position trails, and real-time updates. Served directly by the daemon with no external web server required. See the [Web Map Guide](docs/WEBMAP.md).
 - **Web Map Range Rings** — Three range rings (100/150/200 nm) centered on the receiver location with distance labels and a center point marker. Distances follow the selected unit (nautical miles, kilometers, or miles). Toggleable from the settings panel.
 - **Web Map Search Highlighting** — Matched text is highlighted in orange in the search dropdown across callsign, ICAO, and registration fields.
 - **Web Map Sortable Columns** — Aircraft list columns (callsign, altitude, speed, distance) are sortable by clicking headers, with sort preferences persisted in the browser.
 - **Web Map Settings Panel** — Unified control panel with search input, unit switching (speed, altitude, distance), interface settings, and reset to defaults behind a gear icon.
 - **Web Map Dark Overlay** — Semi-transparent dark overlay on map tiles for improved aircraft marker contrast.
 - **Web Map Hover Tooltip** — Tooltip showing callsign, ICAO, speed, and altitude when hovering over aircraft markers, tracking the aircraft position continuously.
+- **Web Map Flight Profile** — Dual-axis chart in the aircraft detail view showing barometric altitude and ground speed over time, with historical data loaded on selection and real-time updates.
 
 ### Changed
 

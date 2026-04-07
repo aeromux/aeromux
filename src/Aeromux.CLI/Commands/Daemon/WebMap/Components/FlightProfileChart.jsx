@@ -92,6 +92,29 @@ function formatAxisValue(v) {
     return Math.abs(n) >= 1000 ? n.toLocaleString() : String(n);
 }
 
+// Draw a quadratic Bézier spline through pixel-coordinate arrays.
+function drawSmoothSegment(ctx, xs, ys) {
+    const n = xs.length;
+    if (n === 0) return;
+
+    ctx.moveTo(xs[0], ys[0]);
+    if (n === 1) return;
+    if (n === 2) { ctx.lineTo(xs[1], ys[1]); return; }
+
+    // Line to midpoint between first two points
+    ctx.lineTo((xs[0] + xs[1]) / 2, (ys[0] + ys[1]) / 2);
+
+    // Quadratic curves through interior points using midpoints as endpoints
+    for (let i = 1; i < n - 1; i++) {
+        const midX = (xs[i] + xs[i + 1]) / 2;
+        const midY = (ys[i] + ys[i + 1]) / 2;
+        ctx.quadraticCurveTo(xs[i], ys[i], midX, midY);
+    }
+
+    // Line to last point
+    ctx.lineTo(xs[n - 1], ys[n - 1]);
+}
+
 // Draw a data line, breaking the path at null values to produce visible gaps.
 function drawLine(ctx, entries, times, getValue, yPos, xPos, color) {
     ctx.strokeStyle = color;
@@ -99,20 +122,30 @@ function drawLine(ctx, entries, times, getValue, yPos, xPos, color) {
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    let drawing = false;
-    ctx.beginPath();
+    // Collect contiguous runs of non-null points, draw each as a smooth segment
+    let segXs = [];
+    let segYs = [];
+
+    const flushSegment = () => {
+        if (segXs.length > 0) {
+            ctx.beginPath();
+            drawSmoothSegment(ctx, segXs, segYs);
+            ctx.stroke();
+            segXs = [];
+            segYs = [];
+        }
+    };
+
     for (let i = 0; i < entries.length; i++) {
         const v = getValue(entries[i]);
         if (v == null) {
-            if (drawing) { ctx.stroke(); ctx.beginPath(); drawing = false; }
+            flushSegment();
             continue;
         }
-        const x = xPos(times[i]);
-        const y = yPos(v);
-        if (!drawing) { ctx.moveTo(x, y); drawing = true; }
-        else { ctx.lineTo(x, y); }
+        segXs.push(xPos(times[i]));
+        segYs.push(yPos(v));
     }
-    if (drawing) ctx.stroke();
+    flushSegment();
 }
 
 function draw(canvas, entries, units) {
