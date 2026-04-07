@@ -16,7 +16,7 @@
 
 import { h } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
-import { fetchStats, fetchAircraft, fetchDetail, fetchHistory } from '../Services/ApiClient.js';
+import { fetchStats, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
 import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings } from '../Services/UnitConversion.js';
@@ -41,6 +41,8 @@ export function App() {
     const aircraftMapRef = useRef(new Map());
     const selectedRef = useRef(null);
     const trailRef = useRef([]);
+    const [stateHistory, setStateHistory] = useState(null);
+    const stateHistoryRef = useRef(null);
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
 
@@ -83,6 +85,8 @@ export function App() {
         setDetail(null);
         setTrail([]);
         trailRef.current = [];
+        setStateHistory(null);
+        stateHistoryRef.current = null;
 
         MapManager.highlightSelected(icao);
         MapManager.updateMarkers(aircraftMapRef.current);
@@ -94,21 +98,12 @@ export function App() {
             }
         }
 
-        // Fetch detail and history independently — one failure must not block the other
-        let detailData = null;
-        let historyData = null;
-
-        try {
-            detailData = await fetchDetail(icao);
-        } catch (e) {
-            console.error('Failed to fetch detail:', e);
-        }
-
-        try {
-            historyData = await fetchHistory(icao);
-        } catch (e) {
-            console.error('Failed to fetch history:', e);
-        }
+        // Fetch detail, position history, and state history in parallel
+        const [detailData, historyData, stateData] = await Promise.all([
+            fetchDetail(icao).catch(e => { console.error('Failed to fetch detail:', e); return null; }),
+            fetchHistory(icao).catch(e => { console.error('Failed to fetch history:', e); return null; }),
+            fetchStateHistory(icao).catch(e => { console.error('Failed to fetch state history:', e); return null; }),
+        ]);
 
         if (selectedRef.current === icao) {
             if (detailData) setDetail(detailData);
@@ -117,6 +112,24 @@ export function App() {
                 trailRef.current = positions;
                 setTrail(positions);
                 MapManager.updateTrail(positions);
+            }
+            if (stateData?.State) {
+                const sh = {
+                    enabled: stateData.State.Enabled,
+                    entries: (stateData.State.Entries || []).map(e => ({
+                        timestamp: new Date(e.Timestamp).getTime(),
+                        altitudeFeet: e.Altitude?.Feet ?? null,
+                        altitudeMeters: e.Altitude?.Meters ?? null,
+                        speedKnots: e.Speed?.Knots ?? null,
+                        speedKmh: e.Speed?.KilometersPerHour ?? null,
+                        speedMph: e.Speed?.MilesPerHour ?? null,
+                    })),
+                    lastSequenceId: stateData.State.Entries?.length
+                        ? stateData.State.Entries[stateData.State.Entries.length - 1].SequenceId
+                        : 0,
+                };
+                stateHistoryRef.current = sh;
+                setStateHistory(sh);
             }
         }
 
@@ -132,6 +145,8 @@ export function App() {
         setExpired(false);
         setTrail([]);
         trailRef.current = [];
+        setStateHistory(null);
+        stateHistoryRef.current = null;
 
         MapManager.clearSelection();
         MapManager.clearTrail();
@@ -263,6 +278,36 @@ export function App() {
                     onDetailUpdated: (data) => {
                         if (selectedRef.current) {
                             setDetail(data);
+
+                            // Append real-time data point to flight profile chart
+                            const prev = stateHistoryRef.current;
+                            if (prev && prev.enabled !== false) {
+                                const ts = data.Timestamp ? new Date(data.Timestamp).getTime() : Date.now();
+                                const altFeet = data.Position?.BarometricAltitude?.Feet ?? null;
+                                const altMeters = data.Position?.BarometricAltitude?.Meters ?? null;
+                                const spdKnots = data.VelocityAndDynamics?.Speed?.Knots ?? null;
+                                const spdKmh = data.VelocityAndDynamics?.Speed?.KilometersPerHour ?? null;
+                                const spdMph = data.VelocityAndDynamics?.Speed?.MilesPerHour ?? null;
+
+                                if (altFeet != null || spdKnots != null) {
+                                    const lastEntry = prev.entries[prev.entries.length - 1];
+                                    if (!lastEntry || ts > lastEntry.timestamp) {
+                                        let entries = [...prev.entries, {
+                                            timestamp: ts,
+                                            altitudeFeet: altFeet,
+                                            altitudeMeters: altMeters,
+                                            speedKnots: spdKnots,
+                                            speedKmh: spdKmh,
+                                            speedMph: spdMph,
+                                        }];
+                                        // Hysteresis: trim to 500 when buffer exceeds 600 to avoid slicing every update
+                                        if (entries.length > 600) entries = entries.slice(-500);
+                                        const updated = { ...prev, entries };
+                                        stateHistoryRef.current = updated;
+                                        setStateHistory(updated);
+                                    }
+                                }
+                            }
                         }
                     },
                     onMetadata: (meta) => {
@@ -326,6 +371,7 @@ export function App() {
                         expired={expired}
                         units={units}
                         receiverLocation={receiverLocation}
+                        stateHistory={stateHistory}
                         onBack={handleBack}
                     />
                 ) : (

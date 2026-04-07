@@ -560,7 +560,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 0 var(--spacing-sm);
+    padding: 0;
 }
 
 .legend-item {
@@ -730,6 +730,45 @@ body {
 
 .hover-tooltip-field {
     color: var(--color-text-secondary);
+}
+
+/* ── Flight Profile Chart ────────────────────────────────────────────────── */
+
+.flight-profile-container {
+    padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.flight-profile-empty {
+    padding: var(--spacing-md);
+    color: var(--color-text-muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+.flight-profile-legend {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+}
+
+.flight-profile-legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.flight-profile-legend-line {
+    display: inline-block;
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.flight-profile-canvas {
+    display: block;
+    width: 100%;
 }
 
 /* ── Responsive: Tablet/Mobile ────────────────────────────────────────────── */

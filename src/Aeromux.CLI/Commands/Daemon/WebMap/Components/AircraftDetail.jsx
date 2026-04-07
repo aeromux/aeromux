@@ -18,6 +18,7 @@ import { h, Fragment } from 'preact';
 import { useState } from 'preact/hooks';
 import { DetailSection } from './DetailSection.jsx';
 import { DetailField } from './DetailField.jsx';
+import { FlightProfileChart } from './FlightProfileChart.jsx';
 import { formatAltitude, formatSpeed, haversineDistance, convertDistance } from '../Services/UnitConversion.js';
 
 function fmtBool(v) { return v == null ? null : v ? 'Yes' : 'No'; }
@@ -36,7 +37,7 @@ function fmtAgo(v) {
 function fmtDeg(v) { return v != null ? `${v.toFixed(2)}\u00B0` : null; }
 function fmtNum(v, suffix) { return v != null ? `${v}${suffix || ''}` : null; }
 
-export function AircraftDetail({ detail, expired, units, receiverLocation, onBack }) {
+export function AircraftDetail({ detail, expired, units, receiverLocation, stateHistory, onBack }) {
     const [showMore, setShowMore] = useState({});
     const toggleMore = (key) => setShowMore(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -127,7 +128,18 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, onBac
                 {db && <div class="see-more" onClick={() => toggleMore('db')}>{showMore.db ? 'Show less' : 'See more'}</div>}
             </DetailSection>
 
-            {/* 3. Status */}
+            {/* 3. Flight Profile */}
+            <DetailSection title="Flight Profile" defaultExpanded={true}>
+                {stateHistory === null ? (
+                    <div class="flight-profile-empty">Loading...</div>
+                ) : stateHistory.enabled === false ? (
+                    <div class="flight-profile-empty">State history not enabled</div>
+                ) : (
+                    <FlightProfileChart entries={stateHistory.entries} units={units} />
+                )}
+            </DetailSection>
+
+            {/* 4. Status */}
             <DetailSection title="Status" defaultExpanded={true}>
                 <div class="section-fields">
                     <DetailField label="First Seen" value={fmtTime(st.FirstSeen)} />

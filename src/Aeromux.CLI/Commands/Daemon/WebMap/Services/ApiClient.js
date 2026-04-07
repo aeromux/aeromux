@@ -30,5 +30,9 @@ export const fetchDetail = (icao) => fetch(`${API}/aircraft/${icao}`).then(r => 
 export const fetchHistory = (icao) =>
     fetch(`${API}/aircraft/${icao}/history?type=Position`).then(r => r.json());
 
+// Fetches altitude/speed state history for the flight profile chart.
+export const fetchStateHistory = (icao) =>
+    fetch(`${API}/aircraft/${icao}/history?type=State`).then(r => r.json());
+
 export const searchAircraft = (query) =>
     fetch(`${API}/aircraft?search=${encodeURIComponent(query)}`).then(r => r.json());
