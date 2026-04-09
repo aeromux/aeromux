@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.6.0] — Unreleased
+## [0.6.0] — 2026-04-09
 
 ### Added
 
@@ -22,6 +22,7 @@ All notable changes to Aeromux will be documented in this file.
 - **Aircraft Detail Fields** — Added magnetic declination, downlink request, utility message, data link capability, and supported BDS registers to the detail endpoint and web map detail view.
 - **Nautical Miles** — Added nautical miles (nm) as a distance unit in the web map and TUI, now the default. Distance can be toggled between nautical miles, statute miles, and kilometers.
 - **History Buffers** — Circular buffers now skip consecutive duplicate entries, preserving more meaningful data for position trails, altitude graphs, and velocity analysis.
+- **Async Notarization** — macOS packaging script now supports async notarization with separate `--submit`, `--staple`, and `--validate` flags, allowing submission without waiting for Apple's approval. The synchronous `--notarize` flag remains available.
 
 ### Documentation
 

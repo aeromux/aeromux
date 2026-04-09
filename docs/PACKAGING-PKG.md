@@ -6,14 +6,14 @@ Packages are built using `pkgbuild` and `productbuild` and can only be built on 
 
 ## Package Metadata
 
-| Field           | Value                                                |
-|-----------------|------------------------------------------------------|
-| Identifier      | `com.aeromux`                                        |
-| Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)    |
-| Install Location| `/opt/aeromux`                                       |
-| Maintainer      | `Nandor Toth <dev@nandortoth.com>`                   |
-| Homepage        | `https://github.com/aeromux/aeromux`              |
-| License         | GPL-3.0-or-later                                     |
+| Field           | Value                                                 |
+|-----------------|-------------------------------------------------------|
+| Identifier      | `com.aeromux`                                         |
+| Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)      |
+| Install Location| `/opt/aeromux`                                        |
+| Maintainer      | `Nandor Toth <dev@nandortoth.com>`                    |
+| Homepage        | `https://github.com/aeromux/aeromux`                  |
+| License         | GPL-3.0-or-later                                      |
 
 ## Filesystem Layout
 
@@ -21,12 +21,12 @@ The package uses a split layout: read-only program files are installed under `/o
 
 ### Installed Files (root-owned, read-only)
 
-| Path                                          | Type        | Description                        |
-|-----------------------------------------------|-------------|------------------------------------|
-| `/opt/aeromux/bin/aeromux`                    | Binary      | Self-contained executable          |
-| `/opt/aeromux/bin/aeromux-uninstall`          | Script      | Uninstall script                   |
-| `/opt/aeromux/share/man/man1/aeromux.1.gz`    | Man page    | Manual page                        |
-| `/opt/aeromux/share/aeromux.example.yaml`     | Template    | Default configuration template     |
+| Path                                          | Type        | Description                          |
+|-----------------------------------------------|-------------|--------------------------------------|
+| `/opt/aeromux/bin/aeromux`                    | Binary      | Self-contained executable            |
+| `/opt/aeromux/bin/aeromux-uninstall`          | Script      | Uninstall script                     |
+| `/opt/aeromux/share/man/man1/aeromux.1.gz`    | Man page    | Manual page                          |
+| `/opt/aeromux/share/aeromux.example.yaml`     | Template    | Default configuration template       |
 | `/usr/local/bin/aeromux`                      | Symlink     | Points to `/opt/aeromux/bin/aeromux` |
 
 ### User Directories (created by postinstall)
@@ -66,8 +66,8 @@ The template at `/opt/aeromux/share/aeromux.example.yaml` is always overwritten 
 
 The following must be installed before using aeromux on macOS:
 
-| Prerequisite   | Install Command            | Reason                                     |
-|----------------|----------------------------|--------------------------------------------|
+| Prerequisite   | Install Command            | Reason                                             |
+|----------------|----------------------------|----------------------------------------------------|
 | `librtlsdr`    | `brew install librtlsdr`   | RTL-SDR shared library (required by RtlSdrManager) |
 
 The `.pkg` installer cannot declare dependencies. The `postinstall` script checks for the presence of librtlsdr (in both `/opt/homebrew/lib/` and `/usr/local/lib/`) and displays Homebrew install instructions if it is missing.
@@ -112,20 +112,25 @@ The `--target all` option packages both macOS architectures (`arm64` and `x86_64
 
 ### Options
 
-| Option        | Description                                                            |
-|---------------|------------------------------------------------------------------------|
-| `--target`    | Target platform: `osx-arm64`, `osx-x64`, or `all` (required)          |
-| `--sign`      | Sign the binary and package with Developer ID certificates             |
-| `--notarize`  | Notarize and staple the package (requires `--sign`)                    |
-| `--rebuild`   | Force rebuild of the binary even if it exists and is recent            |
-| `--silent`    | Suppress all output (only errors are shown)                            |
+| Option        | Description                                                             |
+|---------------|-------------------------------------------------------------------------|
+| `--target`    | Target platform: `osx-arm64`, `osx-x64`, or `all` (required)            |
+| `--sign`      | Sign the binary and package with Developer ID certificates              |
+| `--notarize`  | Notarize and staple the package synchronously (requires `--sign`)       |
+| `--submit`    | Submit for notarization and return immediately (requires `--sign`)      |
+| `--staple`    | Check notarization status; staple and validate if accepted              |
+| `--validate`  | Verify package signature, notarization, and staple status               |
+| `--rebuild`   | Force rebuild of the binary even if it exists and is recent             |
+| `--silent`    | Suppress all output (only errors are shown)                             |
+
+`--notarize`, `--submit`, `--staple`, and `--validate` are mutually exclusive — use only one per invocation. `--staple` and `--validate` are standalone operations that do not require building or signing.
 
 ### Workflow
 
 1. Parse and validate the target architecture.
 2. Check that `pkgbuild` and `productbuild` are available.
 3. If `--sign` is specified, verify both Developer ID Application and Developer ID Installer certificates exist in Keychain.
-4. If `--notarize` is specified, verify `notarytool` is available and the `aeromux-notary` keychain profile exists.
+4. If `--notarize` or `--submit` is specified, verify `notarytool` is available and the `aeromux-notary` keychain profile exists.
 5. Check the binary at `artifacts/binaries/<runtime-id>/aeromux` — it must exist and be less than 1 hour old, or use `--rebuild` to trigger a fresh build.
 6. Read the version from `src/Directory.Build.props`.
 7. For each target, create a temporary staging directory with the payload, scripts, and resources.
@@ -136,6 +141,9 @@ The `--target all` option packages both macOS architectures (`arm64` and `x86_64
 12. If signed, verify the signature with `pkgutil --check-signature`.
 13. Output the `.pkg` file to `artifacts/packages/`.
 14. If `--notarize` is specified, submit all packages for notarization in parallel, wait for Apple's approval, staple the notarization ticket, and validate.
+15. If `--submit` is specified, submit all packages for notarization and return immediately, writing a `.notarization` record file for each package.
+
+For standalone operations (`--staple` and `--validate`), steps 2–13 are skipped. The script reads the version, verifies the `.pkg` exists, and proceeds directly to the requested operation.
 
 ### Build Requirements
 
@@ -143,7 +151,7 @@ The `--target all` option packages both macOS architectures (`arm64` and `x86_64
   - Install with: `xcode-select --install`
 - **`dotnet`** — .NET SDK for building the binary (already required by `build.sh`).
 - **`codesign`** — for binary signing (included with Xcode Command Line Tools). Only needed with `--sign`.
-- **`xcrun notarytool`** — for notarization (included with Xcode Command Line Tools). Only needed with `--notarize`.
+- **`xcrun notarytool`** — for notarization (included with Xcode Command Line Tools). Only needed with `--notarize`, `--submit`, or `--staple`.
 
 ## Cross-Compilation
 
@@ -190,7 +198,10 @@ Installs new files in `/opt/aeromux/`. The user's configuration at `~/Library/Ap
 For packages distributed via GitHub Releases (or any download), both signing and notarization are required. Without notarization, macOS Gatekeeper blocks the installer with a warning when the user opens a downloaded `.pkg` file.
 
 - **`--sign`** signs the binary (with `codesign`) and the `.pkg` (with `productbuild --sign`).
-- **`--notarize`** submits the signed `.pkg` to Apple's notary service, waits for approval, and staples the notarization ticket to the package. Requires `--sign`.
+- **`--notarize`** submits the signed `.pkg` to Apple's notary service, waits for approval, staples the notarization ticket, and validates. Requires `--sign`.
+- **`--submit`** submits the signed `.pkg` to Apple's notary service and returns immediately. Requires `--sign`.
+- **`--staple`** checks the notarization status and, if accepted, staples and validates the ticket.
+- **`--validate`** verifies the package signature, notarization acceptance, and staple status.
 
 Unsigned packages work for local testing but cannot be distributed.
 
@@ -245,12 +256,11 @@ xcrun notarytool history --keychain-profile "aeromux-notary"
 
 The keychain profile name `aeromux-notary` is configured in `package-pkg.sh` as the `NOTARY_PROFILE` constant.
 
-### Building Signed and Notarized Packages
+### Synchronous Notarization
+
+The `--notarize` flag performs the entire notarization pipeline in one blocking call — submit, wait for Apple's approval, staple, and validate:
 
 ```bash
-# Sign only (for local testing)
-./packaging/package-pkg.sh --target osx-arm64 --sign --rebuild
-
 # Sign and notarize (for distribution)
 ./packaging/package-pkg.sh --target osx-arm64 --sign --notarize --rebuild
 
@@ -258,7 +268,63 @@ The keychain profile name `aeromux-notary` is configured in `package-pkg.sh` as 
 ./packaging/package-pkg.sh --target all --sign --notarize --rebuild
 ```
 
-When using `--target all --notarize`, both packages are submitted to Apple's notary service in parallel, roughly halving the wait time. Notarization typically takes 1–5 minutes but can take up to 15 minutes.
+When using `--target all --notarize`, both packages are submitted to Apple's notary service in parallel, roughly halving the wait time. Notarization typically takes 1-5 minutes but can take longer.
+
+### Async Notarization Workflow
+
+For cases where you don't want to wait for Apple's notarization service, the packaging script supports an async workflow that separates submission from stapling:
+
+```mermaid
+flowchart TD
+    A["./package-pkg.sh --sign --submit"] --> B["Apple Notary Service"]
+    B --> C["./package-pkg.sh --staple"]
+    C --> D{Status?}
+    D -->|In Progress| E["Wait and try again"]
+    E --> C
+    D -->|Accepted| F["Package stapled"]
+    F --> G["./package-pkg.sh --validate"]
+    G --> H["Ready for distribution"]
+    D -->|Rejected| I["Fix and resubmit"]
+    I --> A
+
+    style A fill:#2d6a4f,color:#fff
+    style F fill:#2d6a4f,color:#fff
+    style H fill:#2d6a4f,color:#fff
+    style I fill:#9d0208,color:#fff
+    style E fill:#e9c46a,color:#000
+```
+
+**Step 1: Build, sign, and submit**
+
+```bash
+./packaging/package-pkg.sh --target osx-arm64 --sign --submit --rebuild
+```
+
+Submits the signed package to Apple and returns immediately. The script prints the submission ID and saves it to a `.notarization` record file next to the `.pkg`.
+
+**Step 2: Check status and staple**
+
+```bash
+./packaging/package-pkg.sh --target osx-arm64 --staple
+```
+
+Checks the notarization status. If Apple has accepted the package, it staples the notarization ticket and validates. If still in progress, it reports the status and prints the command to check again.
+
+**Step 3: Validate**
+
+```bash
+./packaging/package-pkg.sh --target osx-arm64 --validate
+```
+
+Verifies the package signature, notarization acceptance (via Gatekeeper), and staple status. Confirms the package is ready for distribution.
+
+Each step prints the next command to run on success, guiding through the workflow.
+
+### Notarization Record Files
+
+When `--submit` is used, a `.notarization` sidecar file is written next to each `.pkg` in `artifacts/packages/` (e.g., `aeromux_0.6.0_macos_arm64.pkg.notarization`). This file stores the Apple submission ID so that `--staple` can check the status later.
+
+The record file is automatically deleted after successful stapling or if notarization is rejected. Do not edit these files manually.
 
 ### What Happens During Signing
 
@@ -269,12 +335,29 @@ When using `--target all --notarize`, both packages are submitted to Apple's not
 
 ### What Happens During Notarization
 
+**Synchronous (`--notarize`):**
+
 1. The signed `.pkg` is submitted to Apple's notary service via `xcrun notarytool submit --wait`.
 2. Apple scans the package and all its contents (including the binary) — this is an automated process with no manual review.
 3. Upon approval, the notarization ticket is stapled to the `.pkg` with `xcrun stapler staple`.
 4. The staple is validated with `xcrun stapler validate`.
 
+**Async (`--submit` / `--staple`):**
+
+1. `--submit`: The signed `.pkg` is submitted via `xcrun notarytool submit` (without `--wait`). The submission ID is saved to a `.notarization` record file.
+2. `--staple`: The submission status is checked via `xcrun notarytool info`. If accepted, the ticket is stapled with `xcrun stapler staple` and validated with `xcrun stapler validate`.
+
 ### Verification
+
+The `--validate` flag performs all verification checks in one step:
+
+```bash
+./packaging/package-pkg.sh --target osx-arm64 --validate
+```
+
+This checks the package signature (`pkgutil --check-signature`), notarization acceptance (`spctl --assess`), and staple status (`xcrun stapler validate`).
+
+The same checks can be run manually:
 
 ```bash
 # Verify package signature
@@ -294,18 +377,18 @@ pkgutil --payload-files artifacts/packages/aeromux_0.5.0_macos_arm64.pkg
 
 The following files are stored in `packaging/pkg/` and used by the packaging script:
 
-| File                        | Description                                   |
-|-----------------------------|-----------------------------------------------|
-| `aeromux.1`                 | Man page source (macOS-specific paths)        |
-| `aeromux-uninstall`         | Uninstall script (installed to /opt/aeromux/bin) |
-| `postinstall`               | Post-installation script                      |
+| File                        | Description                                                                    |
+|-----------------------------|--------------------------------------------------------------------------------|
+| `aeromux.1`                 | Man page source (macOS-specific paths)                                         |
+| `aeromux-uninstall`         | Uninstall script (installed to /opt/aeromux/bin)                               |
+| `postinstall`               | Post-installation script                                                       |
 | `distribution.xml`          | Distribution XML template (with `{{PKG_ARCH}}` and `{{VERSION}}` placeholders) |
-| `resources/welcome.html`    | Installer welcome text (with `VERSION_PLACEHOLDER`)               |
-| `resources/conclusion.html` | Post-install summary with next steps          |
-| `resources/license.html`    | GPLv3 license text for installer UI           |
+| `resources/welcome.html`    | Installer welcome text (with `VERSION_PLACEHOLDER`)                            |
+| `resources/conclusion.html` | Post-install summary with next steps                                           |
+| `resources/license.html`    | GPLv3 license text for installer UI                                            |
 
 One additional file is generated at packaging time:
 
-| File                   | Source                                                               |
-|------------------------|----------------------------------------------------------------------|
-| `aeromux.example.yaml` | Generated from `aeromux.example.yaml` with path transformations     |
+| File                   | Source                                                          |
+|------------------------|-----------------------------------------------------------------|
+| `aeromux.example.yaml` | Generated from `aeromux.example.yaml` with path transformations |
