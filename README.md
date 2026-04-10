@@ -39,32 +39,12 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 ### Live Mode Preview
 
-```
-                                        AIRCRAFT LIST - Aeromux
-┌────────┬──────────┬──────────┬────────────┬───────────┬──────────┬──────────┬────────┬───────────┬───┐
-│ ICAO   │ Callsign │ Altitude │   Vertical │  Distance │    Speed │ Messages │ Signal │ Last seen │   │
-├────────┼──────────┼──────────┼────────────┼───────────┼──────────┼──────────┼────────┼───────────┼───┤
-│ 06A13C │ QTR3293  │ 37000 ft │     0 ft/m │  193.2 mi │  472 kts │      191 │  -25.9 │  0.1s ago │ █ │
-│ 392AED │ N/A      │ 37000 ft │   -64 ft/m │  203.2 mi │  450 kts │       40 │  -27.3 │  0.1s ago │ █ │
-│ 3965AF │ AFR274   │ 31000 ft │     0 ft/m │   55.3 mi │  477 kts │      322 │   -4.3 │  0.0s ago │ █ │
-│ 3C6593 │ DLH8KC   │ 39025 ft │     0 ft/m │    8.8 mi │  461 kts │      300 │   -5.7 │  0.0s ago │ █ │
-│ 4007EE │ BAW2231  │ 33000 ft │     0 ft/m │   79.2 mi │  470 kts │      340 │   -9.7 │  0.1s ago │ █ │
-│ 407994 │ BAW15    │ 31000 ft │     0 ft/m │   37.7 mi │  493 kts │      360 │  -10.2 │  0.1s ago │ █ │
-│ 4081BF │ N/A      │ 39000 ft │    64 ft/m │  137.6 mi │  454 kts │      319 │  -19.8 │  0.0s ago │ █ │
-│ 440020 │ AUA7     │ 30150 ft │   832 ft/m │   32.2 mi │  494 kts │      419 │   -2.9 │  0.1s ago │ ░ │
-│ 4408FB │ AUA15    │ 30725 ft │   576 ft/m │   21.4 mi │  485 kts │      396 │   -3.1 │  0.0s ago │ ░ │
-│ 440A8D │ TAY1841  │ 33000 ft │     0 ft/m │   30.7 mi │  485 kts │      427 │   -3.8 │  0.0s ago │ ░ │
-│ 471DBD │ WZZ5070  │  3425 ft │ -1280 ft/m │   29.6 mi │  200 kts │       20 │  -27.3 │  0.3s ago │ ░ │
-│ 471F5C │ WMT559   │ 39000 ft │     0 ft/m │  122.3 mi │  451 kts │      208 │  -17.8 │  0.1s ago │ ░ │
-│ 471FA2 │ N/A      │ 35000 ft │     0 ft/m │  136.5 mi │  429 kts │       28 │  -30.1 │  0.9s ago │ ░ │
-│ 474808 │ N/A      │      N/A │        N/A │       N/A │      N/A │        7 │  -29.0 │  0.0s ago │ ░ │
-│ 4891B2 │ ENT7646  │ 38000 ft │     0 ft/m │   24.3 mi │  422 kts │      393 │  -14.9 │  0.1s ago │ ░ │
-│ 48C2B6 │ RYR46TT  │ 10675 ft │ -1856 ft/m │   20.5 mi │  320 kts │      274 │   -2.7 │  0.2s ago │ ░ │
-└────────┴──────────┴──────────┴────────────┴───────────┴──────────┴──────────┴────────┴───────────┴───┘
-  F1: ICAO ▲  F2: Callsign  F3: Altitude  F4: Vertical  F5: Distance  F6: Speed             F12: Reset
-  Aircraft: 34 | Selected: 1/34 | Viewport: 1-16                         Dist: mi | Alt: ft | Spd: kts
-  ↑/↓: Row, ←/→: Page, Home/End                       ENTER: Details, D/A/S: Units, /: Search, Q: Quit
-```
+<div align="center">
+  <img src="docs/images/tui/live.png" alt="Live Mode" width="800">
+  <br>
+  <em>The live TUI showing the aircraft list with sorting, search, and unit switching</em>
+</div>
+<br>
 
 See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, and detail view documentation.
 
