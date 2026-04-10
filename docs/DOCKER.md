@@ -10,7 +10,7 @@ Images are published to GitHub Container Registry (GHCR) at `ghcr.io/aeromux/aer
 |-----------------|-------------------------------------------------------|
 | Image Name      | `ghcr.io/aeromux/aeromux`                          |
 | Base Image      | `debian:bookworm-slim`                                |
-| Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)      |
+| Version         | From `src/Directory.Build.props` (e.g., `0.6.0`)      |
 | License         | GPL-3.0-or-later                                      |
 | Maintainer      | `Nandor Toth <dev@nandortoth.com>`                    |
 | Homepage        | `https://github.com/aeromux/aeromux`               |
@@ -30,10 +30,10 @@ The following packages are installed in the image via `apt-get`:
 
 | Tag       | Description                                             |
 |-----------|---------------------------------------------------------|
-| `0.5.0`   | Version-specific, multi-arch manifest (arm64 + amd64)   |
+| `0.6.0`   | Version-specific, multi-arch manifest (arm64 + amd64)   |
 | `latest`  | Points to the most recent version                       |
 
-Multi-arch manifests are used so that a single tag (e.g., `0.5.0`) automatically resolves to the correct architecture when pulled.
+Multi-arch manifests are used so that a single tag (e.g., `0.6.0`) automatically resolves to the correct architecture when pulled.
 
 ## Filesystem Layout
 
@@ -249,14 +249,14 @@ Saved `.tar` files follow the naming convention `aeromux_<version>_linux_<arch>.
 
 ```
 artifacts/docker/
-  aeromux_0.5.0_linux_arm64.tar
-  aeromux_0.5.0_linux_amd64.tar
+  aeromux_0.6.0_linux_arm64.tar
+  aeromux_0.6.0_linux_amd64.tar
 ```
 
 Load a saved image with:
 
 ```bash
-docker load -i artifacts/docker/aeromux_0.5.0_linux_arm64.tar
+docker load -i artifacts/docker/aeromux_0.6.0_linux_arm64.tar
 ```
 
 ## Build Environment

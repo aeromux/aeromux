@@ -9,7 +9,7 @@ Packages are built using `pkgbuild` and `productbuild` and can only be built on 
 | Field           | Value                                                 |
 |-----------------|-------------------------------------------------------|
 | Identifier      | `com.aeromux`                                         |
-| Version         | From `src/Directory.Build.props` (e.g., `0.5.0`)      |
+| Version         | From `src/Directory.Build.props` (e.g., `0.6.0`)      |
 | Install Location| `/opt/aeromux`                                        |
 | Maintainer      | `Nandor Toth <dev@nandortoth.com>`                    |
 | Homepage        | `https://github.com/aeromux/aeromux`                  |
@@ -180,7 +180,7 @@ The packaging script supports building packages for both macOS architectures fro
 ### Install
 
 ```bash
-sudo installer -pkg aeromux_0.5.0_macos_arm64.pkg -target /
+sudo installer -pkg aeromux_0.6.0_macos_arm64.pkg -target /
 ```
 
 Or double-click the `.pkg` file in Finder. Creates the `/opt/aeromux/` directory, user directories in `~/Library/`, places the configuration file, and displays a post-install message with next steps.
@@ -361,16 +361,16 @@ The same checks can be run manually:
 
 ```bash
 # Verify package signature
-pkgutil --check-signature artifacts/packages/aeromux_0.5.0_macos_arm64.pkg
+pkgutil --check-signature artifacts/packages/aeromux_0.6.0_macos_arm64.pkg
 
 # Verify notarization (Gatekeeper assessment)
-spctl --assess --type install artifacts/packages/aeromux_0.5.0_macos_arm64.pkg
+spctl --assess --type install artifacts/packages/aeromux_0.6.0_macos_arm64.pkg
 
 # Verify stapled ticket
-xcrun stapler validate artifacts/packages/aeromux_0.5.0_macos_arm64.pkg
+xcrun stapler validate artifacts/packages/aeromux_0.6.0_macos_arm64.pkg
 
 # Inspect package contents
-pkgutil --payload-files artifacts/packages/aeromux_0.5.0_macos_arm64.pkg
+pkgutil --payload-files artifacts/packages/aeromux_0.6.0_macos_arm64.pkg
 ```
 
 ## Static Files
