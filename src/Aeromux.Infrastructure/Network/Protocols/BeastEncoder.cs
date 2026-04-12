@@ -73,19 +73,19 @@ public class BeastEncoder
     /// Encodes a ValidatedFrame to Beast binary format.
     /// </summary>
     /// <param name="frame">Validated Mode S frame to encode</param>
-    /// <returns>Beast-encoded byte array ready for TCP transmission</returns>
+    /// <returns>Beast-encoded bytes ready for TCP transmission</returns>
     /// <remarks>
     /// Output format: [ESC][Type][Timestamp:6][Signal:1][Data:7/14]
     /// Actual size may be larger than minimal due to escape byte doubling in data.
     /// </remarks>
-    public byte[] Encode(ValidatedFrame frame)
+    public ReadOnlyMemory<byte> Encode(ValidatedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
 
         // Determine frame length (7 bytes for short, 14 bytes for long)
         bool isLong = frame.Data.Length == 14;
 
-        // Encode into reusable buffer to avoid per-frame allocation
+        // Encode into reusable buffer — zero per-frame allocations
         // Worst case: 1 (ESC) + 1 (type) + 6×2 (timestamp escaped) + 1×2 (signal escaped) + 14×2 (data escaped) = 44
         byte[] output = _encodeBuffer;
 
@@ -135,7 +135,7 @@ public class BeastEncoder
         }
 
         // Return slice of actual used bytes (might be less than maxLength if no ESC bytes present)
-        return output[..pos];
+        return _encodeBuffer.AsMemory(0, pos);
     }
 
     /// <summary>

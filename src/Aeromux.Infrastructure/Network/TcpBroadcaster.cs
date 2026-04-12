@@ -262,35 +262,31 @@ public sealed class TcpBroadcaster : IAsyncDisposable
         {
             // Step 1: Encode frame based on broadcaster's format
             // Beast uses raw ValidatedFrame, JSON/SBS use parsed ModeSMessage
-            // SBS encoder returns List<byte[]> (may contain AIR, ID, and MSG messages)
-            // Beast and JSON encoders return single byte[]? (or null for unparseable)
-            List<byte[]> messagesToBroadcast = [];
+            // SBS encoder returns List<ReadOnlyMemory<byte>> (may contain AIR, ID, and MSG messages)
+            // Beast encoder returns ReadOnlyMemory<byte>, JSON returns ReadOnlyMemory<byte>? (null if skipped)
+            List<ReadOnlyMemory<byte>> messagesToBroadcast = [];
 
             switch (_format)
             {
                 case BroadcastFormat.Beast:
                 {
-                    byte[]? encoded = _beastEncoder!.Encode(data.Frame);
-                    if (encoded != null)
-                    {
-                        messagesToBroadcast.Add(encoded);
-                    }
-
+                    ReadOnlyMemory<byte> encoded = _beastEncoder!.Encode(data.Frame);
+                    messagesToBroadcast.Add(encoded);
                     break;
                 }
                 case BroadcastFormat.Json:
                 {
-                    byte[]? encoded = _jsonEncoder!.Encode(data);
-                    if (encoded != null)
+                    ReadOnlyMemory<byte>? encoded = _jsonEncoder!.Encode(data);
+                    if (encoded.HasValue)
                     {
-                        messagesToBroadcast.Add(encoded);
+                        messagesToBroadcast.Add(encoded.Value);
                     }
 
                     break;
                 }
                 case BroadcastFormat.Sbs:
                 {
-                    List<byte[]> encoded = _sbsEncoder!.Encode(data);
+                    List<ReadOnlyMemory<byte>> encoded = _sbsEncoder!.Encode(data);
                     messagesToBroadcast.AddRange(encoded);
                     break;
                 }
@@ -343,7 +339,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
             // Step 5: Write encoded messages to all clients
             // SBS format may have multiple messages (AIR, ID, MSG) for a single frame
             // Beast and JSON formats have single message per frame
-            foreach (byte[] message in messagesToBroadcast)
+            foreach (ReadOnlyMemory<byte> message in messagesToBroadcast)
             {
                 foreach (TcpClient client in clientsSnapshot)
                 {

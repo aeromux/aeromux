@@ -62,13 +62,12 @@ public class BeastEncoderTests
                 .Build();
 
             // Act
-            byte[] encoded = _encoder.Encode(frame);
+            ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
             // Assert: Encoding should succeed and produce valid output
-            encoded.Should().NotBeNull();
             encoded.Length.Should().BeGreaterThan(10, "encoded frame should have reasonable length");
-            encoded[0].Should().Be(0x1A, "frame should start with ESC marker");
-            encoded[1].Should().Be((byte)'2', "short frame should have type '2'");
+            encoded.Span[0].Should().Be(0x1A, "frame should start with ESC marker");
+            encoded.Span[1].Should().Be((byte)'2', "short frame should have type '2'");
         }
 
         // The escape logic is validated by other tests (FrameDataContainsMultipleEscapeBytes,
@@ -90,7 +89,7 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert: Check if signal byte is 0x1A and verify it's escaped
         // Calculate what signal byte should be
@@ -102,9 +101,10 @@ public class BeastEncoderTests
             // After timestamp (6 bytes) there should be signal byte
             // Since timestamp might also have escapes, we need to check pattern
             bool foundDoubledEscape = false;
-            for (int i = 2; i < encoded.Length - 1; i++)
+            ReadOnlySpan<byte> span = encoded.Span;
+            for (int i = 2; i < span.Length - 1; i++)
             {
-                if (encoded[i] == BeastTestData.ESC && encoded[i + 1] == BeastTestData.ESC)
+                if (span[i] == BeastTestData.ESC && span[i + 1] == BeastTestData.ESC)
                 {
                     foundDoubledEscape = true;
                     break;
@@ -126,10 +126,10 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert: Count 0x1A bytes in the output
-        int escapeCount = encoded.Count(b => b == BeastTestData.ESC);
+        int escapeCount = encoded.ToArray().Count(b => b == BeastTestData.ESC);
 
         // Original data has 4 ESC bytes, each should be doubled (= 8 total)
         // Plus 1 frame start marker (not in data)
@@ -150,7 +150,7 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert: Verify output is significantly larger than minimal
         int minimalSize = 1 + 1 + 6 + 1 + allEscapeData.Length;  // No escaping
@@ -161,12 +161,13 @@ public class BeastEncoderTests
 
         // Verify frame data section has doubled ESC bytes
         // Skip header (ESC + type + timestamp + signal) and check data
-        int dataStartApprox = encoded.Length - (allEscapeData.Length * 2);
+        ReadOnlySpan<byte> span = encoded.Span;
+        int dataStartApprox = span.Length - (allEscapeData.Length * 2);
         int doubledEscapesInData = 0;
 
-        for (int i = dataStartApprox; i < encoded.Length - 1; i++)
+        for (int i = dataStartApprox; i < span.Length - 1; i++)
         {
-            if (encoded[i] == BeastTestData.ESC && encoded[i + 1] == BeastTestData.ESC)
+            if (span[i] == BeastTestData.ESC && span[i + 1] == BeastTestData.ESC)
             {
                 doubledEscapesInData++;
                 i++; // Skip the second ESC
@@ -197,7 +198,7 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert: Extract signal byte (after ESC + type + 6 timestamp bytes)
         // Note: timestamp might have escapes, so we need to parse carefully
@@ -219,12 +220,12 @@ public class BeastEncoderTests
         ValidatedFrame frame1 = _frameBuilder.WithHexData(BeastTestData.ShortFrame_DF0).WithSignalStrength(127).Build();
         ValidatedFrame frame2 = _frameBuilder.WithHexData(BeastTestData.ShortFrame_DF0).WithSignalStrength(129).Build();
 
-        byte[] encoded1 = _encoder.Encode(frame1);
-        byte[] encoded2 = _encoder.Encode(frame2);
+        ReadOnlyMemory<byte> encoded1 = _encoder.Encode(frame1);
+        ReadOnlyMemory<byte> encoded2 = _encoder.Encode(frame2);
 
         // Both should produce consistent results
-        encoded1.Should().NotBeNull();
-        encoded2.Should().NotBeNull();
+        encoded1.Length.Should().BeGreaterThan(0);
+        encoded2.Length.Should().BeGreaterThan(0);
 
         // Verify Math.Round is applied consistently
         byte signal1 = (byte)Math.Round(Math.Sqrt(127 / 255.0) * 255.0);
@@ -252,14 +253,14 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert: Verify the timestamp conversion formula
         ulong expected12MHz = (ulong)(ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
 
         // Verify output has correct structure
-        encoded[0].Should().Be(BeastTestData.ESC, "first byte should be frame marker");
-        encoded[1].Should().Be(BeastTestData.TYPE_SHORT, "second byte should be message type");
+        encoded.Span[0].Should().Be(BeastTestData.ESC, "first byte should be frame marker");
+        encoded.Span[1].Should().Be(BeastTestData.TYPE_SHORT, "second byte should be message type");
 
         // Note: We can't directly verify timestamp bytes due to potential escaping
         // But we can verify the conversion formula is correct
@@ -280,7 +281,7 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = encoder.Encode(frame);
 
         // Assert: Verify big-endian ordering (MSB first)
         // Calculate expected absolute 12 MHz timestamp
@@ -296,7 +297,7 @@ public class BeastEncoderTests
 
         // Timestamp starts at index 2 (after ESC + type)
         // Verify at least the first few bytes match (accounting for potential escaping)
-        encoded[2].Should().Be(expectedBytes[0], "MSB should be first");
+        encoded.Span[2].Should().Be(expectedBytes[0], "MSB should be first");
     }
 
     // ======================================================================================
@@ -313,11 +314,11 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert
-        encoded[0].Should().Be(BeastTestData.ESC, "first byte is frame marker");
-        encoded[1].Should().Be(BeastTestData.TYPE_SHORT, "7-byte frame should have type '2'");
+        encoded.Span[0].Should().Be(BeastTestData.ESC, "first byte is frame marker");
+        encoded.Span[1].Should().Be(BeastTestData.TYPE_SHORT, "7-byte frame should have type '2'");
     }
 
     [Fact]
@@ -330,11 +331,11 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert
-        encoded[0].Should().Be(BeastTestData.ESC, "first byte is frame marker");
-        encoded[1].Should().Be(BeastTestData.TYPE_LONG, "14-byte frame should have type '3'");
+        encoded.Span[0].Should().Be(BeastTestData.ESC, "first byte is frame marker");
+        encoded.Span[1].Should().Be(BeastTestData.TYPE_LONG, "14-byte frame should have type '3'");
     }
 
     // ======================================================================================
@@ -428,7 +429,7 @@ public class BeastEncoderTests
             .Build();
 
         // Act
-        byte[] encoded = _encoder.Encode(frame);
+        ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
         // Assert: Verify output length is reasonable
         // Minimum: 1 (ESC) + 1 (type) + 6 (timestamp) + 1 (signal) + 7 (data) = 16
@@ -436,6 +437,6 @@ public class BeastEncoderTests
         encoded.Length.Should().BeGreaterThanOrEqualTo(16, "minimum frame size");
 
         // Verify no null bytes at end (proper slicing)
-        encoded[encoded.Length - 1].Should().NotBe(0, "last byte should be data, not padding");
+        encoded.Span[encoded.Length - 1].Should().NotBe(0, "last byte should be data, not padding");
     }
 }

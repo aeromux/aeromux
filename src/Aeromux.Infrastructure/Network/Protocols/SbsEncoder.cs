@@ -144,6 +144,10 @@ public sealed class SbsEncoder : IDisposable
     private readonly ConcurrentDictionary<string, AircraftSbsState> _aircraftState;
     private readonly ConcurrentQueue<byte[]> _pendingMessages;
 
+    // Reusable format buffer for UTF-8 output — avoids per-frame byte[] allocations
+    // Only used by FormatMsg1-8 (sequential main encode path), not by FormatAir/FormatId (event handlers)
+    private byte[] _formatBuffer = new byte[256];
+
     /// <summary>
     /// Initializes a new instance of the SbsEncoder with Aircraft State Tracker integration.
     /// </summary>
@@ -167,11 +171,11 @@ public sealed class SbsEncoder : IDisposable
     /// <param name="frame">Processed frame containing validated frame and parsed message</param>
     /// <returns>List of UTF-8 encoded SBS CSV lines with CRLF terminators</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="frame"/> is null</exception>
-    public List<byte[]> Encode(ProcessedFrame frame)
+    public List<ReadOnlyMemory<byte>> Encode(ProcessedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
 
-        var messages = new List<byte[]>();
+        var messages = new List<ReadOnlyMemory<byte>>();
 
         // First, dequeue any pending AIR/ID messages from events
         while (_pendingMessages.TryDequeue(out byte[]? pending))
@@ -197,7 +201,7 @@ public sealed class SbsEncoder : IDisposable
         AircraftSbsState state = _aircraftState.GetOrAdd(icao, _ => new AircraftSbsState());
 
         // Encode based on message type
-        byte[]? encoded = msg switch
+        ReadOnlyMemory<byte>? encoded = msg switch
         {
             AircraftIdentification ident => EncodeIdentification(ident, aircraft, state, msgTime, logTime),
             SurfacePosition surf => EncodeSurfacePosition(surf, aircraft, state, msgTime, logTime),
@@ -211,9 +215,9 @@ public sealed class SbsEncoder : IDisposable
             _ => null
         };
 
-        if (encoded != null)
+        if (encoded.HasValue)
         {
-            messages.Add(encoded);
+            messages.Add(encoded.Value);
         }
 
         return messages;
@@ -239,7 +243,7 @@ public sealed class SbsEncoder : IDisposable
     /// Encodes AircraftIdentification message as MSG,1.
     /// Also emits ID message if this is the first callsign received.
     /// </summary>
-    private byte[] EncodeIdentification(
+    private ReadOnlyMemory<byte> EncodeIdentification(
         AircraftIdentification msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -267,7 +271,7 @@ public sealed class SbsEncoder : IDisposable
     /// <summary>
     /// Encodes SurfacePosition message as MSG,2.
     /// </summary>
-    private byte[] EncodeSurfacePosition(
+    private ReadOnlyMemory<byte> EncodeSurfacePosition(
         SurfacePosition msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -281,7 +285,7 @@ public sealed class SbsEncoder : IDisposable
     /// <summary>
     /// Encodes AirbornePosition message as MSG,3.
     /// </summary>
-    private byte[] EncodeAirbornePosition(
+    private ReadOnlyMemory<byte> EncodeAirbornePosition(
         AirbornePosition msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -295,7 +299,7 @@ public sealed class SbsEncoder : IDisposable
     /// <summary>
     /// Encodes AirborneVelocity message as MSG,4.
     /// </summary>
-    private byte[] EncodeVelocity(
+    private ReadOnlyMemory<byte> EncodeVelocity(
         AirborneVelocity msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -310,7 +314,7 @@ public sealed class SbsEncoder : IDisposable
     /// Encodes SurveillanceAltitudeReply message as MSG,5.
     /// Only sent if aircraft has previously sent ES messages (MSG,1/2/3/4/8).
     /// </summary>
-    private byte[]? EncodeSurveillanceAlt(
+    private ReadOnlyMemory<byte>? EncodeSurveillanceAlt(
         SurveillanceAltitudeReply msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -330,7 +334,7 @@ public sealed class SbsEncoder : IDisposable
     /// Encodes SurveillanceIdentityReply message as MSG,6.
     /// Only sent if aircraft has previously sent ES messages (MSG,1/2/3/4/8).
     /// </summary>
-    private byte[]? EncodeSurveillanceId(
+    private ReadOnlyMemory<byte>? EncodeSurveillanceId(
         SurveillanceIdentityReply msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -349,7 +353,7 @@ public sealed class SbsEncoder : IDisposable
     /// <summary>
     /// Encodes AllCallReply message as MSG,8.
     /// </summary>
-    private byte[] EncodeAllCall(
+    private ReadOnlyMemory<byte> EncodeAllCall(
         AllCallReply msg,
         Aircraft? aircraft,
         AircraftSbsState state,
@@ -364,7 +368,7 @@ public sealed class SbsEncoder : IDisposable
     /// <summary>
     /// Encodes LongAirAirSurveillance message as MSG,7.
     /// </summary>
-    private byte[] EncodeAirAirLong(
+    private ReadOnlyMemory<byte> EncodeAirAirLong(
         LongAirAirSurveillance msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -374,7 +378,7 @@ public sealed class SbsEncoder : IDisposable
     /// <summary>
     /// Encodes ShortAirAirSurveillance message as MSG,7.
     /// </summary>
-    private byte[] EncodeAirAirShort(
+    private ReadOnlyMemory<byte> EncodeAirAirShort(
         ShortAirAirSurveillance msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -411,7 +415,7 @@ public sealed class SbsEncoder : IDisposable
     /// Formats MSG,1 (ES Aircraft Identification).
     /// Format: MSG,1,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},{Callsign},,,,,,,,,,
     /// </summary>
-    private byte[] FormatMsg1(
+    private ReadOnlyMemory<byte> FormatMsg1(
         AircraftIdentification msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -424,14 +428,14 @@ public sealed class SbsEncoder : IDisposable
         string callsign = aircraft?.Identification.Callsign ?? msg.Callsign;
 
         string line = $"MSG,1,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},{callsign},,,,,,,,,,";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,2 (ES Surface Position).
     /// Format: MSG,2,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,{Alt},{GS},{Track},{Lat},{Lon},,,,,,{Gnd}
     /// </summary>
-    private byte[] FormatMsg2(
+    private ReadOnlyMemory<byte> FormatMsg2(
         SurfacePosition msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -459,14 +463,14 @@ public sealed class SbsEncoder : IDisposable
         string gnd = "-1";
 
         string line = $"MSG,2,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,{alt},{gs},{track},{lat},{lon},,,,,,{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,3 (ES Airborne Position).
     /// Format: MSG,3,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,{Alt},,,{Lat},{Lon},,{Alert},{Emer},{SPI},{Gnd}
     /// </summary>
-    private byte[] FormatMsg3(
+    private ReadOnlyMemory<byte> FormatMsg3(
         AirbornePosition msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -490,14 +494,14 @@ public sealed class SbsEncoder : IDisposable
                         aircraft?.Position.IsOnGround ?? false);
 
         string line = $"MSG,3,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,{alt},,,{lat},{lon},,{alert},{emergency},{spi},{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,4 (ES Airborne Velocity).
     /// Format: MSG,4,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,,{GS},{Track},,,{VR},,,,,
     /// </summary>
-    private byte[] FormatMsg4(
+    private ReadOnlyMemory<byte> FormatMsg4(
         AirborneVelocity msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -519,14 +523,14 @@ public sealed class SbsEncoder : IDisposable
                       aircraft?.Velocity.VerticalRate?.ToString() ?? "";
 
         string line = $"MSG,4,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,,{gs},{track},,,{vrate},,,,,";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,5 (Surveillance Altitude Reply).
     /// Format: MSG,5,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,{Alt},,,,,,{Alert},,{SPI},{Gnd}
     /// </summary>
-    private byte[] FormatMsg5(
+    private ReadOnlyMemory<byte> FormatMsg5(
         SurveillanceAltitudeReply msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -547,14 +551,14 @@ public sealed class SbsEncoder : IDisposable
                         aircraft?.Position.IsOnGround ?? false);
 
         string line = $"MSG,5,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,{alt},,,,,,{alert},,{spi},{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,6 (Surveillance Identity Reply).
     /// Format: MSG,6,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,{Alt},,,,,,{Squawk},{Alert},{Emer},{SPI},{Gnd}
     /// </summary>
-    private byte[] FormatMsg6(
+    private ReadOnlyMemory<byte> FormatMsg6(
         SurveillanceIdentityReply msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -576,14 +580,14 @@ public sealed class SbsEncoder : IDisposable
                         aircraft?.Position.IsOnGround ?? false);
 
         string line = $"MSG,6,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,{alt},,,,,,{squawk},{alert},{emergency},{spi},{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,7 (Air-to-Air Surveillance - Long).
     /// Format: MSG,7,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,{Alt},,,,,,,,,,{Gnd}
     /// </summary>
-    private byte[] FormatMsg7(
+    private ReadOnlyMemory<byte> FormatMsg7(
         LongAirAirSurveillance msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -600,14 +604,14 @@ public sealed class SbsEncoder : IDisposable
         string gnd = aircraft?.Position.IsOnGround == true ? "-1" : "0";
 
         string line = $"MSG,7,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,{alt},,,,,,,,,,{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,7 (Air-to-Air Surveillance - Short).
     /// Format: MSG,7,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,{Alt},,,,,,,,,,{Gnd}
     /// </summary>
-    private byte[] FormatMsg7Short(
+    private ReadOnlyMemory<byte> FormatMsg7Short(
         ShortAirAirSurveillance msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -624,14 +628,14 @@ public sealed class SbsEncoder : IDisposable
         string gnd = aircraft?.Position.IsOnGround == true ? "-1" : "0";
 
         string line = $"MSG,7,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,{alt},,,,,,,,,,{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     /// <summary>
     /// Formats MSG,8 (All-Call Reply).
     /// Format: MSG,8,1,1,{ICAO},1,{DateGen},{TimeGen},{DateLog},{TimeLog},,,,,,,,,,,,{Gnd}
     /// </summary>
-    private byte[] FormatMsg8(
+    private ReadOnlyMemory<byte> FormatMsg8(
         AllCallReply msg,
         Aircraft? aircraft,
         DateTime msgTime,
@@ -644,12 +648,32 @@ public sealed class SbsEncoder : IDisposable
         string gnd = aircraft?.Position.IsOnGround == true ? "-1" : "0";
 
         string line = $"MSG,8,1,1,{msg.IcaoAddress},1,{msgDate},{msgTimeStr},{logDate},{logTimeStr},,,,,,,,,,,,{gnd}";
-        return Encoding.UTF8.GetBytes(line + "\r\n");
+        return FormatToMemory(line);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // HELPER METHODS
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Encodes a CSV line into the reusable format buffer with CRLF terminator.
+    /// Returns a memory slice of the internal buffer — valid until the next call.
+    /// </summary>
+    /// <param name="line">SBS CSV line without terminator</param>
+    /// <returns>UTF-8 encoded line with CRLF as a memory slice of the reusable buffer</returns>
+    private ReadOnlyMemory<byte> FormatToMemory(string line)
+    {
+        int byteCount = Encoding.UTF8.GetByteCount(line) + 2; // +\r\n
+        if (byteCount > _formatBuffer.Length)
+        {
+            _formatBuffer = new byte[byteCount * 2];
+        }
+
+        int written = Encoding.UTF8.GetBytes(line, _formatBuffer);
+        _formatBuffer[written] = (byte)'\r';
+        _formatBuffer[written + 1] = (byte)'\n';
+        return _formatBuffer.AsMemory(0, written + 2);
+    }
 
     /// <summary>
     /// Formats DateTime as SBS date and time strings.

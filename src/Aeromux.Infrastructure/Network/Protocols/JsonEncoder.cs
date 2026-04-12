@@ -119,6 +119,10 @@ public sealed class JsonEncoder : IDisposable
     private readonly TimeSpan _minimumInterval = TimeSpan.FromSeconds(1);
     private readonly JsonSerializerOptions _serializerOptions;
 
+    // Reusable encode buffer for UTF-8 output — avoids per-frame byte[] allocations
+    // Grows to accommodate largest JSON payload, then stays at that size
+    private byte[] _encodeBuffer = new byte[4096];
+
     /// <summary>
     /// Initializes a new JSON encoder with aircraft state tracker integration.
     /// </summary>
@@ -142,7 +146,7 @@ public sealed class JsonEncoder : IDisposable
     /// </summary>
     /// <param name="frame">Processed frame containing validated frame and parsed message</param>
     /// <returns>UTF-8 encoded JSON with newline terminator, or null if skipped</returns>
-    public byte[]? Encode(ProcessedFrame frame)
+    public ReadOnlyMemory<byte>? Encode(ProcessedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
 
@@ -187,9 +191,17 @@ public sealed class JsonEncoder : IDisposable
             ["DataQuality"] = JsonBroadcastMapper.ToDataQuality(aircraft)
         };
 
-        // Serialize to JSON
+        // Serialize to JSON and encode into reusable buffer
         string json = JsonSerializer.Serialize(response, _serializerOptions);
-        return Encoding.UTF8.GetBytes(json + "\n");
+        int byteCount = Encoding.UTF8.GetByteCount(json) + 1; // +1 for \n
+        if (byteCount > _encodeBuffer.Length)
+        {
+            _encodeBuffer = new byte[byteCount * 2];
+        }
+
+        int written = Encoding.UTF8.GetBytes(json, _encodeBuffer);
+        _encodeBuffer[written] = (byte)'\n';
+        return _encodeBuffer.AsMemory(0, written + 1);
     }
 
     /// <summary>

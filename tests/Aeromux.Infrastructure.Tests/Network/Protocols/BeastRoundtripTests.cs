@@ -61,7 +61,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -109,7 +109,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -153,7 +153,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -192,7 +192,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
 
         // Encoded should be significantly larger due to doubling
         byte[] expectedData = BeastTestData.HexToBytes(BeastTestData.AllEscapeBytes);
@@ -240,7 +240,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -275,7 +275,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -305,7 +305,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -334,7 +334,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -365,7 +365,7 @@ public class BeastRoundtripTests
             .Build();
 
         // Act: Encode → Parse
-        byte[] encoded = _encoder.Encode(originalFrame);
+        byte[] encoded = _encoder.Encode(originalFrame).ToArray();
         MemoryStream stream = BeastTestData.CreateStreamFromBytes(encoded);
 
         var parsedFrames = new List<ValidatedFrame>();
@@ -413,7 +413,7 @@ public class BeastRoundtripTests
         var stream = new MemoryStream();
         foreach (ValidatedFrame frame in frames)
         {
-            byte[] encoded = _encoder.Encode(frame);
+            ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
             await stream.WriteAsync(encoded);
         }
         stream.Position = 0;
