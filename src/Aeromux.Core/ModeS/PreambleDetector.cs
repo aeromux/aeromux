@@ -51,6 +51,10 @@ public sealed class PreambleDetector
     private readonly ValidatedFrameFactory _validatedFrameFactory = new(); // For validating extracted messages
     private readonly IcaoConfidenceTracker? _confidenceTracker; // Optional: for filtering AP mode from unknown aircraft
 
+    /// <summary>Reusable extraction buffers — avoids per-phase heap allocation in TryPhase.</summary>
+    private readonly byte[] _shortBuffer = new byte[ModeSFrameLength.ShortBytes];
+    private readonly byte[] _longBuffer = new byte[ModeSFrameLength.LongBytes];
+
     /// <summary>
     /// RTL-SDR sample rate in samples per second (2.4 MSPS, industry standard for Mode S/ADS-B).
     /// This value matches the hardcoded sample rate in DeviceWorker and the phase correlation
@@ -450,18 +454,18 @@ public sealed class PreambleDetector
             return;
         }
 
-        // Extract full message
+        // Extract full message into reusable buffer (avoids heap allocation per phase)
         int messageLengthBytes = messageLengthBits / 8;
-        byte[] message = new byte[messageLengthBytes];
-        message[0] = firstByte;
+        byte[] buffer = messageLengthBytes == ModeSFrameLength.ShortBytes ? _shortBuffer : _longBuffer;
+        buffer[0] = firstByte;
 
         for (int i = 1; i < messageLengthBytes; i++)
         {
-            message[i] = SliceByte(m, ref pPtr, ref phase);
+            buffer[i] = SliceByte(m, ref pPtr, ref phase);
         }
 
         // Validate message with CRC (signal strength deferred until best phase selected)
-        var rawFrame = new RawFrame(message, default, 0.0);
+        var rawFrame = new RawFrame(buffer, default, 0.0);
         ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, 0.0);
 
         int score;
@@ -508,7 +512,7 @@ public sealed class PreambleDetector
             // Only save message and compute signal strength if score is positive (accepted)
             if (score > 0)
             {
-                bestMessage = message;
+                bestMessage = buffer.ToArray();
                 bestSignalStrength = CalculateSignalStrength(m, pos, messageLengthBits);
             }
             else
