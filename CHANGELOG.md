@@ -7,6 +7,8 @@ All notable changes to Aeromux will be documented in this file.
 ### Changed
 
 - **Enum Validation Performance** — Replaced all 55 `Enum.IsDefined` reflection calls in the Mode S parsing hot path with zero-allocation range checks and pre-computed lookup tables, eliminating boxing allocations and reflection overhead per message parse.
+- **Frame Extraction Performance** — Reuse pre-allocated buffers during preamble detection phase testing, eliminating ~99% of short-lived byte array allocations in the signal processing hot path.
+- **TCP Broadcast Performance** — Replaced per-frame client list copying with a copy-on-write volatile snapshot, eliminating up to 3,000 list allocations per second across Beast, JSON, and SBS broadcasters.
 
 ## [0.6.0] — 2026-04-09
 

@@ -72,6 +72,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
     // Client management (thread-safe via Lock)
     private readonly List<TcpClient> _clients = [];
     private readonly Lock _clientsLock = new();
+    private volatile TcpClient[] _clientsSnapshot = [];
 
     // Background tasks and cancellation
     private TcpListener? _listener;
@@ -216,6 +217,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 lock (_clientsLock)
                 {
                     _clients.Add(client);
+                    _clientsSnapshot = [.. _clients];
                     Log.Information("[{Format}] Client connected from {Remote} on port {Port} (total: {Count})",
                         _format.ToString(), client.Client.RemoteEndPoint, _port, _clients.Count);
                 }
@@ -303,15 +305,9 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 continue;
             }
 
-            // Step 3: Create snapshot of client list for iteration
-            // Lock protects against concurrent modifications during AcceptClientsAsync or cleanup
-            // Snapshot allows us to iterate without holding lock during slow network writes
-            // This single snapshot is used for both receiver ID (if needed) and frame data
-            List<TcpClient> clientsSnapshot;
-            lock (_clientsLock)
-            {
-                clientsSnapshot = new List<TcpClient>(_clients);
-            }
+            // Step 3: Copy-on-write snapshot: volatile read is lock-free and allocation-free
+            // Snapshot array is rebuilt only when clients connect or disconnect
+            TcpClient[] clientsSnapshot = _clientsSnapshot;
 
             // Step 4: Send receiver ID once at start (Beast format only)
             // Transmits 0xe3 message containing first 64 bits of receiver UUID
@@ -338,7 +334,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 }
 
                 _receiverIdSent = true;
-                Log.Information("Sent receiver ID [{Format}] to {Count} client(s)", _format, clientsSnapshot.Count);
+                Log.Information("Sent receiver ID [{Format}] to {Count} client(s)", _format, clientsSnapshot.Length);
             }
 
             // Track clients that fail during write (for cleanup)
@@ -390,6 +386,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                         client.Dispose();
                     }
 
+                    _clientsSnapshot = [.. _clients];
                     Log.Information("[{Format}] Total clients on port {Port}: {Remaining}",
                         _format.ToString(), _port, _clients.Count);
                 }
@@ -467,6 +464,7 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 client.Dispose();
             }
             _clients.Clear();
+            _clientsSnapshot = [];
         }
 
         // Step 6: Dispose encoders
@@ -485,17 +483,8 @@ public sealed class TcpBroadcaster : IAsyncDisposable
 
     /// <summary>
     /// Gets the current number of connected TCP clients for this broadcaster.
-    /// Thread-safe: Uses lock to safely read client count from concurrent collection.
+    /// Thread-safe: reads from volatile copy-on-write snapshot (no lock required).
     /// Useful for monitoring active connections and debugging connectivity issues.
     /// </summary>
-    public int ClientCount
-    {
-        get
-        {
-            lock (_clientsLock)
-            {
-                return _clients.Count;
-            }
-        }
-    }
+    public int ClientCount => _clientsSnapshot.Length;
 }
