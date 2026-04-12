@@ -68,7 +68,7 @@ public sealed class IcaoConfidenceTracker
     /// <param name="timeoutSeconds">Remove ICAOs not seen within this many seconds</param>
     public IcaoConfidenceTracker(ConfidenceLevel requiredConfidence, int timeoutSeconds)
     {
-        if (!Enum.IsDefined(typeof(ConfidenceLevel), requiredConfidence))
+        if (!EnumValidator.IsValidConfidenceLevel((int)requiredConfidence))
         {
             throw new ArgumentOutOfRangeException(nameof(requiredConfidence),
                 $"Invalid confidence level: {requiredConfidence}");

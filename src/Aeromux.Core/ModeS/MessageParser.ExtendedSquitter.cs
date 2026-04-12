@@ -142,7 +142,7 @@ public sealed partial class MessageParser
     {
         // Extract Surveillance Status (SS) - bits 38-39 (2 bits)
         int ssRaw = ExtractBits(frame.Data, 38, 2);
-        if (!Enum.IsDefined(typeof(SurveillanceStatus), ssRaw))
+        if (!EnumValidator.IsValidSurveillanceStatus(ssRaw))
         {
             Log.Debug("Invalid surveillance status {SS} in TC {TC} from {Icao} (valid: 0-3), frame: {Frame}",
                 ssRaw, tc, frame.IcaoAddress, frame.Data);
@@ -152,7 +152,7 @@ public sealed partial class MessageParser
 
         // Extract single antenna flag - bit 40 (1 bit)
         int antennaRaw = ExtractBits(frame.Data, 40, 1);
-        if (!Enum.IsDefined(typeof(AntennaFlag), antennaRaw))
+        if (!EnumValidator.IsValidAntennaFlag(antennaRaw))
         {
             Log.Debug("Invalid antenna flag {Antenna} in TC {TC} from {Icao} (valid: 0-1), frame: {Frame}",
                 antennaRaw, tc, frame.IcaoAddress, frame.Data);
@@ -166,7 +166,7 @@ public sealed partial class MessageParser
 
         // Extract CPR format (F bit) - bit 54 (1 bit, 0=even, 1=odd)
         int cprFormatRaw = ExtractBits(frame.Data, 54, 1);
-        if (!Enum.IsDefined(typeof(CprFormat), cprFormatRaw))
+        if (!EnumValidator.IsValidCprFormat(cprFormatRaw))
         {
             Log.Debug("Invalid CPR format {CprFormat} in TC {TC} from {Icao} (valid: 0-1), frame: {Frame}",
                 cprFormatRaw, tc, frame.IcaoAddress, frame.Data);
@@ -224,7 +224,7 @@ public sealed partial class MessageParser
         // Extract NACv (Navigation Accuracy Category - Velocity) - bits 43-45 (3 bits)
         int nacvRaw = ExtractBits(frame.Data, 43, 3);
         NavigationAccuracyCategoryVelocity? nacv = null;
-        if (Enum.IsDefined(typeof(NavigationAccuracyCategoryVelocity), nacvRaw))
+        if (EnumValidator.IsValidNavigationAccuracyCategoryVelocity(nacvRaw))
         {
             nacv = (NavigationAccuracyCategoryVelocity)nacvRaw;
         }
@@ -432,7 +432,7 @@ public sealed partial class MessageParser
         int movementRaw = ExtractBits(frame.Data, 38, 7);
 
         // Map raw value to SurfaceMovement enum
-        if (!Enum.IsDefined(typeof(SurfaceMovement), movementRaw))
+        if (!EnumValidator.IsValidSurfaceMovement(movementRaw))
         {
             Log.Debug("Invalid surface movement {Movement} in TC {TC} from {Icao} (valid: 0-127), frame: {Frame}",
                 movementRaw, tc, frame.IcaoAddress, frame.Data);
@@ -460,7 +460,7 @@ public sealed partial class MessageParser
 
         // Extract CPR format (F bit) - bit 54 (1 bit, 0=even, 1=odd)
         int cprFormatRaw = ExtractBits(frame.Data, 54, 1);
-        if (!Enum.IsDefined(typeof(CprFormat), cprFormatRaw))
+        if (!EnumValidator.IsValidCprFormat(cprFormatRaw))
         {
             Log.Debug("Invalid CPR format {CprFormat} in TC {TC} from {Icao} (valid: 0-1), frame: {Frame}",
                 cprFormatRaw, tc, frame.IcaoAddress, frame.Data);
@@ -544,7 +544,7 @@ public sealed partial class MessageParser
         int subtypeRaw = ExtractBits(frame.Data, 38, 3);
 
         // Validate subtype
-        if (!Enum.IsDefined(typeof(AircraftStatusSubtype), subtypeRaw))
+        if (!EnumValidator.IsValidAircraftStatusSubtype(subtypeRaw))
         {
             // Subtype 3-7 reserved or no information
             Log.Debug("Unsupported TC 28 subtype {Subtype} from {Icao}",
@@ -563,7 +563,7 @@ public sealed partial class MessageParser
             // Extract emergency state from bits 41-43 (3 bits)
             int esRaw = ExtractBits(frame.Data, 41, 3);
 
-            if (!Enum.IsDefined(typeof(EmergencyState), esRaw))
+            if (!EnumValidator.IsValidEmergencyState(esRaw))
             {
                 Log.Debug("Invalid emergency state {ES} in TC 28 from {Icao}",
                     esRaw, frame.IcaoAddress);
@@ -613,7 +613,7 @@ public sealed partial class MessageParser
         int subtypeRaw = ExtractBits(frame.Data, 38, 3);
 
         // Validate subtype (0=airborne, 1=surface, 2-7=reserved)
-        if (!Enum.IsDefined(typeof(OperationalStatusSubtype), subtypeRaw))
+        if (!EnumValidator.IsValidOperationalStatusSubtype(subtypeRaw))
         {
             Log.Debug("Reserved TC 31 subtype {Subtype} from {Icao}",
                 subtypeRaw, frame.IcaoAddress);
@@ -624,7 +624,7 @@ public sealed partial class MessageParser
 
         // Extract version number - bits 73-75 (3 bits)
         int versionRaw = ExtractBits(frame.Data, 73, 3);
-        if (!Enum.IsDefined(typeof(AdsbVersion), versionRaw))
+        if (!EnumValidator.IsValidAdsbVersion(versionRaw))
         {
             Log.Debug("Invalid ADS-B version {Version} in TC 31 from {Icao} (valid: 0-7), frame: {Frame}",
                 versionRaw, frame.IcaoAddress, frame.Data);
@@ -719,7 +719,7 @@ public sealed partial class MessageParser
 
                     // Trajectory Change Report capability level
                     int tcCapabilityRaw = ExtractBits(frame.Data, 49, 2);
-                    if (!Enum.IsDefined(typeof(TrajectoryChangeReportCapability), tcCapabilityRaw))
+                    if (!EnumValidator.IsValidTrajectoryChangeReportCapability(tcCapabilityRaw))
                     {
                         Log.Debug("Invalid TC capability level {TCLevel} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             tcCapabilityRaw, frame.IcaoAddress, frame.Data);
@@ -760,7 +760,7 @@ public sealed partial class MessageParser
 
                     // Navigation Accuracy Category for Velocity
                     int nacvRaw = ExtractBits(frame.Data, 49, 3);
-                    if (!Enum.IsDefined(typeof(NavigationAccuracyCategoryVelocity), nacvRaw))
+                    if (!EnumValidator.IsValidNavigationAccuracyCategoryVelocity(nacvRaw))
                     {
                         Log.Debug("Invalid NACv {NACv} in TC 31 from {Icao} (valid: 0-7), frame: {Frame}",
                             nacvRaw, frame.IcaoAddress, frame.Data);
@@ -796,7 +796,7 @@ public sealed partial class MessageParser
 
                     // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
                     int antennaRaw = ExtractBits(frame.Data, 62, 1);
-                    if (!Enum.IsDefined(typeof(AntennaFlag), antennaRaw))
+                    if (!EnumValidator.IsValidAntennaFlag(antennaRaw))
                     {
                         Log.Debug("Invalid antenna flag {Antenna} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             antennaRaw, frame.IcaoAddress, frame.Data);
@@ -806,7 +806,7 @@ public sealed partial class MessageParser
 
                     // Defines the failure condition that the ADS-B system is designed to support
                     int sdaRaw = ExtractBits(frame.Data, 63, 2);
-                    if (!Enum.IsDefined(typeof(SdaSupportedFailureCondition), sdaRaw))
+                    if (!EnumValidator.IsValidSdaSupportedFailureCondition(sdaRaw))
                     {
                         Log.Debug("Invalid SDA {SDA} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             sdaRaw, frame.IcaoAddress, frame.Data);
@@ -838,7 +838,7 @@ public sealed partial class MessageParser
 
                     // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
                     int antennaRaw = ExtractBits(frame.Data, 62, 1);
-                    if (!Enum.IsDefined(typeof(AntennaFlag), antennaRaw))
+                    if (!EnumValidator.IsValidAntennaFlag(antennaRaw))
                     {
                         Log.Debug("Invalid antenna flag {Antenna} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             antennaRaw, frame.IcaoAddress, frame.Data);
@@ -848,7 +848,7 @@ public sealed partial class MessageParser
 
                     // Defines the failure condition that the ADS-B system is designed to support
                     int sdaRaw = ExtractBits(frame.Data, 63, 2);
-                    if (!Enum.IsDefined(typeof(SdaSupportedFailureCondition), sdaRaw))
+                    if (!EnumValidator.IsValidSdaSupportedFailureCondition(sdaRaw))
                     {
                         Log.Debug("Invalid SDA {SDA} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             sdaRaw, frame.IcaoAddress, frame.Data);
@@ -879,7 +879,7 @@ public sealed partial class MessageParser
                 {
                     // Geometrical Vertical Accuracy
                     int gvaRaw = ExtractBits(frame.Data, 81, 2);
-                    if (!Enum.IsDefined(typeof(GeometricVerticalAccuracy), gvaRaw))
+                    if (!EnumValidator.IsValidGeometricVerticalAccuracy(gvaRaw))
                     {
                         Log.Debug("Invalid GVA {GVA} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             gvaRaw, frame.IcaoAddress, frame.Data);
@@ -889,7 +889,7 @@ public sealed partial class MessageParser
 
                     // Barometric Altitude Integrity Code
                     int nicBaroRaw = ExtractBits(frame.Data, 85, 1);
-                    if (!Enum.IsDefined(typeof(BarometricAltitudeIntegrityCode), nicBaroRaw))
+                    if (!EnumValidator.IsValidBarometricAltitudeIntegrityCode(nicBaroRaw))
                     {
                         Log.Debug("Invalid NICbaro {NICbaro} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             nicBaroRaw, frame.IcaoAddress, frame.Data);
@@ -907,7 +907,7 @@ public sealed partial class MessageParser
 
                     // Track Angle or Heading
                     int trkHdgRaw = ExtractBits(frame.Data, 85, 1);
-                    if (!Enum.IsDefined(typeof(TargetHeadingType), trkHdgRaw))
+                    if (!EnumValidator.IsValidTargetHeadingType(trkHdgRaw))
                     {
                         Log.Debug("Invalid TRK/HDG {TrkHdg} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             trkHdgRaw, frame.IcaoAddress, frame.Data);
@@ -923,7 +923,7 @@ public sealed partial class MessageParser
 
                 // Navigation Accuracy Category for Position (NACp)
                 int nacpRaw = ExtractBits(frame.Data, 77, 4);
-                if (!Enum.IsDefined(typeof(NavigationAccuracyCategoryPosition), nacpRaw))
+                if (!EnumValidator.IsValidNavigationAccuracyCategoryPosition(nacpRaw))
                 {
                     Log.Debug("Invalid NACp {NACp} in TC 31 from {Icao} (valid: 0-15), frame: {Frame}",
                         nacpRaw, frame.IcaoAddress, frame.Data);
@@ -933,7 +933,7 @@ public sealed partial class MessageParser
 
                 // Source Integrity Level
                 int silRaw = ExtractBits(frame.Data, 83, 2);
-                if (!Enum.IsDefined(typeof(SourceIntegrityLevel), silRaw))
+                if (!EnumValidator.IsValidSourceIntegrityLevel(silRaw))
                 {
                     Log.Debug("Invalid SIL {SIL} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                         silRaw, frame.IcaoAddress, frame.Data);
@@ -943,7 +943,7 @@ public sealed partial class MessageParser
 
                 // Horizontal Reference Direction
                 int hrdRaw = ExtractBits(frame.Data, 86, 1);
-                if (!Enum.IsDefined(typeof(HorizontalReferenceDirection), hrdRaw))
+                if (!EnumValidator.IsValidHorizontalReferenceDirection(hrdRaw))
                 {
                     Log.Debug("Invalid HRD {HRD} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                         hrdRaw, frame.IcaoAddress, frame.Data);
@@ -979,7 +979,7 @@ public sealed partial class MessageParser
 
                     // Trajectory Change Report capability level
                     int tcCapabilityRaw = ExtractBits(frame.Data, 49, 2);
-                    if (!Enum.IsDefined(typeof(TrajectoryChangeReportCapability), tcCapabilityRaw))
+                    if (!EnumValidator.IsValidTrajectoryChangeReportCapability(tcCapabilityRaw))
                     {
                         Log.Debug("Invalid TC capability level {TCLevel} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             tcCapabilityRaw, frame.IcaoAddress, frame.Data);
@@ -1020,7 +1020,7 @@ public sealed partial class MessageParser
 
                     // Navigation Accuracy Category for Velocity
                     int nacvRaw = ExtractBits(frame.Data, 49, 3);
-                    if (!Enum.IsDefined(typeof(NavigationAccuracyCategoryVelocity), nacvRaw))
+                    if (!EnumValidator.IsValidNavigationAccuracyCategoryVelocity(nacvRaw))
                     {
                         Log.Debug("Invalid NACv {NACv} in TC 31 from {Icao} (valid: 0-7), frame: {Frame}",
                             nacvRaw, frame.IcaoAddress, frame.Data);
@@ -1056,7 +1056,7 @@ public sealed partial class MessageParser
 
                     // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
                     int antennaRaw = ExtractBits(frame.Data, 62, 1);
-                    if (!Enum.IsDefined(typeof(AntennaFlag), antennaRaw))
+                    if (!EnumValidator.IsValidAntennaFlag(antennaRaw))
                     {
                         Log.Debug("Invalid antenna flag {Antenna} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             antennaRaw, frame.IcaoAddress, frame.Data);
@@ -1066,7 +1066,7 @@ public sealed partial class MessageParser
 
                     // Defines the failure condition that the ADS-B system is designed to support
                     int sdaRaw = ExtractBits(frame.Data, 63, 2);
-                    if (!Enum.IsDefined(typeof(SdaSupportedFailureCondition), sdaRaw))
+                    if (!EnumValidator.IsValidSdaSupportedFailureCondition(sdaRaw))
                     {
                         Log.Debug("Invalid SDA {SDA} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             sdaRaw, frame.IcaoAddress, frame.Data);
@@ -1098,7 +1098,7 @@ public sealed partial class MessageParser
 
                     // Indicate that the ADS-B Transmitting Subsystem is operating with a single antenna
                     int antennaRaw = ExtractBits(frame.Data, 62, 1);
-                    if (!Enum.IsDefined(typeof(AntennaFlag), antennaRaw))
+                    if (!EnumValidator.IsValidAntennaFlag(antennaRaw))
                     {
                         Log.Debug("Invalid antenna flag {Antenna} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             antennaRaw, frame.IcaoAddress, frame.Data);
@@ -1108,7 +1108,7 @@ public sealed partial class MessageParser
 
                     // Defines the failure condition that the ADS-B system is designed to support
                     int sdaRaw = ExtractBits(frame.Data, 63, 2);
-                    if (!Enum.IsDefined(typeof(SdaSupportedFailureCondition), sdaRaw))
+                    if (!EnumValidator.IsValidSdaSupportedFailureCondition(sdaRaw))
                     {
                         Log.Debug("Invalid SDA {SDA} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             sdaRaw, frame.IcaoAddress, frame.Data);
@@ -1139,7 +1139,7 @@ public sealed partial class MessageParser
                 {
                     // Geometrical Vertical Accuracy
                     int gvaRaw = ExtractBits(frame.Data, 81, 2);
-                    if (!Enum.IsDefined(typeof(GeometricVerticalAccuracy), gvaRaw))
+                    if (!EnumValidator.IsValidGeometricVerticalAccuracy(gvaRaw))
                     {
                         Log.Debug("Invalid GVA {GVA} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                             gvaRaw, frame.IcaoAddress, frame.Data);
@@ -1149,7 +1149,7 @@ public sealed partial class MessageParser
 
                     // Barometric Altitude Integrity Code
                     int nicBaroRaw = ExtractBits(frame.Data, 85, 1);
-                    if (!Enum.IsDefined(typeof(BarometricAltitudeIntegrityCode), nicBaroRaw))
+                    if (!EnumValidator.IsValidBarometricAltitudeIntegrityCode(nicBaroRaw))
                     {
                         Log.Debug("Invalid NICbaro {NICbaro} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             nicBaroRaw, frame.IcaoAddress, frame.Data);
@@ -1167,7 +1167,7 @@ public sealed partial class MessageParser
 
                     // Track Angle or Heading
                     int trkHdgRaw = ExtractBits(frame.Data, 85, 1);
-                    if (!Enum.IsDefined(typeof(TargetHeadingType), trkHdgRaw))
+                    if (!EnumValidator.IsValidTargetHeadingType(trkHdgRaw))
                     {
                         Log.Debug("Invalid TRK/HDG {TrkHdg} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                             trkHdgRaw, frame.IcaoAddress, frame.Data);
@@ -1183,7 +1183,7 @@ public sealed partial class MessageParser
 
                 // Navigation Accuracy Category for Position (NACp)
                 int nacpRawV2 = ExtractBits(frame.Data, 77, 4);
-                if (!Enum.IsDefined(typeof(NavigationAccuracyCategoryPosition), nacpRawV2))
+                if (!EnumValidator.IsValidNavigationAccuracyCategoryPosition(nacpRawV2))
                 {
                     Log.Debug("Invalid NACp {NACp} in TC 31 from {Icao} (valid: 0-15), frame: {Frame}",
                         nacpRawV2, frame.IcaoAddress, frame.Data);
@@ -1193,7 +1193,7 @@ public sealed partial class MessageParser
 
                 // Source Integrity Level
                 int silRawV2 = ExtractBits(frame.Data, 83, 2);
-                if (!Enum.IsDefined(typeof(SourceIntegrityLevel), silRawV2))
+                if (!EnumValidator.IsValidSourceIntegrityLevel(silRawV2))
                 {
                     Log.Debug("Invalid SIL {SIL} in TC 31 from {Icao} (valid: 0-3), frame: {Frame}",
                         silRawV2, frame.IcaoAddress, frame.Data);
@@ -1203,7 +1203,7 @@ public sealed partial class MessageParser
 
                 // Horizontal Reference Direction
                 int hrdRawV2 = ExtractBits(frame.Data, 86, 1);
-                if (!Enum.IsDefined(typeof(HorizontalReferenceDirection), hrdRawV2))
+                if (!EnumValidator.IsValidHorizontalReferenceDirection(hrdRawV2))
                 {
                     Log.Debug("Invalid HRD {HRD} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                         hrdRawV2, frame.IcaoAddress, frame.Data);
@@ -1213,7 +1213,7 @@ public sealed partial class MessageParser
 
                 // SIL Supplement
                 int silSupplementRaw = ExtractBits(frame.Data, 87, 1);
-                if (!Enum.IsDefined(typeof(SilSupplement), silSupplementRaw))
+                if (!EnumValidator.IsValidSilSupplement(silSupplementRaw))
                 {
                     Log.Debug("Invalid SIL Supplement {SILSupplement} in TC 31 from {Icao} (valid: 0-1), frame: {Frame}",
                         silSupplementRaw, frame.IcaoAddress, frame.Data);
@@ -1264,7 +1264,7 @@ public sealed partial class MessageParser
         int subtypeRaw = ExtractBits(frame.Data, 38, 2);
 
         // Validate subtype (0=Version1, 1=Version2, 2-3=reserved)
-        if (!Enum.IsDefined(typeof(TargetStateSubtype), subtypeRaw))
+        if (!EnumValidator.IsValidTargetStateSubtype(subtypeRaw))
         {
             Log.Debug("Reserved TC 29 subtype {Subtype} from {Icao}",
                 subtypeRaw, frame.IcaoAddress);
@@ -1318,7 +1318,7 @@ public sealed partial class MessageParser
 
                 // Vertical mode (bits 46-47, 2 bits)
                 int verticalModeRaw = ExtractBits(frame.Data, 46, 2);
-                if (!Enum.IsDefined(typeof(VerticalMode), verticalModeRaw))
+                if (!EnumValidator.IsValidVerticalMode(verticalModeRaw))
                 {
                     Log.Debug("Invalid vertical mode {VerticalMode} in TC 29 from {Icao} (valid: 0-3), frame: {Frame}",
                         verticalModeRaw, frame.IcaoAddress, frame.Data);
@@ -1336,7 +1336,7 @@ public sealed partial class MessageParser
 
                     // Angle type (bit 69, 1 bit, 0=track, 1=heading)
                     int headingTypeRaw = ExtractBits(frame.Data, 69, 1);
-                    if (!Enum.IsDefined(typeof(TargetHeadingType), headingTypeRaw))
+                    if (!EnumValidator.IsValidTargetHeadingType(headingTypeRaw))
                     {
                         Log.Debug("Invalid target heading type {HeadingType} in TC 29 from {Icao} (valid: 0-1), frame: {Frame}",
                             headingTypeRaw, frame.IcaoAddress, frame.Data);
@@ -1347,7 +1347,7 @@ public sealed partial class MessageParser
 
                 // Horizontal mode (bits 70-71, 2 bits)
                 int horizontalModeRaw = ExtractBits(frame.Data, 70, 2);
-                if (!Enum.IsDefined(typeof(HorizontalMode), horizontalModeRaw))
+                if (!EnumValidator.IsValidHorizontalMode(horizontalModeRaw))
                 {
                     Log.Debug("Invalid horizontal mode {HorizontalMode} in TC 29 from {Icao} (valid: 0-3), frame: {Frame}",
                         horizontalModeRaw, frame.IcaoAddress, frame.Data);
@@ -1357,7 +1357,7 @@ public sealed partial class MessageParser
 
                 // NACp (Navigation Accuracy Category - Position, bits 72-75, 4 bits)
                 int nacpRaw29 = ExtractBits(frame.Data, 72, 4);
-                if (!Enum.IsDefined(typeof(NavigationAccuracyCategoryPosition), nacpRaw29))
+                if (!EnumValidator.IsValidNavigationAccuracyCategoryPosition(nacpRaw29))
                 {
                     Log.Debug("Invalid NACp {NACp} in TC 29 from {Icao} (valid: 0-15), frame: {Frame}",
                         nacpRaw29, frame.IcaoAddress, frame.Data);
@@ -1367,7 +1367,7 @@ public sealed partial class MessageParser
 
                 // NICbaro (NIC barometric altitude integrity, bit 76, 1 bit)
                 int nicBaroRaw29 = ExtractBits(frame.Data, 76, 1);
-                if (!Enum.IsDefined(typeof(BarometricAltitudeIntegrityCode), nicBaroRaw29))
+                if (!EnumValidator.IsValidBarometricAltitudeIntegrityCode(nicBaroRaw29))
                 {
                     Log.Debug("Invalid NICbaro {NICbaro} in TC 29 from {Icao} (valid: 0-1), frame: {Frame}",
                         nicBaroRaw29, frame.IcaoAddress, frame.Data);
@@ -1377,7 +1377,7 @@ public sealed partial class MessageParser
 
                 // SIL (Source Integrity Level, bits 77-78, 2 bits)
                 int silRaw29 = ExtractBits(frame.Data, 77, 2);
-                if (!Enum.IsDefined(typeof(SourceIntegrityLevel), silRaw29))
+                if (!EnumValidator.IsValidSourceIntegrityLevel(silRaw29))
                 {
                     Log.Debug("Invalid SIL {SIL} in TC 29 from {Icao} (valid: 0-3), frame: {Frame}",
                         silRaw29, frame.IcaoAddress, frame.Data);
@@ -1393,7 +1393,7 @@ public sealed partial class MessageParser
 
                 // Emergency/priority status (bits 86-88, 3 bits)
                 int emergencyRaw = ExtractBits(frame.Data, 86, 3);
-                if (!Enum.IsDefined(typeof(EmergencyState), emergencyRaw))
+                if (!EnumValidator.IsValidEmergencyState(emergencyRaw))
                 {
                     Log.Debug("Invalid emergency state {Emergency} in TC 29 from {Icao} (valid: 0-7), frame: {Frame}",
                         emergencyRaw, frame.IcaoAddress, frame.Data);

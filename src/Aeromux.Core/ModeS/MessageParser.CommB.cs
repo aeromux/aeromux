@@ -66,7 +66,7 @@ public sealed partial class MessageParser
     {
         // Extract Flight Status (FS) - bits 6-8 (3 bits)
         int flightStatusRaw = ExtractBits(frame.Data, 6, 3);
-        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        if (!EnumValidator.IsValidFlightStatus(flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 20 from {Icao}",
                 flightStatusRaw, frame.IcaoAddress);
@@ -132,7 +132,7 @@ public sealed partial class MessageParser
     {
         // Extract Flight Status (FS) - bits 6-8 (3 bits)
         int flightStatusRaw = ExtractBits(frame.Data, 6, 3);
-        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        if (!EnumValidator.IsValidFlightStatus(flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 21 from {Icao}",
                 flightStatusRaw, frame.IcaoAddress);
@@ -571,7 +571,7 @@ public sealed partial class MessageParser
         if (sourceStatus == 1)
         {
             // Only decode if value maps to a defined enum member
-            if (Enum.IsDefined(typeof(Bds40AltitudeSource), sourceRaw))
+            if (EnumValidator.IsValidBds40AltitudeSource(sourceRaw))
             {
                 altSource = (Bds40AltitudeSource)sourceRaw;
             }
@@ -688,7 +688,7 @@ public sealed partial class MessageParser
         Severity? turbulence = null;
         if (turbulenceStatus == 1)
         {
-            if (!Enum.IsDefined(typeof(Severity), turbulenceRaw))
+            if (!EnumValidator.IsValidSeverity(turbulenceRaw))
             {
                 return null; // Invalid severity value
             }
@@ -778,23 +778,23 @@ public sealed partial class MessageParser
 
         // Validate all severity enums before decoding (valid: 0-3, 2-bit fields)
         // This prevents invalid enum casts that could cause runtime errors
-        if (turbStatus == 1 && !Enum.IsDefined(typeof(Severity), turb))
+        if (turbStatus == 1 && !EnumValidator.IsValidSeverity(turb))
         {
             return null; // Invalid turbulence severity
         }
-        if (wsStatus == 1 && !Enum.IsDefined(typeof(Severity), ws))
+        if (wsStatus == 1 && !EnumValidator.IsValidSeverity(ws))
         {
             return null; // Invalid wind shear severity
         }
-        if (mbStatus == 1 && !Enum.IsDefined(typeof(Severity), mburst))
+        if (mbStatus == 1 && !EnumValidator.IsValidSeverity(mburst))
         {
             return null; // Invalid microburst severity
         }
-        if (iceStatus == 1 && !Enum.IsDefined(typeof(Severity), ice))
+        if (iceStatus == 1 && !EnumValidator.IsValidSeverity(ice))
         {
             return null; // Invalid icing severity
         }
-        if (wvStatus == 1 && !Enum.IsDefined(typeof(Severity), wv))
+        if (wvStatus == 1 && !EnumValidator.IsValidSeverity(wv))
         {
             return null; // Invalid wake vortex severity
         }

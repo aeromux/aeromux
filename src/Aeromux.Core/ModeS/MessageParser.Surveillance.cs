@@ -47,7 +47,7 @@ public sealed partial class MessageParser
     {
         // Extract Flight Status (FS - Flight Status) field from bits 6-8 (byte 0, bits 0-2)
         int  flightStatusRaw = ExtractBits(frame.Data, 6, 3);
-        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        if (!EnumValidator.IsValidFlightStatus(flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 4 from {Icao}",
                 flightStatusRaw, frame.IcaoAddress);
@@ -88,7 +88,7 @@ public sealed partial class MessageParser
     {
         // Extract Flight Status (FS) field from bits 6-8 (byte 0, bits 0-2)
         int flightStatusRaw = ExtractBits(frame.Data, 6, 3);
-        if (!Enum.IsDefined(typeof(FlightStatus), flightStatusRaw))
+        if (!EnumValidator.IsValidFlightStatus(flightStatusRaw))
         {
             Log.Debug("Invalid flight status {FS} in DF 5 from {Icao}",
                 flightStatusRaw, frame.IcaoAddress);

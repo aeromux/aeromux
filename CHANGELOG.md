@@ -2,6 +2,12 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.6.1] — Unreleased
+
+### Changed
+
+- **Enum Validation Performance** — Replaced all 55 `Enum.IsDefined` reflection calls in the Mode S parsing hot path with zero-allocation range checks and pre-computed lookup tables, eliminating boxing allocations and reflection overhead per message parse.
+
 ## [0.6.0] — 2026-04-09
 
 ### Added
@@ -57,5 +63,6 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.6.1]: https://github.com/aeromux/aeromux/releases/tag/v0.6.1
 [0.6.0]: https://github.com/aeromux/aeromux/releases/tag/v0.6.0
 [0.5.0]: https://github.com/aeromux/aeromux/releases/tag/v0.5.0

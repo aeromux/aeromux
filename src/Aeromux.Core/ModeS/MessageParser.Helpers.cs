@@ -357,7 +357,7 @@ public sealed partial class MessageParser
         int combined = (tc * 10) + ca;
 
         // Map to enum (enum values are defined as TC * 10 + CA)
-        if (Enum.IsDefined(typeof(AircraftCategory), combined))
+        if (EnumValidator.IsValidAircraftCategory(combined))
         {
             return (AircraftCategory)combined;
         }

@@ -51,7 +51,7 @@ public sealed partial class MessageParser
         int capabilityRaw = ExtractBits(frame.Data, 6, 3);
 
         // Validate capability value (0-7 are defined in TransponderCapability enum)
-        if (!Enum.IsDefined(typeof(TransponderCapability), capabilityRaw))
+        if (!EnumValidator.IsValidTransponderCapability(capabilityRaw))
         {
             Log.Debug("Invalid capability value {Capability} in DF 11 from {Icao}",
                 capabilityRaw, frame.IcaoAddress);

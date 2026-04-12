@@ -68,7 +68,7 @@ public sealed partial class MessageParser
         int riRaw = ExtractBits(frame.Data, 14, 4);
 
         // Validate RI field (valid values: 0, 2, 3, 4, 8-14; reserved: 1, 5, 6, 7, 15)
-        if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
+        if (!EnumValidator.IsValidAcasReplyInformation(riRaw))
         {
             Log.Debug("Reserved RI value {RI} in DF 0 from {Icao} (valid: 0,2,3,4,8-14), frame: {Frame}",
                 riRaw, frame.IcaoAddress, frame.Data);
@@ -154,7 +154,7 @@ public sealed partial class MessageParser
         int riRaw = ExtractBits(frame.Data, 14, 4);
 
         // Validate RI field (valid values: 0, 2, 3, 4, 8-14; reserved: 1, 5, 6, 7, 15)
-        if (!Enum.IsDefined(typeof(AcasReplyInformation), riRaw))
+        if (!EnumValidator.IsValidAcasReplyInformation(riRaw))
         {
             Log.Debug("Reserved RI value {RI} in DF 16 from {Icao} (valid: 0,2,3,4,8-14), frame: {Frame}",
                 riRaw, frame.IcaoAddress, frame.Data);
