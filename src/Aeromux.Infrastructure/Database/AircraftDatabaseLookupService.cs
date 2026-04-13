@@ -23,13 +23,14 @@ namespace Aeromux.Infrastructure.Database;
 /// <summary>
 /// Provides aircraft enrichment data by querying the aeromux-db SQLite database.
 /// Opens a read-only connection at construction and keeps it open for the lifetime of the service.
-/// Thread-safe for concurrent lookups.
+/// Designed for single-threaded access from the tracker's consumer task.
 /// </summary>
 public sealed class AircraftDatabaseLookupService : IAircraftDatabaseLookup, IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly SqliteCommand _lookupCommand;
+    private readonly SqliteParameter _icaoParameter;
     private readonly int _schemaVersion;
-    private readonly Lock _lock = new();
     private bool _disposed;
 
     /// <summary>
@@ -45,6 +46,11 @@ public sealed class AircraftDatabaseLookupService : IAircraftDatabaseLookup, IDi
         _connection.Open();
         _schemaVersion = schemaVersion;
 
+        // Pre-create parameterized lookup command — reused across all lookups
+        _lookupCommand = _connection.CreateCommand();
+        _lookupCommand.CommandText = "SELECT * FROM aircraft_view WHERE aircraft_icao_address = @icao";
+        _icaoParameter = _lookupCommand.Parameters.Add("@icao", SqliteType.Text);
+
         Log.Debug("Database lookup service opened: {FilePath}, schema version {SchemaVersion}",
             databaseFilePath, schemaVersion);
     }
@@ -56,15 +62,9 @@ public sealed class AircraftDatabaseLookupService : IAircraftDatabaseLookup, IDi
 
         try
         {
-            lock (_lock)
-            {
-                using SqliteCommand command = _connection.CreateCommand();
-                command.CommandText = "SELECT * FROM aircraft_view WHERE aircraft_icao_address = @icao";
-                command.Parameters.AddWithValue("@icao", icaoAddress);
-
-                using SqliteDataReader reader = command.ExecuteReader();
-                return !reader.Read() ? AircraftDatabaseRecord.Empty : MapToRecord(reader, _schemaVersion);
-            }
+            _icaoParameter.Value = icaoAddress;
+            using SqliteDataReader reader = _lookupCommand.ExecuteReader();
+            return !reader.Read() ? AircraftDatabaseRecord.Empty : MapToRecord(reader, _schemaVersion);
         }
         catch (SqliteException ex)
         {
@@ -117,7 +117,7 @@ public sealed class AircraftDatabaseLookupService : IAircraftDatabaseLookup, IDi
     }
 
     /// <summary>
-    /// Closes the database connection.
+    /// Disposes the cached lookup command and closes the database connection.
     /// </summary>
     public void Dispose()
     {
@@ -127,6 +127,7 @@ public sealed class AircraftDatabaseLookupService : IAircraftDatabaseLookup, IDi
         }
 
         _disposed = true;
+        _lookupCommand.Dispose();
         _connection.Dispose();
         Log.Debug("Database lookup service closed");
     }
