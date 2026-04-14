@@ -54,6 +54,7 @@ public sealed class DeviceWorker : IDisposable
     private readonly PreambleDetector _preambleDetector;
     private readonly ValidatedFrameFactory _validatedFrameFactory = new();
     private readonly IcaoConfidenceTracker _confidenceTracker;
+    private readonly bool _ownsConfidenceTracker;  // True when tracker is self-created (not shared), responsible for disposal
     private readonly FrameDeduplicator _frameDeduplicator;
     private readonly MessageParser _messageParser;
     private readonly Action<ValidatedFrame, ModeSMessage?>? _onDataParsed;
@@ -83,6 +84,7 @@ public sealed class DeviceWorker : IDisposable
 
         // Initialize confidence tracker (shared across devices + MLAT, or create new for standalone)
         // Shared tracker enables MLAT to mark ICAOs as confident for all SDR workers
+        _ownsConfidenceTracker = confidenceTracker == null;
         _confidenceTracker = confidenceTracker ?? new IcaoConfidenceTracker(
             trackingConfig.ConfidenceLevel,
             trackingConfig.IcaoTimeoutSeconds);
@@ -757,6 +759,11 @@ public sealed class DeviceWorker : IDisposable
     {
         Stop();
         _demodulator.Dispose();
+
+        if (_ownsConfidenceTracker)
+        {
+            _confidenceTracker.Dispose();
+        }
     }
 
     /// <summary>Gets the configured device name.</summary>

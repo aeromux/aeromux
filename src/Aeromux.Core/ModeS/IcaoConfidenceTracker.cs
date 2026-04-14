@@ -43,13 +43,20 @@ namespace Aeromux.Core.ModeS;
 /// - Prevents unbounded dictionary growth
 /// - Typical memory: ~100-200 active ICAOs in normal environment
 ///
+/// Thread safety:
+/// - All public methods are thread-safe using ReaderWriterLockSlim
+/// - Read operations (IsConfident) allow concurrent access across workers
+/// - Write operations (TrackAndValidate, MarkAsConfident) are exclusive
+/// - Implements IDisposable to release the lock; dispose after all workers stop
+///
 /// References:
 /// - Professional Mode S decoders use similar confidence tracking to filter noise
 /// - Typical implementations require 3-10 detections before displaying aircraft
 /// </remarks>
-public sealed class IcaoConfidenceTracker
+public sealed class IcaoConfidenceTracker : IDisposable
 {
     private readonly Dictionary<uint, IcaoRecord> _icaoRecords = new();
+    private readonly ReaderWriterLockSlim _lock = new();  // Read lock for IsConfident (hot path), write lock for mutations
     private readonly ConfidenceLevel _requiredConfidence;
     private readonly TimeSpan _timeout;
     private readonly List<uint> _expiredKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
@@ -90,8 +97,18 @@ public sealed class IcaoConfidenceTracker
     /// </summary>
     /// <param name="icaoRaw">24-bit ICAO address as uint</param>
     /// <returns>True if ICAO has reached confidence threshold</returns>
-    public bool IsConfident(uint icaoRaw) =>
-        _icaoRecords.TryGetValue(icaoRaw, out IcaoRecord? record) && record.IsConfident;
+    public bool IsConfident(uint icaoRaw)
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            return _icaoRecords.TryGetValue(icaoRaw, out IcaoRecord? record) && record.IsConfident;
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
 
     /// <summary>
     /// Tracks a validated frame and determines if it meets confidence threshold.
@@ -105,46 +122,54 @@ public sealed class IcaoConfidenceTracker
     {
         ArgumentNullException.ThrowIfNull(frame);
 
-        _totalFrames++;
-
-        // Lazy cleanup: Remove expired ICAOs every 100 frames
-        // Spreads cleanup work over time without blocking or requiring separate task
-        // At typical rates: 2-5 frames/second = cleanup every 20-50 seconds
-        if (_totalFrames % 100 == 0)
+        _lock.EnterWriteLock();
+        try
         {
-            CleanupExpired(frame.Timestamp);
+            _totalFrames++;
+
+            // Lazy cleanup: Remove expired ICAOs every 100 frames
+            // Spreads cleanup work over time without blocking or requiring separate task
+            // At typical rates: 2-5 frames/second = cleanup every 20-50 seconds
+            if (_totalFrames % 100 == 0)
+            {
+                CleanupExpired(frame.Timestamp);
+            }
+
+            uint icao = frame.IcaoRaw;
+
+            // Get or create ICAO record
+            if (!_icaoRecords.TryGetValue(icao, out IcaoRecord? record))
+            {
+                record = new IcaoRecord(icao, frame.Timestamp, (int)_requiredConfidence);
+                _icaoRecords[icao] = record;
+            }
+
+            // Track detection
+            bool wasConfident = record.IsConfident;
+            record.IncrementDetections(frame);
+
+            // Check if just became confident (crossed threshold)
+            isNewConfirmedIcao = !wasConfident && record.IsConfident;
+            if (isNewConfirmedIcao)
+            {
+                _newConfirmedIcaos++;
+            }
+
+            // Only pass frames that meet confidence threshold
+            if (record.IsConfident)
+            {
+                _confidentFrames++;
+                return true;
+            }
+
+            // Track frames that didn't meet confidence threshold
+            _unconfidentFrames++;
+            return false;
         }
-
-        uint icao = frame.IcaoRaw;
-
-        // Get or create ICAO record
-        if (!_icaoRecords.TryGetValue(icao, out IcaoRecord? record))
+        finally
         {
-            record = new IcaoRecord(icao, frame.Timestamp, (int)_requiredConfidence);
-            _icaoRecords[icao] = record;
+            _lock.ExitWriteLock();
         }
-
-        // Track detection
-        bool wasConfident = record.IsConfident;
-        record.IncrementDetections(frame);
-
-        // Check if just became confident (crossed threshold)
-        isNewConfirmedIcao = !wasConfident && record.IsConfident;
-        if (isNewConfirmedIcao)
-        {
-            _newConfirmedIcaos++;
-        }
-
-        // Only pass frames that meet confidence threshold
-        if (record.IsConfident)
-        {
-            _confidentFrames++;
-            return true;
-        }
-
-        // Track frames that didn't meet confidence threshold
-        _unconfidentFrames++;
-        return false;
     }
 
     /// <summary>
@@ -191,17 +216,42 @@ public sealed class IcaoConfidenceTracker
     public long ExpiredIcaos => _expiredIcaos;
 
     /// <summary>Currently tracked ICAOs (active + unconfident)</summary>
-    public int TrackedIcaos => _icaoRecords.Count;
+    public int TrackedIcaos
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _icaoRecords.Count; }
+            finally { _lock.ExitReadLock(); }
+        }
+    }
 
     /// <summary>ICAOs meeting confidence threshold (subset of TrackedIcaos)</summary>
-    public int ConfirmedIcaos => _icaoRecords.Values.Count(r => r.IsConfident);
+    public int ConfirmedIcaos
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _icaoRecords.Values.Count(r => r.IsConfident); }
+            finally { _lock.ExitReadLock(); }
+        }
+    }
 
     /// <summary>Gets the set of confirmed ICAO addresses for deduplication across devices</summary>
-    public IEnumerable<uint> GetConfirmedIcaoAddresses() =>
-        _icaoRecords.Where(kvp => kvp.Value.IsConfident).Select(kvp => kvp.Key);
+    public uint[] GetConfirmedIcaoAddresses()
+    {
+        _lock.EnterReadLock();
+        try { return _icaoRecords.Where(kvp => kvp.Value.IsConfident).Select(kvp => kvp.Key).ToArray(); }
+        finally { _lock.ExitReadLock(); }
+    }
 
     /// <summary>Gets the set of all tracked ICAO addresses for deduplication across devices</summary>
-    public IEnumerable<uint> GetTrackedIcaoAddresses() => _icaoRecords.Keys;
+    public uint[] GetTrackedIcaoAddresses()
+    {
+        _lock.EnterReadLock();
+        try { return _icaoRecords.Keys.ToArray(); }
+        finally { _lock.ExitReadLock(); }
+    }
 
     /// <summary>
     /// Marks an ICAO as confident immediately without requiring detection threshold.
@@ -212,13 +262,24 @@ public sealed class IcaoConfidenceTracker
     /// <param name="timestamp">Timestamp to use for record creation/update</param>
     public void MarkAsConfident(uint icaoRaw, DateTime timestamp)
     {
-        if (!_icaoRecords.TryGetValue(icaoRaw, out IcaoRecord? record))
+        _lock.EnterWriteLock();
+        try
         {
-            record = new IcaoRecord(icaoRaw, timestamp, (int)_requiredConfidence);
-            _icaoRecords[icaoRaw] = record;
+            if (!_icaoRecords.TryGetValue(icaoRaw, out IcaoRecord? record))
+            {
+                record = new IcaoRecord(icaoRaw, timestamp, (int)_requiredConfidence);
+                _icaoRecords[icaoRaw] = record;
+            }
+            record.ForceConfident(timestamp);
         }
-        record.ForceConfident(timestamp);
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
     }
+
+    /// <summary>Releases the ReaderWriterLockSlim used for thread-safety.</summary>
+    public void Dispose() => _lock.Dispose();
 }
 
 /// <summary>

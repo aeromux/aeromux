@@ -54,7 +54,7 @@ public class PreambleDetectorTimingTests
     public void PreambleDetector_WithAllParameters_CreatesInstance()
     {
         // Arrange
-        var confidenceTracker = new IcaoConfidenceTracker(ConfidenceLevel.High, 60);
+        using var confidenceTracker = new IcaoConfidenceTracker(ConfidenceLevel.High, 60);
 
         // Act
         var detector = new PreambleDetector(

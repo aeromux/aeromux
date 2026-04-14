@@ -443,6 +443,7 @@ public sealed class ReceiverStream : IFrameStream
         }
 
         // Step 5: Dispose resources
+        _confidenceTracker?.Dispose();
         _internalCts?.Dispose();
         _startLock.Dispose();
     }

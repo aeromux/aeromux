@@ -423,6 +423,7 @@ public sealed class BeastStream : IFrameStream
         }
 
         _startLock.Dispose();
+        _confidenceTracker.Dispose();
 
         Log.Information("BeastStream disposed");
     }
