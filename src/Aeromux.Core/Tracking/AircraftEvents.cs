@@ -28,27 +28,3 @@ public class AircraftEventArgs : EventArgs
     /// </summary>
     public required Aircraft Aircraft { get; init; }
 }
-
-/// <summary>
-/// Event arguments for aircraft update events.
-/// Provides both previous and updated state for comparison.
-/// Used by OnAircraftUpdated event.
-/// </summary>
-/// <remarks>
-/// This event fires on EVERY frame update. Subscribers should compare Previous vs Updated
-/// to filter only the changes they care about (e.g., position changes, velocity changes).
-/// </remarks>
-public class AircraftUpdateEventArgs : EventArgs
-{
-    /// <summary>
-    /// The aircraft state before the update (immutable snapshot).
-    /// Use this to compare old values with new values.
-    /// </summary>
-    public required Aircraft Previous { get; init; }
-
-    /// <summary>
-    /// The aircraft state after the update (immutable snapshot).
-    /// This is the new current state stored in the tracker.
-    /// </summary>
-    public required Aircraft Updated { get; init; }
-}

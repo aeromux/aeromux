@@ -71,7 +71,7 @@ internal sealed class LiveTuiDisplay
         };
 
         // Log significant updates (typically for debug, currently does nothing)
-        tracker.OnAircraftUpdated += (_, e) =>
+        tracker.OnAircraftUpdated += (previous, updated) =>
         {
             // Example
             //

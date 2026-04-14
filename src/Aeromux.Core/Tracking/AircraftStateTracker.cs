@@ -92,11 +92,11 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// Fired when an aircraft's state is updated with new data.
     /// Provides both previous and updated state for comparison.
     /// Fired on EVERY frame update regardless of whether data actually changed.
-    /// Subscribers MUST compare Previous vs Updated properties to detect actual state changes
+    /// Subscribers MUST compare previous vs updated parameters to detect actual state changes
     /// and avoid redundant processing. Use this pattern instead of multiple specialized events
     /// for better performance and simpler event model.
     /// </summary>
-    public event EventHandler<AircraftUpdateEventArgs>? OnAircraftUpdated;
+    public event Action<Aircraft, Aircraft>? OnAircraftUpdated;
 
     /// <summary>
     /// Fired when a new aircraft is first detected and added to tracking.
@@ -298,12 +298,8 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         // Update history buffers
         updated = updated with { History = UpdateHistory(updated.History, frame, updated.Position, updated.Velocity, now) };
 
-        // Always fire update event (subscribers compare Previous vs Updated for filtering)
-        OnAircraftUpdated?.Invoke(this, new AircraftUpdateEventArgs
-        {
-            Previous = existing,
-            Updated = updated
-        });
+        // Always fire update event (subscribers compare previous vs updated for filtering)
+        OnAircraftUpdated?.Invoke(existing, updated);
 
         return updated;
     }

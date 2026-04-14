@@ -401,14 +401,14 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
                 }
             };
 
-            Tracker.OnAircraftUpdated += (sender, args) =>
+            Tracker.OnAircraftUpdated += (previous, updated) =>
             {
                 try
                 {
                     Interlocked.Increment(ref updatedCount);
-                    args.Previous.Should().NotBeNull();
-                    args.Updated.Should().NotBeNull();
-                    args.Updated.Status.TotalMessages.Should().BeGreaterThan(args.Previous.Status.TotalMessages);
+                    previous.Should().NotBeNull();
+                    updated.Should().NotBeNull();
+                    updated.Status.TotalMessages.Should().BeGreaterThan(previous.Status.TotalMessages);
                 }
                 catch
                 {

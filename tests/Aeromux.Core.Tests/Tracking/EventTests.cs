@@ -70,11 +70,11 @@ public class EventTests : AircraftStateTrackerTestsBase
         Aircraft? previousState = null;
         Aircraft? updatedState = null;
 
-        Tracker.OnAircraftUpdated += (sender, args) =>
+        Tracker.OnAircraftUpdated += (previous, updated) =>
         {
             updateCount++;
-            previousState = args.Previous;
-            updatedState = args.Updated;
+            previousState = previous;
+            updatedState = updated;
         };
 
         // Act - First frame creates aircraft (no update event)
@@ -97,7 +97,7 @@ public class EventTests : AircraftStateTrackerTestsBase
         // Arrange
         Tracker = CreateTracker();
         int updateCount = 0;
-        Tracker.OnAircraftUpdated += (sender, args) => updateCount++;
+        Tracker.OnAircraftUpdated += (previous, updated) => updateCount++;
 
         // Act
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");

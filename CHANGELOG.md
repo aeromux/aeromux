@@ -13,6 +13,7 @@ All notable changes to Aeromux will be documented in this file.
 - **Database Lookup Performance** — Removed unnecessary lock and pre-created the parameterized SQLite command in the aircraft database lookup service, eliminating per-lookup command allocation and lock overhead.
 - **Aircraft Tracking Performance** — Changed the aircraft state dictionary from string to `uint` ICAO keys, replacing per-lookup 6-character string hashing with single-instruction integer hashing on the 1,000+/sec update hot path.
 - **Comm-B Parsing Performance** — Replaced per-message `byte[]` allocation and `Array.Copy` for the 7-byte MB field with a zero-copy `ReadOnlySpan<byte>` slice into the existing frame data, eliminating a heap allocation per DF 20/21 message.
+- **Update Event Performance** — Replaced `EventHandler<AircraftUpdateEventArgs>` with `Action<Aircraft, Aircraft>` for the aircraft update event, eliminating a per-frame heap allocation on the 1,000+/sec update path.
 
 ## [0.6.0] — 2026-04-09
 

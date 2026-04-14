@@ -103,7 +103,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         };
 
         // Log significant updates (typically for debug, currently does nothing)
-        _aircraftTracker.OnAircraftUpdated += (sender, e) =>
+        _aircraftTracker.OnAircraftUpdated += (previous, updated) =>
         {
             // Example
             //

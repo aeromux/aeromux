@@ -65,10 +65,10 @@ public interface IAircraftStateTracker
 
     /// <summary>
     /// Fired when an aircraft's state is updated with new data.
-    /// Provides both previous and updated state for comparison.
-    /// Fired on EVERY frame update - subscribers should compare Previous vs Updated to filter changes.
+    /// Parameters are (previous, updated) aircraft state for comparison.
+    /// Fired on EVERY frame update - subscribers should compare previous vs updated to filter changes.
     /// </summary>
-    event EventHandler<AircraftUpdateEventArgs>? OnAircraftUpdated;
+    event Action<Aircraft, Aircraft>? OnAircraftUpdated;
 
     /// <summary>
     /// Fired when a new aircraft is first detected and added to tracking.
