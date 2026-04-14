@@ -302,11 +302,11 @@ public sealed partial class MessageParser
     /// <summary>
     /// Extracts a specified number of bits from a byte array starting at a given bit position.
     /// </summary>
-    /// <param name="data">Source byte array.</param>
+    /// <param name="data">Source byte data.</param>
     /// <param name="startBit">Starting bit position (1-indexed as per Mode S specification).</param>
     /// <param name="bitCount">Number of bits to extract.</param>
     /// <returns>Extracted value as integer.</returns>
-    private static int ExtractBits(byte[] data, int startBit, int bitCount)
+    private static int ExtractBits(ReadOnlySpan<byte> data, int startBit, int bitCount)
     {
         // Convert to 0-indexed
         int bitIndex = startBit - 1;

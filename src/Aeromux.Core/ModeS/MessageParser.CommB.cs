@@ -89,8 +89,7 @@ public sealed partial class MessageParser
 
         // Extract MB field (Message, Comm-B) - bits 33-88 (56 bits = 7 bytes)
         // Note: The bit alignment is handled by ExtractBits function within BDS parsers
-        byte[] mb = new byte[7];
-        Array.Copy(frame.Data, 4, mb, 0, 7);
+        ReadOnlySpan<byte> mb = frame.Data.AsSpan(4, 7);
 
         // Infer BDS code and parse data
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
@@ -155,8 +154,7 @@ public sealed partial class MessageParser
 
         // Extract MB field (Message, Comm-B) - bits 33-88 (56 bits = 7 bytes)
         // Note: The bit alignment is handled by ExtractBits function within BDS parsers
-        byte[] mb = new byte[7];
-        Array.Copy(frame.Data, 4, mb, 0, 7);
+        ReadOnlySpan<byte> mb = frame.Data.AsSpan(4, 7);
 
         // Infer BDS code and parse data
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
@@ -220,10 +218,10 @@ public sealed partial class MessageParser
     /// 6. Try MRAR registers (4,4/4,5) with FOM/status checks
     /// 7. Return Unknown if no match
     /// </remarks>
-    private (BdsCode BdsCode, BdsData? Data) InferBds(byte[] mb)
+    private (BdsCode BdsCode, BdsData? Data) InferBds(ReadOnlySpan<byte> mb)
     {
         // Check for empty response (all zeros or invalid)
-        bool allZeros = mb.All(t => t == 0);
+        bool allZeros = !mb.ContainsAnyExcept((byte)0);
 
         if (allZeros)
         {
@@ -331,7 +329,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 1,0 (Data link capability report).
     /// </summary>
-    private Bds10DataLinkCapability? TryParseBds10(byte[] mb)
+    private Bds10DataLinkCapability? TryParseBds10(ReadOnlySpan<byte> mb)
     {
         // BDS 1,0: First byte = 0x10
         if (mb[0] != 0x10)
@@ -372,7 +370,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 1,7 (Common usage GICB capability report).
     /// </summary>
-    private Bds17GicbCapability? TryParseBds17(byte[] mb)
+    private Bds17GicbCapability? TryParseBds17(ReadOnlySpan<byte> mb)
     {
         // BDS 1,7 validation per readsb lines 132-134:
         // Reserved bits 25-56 must all be zero
@@ -405,7 +403,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 2,0 (Aircraft identification).
     /// </summary>
-    private Bds20AircraftIdentification? TryParseBds20(byte[] mb)
+    private Bds20AircraftIdentification? TryParseBds20(ReadOnlySpan<byte> mb)
     {
         // BDS 2,0: First byte = 0x20
         if (mb[0] != 0x20)
@@ -447,7 +445,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 3,0 (ACAS Resolution Advisory).
     /// </summary>
-    private Bds30AcasResolutionAdvisory? TryParseBds30(byte[] mb)
+    private Bds30AcasResolutionAdvisory? TryParseBds30(ReadOnlySpan<byte> mb)
     {
         // BDS 3,0: First byte (VDS) = 0x30
         if (mb[0] != 0x30)
@@ -477,7 +475,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 4,0 (Selected vertical intention).
     /// </summary>
-    private Bds40SelectedVerticalIntention? TryParseBds40(byte[] mb)
+    private Bds40SelectedVerticalIntention? TryParseBds40(ReadOnlySpan<byte> mb)
     {
         // BDS 4,0: No fixed identifier, use status bits and range checks (per ICAO Annex 10 Vol IV)
         // Structure:
@@ -590,7 +588,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 4,4 (Meteorological routine report).
     /// </summary>
-    private Bds44MeteorologicalRoutine? TryParseBds44(byte[] mb)
+    private Bds44MeteorologicalRoutine? TryParseBds44(ReadOnlySpan<byte> mb)
     {
         // BDS 4,4 Meteorological Routine Air Report structure (per ICAO Annex 10 Vol IV):
         // - Bits 1-4: Figure of Merit / Source (4 bits, valid range: 0-4, no status bit)
@@ -731,7 +729,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 4,5 (Meteorological hazard report).
     /// </summary>
-    private Bds45MeteorologicalHazard? TryParseBds45(byte[] mb)
+    private Bds45MeteorologicalHazard? TryParseBds45(ReadOnlySpan<byte> mb)
     {
         // BDS 4,5 structure (simplified):
         // - Bit 1: Turbulence status
@@ -860,7 +858,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 5,0 (Track and turn report).
     /// </summary>
-    private Bds50TrackAndTurn? TryParseBds50(byte[] mb)
+    private Bds50TrackAndTurn? TryParseBds50(ReadOnlySpan<byte> mb)
     {
         // BDS 5,0 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Roll angle status
@@ -990,7 +988,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 5,3 (Air-referenced state vector).
     /// </summary>
-    private Bds53AirReferencedState? TryParseBds53(byte[] mb)
+    private Bds53AirReferencedState? TryParseBds53(ReadOnlySpan<byte> mb)
     {
         // BDS 5,3 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Magnetic heading status
@@ -1100,7 +1098,7 @@ public sealed partial class MessageParser
     /// <summary>
     /// Tries to parse BDS 6,0 (Heading and speed report).
     /// </summary>
-    private Bds60HeadingAndSpeed? TryParseBds60(byte[] mb)
+    private Bds60HeadingAndSpeed? TryParseBds60(ReadOnlySpan<byte> mb)
     {
         // BDS 6,0 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Magnetic heading status
