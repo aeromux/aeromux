@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Threading.Channels;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS;
@@ -31,7 +32,7 @@ namespace Aeromux.Core.Tracking;
 /// </summary>
 public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
 {
-    private readonly ConcurrentDictionary<string, Aircraft> _aircraft = new();
+    private readonly ConcurrentDictionary<uint, Aircraft> _aircraft = new();
     private readonly Timer _cleanupTimer;
     private TimeSpan _cleanupInterval = TimeSpan.FromSeconds(10);
     private readonly TrackingConfig _trackingConfig;
@@ -148,13 +149,13 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(frame);
 
-        string icao = frame.Frame.IcaoAddress;
+        uint icaoRaw = frame.Frame.IcaoRaw;
 
         // AddOrUpdate is atomic - thread-safe for concurrent updates
         _aircraft.AddOrUpdate(
-            icao,
-            _ => CreateNew(frame),           // Factory for new aircraft
-            (_, existing) => ApplyUpdate(existing, frame));  // Update function for existing
+            icaoRaw,
+            _ => CreateNew(frame), // Factory for new aircraft
+            (_, existing) => ApplyUpdate(existing, frame)); // Update function for existing
     }
 
     /// <summary>
@@ -179,7 +180,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <returns>Aircraft state if found and not expired, otherwise null</returns>
     public Aircraft? GetAircraft(string icao)
     {
-        if (_aircraft.TryGetValue(icao, out Aircraft? aircraft) && !aircraft.IsExpired(AircraftTimeout))
+        if (uint.TryParse(icao, NumberStyles.HexNumber, null, out uint icaoRaw) &&
+            _aircraft.TryGetValue(icaoRaw, out Aircraft? aircraft) &&
+            !aircraft.IsExpired(AircraftTimeout))
         {
             return aircraft;
         }
@@ -486,7 +489,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
             .Select(kvp => kvp.Key)
             .ToList();
 
-        foreach (string icao in expired)
+        foreach (uint icao in expired)
         {
             if (_aircraft.TryRemove(icao, out Aircraft? aircraft))
             {
