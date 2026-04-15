@@ -62,6 +62,30 @@ public sealed class CprDecoder
     private readonly TimeSpan _maxFrameAge = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// Maximum distance from receiver for a valid decoded position.
+    /// Positions beyond this range are rejected as implausible (likely CPR decode errors from bit corruption).
+    /// 300 NM is the practical maximum range for Mode S reception at typical antenna installations.
+    /// </summary>
+    private const double MaxReceiverRangeNm = 300.0;
+
+    /// <summary>
+    /// Receiver location for range-based position filtering.
+    /// Null when receiver location is not configured — range check is skipped.
+    /// </summary>
+    private GeographicCoordinate? _receiverLocation;
+
+    /// <summary>
+    /// Sets the receiver location for range-based position filtering.
+    /// Positions decoded beyond 300 NM from receiver are rejected as implausible.
+    /// If not set, range filtering is disabled and all decoded positions are accepted.
+    /// </summary>
+    /// <param name="receiverLocation">Receiver geographic coordinates.</param>
+    public void SetReceiverLocation(GeographicCoordinate receiverLocation)
+    {
+        _receiverLocation = receiverLocation;
+    }
+
+    /// <summary>
     /// Decodes CPR-encoded position from airborne position message.
     /// Stores frame and attempts global decoding when even+odd pair available.
     /// </summary>
@@ -122,12 +146,21 @@ public sealed class CprDecoder
         // The newer frame is more likely to reflect current aircraft position
         bool useOdd = state.OddFrame.Timestamp > state.EvenFrame.Timestamp;
 
-        return DecodeCprGlobal(
+        GeographicCoordinate? result = DecodeCprGlobal(
             state.EvenFrame.Lat,
             state.EvenFrame.Lon,
             state.OddFrame.Lat,
             state.OddFrame.Lon,
             useOdd);
+
+        // Range check: reject positions beyond 300 NM from receiver
+        if (result != null && _receiverLocation != null &&
+            _receiverLocation.DistanceToNauticalMiles(result) > MaxReceiverRangeNm)
+        {
+            return null;
+        }
+
+        return result;
     }
 
     /// <summary>

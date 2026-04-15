@@ -98,8 +98,11 @@ public sealed partial class MessageParser
     /// Must be called if receiver location is configured in settings.
     /// </summary>
     /// <param name="receiverLocation">Receiver geographic coordinates.</param>
-    public void SetReceiverLocation(GeographicCoordinate receiverLocation) =>
+    public void SetReceiverLocation(GeographicCoordinate receiverLocation)
+    {
         _surfaceCprDecoder.SetReceiverLocation(receiverLocation);
+        _cprDecoder.SetReceiverLocation(receiverLocation);
+    }
 
     /// <summary>
     /// Parses a validated frame into a structured message.

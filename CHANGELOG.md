@@ -15,6 +15,10 @@ All notable changes to Aeromux will be documented in this file.
 - **Comm-B Parsing Performance** — Replaced per-message `byte[]` allocation and `Array.Copy` for the 7-byte MB field with a zero-copy `ReadOnlySpan<byte>` slice into the existing frame data, eliminating a heap allocation per DF 20/21 message.
 - **Update Event Performance** — Replaced `EventHandler<AircraftUpdateEventArgs>` with `Action<Aircraft, Aircraft>` for the aircraft update event, eliminating a per-frame heap allocation on the 1,000+/sec update path.
 
+### Added
+
+- **CPR Position Validation** — Three-layer position validation to eliminate wildly incorrect aircraft positions (appearing as long straight lines across the map) caused by CPR global decode errors from bit corruption passing CRC. Layer 1: receiver range check rejects decoded positions beyond 300 NM from receiver (skipped when receiver location is not configured). Layer 2: speed/distance plausibility check validates that position changes are physically possible given elapsed time and aircraft speed. Layer 3: position persistence counter requires 4 consecutive implausible positions before overwriting a known good position, preventing single bad decodes from corrupting tracks.
+
 ### Fixed
 
 - **ICAO Confidence Tracker Thread Safety** — Fixed `NullReferenceException` crash in `IcaoConfidenceTracker.CleanupExpired` caused by concurrent dictionary access from multiple SDR device workers sharing the same tracker instance. Added `ReaderWriterLockSlim` to allow concurrent read access on the high-frequency `IsConfident` hot path while serializing write operations.

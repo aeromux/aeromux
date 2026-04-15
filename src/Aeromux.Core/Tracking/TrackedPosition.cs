@@ -153,4 +153,12 @@ public sealed record TrackedPosition
     /// Once set to true, this flag is never reset to false during the aircraft's tracking lifetime.
     /// </summary>
     public bool HadMlatPosition { get; init; }
+
+    /// <summary>
+    /// Counts consecutive position updates that failed the speed/distance plausibility check.
+    /// When this counter reaches the persistence threshold (4), the new position is accepted
+    /// and the counter resets — preventing a stale good position from permanently blocking updates.
+    /// Reset to 0 on every plausible position update.
+    /// </summary>
+    public int ImplausibleCount { get; init; }
 }

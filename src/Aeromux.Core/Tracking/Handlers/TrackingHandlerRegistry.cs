@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.Configuration;
+
 namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
@@ -36,14 +38,15 @@ public sealed class TrackingHandlerRegistry
     /// Initializes the registry and registers all tracking handlers.
     /// Handlers are registered by their MessageType for fast lookup.
     /// </summary>
-    public TrackingHandlerRegistry()
+    /// <param name="trackingConfig">Tracking configuration passed to handlers that require it (e.g., timeout-based thresholds).</param>
+    public TrackingHandlerRegistry(TrackingConfig trackingConfig)
     {
         // Identification and status handlers
         Register(new AircraftIdentificationHandler());
         Register(new AircraftStatusHandler());
 
         // Position handlers
-        Register(new AirbornePositionHandler());
+        Register(new AirbornePositionHandler(trackingConfig));
         Register(new SurfacePositionHandler());
 
         // Velocity handler

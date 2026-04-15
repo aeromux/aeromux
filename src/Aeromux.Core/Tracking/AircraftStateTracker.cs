@@ -50,7 +50,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     public AircraftStateTracker(TrackingConfig trackingConfig, IAircraftDatabaseLookup? databaseLookup = null)
     {
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
-        _handlerRegistry = new TrackingHandlerRegistry();
+        _handlerRegistry = new TrackingHandlerRegistry(trackingConfig);
         _databaseLookup = databaseLookup;
 
         // Initialize timeout from config (convert seconds to TimeSpan)

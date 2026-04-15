@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
@@ -42,10 +43,40 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <item>Position.GeometricAltitude: GNSS altitude from TC 20-22 (if present)</item>
 /// <item>Position.IsOnGround: Set to false (airborne)</item>
 /// <item>Position.LastUpdate: Timestamp when position was updated</item>
+/// <item>Position.ImplausibleCount: Speed/distance plausibility counter (reset on good position, incremented on bad)</item>
 /// </list>
 /// </remarks>
 public sealed class AirbornePositionHandler : ITrackingHandler
 {
+    /// <summary>
+    /// Default airborne speed assumption (knots) when no velocity data is available.
+    /// 900 knots covers fast jets and provides a generous upper bound for plausibility checks.
+    /// </summary>
+    private const int DefaultAirborneSpeedKnots = 900;
+
+    /// <summary>
+    /// Number of consecutive implausible positions required before accepting a new position anyway.
+    /// Prevents a stale good position from permanently blocking updates when the aircraft has legitimately moved.
+    /// </summary>
+    private const int PositionPersistenceThreshold = 4;
+
+    /// <summary>
+    /// Time threshold (seconds) after which the speed check is bypassed.
+    /// Computed as 50% of the configured aircraft timeout. If the last position is older than this,
+    /// the position is considered stale and the new position is accepted unconditionally.
+    /// </summary>
+    private readonly double _speedCheckBypassSeconds;
+
+    /// <summary>
+    /// Initializes the handler with tracking configuration for speed check threshold calculation.
+    /// </summary>
+    /// <param name="trackingConfig">Tracking configuration providing aircraft timeout for speed check bypass threshold.</param>
+    public AirbornePositionHandler(TrackingConfig trackingConfig)
+    {
+        ArgumentNullException.ThrowIfNull(trackingConfig);
+        _speedCheckBypassSeconds = trackingConfig.AircraftTimeoutSeconds / 2.0;
+    }
+
     public Type MessageType => typeof(AirbornePosition);
 
     public Aircraft Apply(
@@ -111,15 +142,51 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             }
         }
 
+        // Determine new coordinate with speed check + persistence filtering
+        // This prevents CPR decode errors (from bit corruption passing CRC) from producing
+        // wildly incorrect positions that appear as long straight lines on the map
+        GeographicCoordinate? newCoordinate = position.Coordinate;
+        int implausibleCount = position.ImplausibleCount;
+
+        if (msg.Position != null)
+        {
+            if (position.Coordinate == null || position.LastUpdate == null)
+            {
+                // First position — accept unconditionally
+                newCoordinate = msg.Position;
+                implausibleCount = 0;
+            }
+            else
+            {
+                double elapsed = (timestamp - position.LastUpdate.Value).TotalSeconds;
+                if (IsPositionPlausible(position.Coordinate, msg.Position, elapsed, aircraft.Velocity.Speed?.Knots))
+                {
+                    // Plausible — accept
+                    newCoordinate = msg.Position;
+                    implausibleCount = 0;
+                }
+                else if (implausibleCount >= PositionPersistenceThreshold)
+                {
+                    // Too many consecutive implausible positions — accept anyway (old position likely stale)
+                    newCoordinate = msg.Position;
+                    implausibleCount = 0;
+                }
+                else
+                {
+                    // Implausible — keep old coordinate, increment counter
+                    implausibleCount++;
+                }
+            }
+        }
+
         // Update position with all fields
-        // Coordinate from CPR decoding (if successfully decoded)
         // Single Antenna flag from bit 40
         // IsOnGround always false for airborne messages
         // PositionSource tracks where the position came from (Sdr, Beast, or Mlat)
         // HadMlatPosition is set to true if this is an MLAT position or was previously true
         position = position with
         {
-            Coordinate = msg.Position ?? position.Coordinate,
+            Coordinate = newCoordinate,
             BarometricAltitude = barometricAltitude,
             GeometricAltitude = geometricAltitude,
             GeometricBarometricDelta = geometricBarometricDelta,
@@ -127,9 +194,39 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             IsOnGround = false,
             LastUpdate = timestamp,
             PositionSource = frame.Source,
-            HadMlatPosition = position.HadMlatPosition || frame.Source == FrameSource.Mlat
+            HadMlatPosition = position.HadMlatPosition || frame.Source == FrameSource.Mlat,
+            ImplausibleCount = implausibleCount
         };
 
         return aircraft with { Position = position };
+    }
+
+    /// <summary>
+    /// Checks whether a position update is physically plausible based on distance vs. speed and elapsed time.
+    /// Returns true if the position should be accepted, false if it appears to be a CPR decode error.
+    /// </summary>
+    /// <param name="previous">The aircraft's current known position.</param>
+    /// <param name="candidate">The newly decoded position to validate.</param>
+    /// <param name="elapsedSeconds">Seconds since the last position update.</param>
+    /// <param name="speedKnots">Aircraft's known speed in knots, or null if unavailable.</param>
+    /// <returns>True if the position change is plausible given the aircraft's speed and elapsed time.</returns>
+    private bool IsPositionPlausible(
+        GeographicCoordinate previous,
+        GeographicCoordinate candidate,
+        double elapsedSeconds,
+        int? speedKnots)
+    {
+        // Stale position — skip speed check, accept unconditionally
+        if (elapsedSeconds > _speedCheckBypassSeconds)
+        {
+            return true;
+        }
+
+        int speed = speedKnots ?? DefaultAirborneSpeedKnots;
+
+        // Max distance aircraft could travel: (elapsed + 1s jitter tolerance) * speed in NM
+        double maxDistanceNm = (elapsedSeconds + 1.0) * speed / 3600.0;
+
+        return previous.DistanceToNauticalMiles(candidate) <= maxDistanceNm;
     }
 }
