@@ -19,6 +19,7 @@ using System.Net.Sockets;
 using System.Threading.Channels;
 using Aeromux.Core.ModeS;
 using Aeromux.Core.Tracking;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Network.Enums;
 using Aeromux.Infrastructure.Streaming;
 using Aeromux.Infrastructure.Network.Protocols;
@@ -270,6 +271,14 @@ public sealed class TcpBroadcaster : IAsyncDisposable
             {
                 case BroadcastFormat.Beast:
                 {
+                    // Skip MLAT-computed positions: mlat-client sends synthetic DF 17 frames
+                    // with a magic timestamp back on port 30104. If re-broadcast on the Beast
+                    // feed port (30005), mlat-client detects the loop and warns "MLAT magic timestamp".
+                    if (data.Source == FrameSource.Mlat)
+                    {
+                        continue;
+                    }
+
                     ReadOnlyMemory<byte> encoded = _beastEncoder!.Encode(data.Frame);
                     messagesToBroadcast.Add(encoded);
                     break;
