@@ -200,12 +200,12 @@ public static class BeastTestData
 
     /// <summary>
     /// Creates a 48-bit big-endian timestamp from a DateTime.
-    /// Uses the same formula as BeastEncoder: ticks * 12.0 / TimeSpan.TicksPerMicrosecond
+    /// Uses the same integer formula as BeastEncoder: Ticks * 6 / 5 (12 MHz from 100ns ticks).
     /// Masks to 48 bits to match BeastEncoder behavior.
     /// </summary>
     public static byte[] CreateTimestamp(DateTime dateTime)
     {
-        ulong timestamp12MHz = (ulong)(dateTime.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        ulong timestamp12MHz = (ulong)(dateTime.Ticks * 6 / 5);
         timestamp12MHz &= 0xFFFFFFFFFFFF;  // Mask to 48 bits
         byte[] timestamp = new byte[6];
 

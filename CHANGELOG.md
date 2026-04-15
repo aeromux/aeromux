@@ -18,6 +18,8 @@ All notable changes to Aeromux will be documented in this file.
 ### Fixed
 
 - **ICAO Confidence Tracker Thread Safety** — Fixed `NullReferenceException` crash in `IcaoConfidenceTracker.CleanupExpired` caused by concurrent dictionary access from multiple SDR device workers sharing the same tracker instance. Added `ReaderWriterLockSlim` to allow concurrent read access on the high-frequency `IsConfident` hot path while serializing write operations.
+- **Beast Timestamp MLAT Precision** — Fixed mlat-client reporting "clock unstable" by replacing floating-point timestamp conversion in BeastEncoder with integer arithmetic. The previous `double` conversion of absolute `DateTime.Ticks` (~6×10¹⁷) exceeded the 52-bit mantissa precision, introducing ~10 μs jitter in 12 MHz Beast timestamps. Integer arithmetic (`Ticks × 6 / 5`) reduces worst-case error to 83 ns.
+- **Beast Parser Stream Resynchronization** — Fixed BeastParser silently consuming valid frame data when encountering unknown Beast message types. The parser now skips unrecognized types and rescans for the next frame start marker, preventing stream desync from corrupted or unsupported messages.
 
 ## [0.6.0] — 2026-04-09
 

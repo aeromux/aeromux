@@ -153,6 +153,15 @@ public sealed class BeastParser
                 continue; // Message consumed, proceed to next Beast message
             }
 
+            // Skip unknown message types to maintain stream synchronization.
+            // Known types: '2' (short Mode S), '3' (long Mode S), 0xe3 (receiver ID, handled above).
+            // Type '1' (Mode A/C) is defined in Beast protocol but not useful for Mode S decoding.
+            // On unknown type, discard and resume scanning for next ESC marker.
+            if (buffer[1] != '2' && buffer[1] != '3')
+            {
+                continue;
+            }
+
             bool isLong = buffer[1] == '3';
             int frameLength = isLong ? 14 : 7;
 

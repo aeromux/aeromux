@@ -242,6 +242,7 @@ public class BeastEncoderTests
     [Theory]
     [InlineData(0)]  // DateTime.MinValue equivalent (0 ticks)
     [InlineData(638400000000000000)]  // 2024-01-01 12:00:00 UTC
+    [InlineData(638797920000000000)]  // 2026-04-15 00:00:00 UTC — realistic value for MLAT precision
     public void Encode_Timestamp_12MHzConversion(long ticks)
     {
         // Arrange
@@ -255,8 +256,8 @@ public class BeastEncoderTests
         // Act
         ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
-        // Assert: Verify the timestamp conversion formula
-        ulong expected12MHz = (ulong)(ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        // Assert: Verify the timestamp conversion formula (integer arithmetic)
+        ulong expected12MHz = (ulong)(ticks * 6 / 5);
 
         // Verify output has correct structure
         encoded.Span[0].Should().Be(BeastTestData.ESC, "first byte should be frame marker");
@@ -284,8 +285,8 @@ public class BeastEncoderTests
         ReadOnlyMemory<byte> encoded = encoder.Encode(frame);
 
         // Assert: Verify big-endian ordering (MSB first)
-        // Calculate expected absolute 12 MHz timestamp
-        long timestamp12MHz = (long)(knownTimestamp.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        // Calculate expected absolute 12 MHz timestamp (integer arithmetic)
+        long timestamp12MHz = knownTimestamp.Ticks * 6 / 5;
         ulong timestamp48bit = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;  // Mask to 48 bits
 
         // Extract expected bytes (big-endian, MSB first)
@@ -298,6 +299,56 @@ public class BeastEncoderTests
         // Timestamp starts at index 2 (after ESC + type)
         // Verify at least the first few bytes match (accounting for potential escaping)
         encoded.Span[2].Should().Be(expectedBytes[0], "MSB should be first");
+    }
+
+    [Fact]
+    public void Encode_ConsecutiveTimestamps_ExactRelativeSpacing()
+    {
+        // Arrange: Two frames 1 ms apart at a realistic 2026 timestamp.
+        // MLAT requires that the 12 MHz delta between consecutive frames accurately
+        // reflects real elapsed time. 1 ms = 12,000 counts at 12 MHz.
+        var encoder = new BeastEncoder();
+        var baseTime = new DateTime(2026, 4, 15, 10, 20, 40, DateTimeKind.Utc);
+        var frameA = _frameBuilder
+            .WithHexData(BeastTestData.NoEscapeBytes)
+            .WithTimestamp(baseTime)
+            .WithSignalStrength(100)
+            .Build();
+        var frameB = _frameBuilder
+            .WithHexData(BeastTestData.NoEscapeBytes)
+            .WithTimestamp(baseTime.AddMilliseconds(1))
+            .WithSignalStrength(100)
+            .Build();
+
+        // Act: ToArray() each result since BeastEncoder reuses its internal buffer
+        byte[] encodedA = encoder.Encode(frameA).ToArray();
+        byte[] encodedB = encoder.Encode(frameB).ToArray();
+
+        // Assert: Extract 12 MHz timestamps and verify delta is exactly 12,000
+        // Using NoEscapeBytes data + signal 100 (sqrt(100/255)*255 ≈ 160, not 0x1A),
+        // so timestamp bytes start at offset 2 with no escaping interference.
+        ulong tsA = Extract48BitTimestamp(encodedA);
+        ulong tsB = Extract48BitTimestamp(encodedB);
+
+        long delta = (long)(tsB - tsA);
+        delta.Should().Be(12_000, "1 ms at 12 MHz should be exactly 12,000 counts");
+    }
+
+    /// <summary>
+    /// Extracts the 48-bit big-endian timestamp from an encoded Beast frame.
+    /// Assumes no escape bytes in the timestamp region (use with NoEscapeBytes test data).
+    /// </summary>
+    /// <param name="encoded">Raw Beast-encoded frame bytes</param>
+    /// <returns>48-bit timestamp as ulong (big-endian decoded)</returns>
+    private static ulong Extract48BitTimestamp(ReadOnlySpan<byte> encoded)
+    {
+        // Timestamp starts at offset 2 (after ESC + type byte)
+        ulong ts = 0;
+        for (int i = 0; i < 6; i++)
+        {
+            ts = (ts << 8) | encoded[2 + i];
+        }
+        return ts;
     }
 
     // ======================================================================================

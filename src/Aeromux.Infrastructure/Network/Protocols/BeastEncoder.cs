@@ -36,7 +36,8 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// which undoes the escaping during parsing.
 ///
 /// Timestamp Encoding:
-/// Timestamps are encoded as absolute 12 MHz counters from the frame's DateTime.Ticks value.
+/// Timestamps are encoded as absolute 12 MHz counters from the frame's DateTime.Ticks value
+/// using integer arithmetic (Ticks × 6 / 5) to avoid floating-point precision loss.
 /// The high-precision timestamps come from StopwatchTimeProvider in the frame detection pipeline.
 /// Masked to 48 bits for Beast protocol (wraps every ~271 days, acceptable for real-time operation).
 /// Beast receivers handle wrapping automatically during decoding.
@@ -97,13 +98,14 @@ public class BeastEncoder
         // Write message type indicator ('2' for short 56-bit frames, '3' for long 112-bit frames)
         output[pos++] = isLong ? (byte)'3' : (byte)'2';
 
-        // Convert absolute timestamp to 12 MHz counter
-        // Frame timestamp has sub-millisecond precision from StopwatchTimeProvider
-        // DateTime.Ticks is in 100ns units, convert to 12 MHz (1/12,000,000 second units)
-        // Beast protocol uses 12 MHz sampling rate (standard for Mode S receivers like dump1090/readsb)
-        // because it provides sufficient resolution for timestamping Mode S pulses (0.5 μs pulse width)
-        // Conversion: Ticks (100ns) → Microseconds (/10) → 12 MHz samples (×12)
-        long timestamp12MHz = (long)(frame.Timestamp.Ticks * 12.0 / TimeSpan.TicksPerMicrosecond);
+        // Convert absolute timestamp to 12 MHz counter using integer arithmetic.
+        // DateTime.Ticks are 100ns units; 12 MHz = 12 counts per μs = 1.2 counts per tick.
+        // Integer ratio: 6 counts per 5 ticks (equivalent to ×12/10, reduces intermediate value vs ×12 to avoid overflow for far-future dates).
+        // CRITICAL: Floating-point arithmetic (Ticks * 12.0 / 10) loses precision for absolute
+        // DateTime values (~6×10^17 ticks) because double has only 52-bit mantissa — the ULP
+        // at that magnitude is ~128 ticks, introducing ~10 μs jitter that breaks MLAT clock sync.
+        // Integer arithmetic has at most 1 count (83 ns) truncation error. No overflow until ~year 4600.
+        long timestamp12MHz = frame.Timestamp.Ticks * 6 / 5;
 
         // Mask to 48 bits (Beast protocol limitation)
         // Wraps every ~271 days from an arbitrary point - Beast receivers handle this
