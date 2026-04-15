@@ -200,18 +200,25 @@ public static class BeastTestData
 
     /// <summary>
     /// Creates a 48-bit big-endian timestamp from a DateTime.
-    /// Uses the same integer formula as BeastEncoder: Ticks * 6 / 5 (12 MHz from 100ns ticks).
-    /// Masks to 48 bits to match BeastEncoder behavior.
+    /// Converts Ticks to 12 MHz counts for parser test streams.
     /// </summary>
     public static byte[] CreateTimestamp(DateTime dateTime)
     {
-        ulong timestamp12MHz = (ulong)(dateTime.Ticks * 6 / 5);
-        timestamp12MHz &= 0xFFFFFFFFFFFF;  // Mask to 48 bits
+        return CreateTimestamp(dateTime.Ticks * 6 / 5);
+    }
+
+    /// <summary>
+    /// Creates a 48-bit big-endian timestamp from an explicit 12 MHz value.
+    /// Masks to 48 bits to match Beast protocol.
+    /// </summary>
+    public static byte[] CreateTimestamp(long timestamp12MHz)
+    {
+        ulong masked = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;
         byte[] timestamp = new byte[6];
 
         for (int i = 0; i < 6; i++)
         {
-            timestamp[i] = (byte)(timestamp12MHz >> (40 - (i * 8)));
+            timestamp[i] = (byte)(masked >> (40 - (i * 8)));
         }
 
         return timestamp;

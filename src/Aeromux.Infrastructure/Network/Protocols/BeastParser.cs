@@ -29,14 +29,15 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// Beast Binary Format Parsing:
 /// - Reads escape byte (0x1A) to identify frame start
 /// - Reads message type ('2' for short 7-byte, '3' for long 14-byte frames)
-/// - Reads 48-bit timestamp (12 MHz counter, big-endian) - consumed but not used
+/// - Reads 48-bit timestamp (12 MHz counter, big-endian) - preserved in Timestamp12MHz for relay
 /// - Reads signal level (0-255 relative magnitude)
 /// - Reads frame data with escape sequence handling (0x1A 0x1A → 0x1A)
 ///
-/// Timestamp Handling:
-/// Beast protocol encodes timestamps relative to sender's reference time (typically app start).
-/// We cannot reconstruct absolute time without knowing the sender's reference point.
-/// ValidatedFrame.Timestamp is set to reception time (DateTime.UtcNow) for logging and display.
+/// Timestamp Handling (dual-timestamp approach):
+/// The 48-bit 12 MHz wire timestamp is preserved in Timestamp12MHz for Beast relay to mlat-client.
+/// ValidatedFrame.Timestamp is set to reception time (DateTime.UtcNow) for logging, display, and age calculation.
+/// Beast protocol encodes timestamps relative to sender's reference time (typically app start),
+/// so we cannot reconstruct absolute time — but the wire value is sufficient for MLAT TDOA.
 ///
 /// ICAO Address Extraction:
 /// Uses ValidatedFrameFactory to properly extract ICAO for both PI and AP modes.
@@ -197,6 +198,14 @@ public sealed class BeastParser
                 break; // Incomplete timestamp
             }
 
+            // Reconstruct 48-bit 12 MHz timestamp from big-endian bytes.
+            // Preserved for Beast relay — enables timestamp-accurate forwarding to mlat-client.
+            long wireTimestamp12MHz = 0;
+            for (int i = 0; i < 6; i++)
+            {
+                wireTimestamp12MHz = (wireTimestamp12MHz << 8) | timestampBytes[i];
+            }
+
             // Step 4: Read signal strength indicator (0-255) with escape handling
             // CRITICAL: Signal byte can also be 0x1A and must be unescaped
             bytesRead = await stream.ReadAsync(buffer.AsMemory(0, 1), cancellationToken);
@@ -250,10 +259,8 @@ public sealed class BeastParser
                 frameData[dataPos++] = b;
             }
 
-            // Step 6: Use reception time for timestamp
-            // Beast timestamps are sender-relative (12MHz counter from sender's start time)
-            // We cannot reconstruct absolute time without knowing the sender's reference point
-            // Reception time is appropriate for logging, display, and frame correlation
+            // Step 6: Use reception time for DateTime timestamp (logging, display, age calculation).
+            // The 12 MHz wire timestamp is preserved separately in Timestamp12MHz for Beast relay.
             DateTime timestamp = DateTime.UtcNow;
 
             // Step 7: Decode signal strength by reversing Beast encoder's sqrt transform
@@ -265,7 +272,7 @@ public sealed class BeastParser
 
             // Step 8: Create ValidatedFrame using ValidatedFrameFactory
             // This properly handles both PI mode (ICAO in AA field) and AP mode (ICAO in CRC)
-            var rawFrame = new RawFrame(frameData, timestamp, signalStrength);
+            var rawFrame = new RawFrame(frameData, timestamp, wireTimestamp12MHz, signalStrength);
             ValidatedFrame? validatedFrame = _validatedFrameFactory.ValidateFrame(rawFrame, signalStrength);
 
             // Track parsing statistics

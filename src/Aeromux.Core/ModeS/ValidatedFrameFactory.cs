@@ -86,14 +86,14 @@ public sealed class ValidatedFrameFactory
         if (TryValidate(data, isPIMode, out string? icaoAddress, out uint icaoRaw))
         {
             _framesValid++;
-            return new ValidatedFrame(data, rawFrame.Timestamp, icaoRaw, icaoAddress!, signalStrength, false);
+            return new ValidatedFrame(data, rawFrame.Timestamp, rawFrame.Timestamp12MHz, icaoRaw, icaoAddress!, signalStrength, false);
         }
 
         // Try single-bit error correction (only for PI mode - AP mode has no validation)
         if (isPIMode && TryCorrectSingleBitError(data, out icaoAddress, out icaoRaw))
         {
             _framesCorrected++;
-            return new ValidatedFrame(data, rawFrame.Timestamp, icaoRaw, icaoAddress!, signalStrength, true);
+            return new ValidatedFrame(data, rawFrame.Timestamp, rawFrame.Timestamp12MHz, icaoRaw, icaoAddress!, signalStrength, true);
         }
 
         // Frame is corrupted beyond repair

@@ -70,6 +70,13 @@ public sealed class PreambleDetector
     /// </summary>
     private const double TicksPerSample = (double)TimeSpan.TicksPerSecond / SampleRate;
 
+    /// <summary>
+    /// Multiplier to convert sample count to 12 MHz Beast timestamp counts.
+    /// At 2.4 MSPS: 12,000,000 / 2,400,000 = 5 counts per sample.
+    /// Used for MLAT-accurate Beast timestamps tied to the radio crystal, not wall clock.
+    /// </summary>
+    private const int SamplesTo12MHz = 12_000_000 / SampleRate;
+
     // Statistics
     private long _preambleCandidates;
     private long _framesExtracted;
@@ -105,6 +112,11 @@ public sealed class PreambleDetector
     /// Captured once per buffer in DeviceWorker via StopwatchTimeProvider.
     /// Per-frame timestamps are computed as: bufferTimestamp + (samplePosition - prefixLength) x ticksPerSample.
     /// </param>
+    /// <param name="bufferStartSampleCount">
+    /// Cumulative sample count at the start of this buffer (before incrementing by buffer size).
+    /// Used to compute 12 MHz Beast timestamps: (bufferStartSampleCount + sampleOffset) × 5.
+    /// Tied to the RTL-SDR crystal oscillator for MLAT-accurate, jitter-free timestamps.
+    /// </param>
     /// <returns>List of successfully extracted and validated raw frames.</returns>
     /// <remarks>
     /// <para>
@@ -116,7 +128,8 @@ public sealed class PreambleDetector
     /// </remarks>
     public List<RawFrame> DetectAndExtract(
         SignalProcessing.IQDemodulator.MagnitudeBuffer magnitudeBuffer,
-        DateTime bufferTimestamp)
+        DateTime bufferTimestamp,
+        long bufferStartSampleCount)
     {
         ArgumentNullException.ThrowIfNull(magnitudeBuffer);
 
@@ -164,7 +177,7 @@ public sealed class PreambleDetector
                 int testPos = pa + offset;
 
                 // Full phase correlation and frame extraction (same as scalar path)
-                RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, out bool hadPreamble);
+                RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, bufferStartSampleCount, out bool hadPreamble);
 
                 if (hadPreamble)
                 {
@@ -217,7 +230,7 @@ public sealed class PreambleDetector
                     m[testPos + 12] > m[testPos + 15])
                 {
                     // Pre-check passed — run full phase correlation and frame extraction
-                    RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, out bool hadPreamble);
+                    RawFrame? frame = DetectAndExtractWithPhases(m, testPos, bufferTimestamp, bufferStartSampleCount, out bool hadPreamble);
 
                     if (hadPreamble)
                     {
@@ -335,10 +348,11 @@ public sealed class PreambleDetector
     /// <param name="m">Magnitude sample buffer</param>
     /// <param name="pos">Suspected preamble start position in magnitude buffer</param>
     /// <param name="bufferTimestamp">Wall-clock anchor for the current IQ buffer</param>
+    /// <param name="bufferStartSampleCount">Cumulative sample count at buffer start for 12 MHz Beast timestamp computation</param>
     /// <param name="hadPreamble">Output: true if at least one phase exceeded threshold (indicates valid preamble signal)</param>
     /// <returns>Best extracted frame, or null if all phases failed or were rejected</returns>
     private RawFrame? DetectAndExtractWithPhases(
-        ReadOnlySpan<ushort> m, int pos, DateTime bufferTimestamp, out bool hadPreamble)
+        ReadOnlySpan<ushort> m, int pos, DateTime bufferTimestamp, long bufferStartSampleCount, out bool hadPreamble)
     {
         // Local noise estimation from 5 valley samples (preamble low-points)
         // Samples at offsets 5, 8, 16, 17, 18 represent expected low-magnitude regions in preamble
@@ -407,7 +421,8 @@ public sealed class PreambleDetector
             // Both cases produce correct timestamps relative to bufferTimestamp.
             int sampleOffset = pos - SignalProcessing.IQDemodulator.PrefixSamples;
             DateTime frameTimestamp = bufferTimestamp.AddTicks((long)(sampleOffset * TicksPerSample));
-            return new RawFrame(bestMessage, frameTimestamp, bestSignalStrength);
+            long timestamp12MHz = (bufferStartSampleCount + sampleOffset) * SamplesTo12MHz;
+            return new RawFrame(bestMessage, frameTimestamp, timestamp12MHz, bestSignalStrength);
         }
 
         // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)
@@ -465,7 +480,7 @@ public sealed class PreambleDetector
         }
 
         // Validate message with CRC (signal strength deferred until best phase selected)
-        var rawFrame = new RawFrame(buffer, default, 0.0);
+        var rawFrame = new RawFrame(buffer, default, 0L, 0.0);
         ValidatedFrame? validated = _validatedFrameFactory.ValidateFrame(rawFrame, 0.0);
 
         int score;

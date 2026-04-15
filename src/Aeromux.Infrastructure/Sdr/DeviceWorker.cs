@@ -324,11 +324,15 @@ public sealed class DeviceWorker : IDisposable
 
             try
             {
+                // Capture cumulative sample count BEFORE incrementing for this buffer.
+                // PreambleDetector uses this to compute 12 MHz Beast timestamps:
+                // (bufferStartSamples + sampleOffset) × 5, tied to the radio crystal for MLAT accuracy.
+                long bufferStartSamples = _totalSamplesReceived;
                 _totalSamplesReceived += rawBuffer.SampleCount;
 
                 // Capture wall-clock anchor ONCE per buffer for sample-offset timestamps.
-                // All frames detected in this buffer derive their timestamps from this anchor
-                // plus their sample position, providing deterministic sub-microsecond precision.
+                // All frames detected in this buffer derive their DateTime timestamps from this anchor
+                // plus their sample position. Used for display, logging, and age calculation.
                 DateTime bufferTimestamp = _timeProvider.GetCurrentTimestamp();
 
                 // Convert raw I/Q bytes to magnitude (direct byte access, no IQData intermediary)
@@ -347,7 +351,7 @@ public sealed class DeviceWorker : IDisposable
                 // Scan linear buffer from start (index 0) through new data region
                 // The buffer layout is: [326 prefix samples][new data]
                 // Scanning starts at index 0, allowing detector to access prefix for boundary detection
-                List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer, bufferTimestamp);
+                List<RawFrame> frames = _preambleDetector.DetectAndExtract(magnitudeBuffer, bufferTimestamp, bufferStartSamples);
 
                 // Validate frames with CRC and extract ICAO addresses
                 foreach (RawFrame rawFrame in frames)

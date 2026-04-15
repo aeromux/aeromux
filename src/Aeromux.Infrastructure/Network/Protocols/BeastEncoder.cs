@@ -36,10 +36,11 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 /// which undoes the escaping during parsing.
 ///
 /// Timestamp Encoding:
-/// Timestamps are encoded as absolute 12 MHz counters from the frame's DateTime.Ticks value
-/// using integer arithmetic (Ticks × 6 / 5) to avoid floating-point precision loss.
-/// The high-precision timestamps come from StopwatchTimeProvider in the frame detection pipeline.
-/// Masked to 48 bits for Beast protocol (wraps every ~271 days, acceptable for real-time operation).
+/// Timestamps use the pre-computed Timestamp12MHz field from the frame pipeline.
+/// For SDR frames: derived from cumulative sample count × 5 (2.4 MSPS → 12 MHz),
+/// tied to the RTL-SDR crystal oscillator for MLAT-accurate, jitter-free timestamps.
+/// For Beast input frames: preserved 48-bit wire value from the sender.
+/// Masked to 48 bits for Beast protocol (wraps every ~23 days from program start).
 /// Beast receivers handle wrapping automatically during decoding.
 /// </remarks>
 public class BeastEncoder
@@ -98,18 +99,11 @@ public class BeastEncoder
         // Write message type indicator ('2' for short 56-bit frames, '3' for long 112-bit frames)
         output[pos++] = isLong ? (byte)'3' : (byte)'2';
 
-        // Convert absolute timestamp to 12 MHz counter using integer arithmetic.
-        // DateTime.Ticks are 100ns units; 12 MHz = 12 counts per μs = 1.2 counts per tick.
-        // Integer ratio: 6 counts per 5 ticks (equivalent to ×12/10, reduces intermediate value vs ×12 to avoid overflow for far-future dates).
-        // CRITICAL: Floating-point arithmetic (Ticks * 12.0 / 10) loses precision for absolute
-        // DateTime values (~6×10^17 ticks) because double has only 52-bit mantissa — the ULP
-        // at that magnitude is ~128 ticks, introducing ~10 μs jitter that breaks MLAT clock sync.
-        // Integer arithmetic has at most 1 count (83 ns) truncation error. No overflow until ~year 4600.
-        long timestamp12MHz = frame.Timestamp.Ticks * 6 / 5;
-
-        // Mask to 48 bits (Beast protocol limitation)
-        // Wraps every ~271 days from an arbitrary point - Beast receivers handle this
-        ulong timestamp48bit = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;
+        // Use pre-computed 12 MHz timestamp from the frame pipeline.
+        // SDR frames: (cumulative_sample_count + sample_offset) × 5, tied to radio crystal — zero jitter.
+        // Beast input frames: preserved 48-bit wire value from sender.
+        // Mask to 48 bits (Beast protocol limitation, wraps every ~23 days from program start).
+        ulong timestamp48bit = (ulong)frame.Timestamp12MHz & 0xFFFFFFFFFFFF;
 
         for (int i = 0; i < 6; i++)
         {

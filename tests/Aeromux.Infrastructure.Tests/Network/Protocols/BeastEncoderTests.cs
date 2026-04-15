@@ -29,7 +29,6 @@ public class BeastEncoderTests
 
     public BeastEncoderTests()
     {
-        // Encoder uses first frame timestamp as reference (lazy initialization)
         _encoder = new BeastEncoder();
     }
 
@@ -240,44 +239,36 @@ public class BeastEncoderTests
     // ======================================================================================
 
     [Theory]
-    [InlineData(0)]  // DateTime.MinValue equivalent (0 ticks)
-    [InlineData(638400000000000000)]  // 2024-01-01 12:00:00 UTC
-    [InlineData(638797920000000000)]  // 2026-04-15 00:00:00 UTC — realistic value for MLAT precision
-    public void Encode_Timestamp_12MHzConversion(long ticks)
+    [InlineData(0)]             // Zero timestamp
+    [InlineData(1_000_000)]     // Small value
+    [InlineData(500_000_000_000)]  // Realistic value (~11.5 hours at 12 MHz)
+    public void Encode_Timestamp_12MHzPassthrough(long timestamp12MHz)
     {
-        // Arrange
-        var timestamp = new DateTime(ticks, DateTimeKind.Utc);
+        // Arrange: BeastEncoder should pass through Timestamp12MHz directly
         ValidatedFrame frame = _frameBuilder
             .WithHexData(BeastTestData.ShortFrame_DF0)
-            .WithTimestamp(timestamp)
+            .WithTimestamp12MHz(timestamp12MHz)
             .WithSignalStrength(100)
             .Build();
 
         // Act
         ReadOnlyMemory<byte> encoded = _encoder.Encode(frame);
 
-        // Assert: Verify the timestamp conversion formula (integer arithmetic)
-        ulong expected12MHz = (ulong)(ticks * 6 / 5);
-
-        // Verify output has correct structure
+        // Assert: Verify output has correct structure
         encoded.Span[0].Should().Be(BeastTestData.ESC, "first byte should be frame marker");
         encoded.Span[1].Should().Be(BeastTestData.TYPE_SHORT, "second byte should be message type");
-
-        // Note: We can't directly verify timestamp bytes due to potential escaping
-        // But we can verify the conversion formula is correct
-        expected12MHz.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]
     public void Encode_Timestamp_BigEndianByteOrder()
     {
-        // Arrange: Use encoder with absolute timestamps
+        // Arrange: Known 12 MHz timestamp, use frame without ESC bytes to simplify extraction
         var encoder = new BeastEncoder();
-        var knownTimestamp = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        long known12MHz = 0x0A0B0C0D0E0FL; // Known value with distinct bytes, no 0x1A
 
         ValidatedFrame frame = _frameBuilder
-            .WithHexData(BeastTestData.NoEscapeBytes)  // Use frame without ESC to simplify
-            .WithTimestamp(knownTimestamp)
+            .WithHexData(BeastTestData.NoEscapeBytes)
+            .WithTimestamp12MHz(known12MHz)
             .WithSignalStrength(100)
             .Build();
 
@@ -285,38 +276,39 @@ public class BeastEncoderTests
         ReadOnlyMemory<byte> encoded = encoder.Encode(frame);
 
         // Assert: Verify big-endian ordering (MSB first)
-        // Calculate expected absolute 12 MHz timestamp (integer arithmetic)
-        long timestamp12MHz = knownTimestamp.Ticks * 6 / 5;
-        ulong timestamp48bit = (ulong)timestamp12MHz & 0xFFFFFFFFFFFF;  // Mask to 48 bits
+        ulong timestamp48bit = (ulong)known12MHz & 0xFFFFFFFFFFFF;
 
-        // Extract expected bytes (big-endian, MSB first)
         byte[] expectedBytes = new byte[6];
         for (int i = 0; i < 6; i++)
         {
             expectedBytes[i] = (byte)(timestamp48bit >> (40 - (i * 8)));
         }
 
-        // Timestamp starts at index 2 (after ESC + type)
-        // Verify at least the first few bytes match (accounting for potential escaping)
+        // Timestamp starts at index 2 (after ESC + type), no escaping needed for these values
         encoded.Span[2].Should().Be(expectedBytes[0], "MSB should be first");
+        encoded.Span[3].Should().Be(expectedBytes[1], "second byte");
+        encoded.Span[4].Should().Be(expectedBytes[2], "third byte");
+        encoded.Span[5].Should().Be(expectedBytes[3], "fourth byte");
+        encoded.Span[6].Should().Be(expectedBytes[4], "fifth byte");
+        encoded.Span[7].Should().Be(expectedBytes[5], "LSB should be last");
     }
 
     [Fact]
     public void Encode_ConsecutiveTimestamps_ExactRelativeSpacing()
     {
-        // Arrange: Two frames 1 ms apart at a realistic 2026 timestamp.
-        // MLAT requires that the 12 MHz delta between consecutive frames accurately
-        // reflects real elapsed time. 1 ms = 12,000 counts at 12 MHz.
+        // Arrange: Two frames with 12 MHz timestamps exactly 12,000 apart (= 1 ms).
+        // MLAT requires that the delta between consecutive frames accurately reflects elapsed time.
+        // At 2.4 MSPS, 2,400 samples = 1 ms → 2,400 × 5 = 12,000 counts at 12 MHz.
         var encoder = new BeastEncoder();
-        var baseTime = new DateTime(2026, 4, 15, 10, 20, 40, DateTimeKind.Utc);
+        long baseTs12MHz = 500_000_000_000L; // ~11.5 hours into session
         var frameA = _frameBuilder
             .WithHexData(BeastTestData.NoEscapeBytes)
-            .WithTimestamp(baseTime)
+            .WithTimestamp12MHz(baseTs12MHz)
             .WithSignalStrength(100)
             .Build();
         var frameB = _frameBuilder
             .WithHexData(BeastTestData.NoEscapeBytes)
-            .WithTimestamp(baseTime.AddMilliseconds(1))
+            .WithTimestamp12MHz(baseTs12MHz + 12_000)
             .WithSignalStrength(100)
             .Build();
 

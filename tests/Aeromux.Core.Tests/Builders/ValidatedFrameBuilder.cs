@@ -24,6 +24,7 @@ public class ValidatedFrameBuilder
 {
     private byte[] _data = Array.Empty<byte>();
     private DateTime _timestamp = DateTime.UtcNow;
+    private long _timestamp12MHz;
     private string _icaoAddress = "000000";
     private double _signalStrength = 255.0;
     private bool _wasCorrected = false;
@@ -87,12 +88,21 @@ public class ValidatedFrameBuilder
     }
 
     /// <summary>
+    /// Sets the 12 MHz Beast timestamp.
+    /// </summary>
+    public ValidatedFrameBuilder WithTimestamp12MHz(long timestamp12MHz)
+    {
+        _timestamp12MHz = timestamp12MHz;
+        return this;
+    }
+
+    /// <summary>
     /// Builds the ValidatedFrame instance.
     /// </summary>
     public ValidatedFrame Build()
     {
         uint icaoRaw = Convert.ToUInt32(_icaoAddress, 16);
-        return new ValidatedFrame(_data, _timestamp, icaoRaw, _icaoAddress, _signalStrength, _wasCorrected);
+        return new ValidatedFrame(_data, _timestamp, _timestamp12MHz, icaoRaw, _icaoAddress, _signalStrength, _wasCorrected);
     }
 
     /// <summary>

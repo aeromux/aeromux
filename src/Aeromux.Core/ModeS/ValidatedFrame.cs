@@ -22,6 +22,7 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <param name="Data">Validated frame bytes (7 or 14 bytes)</param>
 /// <param name="Timestamp">UTC timestamp when frame was received</param>
+/// <param name="Timestamp12MHz">12 MHz Beast timestamp — sample-count-derived for SDR, wire value for Beast input</param>
 /// <param name="IcaoRaw">24-bit ICAO aircraft address as uint (for internal lookups without string overhead)</param>
 /// <param name="IcaoAddress">24-bit ICAO aircraft address (hex string, 6 chars)</param>
 /// <param name="SignalStrength">Signal strength as power value (0.0-255.0, higher = stronger)</param>
@@ -36,6 +37,7 @@ namespace Aeromux.Core.ModeS;
 public sealed record ValidatedFrame(
     byte[] Data,
     DateTime Timestamp,
+    long Timestamp12MHz,
     uint IcaoRaw,
     string IcaoAddress,
     double SignalStrength,

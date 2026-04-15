@@ -22,6 +22,7 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <param name="Data">Raw frame bytes (7 bytes for short, 14 bytes for long frames)</param>
 /// <param name="Timestamp">UTC timestamp when frame was detected</param>
+/// <param name="Timestamp12MHz">12 MHz Beast timestamp — sample-count-derived for SDR, wire value for Beast input, 0 for internal CRC validation</param>
 /// <param name="SignalStrength">Signal strength as POWER value (0.0-255.0, higher = stronger signal)</param>
 /// <remarks>
 /// The frame data includes:
@@ -34,7 +35,7 @@ namespace Aeromux.Core.ModeS;
 /// Signal strength stores power (not amplitude) with full double precision to accurately
 /// represent very weak signals. Only quantized to byte when encoding to Beast format.
 /// </remarks>
-public sealed record RawFrame(byte[] Data, DateTime Timestamp, double SignalStrength)
+public sealed record RawFrame(byte[] Data, DateTime Timestamp, long Timestamp12MHz, double SignalStrength)
 {
     /// <summary>
     /// Gets the frame length in bits (56 or 112).
