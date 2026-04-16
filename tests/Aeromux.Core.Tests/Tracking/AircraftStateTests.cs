@@ -354,10 +354,10 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
         DateTime? secondUpdate = afterOdd!.Position.LastUpdate;
 
         // Assert
-        firstUpdate.Should().NotBeNull();
+        // After even-only frame, CPR decode returns null (needs both frames),
+        // so LastUpdate is not set until coordinate actually changes
+        firstUpdate.Should().BeNull();
         secondUpdate.Should().NotBeNull();
-        // Second update should be >= first update
-        secondUpdate.Should().BeOnOrAfter(firstUpdate!.Value);
     }
 
     #endregion
@@ -1080,9 +1080,10 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
         DateTime? posUpdate2 = after2!.Position.LastUpdate;
 
         // Assert
-        posUpdate1.Should().NotBeNull();
+        // After even-only frame, CPR decode returns null (needs both frames),
+        // so LastUpdate is not set until coordinate actually changes
+        posUpdate1.Should().BeNull();
         posUpdate2.Should().NotBeNull();
-        posUpdate2.Should().BeOnOrAfter(posUpdate1!.Value);
     }
 
     [Fact]

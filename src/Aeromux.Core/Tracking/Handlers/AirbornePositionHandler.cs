@@ -167,8 +167,12 @@ public sealed class AirbornePositionHandler : ITrackingHandler
                 }
                 else if (implausibleCount >= PositionPersistenceThreshold)
                 {
-                    // Too many consecutive implausible positions — accept anyway (old position likely stale)
-                    newCoordinate = msg.Position;
+                    // Too many consecutive implausible positions — invalidate current position
+                    // rather than accepting the potentially bad new one. The next position
+                    // (good or bad) will be accepted as "first position" via the null check above.
+                    // This breaks the feedback loop where persistence alternately accepts
+                    // bad and good positions, creating zigzag tracks on the map.
+                    newCoordinate = null;
                     implausibleCount = 0;
                 }
                 else
@@ -192,7 +196,7 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             GeometricBarometricDelta = geometricBarometricDelta,
             Antenna = msg.Antenna ?? position.Antenna,
             IsOnGround = false,
-            LastUpdate = timestamp,
+            LastUpdate = newCoordinate != position.Coordinate ? timestamp : position.LastUpdate,
             PositionSource = frame.Source,
             HadMlatPosition = position.HadMlatPosition || frame.Source == FrameSource.Mlat,
             ImplausibleCount = implausibleCount
