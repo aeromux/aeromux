@@ -138,11 +138,11 @@ public sealed class MapHubPushService : BackgroundService
             }
         }
 
-        // Compute diffs: removed aircraft (left viewport or expired)
+        // Compute diffs: removed aircraft (left viewport or expired, but not the selected aircraft)
         List<string> toRemove = new();
         foreach (string icao in state.LastPushedAircraft.Keys)
         {
-            if (!visibleAircraft.ContainsKey(icao))
+            if (!visibleAircraft.ContainsKey(icao) && icao != state.SelectedIcao)
             {
                 await client.SendAsync("AircraftRemoved", icao, cancellationToken);
                 toRemove.Add(icao);
