@@ -43,7 +43,6 @@ public sealed record AircraftListItem(
     bool IsOnGround,
     Velocity? Speed,
     double? Track,
-    double? Heading,
     Velocity? SpeedOnGround,
     double? TrackOnGround,
     int? VerticalRate,

@@ -234,7 +234,7 @@ export function updateMarkers(aircraftMap) {
                 callsign: aircraft.Callsign || icao,
                 altitude: aircraft.BarometricAltitude ? aircraft.BarometricAltitude.Feet : 0,
                 speed: aircraft.Speed ? aircraft.Speed.Knots : 0,
-                heading: aircraft.Track || aircraft.Heading || aircraft.TrackOnGround || 0,
+                heading: aircraft.Track || aircraft.TrackOnGround || 0,
                 selected: icao === selectedIcao,
                 category: aircraft.Military ? 'military'
                     : (aircraft.Ladd || aircraft.Pia) ? 'privacy'

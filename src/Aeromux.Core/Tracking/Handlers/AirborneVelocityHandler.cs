@@ -23,7 +23,8 @@ namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
 /// Handles AirborneVelocity messages (TC 19) for aircraft in flight.
-/// Updates: Speed, Heading, Track, VerticalRate, VelocitySubtype, LastUpdate
+/// Updates: Speed, VerticalRate, VelocitySubtype, NACv, LastUpdate,
+/// and conditionally Track (subtype 1-2) or Heading (subtype 3-4).
 /// </summary>
 /// <remarks>
 /// <para><strong>Important distinction in TC 19 message encoding:</strong></para>
@@ -32,7 +33,9 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <item>Airspeed messages (subtype 3-4): Message "Heading" field contains true Heading (direction nose points)</item>
 /// </list>
 /// <para>
-/// This handler correctly separates these into TrackedVelocity.Heading and TrackedVelocity.Track.
+/// This handler updates only the directional field relevant to the current subtype,
+/// preserving the other from previous state. This avoids Track/Heading flickering
+/// when an aircraft alternates between subtypes.
 /// Note: TrackedVelocity.Track (from TC 19) is different from TrackedVelocity.GroundTrack (from TC 5-8 surface messages).
 /// Track is airborne ground track accounting for wind, while GroundTrack is surface taxi direction.
 /// </para>
@@ -52,42 +55,30 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
 
         var msg = (AirborneVelocity)message;
 
-        // Extract heading vs track based on velocity subtype
-        // TC 19 message encoding quirk: the "Heading" field has different meanings:
-        // - Ground speed messages (subtype 1-2): Field contains track angle (direction of movement over ground)
-        // - Airspeed messages (subtype 3-4): Field contains true heading (direction nose points)
-        // We decode this correctly into separate Heading and Track fields
-        double? heading = null;
-        double? track = null;
-
-        switch (msg.Subtype)
-        {
-            case VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic:
-                // Ground speed: extract track angle (direction of movement accounting for wind)
-                track = msg.Heading;
-                break;
-            case VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic:
-                // Airspeed: extract true heading (direction nose points)
-                heading = msg.Heading;
-                break;
-        }
-
-        // Update velocity with TC 19 message fields while preserving Comm-B and surface data
-        // TC 19 provides: Speed, Heading/Track, VerticalRate, VelocitySubtype, NACv
+        // Update velocity with TC 19 message fields while preserving Comm-B and surface data.
+        // Heading and Track are NOT set here — they are preserved from previous state.
         // Preserve from other handlers: IndicatedAirspeed, TrueAirspeed, TrackAngle (Comm-B BDS 5,0/5,3/6,0)
         //                               GroundSpeed, GroundTrack (Surface Position TC 5-8)
         TrackedVelocity velocity = aircraft.Velocity with
         {
             Speed = msg.Velocity,                                      // Airborne velocity from TC 19
-            Heading = heading,                                         // True heading (subtype 3-4 only)
-            Track = track,                                             // Ground track angle (subtype 1-2 only)
             VerticalRate = msg.VerticalRate,                           // Climb/descent rate from TC 19
             VelocitySubtype = msg.Subtype,                             // Velocity source and speed range
             NACv = msg.NACv,                                           // Navigation accuracy category for velocity
-            // Preserve existing values from other handlers:
-            // - IndicatedAirspeed, TrueAirspeed, TrackAngle (from Comm-B BDS 5,0/5,3/6,0)
-            // - GroundSpeed, GroundTrack (from Surface Position TC 5-8)
             LastUpdate = msg.Velocity != null ? timestamp : null       // Update timestamp only if velocity present
+        };
+
+        // TC 19 message encoding quirk: the "Heading" field has different meanings per subtype.
+        // Only update the directional field this subtype provides — the other is preserved
+        // from the previous state by the `with` expression above. This prevents alternating
+        // subtype 1-2 and 3-4 messages from nullifying each other's Track/Heading values.
+        velocity = msg.Subtype switch
+        {
+            VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic
+                => velocity with { Track = msg.Heading },              // Ground track angle (subtype 1-2)
+            VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic
+                => velocity with { Heading = msg.Heading },            // True heading (subtype 3-4)
+            _ => velocity
         };
 
         // Cache geometric-barometric delta from TC 19 for geometric altitude derivation

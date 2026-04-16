@@ -51,7 +51,6 @@ public static class DaemonApiMapper
             IsOnGround: aircraft.Position.IsOnGround,
             Speed: aircraft.Velocity.Speed,
             Track: aircraft.Velocity.Track,
-            Heading: aircraft.Velocity.Heading,
             SpeedOnGround: aircraft.Velocity.GroundSpeed,
             TrackOnGround: aircraft.Velocity.GroundTrack,
             VerticalRate: aircraft.Velocity.VerticalRate,
