@@ -15,14 +15,11 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
 
-export function DetailSection({ title, icon, defaultExpanded, children }) {
-    const [expanded, setExpanded] = useState(defaultExpanded !== false);
-
+export function DetailSection({ title, icon, expanded, onToggle, children }) {
     return (
         <div class="section">
-            <div class="section-header" onClick={() => setExpanded(!expanded)}>
+            <div class="section-header" onClick={onToggle}>
                 <span class="section-header-title">
                     {icon && <span>{icon}</span>}
                     <span>{title}</span>

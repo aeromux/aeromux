@@ -45,6 +45,13 @@ export function App() {
     const stateHistoryRef = useRef(null);
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
+    const defaultSections = {
+        identification: true, database: true, profile: true, status: true,
+        position: true, velocity: true, autopilot: false, meteorology: false,
+        acas: false, capabilities: false, dataQuality: false,
+    };
+    const [sections, setSections] = useState({ ...defaultSections });
+    const [showMore, setShowMore] = useState({});
 
     // Flush buffered aircraft updates to state and map.
     // SignalR pushes individual aircraft updates rapidly — batching them into 50ms
@@ -171,6 +178,18 @@ export function App() {
     const handleSortChange = useCallback((newSort) => {
         setSort(newSort);
         saveSort(newSort);
+    }, []);
+
+    // Layout state callbacks for detail panel sections
+    const toggleSection = useCallback((key) => {
+        setSections(prev => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+    const toggleMore = useCallback((key) => {
+        setShowMore(prev => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+    const resetLayout = useCallback(() => {
+        setSections({ ...defaultSections });
+        setShowMore({});
     }, []);
 
     // Reset all settings to defaults
@@ -372,6 +391,11 @@ export function App() {
                         units={units}
                         receiverLocation={receiverLocation}
                         stateHistory={stateHistory}
+                        sections={sections}
+                        showMore={showMore}
+                        onToggleSection={toggleSection}
+                        onToggleMore={toggleMore}
+                        onResetLayout={resetLayout}
                         onBack={handleBack}
                     />
                 ) : (

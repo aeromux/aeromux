@@ -138,7 +138,8 @@ public sealed class MapHubPushService : BackgroundService
             }
         }
 
-        // Compute diffs: removed aircraft (left viewport or expired, but not the selected aircraft)
+        // Compute diffs: remove aircraft that left the viewport or expired.
+        // The selected aircraft is excluded — its lifecycle is managed by the detail push block below.
         List<string> toRemove = new();
         foreach (string icao in state.LastPushedAircraft.Keys)
         {

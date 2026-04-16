@@ -15,7 +15,6 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 import { h, Fragment } from 'preact';
-import { useState } from 'preact/hooks';
 import { DetailSection } from './DetailSection.jsx';
 import { DetailField } from './DetailField.jsx';
 import { FlightProfileChart } from './FlightProfileChart.jsx';
@@ -37,14 +36,13 @@ function fmtAgo(v) {
 function fmtDeg(v) { return v != null ? `${v.toFixed(2)}\u00B0` : null; }
 function fmtNum(v, suffix) { return v != null ? `${v}${suffix || ''}` : null; }
 
-export function AircraftDetail({ detail, expired, units, receiverLocation, stateHistory, onBack }) {
-    const [showMore, setShowMore] = useState({});
-    const toggleMore = (key) => setShowMore(prev => ({ ...prev, [key]: !prev[key] }));
-
+export function AircraftDetail({ detail, expired, units, receiverLocation, stateHistory, sections, showMore, onToggleSection, onToggleMore, onResetLayout, onBack }) {
     if (!detail) {
         return (
             <div class="detail-scroll">
-                <button class="back-button" onClick={onBack}>&larr; Back</button>
+                <div class="detail-toolbar">
+                    <button class="back-button" onClick={onBack}>&larr; Back</button>
+                </div>
                 <div class="aircraft-list-empty">Loading...</div>
             </div>
         );
@@ -79,7 +77,10 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
 
     return (
         <div class="detail-scroll">
-            <button class="back-button" onClick={onBack}>&larr; Back</button>
+            <div class="detail-toolbar">
+                <button class="back-button" onClick={onBack}>&larr; Back</button>
+                <button class="reset-layout" onClick={onResetLayout}>Reset layout</button>
+            </div>
             {expired && <div class="expired-banner">[EXPIRED]</div>}
 
             <div class="detail-header">
@@ -88,7 +89,7 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
             </div>
 
             {/* 1. Identification */}
-            <DetailSection title="Identification" defaultExpanded={true}>
+            <DetailSection title="Identification" expanded={sections.identification} onToggle={() => onToggleSection('identification')}>
                 <div class="section-fields">
                     <DetailField label="ICAO Address" value={id.ICAO} />
                     <DetailField label="Callsign" value={id.Callsign} />
@@ -100,7 +101,7 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
             </DetailSection>
 
             {/* 2. Aircraft Database */}
-            <DetailSection title="Aircraft Database" defaultExpanded={true}>
+            <DetailSection title="Aircraft Database" expanded={sections.database} onToggle={() => onToggleSection('database')}>
                 {db === null && detail.Identification ? (
                     <div class="db-disabled-message">Aircraft database not enabled</div>
                 ) : db === undefined ? (
@@ -125,11 +126,11 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                         )}
                     </div>
                 )}
-                {db && <div class="see-more" onClick={() => toggleMore('db')}>{showMore.db ? 'Show less' : 'See more'}</div>}
+                {db && <div class="see-more" onClick={() => onToggleMore('db')}>{showMore.db ? 'Show less' : 'See more'}</div>}
             </DetailSection>
 
             {/* 3. Flight Profile */}
-            <DetailSection title="Flight Profile" defaultExpanded={true}>
+            <DetailSection title="Flight Profile" expanded={sections.profile} onToggle={() => onToggleSection('profile')}>
                 {stateHistory === null ? (
                     <div class="flight-profile-empty">Loading...</div>
                 ) : stateHistory.enabled === false ? (
@@ -140,7 +141,7 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
             </DetailSection>
 
             {/* 4. Status */}
-            <DetailSection title="Status" defaultExpanded={true}>
+            <DetailSection title="Status" expanded={sections.status} onToggle={() => onToggleSection('status')}>
                 <div class="section-fields">
                     <DetailField label="First Seen" value={fmtTime(st.FirstSeen)} />
                     <DetailField label="Last Seen" value={fmtAgo(st.LastSeen)} />
@@ -152,8 +153,8 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                 </div>
             </DetailSection>
 
-            {/* 4. Position */}
-            <DetailSection title="Position" defaultExpanded={true}>
+            {/* 5. Position */}
+            <DetailSection title="Position" expanded={sections.position} onToggle={() => onToggleSection('position')}>
                 <div class="section-fields">
                     <DetailField label="Latitude" value={pos.Coordinate ? fmtDeg(pos.Coordinate.Latitude) : null} />
                     <DetailField label="Longitude" value={pos.Coordinate ? fmtDeg(pos.Coordinate.Longitude) : null} />
@@ -171,11 +172,11 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                         </>
                     )}
                 </div>
-                <div class="see-more" onClick={() => toggleMore('pos')}>{showMore.pos ? 'Show less' : 'See more'}</div>
+                <div class="see-more" onClick={() => onToggleMore('pos')}>{showMore.pos ? 'Show less' : 'See more'}</div>
             </DetailSection>
 
-            {/* 5. Velocity & Dynamics */}
-            <DetailSection title="Velocity & Dynamics" defaultExpanded={true}>
+            {/* 6. Velocity & Dynamics */}
+            <DetailSection title="Velocity & Dynamics" expanded={sections.velocity} onToggle={() => onToggleSection('velocity')}>
                 <div class="section-fields">
                     <DetailField label="Speed" value={formatSpeed(vel.Speed, units.speed)} />
                     <DetailField label="Track" value={fmtDeg(vel.Track)} />
@@ -203,11 +204,11 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                         </>
                     )}
                 </div>
-                <div class="see-more" onClick={() => toggleMore('vel')}>{showMore.vel ? 'Show less' : 'See more'}</div>
+                <div class="see-more" onClick={() => onToggleMore('vel')}>{showMore.vel ? 'Show less' : 'See more'}</div>
             </DetailSection>
 
-            {/* 6. Autopilot (collapsed) */}
-            <DetailSection title="Autopilot" defaultExpanded={false}>
+            {/* 7. Autopilot (collapsed) */}
+            <DetailSection title="Autopilot" expanded={sections.autopilot} onToggle={() => onToggleSection('autopilot')}>
                 <div class="section-fields">
                     <DetailField label="Autopilot Engaged" value={fmtBool(ap.AutopilotEngaged)} />
                     <DetailField label="Selected Altitude" value={formatAltitude(ap.SelectedAltitude, units.altitude)} />
@@ -224,8 +225,8 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                 </div>
             </DetailSection>
 
-            {/* 7. Meteorology (collapsed) */}
-            <DetailSection title="Meteorology" defaultExpanded={false}>
+            {/* 8. Meteorology (collapsed) */}
+            <DetailSection title="Meteorology" expanded={sections.meteorology} onToggle={() => onToggleSection('meteorology')}>
                 {met === null ? (
                     <div class="section-fields">
                         <DetailField label="Wind Speed" value={null} />
@@ -253,8 +254,8 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                 )}
             </DetailSection>
 
-            {/* 8. ACAS/TCAS (collapsed) */}
-            <DetailSection title="ACAS/TCAS" defaultExpanded={false}>
+            {/* 9. ACAS/TCAS (collapsed) */}
+            <DetailSection title="ACAS/TCAS" expanded={sections.acas} onToggle={() => onToggleSection('acas')}>
                 <div class="section-fields">
                     <DetailField label="TCAS Operational" value={fmtBool(acas.TCASOperational)} />
                     <DetailField label="Sensitivity Level" value={fmtNum(acas.SensitivityLevel)} />
@@ -272,8 +273,8 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                 </div>
             </DetailSection>
 
-            {/* 9. Capabilities (collapsed) */}
-            <DetailSection title="Capabilities" defaultExpanded={false}>
+            {/* 10. Capabilities (collapsed) */}
+            <DetailSection title="Capabilities" expanded={sections.capabilities} onToggle={() => onToggleSection('capabilities')}>
                 <div class="section-fields">
                     <DetailField label="ADS-B Version" value={cap.AdsbVersion} />
                     <DetailField label="Transponder Level" value={cap.TransponderLevel} />
@@ -301,11 +302,11 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                         </>
                     )}
                 </div>
-                <div class="see-more" onClick={() => toggleMore('cap')}>{showMore.cap ? 'Show less' : 'See more'}</div>
+                <div class="see-more" onClick={() => onToggleMore('cap')}>{showMore.cap ? 'Show less' : 'See more'}</div>
             </DetailSection>
 
-            {/* 10. Data Quality (collapsed) */}
-            <DetailSection title="Data Quality" defaultExpanded={false}>
+            {/* 11. Data Quality (collapsed) */}
+            <DetailSection title="Data Quality" expanded={sections.dataQuality} onToggle={() => onToggleSection('dataQuality')}>
                 <div class="section-fields">
                     <DetailField label="Antenna (TC 9-18)" value={dq.Antenna_TC918} />
                     <DetailField label="Antenna (TC 31)" value={dq.Antenna_TC31} />
@@ -328,7 +329,7 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                         </>
                     )}
                 </div>
-                <div class="see-more" onClick={() => toggleMore('dq')}>{showMore.dq ? 'Show less' : 'See more'}</div>
+                <div class="see-more" onClick={() => onToggleMore('dq')}>{showMore.dq ? 'Show less' : 'See more'}</div>
             </DetailSection>
         </div>
     );
