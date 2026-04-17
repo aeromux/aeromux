@@ -24,10 +24,13 @@ let markerHoverEnterCallback = null;
 let markerHoverLeaveCallback = null;
 let debounceTimer = null;
 let selectedIcao = null;
+let rangeOutlineAdded = false;
+let pendingRangeOutline = null;
 let hoveredIcao = null;
 let hoveredCoords = null;
 let hoveredProps = null;
 
+// Trail colors per aircraft category — matches the CSS category dot colors (darkened for line contrast)
 const TRAIL_COLORS = {
     normal:   'rgb(0, 97, 146)',
     military: 'rgb(0, 110, 0)',
@@ -61,6 +64,12 @@ export function init(containerId) {
             const p = pendingRangeRings;
             pendingRangeRings = null;
             updateRangeRings(p.lat, p.lon, p.visible, p.distanceUnit);
+        }
+
+        if (pendingRangeOutline) {
+            const p = pendingRangeOutline;
+            pendingRangeOutline = null;
+            updateRangeOutline(p.coordinates, p.visible);
         }
     });
 
@@ -332,6 +341,66 @@ export function getViewportBounds() {
         north: bounds.getNorth(),
         east: bounds.getEast()
     };
+}
+
+// Range outline — receiver coverage boundary polygon
+let rangeOutlineInitialized = false;
+
+function ensureRangeOutlineSources() {
+    if (rangeOutlineInitialized || !map) return;
+    if (!map.getLayer('overlay-layer')) return;
+    rangeOutlineInitialized = true;
+
+    const emptyPoly = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [] }, properties: {} };
+
+    map.addSource('range-outline-source', { type: 'geojson', data: emptyPoly });
+
+    map.addLayer({
+        id: 'range-outline-fill-layer',
+        type: 'fill',
+        source: 'range-outline-source',
+        paint: {
+            'fill-color': '#006192',
+            'fill-opacity': 0.08
+        }
+    }, 'trail-layer');
+
+    map.addLayer({
+        id: 'range-outline-line-layer',
+        type: 'line',
+        source: 'range-outline-source',
+        paint: {
+            'line-color': '#006192',
+            'line-width': 1.5
+        }
+    }, 'trail-layer');
+}
+
+export function updateRangeOutline(coordinates, visible) {
+    if (!map) return;
+    ensureRangeOutlineSources();
+
+    if (!rangeOutlineInitialized) {
+        pendingRangeOutline = { coordinates, visible };
+        return;
+    }
+
+    const source = map.getSource('range-outline-source');
+    if (!source) return;
+
+    if (!visible || !coordinates || coordinates.length < 3) {
+        source.setData({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [] }, properties: {} });
+        return;
+    }
+
+    const ring = coordinates.map(c => [c.Longitude, c.Latitude]);
+    ring.push(ring[0]);
+
+    source.setData({
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [ring] },
+        properties: {}
+    });
 }
 
 // Range rings — distances in nautical miles, converted to km for haversine calculations

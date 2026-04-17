@@ -78,6 +78,13 @@ public static class DaemonApiServer
         builder.Services.AddSingleton<MapHubPushService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MapHubPushService>());
 
+        // Range outline tracker — only created when receiver location is configured
+        if (config.Config.Receiver?.Latitude is not null && config.Config.Receiver?.Longitude is not null)
+        {
+            builder.Services.AddSingleton(new RangeOutlineTracker(
+                config.Config.Receiver.Latitude.Value, config.Config.Receiver.Longitude.Value));
+        }
+
         // Bind to configured address and port
         builder.WebHost.UseUrls($"http://{config.BindAddress}:{config.ApiPort}");
 

@@ -29,6 +29,7 @@ export function connect({ handlers }) {
     connection.on('AircraftRemoved', (icao) => handlers.onAircraftRemoved?.(icao));
     connection.on('AircraftDetailUpdated', (data) => handlers.onDetailUpdated?.(data));
     connection.on('Metadata', (meta) => handlers.onMetadata?.(meta));
+    connection.on('RangeOutlineUpdated', (data) => handlers.onRangeOutlineUpdated?.(data));
 
     connection.onreconnected(() => handlers.onReconnected?.());
 

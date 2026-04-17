@@ -31,15 +31,21 @@ public sealed class MapHubPushService : BackgroundService
 {
     private readonly IAircraftStateTracker _tracker;
     private readonly IHubContext<MapHub> _hubContext;
+    private readonly RangeOutlineTracker? _rangeOutlineTracker;
     private readonly JsonSerializerOptions _jsonOptions;
 
     /// <summary>
-    /// Initializes the push service with the aircraft tracker and hub context.
+    /// Initializes the push service with the aircraft tracker, hub context,
+    /// and optional range outline tracker.
     /// </summary>
-    public MapHubPushService(IAircraftStateTracker tracker, IHubContext<MapHub> hubContext)
+    public MapHubPushService(
+        IAircraftStateTracker tracker,
+        IHubContext<MapHub> hubContext,
+        RangeOutlineTracker? rangeOutlineTracker = null)
     {
         _tracker = tracker;
         _hubContext = hubContext;
+        _rangeOutlineTracker = rangeOutlineTracker;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = null,
@@ -75,13 +81,30 @@ public sealed class MapHubPushService : BackgroundService
         IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
         int totalCount = allAircraft.Count;
 
+        // Feed positions into range outline tracker and compute outline once for all clients
+        List<RangeOutlineCoordinate>? outline = null;
+        int outlineHash = 0;
+        if (_rangeOutlineTracker is not null)
+        {
+            foreach (Aircraft aircraft in allAircraft)
+            {
+                if (aircraft.Position.Coordinate is not null)
+                {
+                    _rangeOutlineTracker.RecordPosition(aircraft.Position.Coordinate);
+                }
+            }
+
+            outline = _rangeOutlineTracker.GetOutline();
+            outlineHash = ComputeHash(outline);
+        }
+
         foreach ((string connectionId, MapHubClientState state) in MapHub.ClientStates)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
-                await PushToClient(connectionId, state, allAircraft, totalCount, cancellationToken);
+                await PushToClient(connectionId, state, allAircraft, totalCount, outline, outlineHash, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -99,6 +122,8 @@ public sealed class MapHubPushService : BackgroundService
         MapHubClientState state,
         IReadOnlyList<Aircraft> allAircraft,
         int totalCount,
+        List<RangeOutlineCoordinate>? outline,
+        int outlineHash,
         CancellationToken cancellationToken)
     {
         IClientProxy client = _hubContext.Clients.Client(connectionId);
@@ -181,6 +206,13 @@ public sealed class MapHubPushService : BackgroundService
 
         // Push metadata
         await client.SendAsync("Metadata", new { TotalAircraftCount = totalCount }, cancellationToken);
+
+        // Push range outline if changed
+        if (outline is not null && outlineHash != state.LastPushedOutlineHash)
+        {
+            await client.SendAsync("RangeOutlineUpdated", outline, cancellationToken);
+            state.LastPushedOutlineHash = outlineHash;
+        }
     }
 
     private static Dictionary<string, object?> BuildDetailResponse(Aircraft aircraft)
@@ -201,6 +233,10 @@ public sealed class MapHubPushService : BackgroundService
         };
     }
 
+    /// <summary>
+    /// Computes a hash by JSON-serializing the object and hashing the resulting string.
+    /// Trades a short-lived string allocation for simple, reliable deep-equality detection.
+    /// </summary>
     private int ComputeHash(object obj)
     {
         string json = JsonSerializer.Serialize(obj, _jsonOptions);

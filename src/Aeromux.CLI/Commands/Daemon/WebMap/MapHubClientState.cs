@@ -46,4 +46,10 @@ public sealed class MapHubClientState
     /// Used to avoid pushing unchanged detail data.
     /// </summary>
     public int LastPushedDetailHash { get; set; }
+
+    /// <summary>
+    /// Hash of the last pushed range outline data.
+    /// Used to avoid pushing unchanged outline data.
+    /// </summary>
+    public int LastPushedOutlineHash { get; set; }
 }

@@ -42,6 +42,12 @@ Three range rings centered on the receiver location indicate distances of 100, 1
 
 Range rings can be toggled on or off from the settings panel. They are enabled by default. When the receiver location is not configured, range rings are not displayed.
 
+### Range Outline
+
+A convex hull polygon showing the receiver's coverage area based on the farthest aircraft positions received in each 1-degree bearing sector. The outline grows over time as aircraft are received in new directions and at greater distances. Positions beyond 300 nm from the receiver are discarded. The outline uses a 4-hour sliding window and resets when the daemon is restarted.
+
+The range outline can be toggled on or off from the settings panel. It is enabled by default. When the receiver location is not configured, the toggle is disabled.
+
 ## Aircraft List (Left Panel)
 
 The left panel displays the Aeromux logo and version at the top, followed by a statistics row showing the number of aircraft currently in view and the total number of tracked aircraft:
@@ -135,9 +141,10 @@ Unit changes are applied immediately across the entire interface — the aircraf
 
 #### Interface
 
-| Option      | Description                             | Default  |
-|-------------|-----------------------------------------|----------|
-| Range rings | Show or hide the range rings on the map | On       |
+| Option        | Description                                                        | Default  |
+|---------------|--------------------------------------------------------------------|----------|
+| Range rings   | Show or hide the range rings on the map                            | On       |
+| Range outline | Show or hide the receiver coverage outline (requires receiver location) | On       |
 
 #### Reset
 

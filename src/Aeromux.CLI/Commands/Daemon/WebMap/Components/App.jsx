@@ -43,6 +43,8 @@ export function App() {
     const trailRef = useRef([]);
     const [stateHistory, setStateHistory] = useState(null);
     const stateHistoryRef = useRef(null);
+    const [rangeOutline, setRangeOutline] = useState([]);
+    const rangeOutlineRef = useRef([]);
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
     const defaultSections = {
@@ -338,6 +340,10 @@ export function App() {
                     onMetadata: (meta) => {
                         setTotalCount(meta.TotalAircraftCount);
                     },
+                    onRangeOutlineUpdated: (data) => {
+                        rangeOutlineRef.current = data;
+                        setRangeOutline(data);
+                    },
                     onReconnected: async () => {
                         // Re-fetch aircraft to reconcile stale state
                         const bounds = MapManager.getViewportBounds();
@@ -373,6 +379,11 @@ export function App() {
             MapManager.updateRangeRings(receiverLocation.lat, receiverLocation.lon, settings.rangeRings, units.distance);
         }
     }, [settings.rangeRings, units.distance, receiverLocation]);
+
+    // Update range outline when settings or outline data changes
+    useEffect(() => {
+        MapManager.updateRangeOutline(rangeOutline, settings.rangeOutline);
+    }, [settings.rangeOutline, rangeOutline]);
 
     const viewCount = aircraftMap.size;
 
@@ -426,6 +437,7 @@ export function App() {
                 onSettingsChange={handleSettingsChange}
                 onSelect={(icao, coordinate) => handleSelect(icao, { panTo: true, coordinate })}
                 onReset={handleReset}
+                receiverLocation={receiverLocation}
             />
         </div>
     );

@@ -53,7 +53,7 @@ export function saveSort(sort) {
 
 // Interface settings (range rings toggle, etc.) persisted across sessions
 const SETTINGS_STORAGE_KEY = 'aeromux-settings';
-const SETTINGS_DEFAULTS = { rangeRings: true };
+const SETTINGS_DEFAULTS = { rangeRings: true, rangeOutline: true };
 
 export function loadSettings() {
     try {
@@ -61,7 +61,8 @@ export function loadSettings() {
         if (stored) {
             const parsed = JSON.parse(stored);
             return {
-                rangeRings: parsed.rangeRings !== undefined ? parsed.rangeRings : SETTINGS_DEFAULTS.rangeRings
+                rangeRings: parsed.rangeRings !== undefined ? parsed.rangeRings : SETTINGS_DEFAULTS.rangeRings,
+                rangeOutline: parsed.rangeOutline !== undefined ? parsed.rangeOutline : SETTINGS_DEFAULTS.rangeOutline
             };
         }
     } catch (e) {

@@ -32,7 +32,7 @@ function highlightMatch(text, query) {
     );
 }
 
-export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset }) {
+export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -184,6 +184,13 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                             <div class="toggle-knob" />
                         </div>
                         Range rings
+                    </div>
+                    <div class={`settings-toggle${!receiverLocation ? ' disabled' : ''}`}
+                         onClick={() => receiverLocation && toggleSetting('rangeOutline')}>
+                        <div class={`toggle-track${receiverLocation && settings.rangeOutline ? ' active' : ''}`}>
+                            <div class="toggle-knob" />
+                        </div>
+                        Range outline
                     </div>
                     <div class="settings-category">Legend</div>
                     <div class="legend-items">

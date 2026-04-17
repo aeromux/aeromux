@@ -498,6 +498,12 @@ body {
     font-family: var(--font-family);
 }
 
+.settings-toggle.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .toggle-track {
     position: relative;
     width: 36px;
