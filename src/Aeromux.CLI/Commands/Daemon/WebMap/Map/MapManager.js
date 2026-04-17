@@ -28,6 +28,12 @@ let hoveredIcao = null;
 let hoveredCoords = null;
 let hoveredProps = null;
 
+const TRAIL_COLORS = {
+    normal:   'rgb(0, 97, 146)',
+    military: 'rgb(0, 110, 0)',
+    privacy:  'rgb(160, 0, 0)',
+};
+
 export function init(containerId) {
     map = new maplibregl.Map({
         container: containerId,
@@ -159,7 +165,6 @@ function addLayers() {
     // Trail layer (below aircraft)
     map.addSource('trail-source', {
         type: 'geojson',
-        lineMetrics: true,
         data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
     });
 
@@ -169,13 +174,8 @@ function addLayers() {
         source: 'trail-source',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-            'line-color': '#006192',
+            'line-color': TRAIL_COLORS.normal,
             'line-width': 3,
-            'line-gradient': [
-                'interpolate', ['linear'], ['line-progress'],
-                0, 'rgba(0, 97, 146, 0.15)',
-                1, 'rgba(0, 97, 146, 1)'
-            ]
         }
     });
 
@@ -312,6 +312,11 @@ export function updateTrail(positions) {
         geometry: { type: 'LineString', coordinates },
         properties: {}
     });
+}
+
+export function setTrailColor(category) {
+    if (!map || !map.getLayer('trail-layer')) return;
+    map.setPaintProperty('trail-layer', 'line-color', TRAIL_COLORS[category] || TRAIL_COLORS.normal);
 }
 
 export function clearTrail() {

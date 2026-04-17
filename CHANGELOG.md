@@ -19,6 +19,7 @@ All notable changes to Aeromux will be documented in this file.
 ### Added
 
 - **Web Map Aircraft Category Dots** — Colored category indicator dots in the aircraft list and detail panel header, matching the map marker colors: blue for normal, green for military, red for privacy (LADD/PIA). Category colors are defined as shared CSS classes used across the legend, list, and detail views.
+- **Web Map Category-Colored Trail** — Aircraft position trail now uses the selected aircraft's category color (dark blue for normal, dark green for military, dark crimson for privacy) instead of a fixed blue gradient.
 - **CPR Position Validation** — Three-layer position validation to eliminate wildly incorrect aircraft positions (appearing as long straight lines across the map) caused by CPR global decode errors from bit corruption passing CRC. Layer 1: receiver range check rejects decoded positions beyond 300 NM from receiver (skipped when receiver location is not configured). Layer 2: speed/distance plausibility check validates that position changes are physically possible given elapsed time and aircraft speed. Layer 3: position persistence counter requires 4 consecutive implausible positions before overwriting a known good position, preventing single bad decodes from corrupting tracks.
 
 ### Fixed

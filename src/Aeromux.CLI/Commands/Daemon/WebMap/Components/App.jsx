@@ -98,6 +98,12 @@ export function App() {
         MapManager.highlightSelected(icao);
         MapManager.updateMarkers(aircraftMapRef.current);
 
+        const selectedAircraft = aircraftMapRef.current.get(icao);
+        const category = selectedAircraft?.Military ? 'military'
+            : (selectedAircraft?.Ladd || selectedAircraft?.Pia) ? 'privacy'
+            : 'normal';
+        MapManager.setTrailColor(category);
+
         if (shouldPan) {
             const coord = coordinate || aircraftMapRef.current.get(icao)?.Coordinate;
             if (coord) {
