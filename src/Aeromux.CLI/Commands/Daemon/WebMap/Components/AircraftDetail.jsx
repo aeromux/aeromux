@@ -84,7 +84,10 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
             {expired && <div class="expired-banner">[EXPIRED]</div>}
 
             <div class="detail-header">
-                <div class="detail-callsign">{callsign}</div>
+                <div class="detail-callsign">
+                    <span class={`detail-dot ${db?.Military ? 'dot-military' : (db?.Ladd || db?.Pia) ? 'dot-privacy' : 'dot-normal'}`} />
+                    {callsign}
+                </div>
                 {operator && <div class="detail-operator">{operator}</div>}
             </div>
 

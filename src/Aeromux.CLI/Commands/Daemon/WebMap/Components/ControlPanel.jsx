@@ -188,19 +188,19 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                     <div class="settings-category">Legend</div>
                     <div class="legend-items">
                         <div class="legend-item">
-                            <span class="legend-dot" style={{ backgroundColor: 'rgb(102, 178, 255)' }} />
+                            <span class="legend-dot dot-normal" />
                             <span class="legend-label">Normal</span>
                         </div>
                         <div class="legend-item">
-                            <span class="legend-dot" style={{ backgroundColor: 'rgb(102, 194, 102)' }} />
+                            <span class="legend-dot dot-military" />
                             <span class="legend-label">Military</span>
                         </div>
                         <div class="legend-item">
-                            <span class="legend-dot" style={{ backgroundColor: 'rgb(255, 102, 102)' }} />
+                            <span class="legend-dot dot-privacy" />
                             <span class="legend-label">Privacy (LADD/PIA)</span>
                         </div>
                         <div class="legend-item">
-                            <span class="legend-dot" style={{ backgroundColor: 'rgb(230, 126, 34)' }} />
+                            <span class="legend-dot dot-selected" />
                             <span class="legend-label">Selected</span>
                         </div>
                     </div>

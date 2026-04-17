@@ -18,6 +18,12 @@ import { h } from 'preact';
 import { useMemo, useCallback } from 'preact/hooks';
 import { formatAltitude, formatSpeed, haversineDistance, convertDistance } from '../Services/UnitConversion.js';
 
+function getCategoryClass(aircraft) {
+    if (aircraft.Military) return 'dot-military';
+    if (aircraft.Ladd || aircraft.Pia) return 'dot-privacy';
+    return 'dot-normal';
+}
+
 function getRawValue(item, column) {
     switch (column) {
         case 'callsign':
@@ -109,6 +115,7 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
             <table class="aircraft-list-table">
                 <thead>
                     <tr>
+                        <th class="aircraft-list-dot-col"></th>
                         {renderHeader('callsign', 'Callsign')}
                         {renderHeader('altitude', 'Altitude')}
                         {renderHeader('speed', 'Speed')}
@@ -129,6 +136,9 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
                                 class={icao === selectedIcao ? 'selected' : ''}
                                 onClick={() => onSelect(icao)}
                             >
+                                <td class="aircraft-list-dot-col">
+                                    <span class={`aircraft-list-dot ${getCategoryClass(aircraft)}`} />
+                                </td>
                                 <td class="aircraft-list-callsign">
                                     <div>{aircraft.Callsign || 'N/A'}</div>
                                     <div class="aircraft-list-icao">{icao}</div>
