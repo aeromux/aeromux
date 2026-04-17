@@ -3,7 +3,7 @@
 Aeromux includes a built-in web-based map for real-time aircraft visualization. The map is served directly by the daemon and embedded into the single-file binary. No external web server, separate process, or additional configuration is required.
 
 <div align="center">
-  <img src="images/webmap/overview.png" alt="Web Map Overview" width="800">
+  <img src="images/webmap/overview.jpeg" alt="Web Map Overview" width="800">
   <br>
   <em>The web map showing aircraft list, map with range rings, and control panel</em>
 </div>
