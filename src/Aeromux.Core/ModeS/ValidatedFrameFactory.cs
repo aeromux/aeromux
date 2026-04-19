@@ -45,12 +45,14 @@ public sealed class ValidatedFrameFactory
     private readonly Dictionary<uint, int> _syndromesShort;  // Syndrome → bit position for 56-bit frames
     private readonly Dictionary<uint, int> _syndromesLong;   // Syndrome → bit position for 112-bit frames
     private readonly Dictionary<uint, string> _icaoStringCache = new();  // ICAO uint → hex string cache
+    private const int MaxIcaoCacheSize = 65_536;  // AP mode (DF 0/4/5/16/20/21) caches noise-derived ICAOs that grow unbounded
 
     // Statistics (exposed as properties for DeviceWorker to log)
     private long _framesChecked;
     private long _framesValid;
     private long _framesCorrected;
     private long _framesInvalid;
+    private long _cacheClears;
 
     /// <summary>
     /// Initializes the factory and pre-computes CRC lookup table and syndrome tables.
@@ -299,9 +301,17 @@ public sealed class ValidatedFrameFactory
     /// <summary>
     /// Formats 24-bit ICAO address as 6-character hex string (uppercase).
     /// Caches results to avoid repeated string allocations for the same aircraft.
+    /// Clears the entire cache when it exceeds <see cref="MaxIcaoCacheSize"/> entries
+    /// to prevent unbounded growth from noise ICAOs in AP mode (DF 0/4/5/16/20/21).
     /// </summary>
     private string FormatIcaoAddress(uint icao)
     {
+        if (_icaoStringCache.Count >= MaxIcaoCacheSize)
+        {
+            _icaoStringCache.Clear();
+            _cacheClears++;
+        }
+
         if (!_icaoStringCache.TryGetValue(icao, out string? cached))
         {
             cached = $"{icao:X6}";
@@ -321,4 +331,7 @@ public sealed class ValidatedFrameFactory
 
     /// <summary>Frames rejected as corrupted beyond repair</summary>
     public long FramesInvalid => _framesInvalid;
+
+    /// <summary>Number of times the ICAO string cache was cleared after reaching capacity</summary>
+    public long CacheClears => _cacheClears;
 }

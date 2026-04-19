@@ -58,6 +58,8 @@ namespace Aeromux.Infrastructure.Streaming;
 /// </summary>
 public sealed class ReceiverStream : IFrameStream
 {
+    private const int SubscriberChannelCapacity = 50_000;  // ~20 MB max per subscriber, drops oldest under backpressure
+
     private readonly List<SdrSourceConfig>? _sourceConfigs;
     private readonly List<BeastSourceConfig>? _beastSourceConfigs;
     private readonly TrackingConfig _trackingConfig;
@@ -237,9 +239,10 @@ public sealed class ReceiverStream : IFrameStream
             throw new InvalidOperationException("ReceiverStream not started. Call StartAsync() first.");
         }
 
-        // Create dedicated channel for this subscriber
-        var subscriberChannel = Channel.CreateUnbounded<ProcessedFrame>(new UnboundedChannelOptions
+        // Create bounded channel for this subscriber (drops oldest frames under backpressure)
+        var subscriberChannel = Channel.CreateBounded<ProcessedFrame>(new BoundedChannelOptions(SubscriberChannelCapacity)
         {
+            FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
             SingleWriter = true
         });

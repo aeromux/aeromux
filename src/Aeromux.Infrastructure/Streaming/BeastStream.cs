@@ -46,6 +46,8 @@ namespace Aeromux.Infrastructure.Streaming;
 /// </summary>
 public sealed class BeastStream : IFrameStream
 {
+    private const int SubscriberChannelCapacity = 50_000;  // ~20 MB max per subscriber, drops oldest under backpressure
+
     // TCP connection
     private readonly string _host;
     private readonly int _port;
@@ -200,9 +202,10 @@ public sealed class BeastStream : IFrameStream
             throw new InvalidOperationException("StartAsync() must be called before Subscribe()");
         }
 
-        // Create unbounded channel for this subscriber
-        var channel = Channel.CreateUnbounded<ProcessedFrame>(new UnboundedChannelOptions
+        // Create bounded channel for this subscriber (drops oldest frames under backpressure)
+        var channel = Channel.CreateBounded<ProcessedFrame>(new BoundedChannelOptions(SubscriberChannelCapacity)
         {
+            FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
             SingleWriter = false, // Multiple broadcasters could write
             AllowSynchronousContinuations = false

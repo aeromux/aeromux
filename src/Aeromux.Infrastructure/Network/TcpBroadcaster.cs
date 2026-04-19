@@ -59,6 +59,8 @@ namespace Aeromux.Infrastructure.Network;
 /// </remarks>
 public sealed class TcpBroadcaster : IAsyncDisposable
 {
+    private static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(5);  // Disconnect clients that block writes beyond this
+
     private readonly int _port;
     private readonly IPAddress _bindAddress;
     private readonly IFrameStream _frameStream;
@@ -354,19 +356,30 @@ public sealed class TcpBroadcaster : IAsyncDisposable
                 {
                     try
                     {
-                        // Write encoded message to client's network stream
-                        await client.GetStream().WriteAsync(message, ct);
+                        // Write with timeout to prevent slow clients from blocking all broadcasts
+                        using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        writeCts.CancelAfter(WriteTimeout);
+                        await client.GetStream().WriteAsync(message, writeCts.Token);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        // Write timed out — client is too slow, disconnect it
+                        if (!disconnected.Contains(client))
+                        {
+                            Log.Warning("[{Format}] Slow client {Remote} on port {Port} — write timed out, disconnecting",
+                                _format.ToString(), client.Client.RemoteEndPoint, _port);
+                            disconnected.Add(client);
+                        }
                     }
                     catch (OperationCanceledException)
                     {
-                        // Propagate cancellation to stop broadcast loop immediately
+                        // Parent cancellation — propagate to stop broadcast loop immediately
                         throw;
                     }
                     catch (Exception)
                     {
                         // Client disconnected or write failed (network error, buffer full, etc.)
                         // Don't log here - will be logged at Information level when cleaned up below
-                        // This avoids noisy Debug logs with stack traces for normal disconnections
                         if (!disconnected.Contains(client))
                         {
                             disconnected.Add(client);

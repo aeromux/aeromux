@@ -2,6 +2,14 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.6.2] — Unreleased
+
+### Fixed
+
+- **Memory Leak: ICAO String Cache** — Fixed unbounded growth of the ICAO hex string cache in `ValidatedFrameFactory`. In AP mode (DF 0/4/5/16/20/21), every noise frame produced a random ICAO that was cached permanently. With multiple factory instances (2 per SDR device + 1 per Beast connection), caches could grow to ~2.3 GB over hours of operation. The cache now clears when it exceeds 65,536 entries (~4.5 MB). Real aircraft ICAOs are re-cached within seconds.
+- **Memory Leak: Unbounded Subscriber Channels** — Fixed unbounded memory growth in `ReceiverStream` and `BeastStream` subscriber channels. When a TCP broadcast client was slow or unresponsive, its subscriber channel accumulated frames indefinitely (~1 GB/hour at 300 fps). Subscriber channels are now bounded to 50,000 frames (~20 MB) with a drop-oldest policy. The `AircraftStateTracker` processes frames in microseconds and is unaffected by the limit.
+- **Slow TCP Client Starvation** — Fixed a single slow TCP client blocking the entire broadcast loop, starving all other clients. `WriteAsync` had no timeout, so a client with a full send buffer would block indefinitely. Added a 5-second per-client write timeout that disconnects unresponsive clients with a warning log, allowing other clients to continue receiving data.
+
 ## [0.6.1] — 2026-04-17
 
 ### Changed
@@ -87,6 +95,7 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.6.2]: https://github.com/aeromux/aeromux/releases/tag/v0.6.2
 [0.6.1]: https://github.com/aeromux/aeromux/releases/tag/v0.6.1
 [0.6.0]: https://github.com/aeromux/aeromux/releases/tag/v0.6.0
 [0.5.0]: https://github.com/aeromux/aeromux/releases/tag/v0.5.0
