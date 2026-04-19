@@ -120,7 +120,11 @@ public sealed class AirbornePositionHandler : ITrackingHandler
                     if (geometricBarometricDelta != null)
                     {
                         int derivedGeometricFeet = barometricAltitude.Feet + geometricBarometricDelta.Value;
-                        geometricAltitude = Altitude.FromFeet(derivedGeometricFeet, AltitudeType.Geometric);
+                        // Valid Altitude range: -2000 (Dead Sea) to 126700 (Gillham code maximum)
+                        if (derivedGeometricFeet is >= -2000 and <= 126700)
+                        {
+                            geometricAltitude = Altitude.FromFeet(derivedGeometricFeet, AltitudeType.Geometric);
+                        }
                     }
 
                     break;

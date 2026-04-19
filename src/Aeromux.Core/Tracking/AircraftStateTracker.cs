@@ -22,6 +22,7 @@ using Aeromux.Core.ModeS;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.Messages;
 using Aeromux.Core.Tracking.Handlers;
+using Serilog;
 
 namespace Aeromux.Core.Tracking;
 
@@ -128,11 +129,20 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         }
 
         // Start background task to consume frames from the channel
+        // Individual frame failures are caught and logged to prevent one bad frame from killing the pipeline
         _consumerTask = Task.Run(async () =>
         {
             await foreach (ProcessedFrame frame in frameChannel.ReadAllAsync(cancellationToken))
             {
-                Update(frame);
+                try
+                {
+                    Update(frame);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Log.Warning(ex, "Skipping frame: tracking update failed for ICAO {Icao}",
+                        frame.Frame.IcaoAddress);
+                }
             }
         }, cancellationToken);
     }

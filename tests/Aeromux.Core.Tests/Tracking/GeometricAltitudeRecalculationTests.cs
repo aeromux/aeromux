@@ -14,8 +14,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.Configuration;
+using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
+using Aeromux.Core.ModeS.Messages;
+using Aeromux.Core.ModeS.ValueObjects;
+using Aeromux.Core.Tests.Builders;
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
+using Aeromux.Core.Tracking.Handlers;
 
 namespace Aeromux.Core.Tests.Tracking;
 
@@ -298,5 +305,143 @@ public class GeometricAltitudeRecalculationTests : AircraftStateTrackerTestsBase
         after2.Should().NotBeNull();
         after2!.Position.BarometricAltitude!.Feet.Should().Be(40000);
         after2.Position.GeometricAltitude!.Feet.Should().Be(40000 - 1300); // 38700 (recalculated)
+    }
+
+    // ========================================
+    // Out-of-Range Derived Altitude Tests
+    // ========================================
+
+    /// <summary>
+    /// Verifies that derived geometric altitude is skipped when the sum of
+    /// barometric altitude and delta exceeds the valid Altitude range [-2000, 126700].
+    /// This prevents ArgumentOutOfRangeException from crashing the consumer task.
+    /// </summary>
+    [Fact]
+    public void DerivedGeometricAltitude_OutOfRange_SkipsDerivation()
+    {
+        // Arrange — handler with default config
+        TrackingConfig config = new TrackingConfigBuilder().Build();
+        var handler = new AirbornePositionHandler(config);
+        DateTime now = DateTime.UtcNow;
+
+        // Aircraft with cached delta of -3150 ft (maximum negative from TC 19)
+        // and existing barometric altitude of -1000 ft
+        // Derived: -1000 + (-3150) = -4150, which is below -2000
+        var aircraft = new Aircraft
+        {
+            Identification = new TrackedIdentification
+            {
+                ICAO = "AABBCC",
+                EmergencyState = EmergencyState.NoEmergency
+            },
+            Position = new TrackedPosition
+            {
+                BarometricAltitude = Altitude.FromFeet(-1000, AltitudeType.Barometric),
+                GeometricBarometricDelta = -3150,
+                GeometricAltitude = null
+            },
+            Status = new TrackedStatus
+            {
+                FirstSeen = now,
+                LastSeen = now,
+                TotalMessages = 1
+            }
+        };
+
+        // AirbornePosition message (TC 9-18) with barometric altitude = -1000 ft
+        var message = new AirbornePosition(
+            IcaoAddress: "AABBCC",
+            Timestamp: now,
+            DownlinkFormat: DownlinkFormat.ExtendedSquitter,
+            SignalStrength: 128.0,
+            WasCorrected: false,
+            Position: null,
+            Altitude: Altitude.FromFeet(-1000, AltitudeType.Barometric),
+            Antenna: null,
+            SurveillanceStatus: SurveillanceStatus.NoAlertNoSPI);
+
+        // Minimal ValidatedFrame and ProcessedFrame for the handler
+        var validatedFrame = new ValidatedFrame(
+            Data: new byte[14],
+            Timestamp: now,
+            Timestamp12MHz: 0,
+            IcaoRaw: 0xAABBCC,
+            IcaoAddress: "AABBCC",
+            SignalStrength: 128.0,
+            WasCorrected: false);
+        var frame = new ProcessedFrame(validatedFrame, message, now);
+
+        // Act — should NOT throw ArgumentOutOfRangeException
+        Aircraft result = handler.Apply(aircraft, message, frame, now);
+
+        // Assert — geometric altitude should remain null (derivation skipped)
+        result.Position.BarometricAltitude!.Feet.Should().Be(-1000);
+        result.Position.GeometricBarometricDelta.Should().Be(-3150);
+        result.Position.GeometricAltitude.Should().BeNull(
+            "derived geometric altitude (-4150 ft) exceeds valid range and should be skipped");
+    }
+
+    /// <summary>
+    /// Verifies that derived geometric altitude is skipped when the sum exceeds
+    /// the upper bound (126700 ft) of the valid Altitude range.
+    /// </summary>
+    [Fact]
+    public void DerivedGeometricAltitude_ExceedsUpperBound_SkipsDerivation()
+    {
+        // Arrange
+        TrackingConfig config = new TrackingConfigBuilder().Build();
+        var handler = new AirbornePositionHandler(config);
+        DateTime now = DateTime.UtcNow;
+
+        // Barometric = 126000 ft + delta = +3150 ft = 129150, exceeds 126700
+        var aircraft = new Aircraft
+        {
+            Identification = new TrackedIdentification
+            {
+                ICAO = "AABBCC",
+                EmergencyState = EmergencyState.NoEmergency
+            },
+            Position = new TrackedPosition
+            {
+                BarometricAltitude = Altitude.FromFeet(126000, AltitudeType.Barometric),
+                GeometricBarometricDelta = 3150,
+                GeometricAltitude = null
+            },
+            Status = new TrackedStatus
+            {
+                FirstSeen = now,
+                LastSeen = now,
+                TotalMessages = 1
+            }
+        };
+
+        var message = new AirbornePosition(
+            IcaoAddress: "AABBCC",
+            Timestamp: now,
+            DownlinkFormat: DownlinkFormat.ExtendedSquitter,
+            SignalStrength: 128.0,
+            WasCorrected: false,
+            Position: null,
+            Altitude: Altitude.FromFeet(126000, AltitudeType.Barometric),
+            Antenna: null,
+            SurveillanceStatus: SurveillanceStatus.NoAlertNoSPI);
+
+        var validatedFrame = new ValidatedFrame(
+            Data: new byte[14],
+            Timestamp: now,
+            Timestamp12MHz: 0,
+            IcaoRaw: 0xAABBCC,
+            IcaoAddress: "AABBCC",
+            SignalStrength: 128.0,
+            WasCorrected: false);
+        var frame = new ProcessedFrame(validatedFrame, message, now);
+
+        // Act
+        Aircraft result = handler.Apply(aircraft, message, frame, now);
+
+        // Assert
+        result.Position.BarometricAltitude!.Feet.Should().Be(126000);
+        result.Position.GeometricAltitude.Should().BeNull(
+            "derived geometric altitude (129150 ft) exceeds valid range and should be skipped");
     }
 }
