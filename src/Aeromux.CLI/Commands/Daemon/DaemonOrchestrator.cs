@@ -184,7 +184,6 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         // Step 2: Stop REST API server
         if (_webApp != null)
         {
-            await _webApp.StopAsync();
             await _webApp.DisposeAsync();
             Log.Information("REST API stopped");
         }

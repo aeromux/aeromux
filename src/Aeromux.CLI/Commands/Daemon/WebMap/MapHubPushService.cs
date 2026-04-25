@@ -20,6 +20,7 @@ using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.Core.Tracking;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
+using Serilog;
 
 namespace Aeromux.CLI.Commands.Daemon.WebMap;
 
@@ -29,6 +30,8 @@ namespace Aeromux.CLI.Commands.Daemon.WebMap;
 /// </summary>
 public sealed class MapHubPushService : BackgroundService
 {
+    private static readonly TimeSpan ClientPushTimeout = TimeSpan.FromSeconds(5);
+
     private readonly IAircraftStateTracker _tracker;
     private readonly IHubContext<MapHub> _hubContext;
     private readonly RangeOutlineTracker? _rangeOutlineTracker;
@@ -67,9 +70,9 @@ public sealed class MapHubPushService : BackgroundService
             {
                 break;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Swallow exceptions to keep the loop running
+                Log.Error(ex, "MapHubPushService push iteration failed");
             }
 
             await Task.Delay(1000, stoppingToken);
@@ -102,17 +105,21 @@ public sealed class MapHubPushService : BackgroundService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            using var clientCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            clientCts.CancelAfter(ClientPushTimeout);
+
             try
             {
-                await PushToClient(connectionId, state, allAircraft, totalCount, outline, outlineHash, cancellationToken);
+                await PushToClient(connectionId, state, allAircraft, totalCount, outline, outlineHash, clientCts.Token);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                throw;
+                Log.Warning("MapHubPushService: client {ConnectionId} push timed out after {Timeout}s, skipping",
+                    connectionId, ClientPushTimeout.TotalSeconds);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Client may have disconnected — skip silently
+                Log.Debug(ex, "MapHubPushService failed to push to client {ConnectionId}", connectionId);
             }
         }
     }

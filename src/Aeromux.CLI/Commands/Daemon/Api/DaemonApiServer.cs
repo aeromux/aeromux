@@ -96,7 +96,16 @@ public static class DaemonApiServer
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = embeddedProvider });
         var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
         contentTypes.Mappings[".woff2"] = "font/woff2";
-        app.UseStaticFiles(new StaticFileOptions { FileProvider = embeddedProvider, ContentTypeProvider = contentTypes });
+        // Embedded assets are baked into the assembly — safe to cache for 24 hours
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = embeddedProvider,
+            ContentTypeProvider = contentTypes,
+            OnPrepareResponse = ctx =>
+            {
+                ctx.Context.Response.Headers.CacheControl = "public, max-age=86400";
+            }
+        });
 
         // Map SignalR hub endpoint
         app.MapHub<MapHub>("/maphub");

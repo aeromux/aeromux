@@ -294,7 +294,8 @@ public static partial class DaemonApiRoutes
                     return Results.BadRequest(new ErrorResponse($"Invalid limit: {limitParam}. Must be a positive integer."));
                 }
 
-                limit = parsedLimit;
+                const int maxLimit = 10000;
+                limit = Math.Min(parsedLimit, maxLimit);
             }
 
             // Parse after parameter

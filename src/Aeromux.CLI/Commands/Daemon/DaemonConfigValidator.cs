@@ -72,6 +72,12 @@ public static class DaemonConfigValidator
         Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
         var mlatConfig = MlatConfig.Validate(settings.MlatEnabled, settings.MlatInputPort, config.Mlat);
 
+        if (!IPAddress.IsLoopback(bindAddress))
+        {
+            Log.Warning("Binding to {BindAddress} — services will listen on all network interfaces. " +
+                "Use --bind-address 127.0.0.1 to restrict to local access only", bindAddress);
+        }
+
         // Validate and resolve output enabled flags (priority: CLI > YAML > Default)
         bool beastEnabled = ValidateOutputEnabled(
             settings.BeastOutputEnabled, config.Network.BeastOutputEnabled, "Beast");

@@ -243,6 +243,16 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
                 return 1;
             }
 
+            // Validate asset filename — defense in depth against path traversal via compromised release metadata
+            if (release.AssetName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+                release.AssetName.Contains("..") ||
+                release.AssetName != Path.GetFileName(release.AssetName))
+            {
+                Console.WriteLine($"Error: Invalid asset filename: {release.AssetName}");
+                DatabaseDownloader.CleanupTempFile(tempFile);
+                return 1;
+            }
+
             // Install atomically
             string installedPath = DatabaseDownloader.InstallDatabase(tempFile, dbPath, release.AssetName);
 
