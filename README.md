@@ -68,7 +68,7 @@ Pre-built packages are available on the [GitHub Releases](https://github.com/aer
 Download the `.deb` package for your architecture (ARM64 for Raspberry Pi, x64 for standard Linux) and install:
 
 ```bash
-sudo dpkg -i aeromux_0.6.1-1_arm64.deb
+sudo dpkg -i aeromux_0.6.2-1_arm64.deb
 ```
 
 The package installs a systemd service that starts automatically. Configuration is at `/etc/aeromux/aeromux.yaml`. Requires `librtlsdr0` — install with `sudo apt-get install librtlsdr0`.
@@ -80,7 +80,7 @@ See the [Debian Packaging Guide](docs/PACKAGING-DEB.md) for details on configura
 Download the `.pkg` installer for your architecture (Apple Silicon or Intel) and double-click to install, or use the command line:
 
 ```bash
-sudo installer -pkg aeromux_0.6.1_macos_arm64.pkg -target /
+sudo installer -pkg aeromux_0.6.2_macos_arm64.pkg -target /
 ```
 
 The installer places the binary at `/opt/aeromux/bin/aeromux` with a symlink in `/usr/local/bin/` for PATH access. Configuration and data are stored under `~/Library/Application Support/aeromux/`. Requires `librtlsdr` — install with `brew install librtlsdr`.
