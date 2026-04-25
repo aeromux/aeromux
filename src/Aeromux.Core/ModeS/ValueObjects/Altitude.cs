@@ -76,7 +76,7 @@ public record Altitude : IComparable<Altitude>, IComparable
     /// <param name="type">Type of altitude measurement.</param>
     /// <returns>An Altitude instance.</returns>
     public static Altitude FromMeters(int meters, AltitudeType type)
-        => new((int)(meters / 0.3048), type);
+        => new((int)Math.Round(meters / 0.3048), type);
 
     /// <summary>
     /// Gets the altitude in feet.
@@ -87,7 +87,7 @@ public record Altitude : IComparable<Altitude>, IComparable
     /// Gets the altitude in meters.
     /// Conversion: 1 foot = 0.3048 meters (exactly).
     /// </summary>
-    public int Meters => (int)(_feet * 0.3048);
+    public int Meters => (int)Math.Round(_feet * 0.3048);
 
     /// <summary>
     /// Gets the flight level (altitude / 100).

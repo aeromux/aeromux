@@ -20,9 +20,9 @@ using FluentAssertions;
 namespace Aeromux.Core.Tests.ModeS.ValueObjects;
 
 /// <summary>
-/// Tests for the Velocity value object boundary validation.
+/// Tests for the Velocity value object boundary validation and unit conversions.
 /// Verifies the 4096 knot cap covers full supersonic encoding range
-/// while rejecting corrupt data.
+/// while rejecting corrupt data, and rounding correctness for km/h and mph conversions.
 /// </summary>
 public class VelocityTests
 {
@@ -69,5 +69,46 @@ public class VelocityTests
         // BDS 5,0 TAS max: 2046 knots
         Velocity velocity = Velocity.FromKnots(2046, VelocityType.TrueAirspeed);
         velocity.Knots.Should().Be(2046);
+    }
+
+    [Fact]
+    public void FromKnots_KilometersPerHour_RoundsCorrectly()
+    {
+        // 450 kts × 1.852 = 833.4 → rounds to 833
+        Velocity velocity = Velocity.FromKnots(450, VelocityType.GroundSpeed);
+        velocity.KilometersPerHour.Should().Be(833);
+    }
+
+    [Fact]
+    public void FromKnots_MilesPerHour_RoundsCorrectly()
+    {
+        // 450 kts × 1.15078 = 517.851 → rounds to 518
+        Velocity velocity = Velocity.FromKnots(450, VelocityType.GroundSpeed);
+        velocity.MilesPerHour.Should().Be(518);
+    }
+
+    [Fact]
+    public void FromKilometersPerHour_Knots_RoundsCorrectly()
+    {
+        // 833 km/h / 1.852 = 449.784... → rounds to 450 (was 449 before rounding fix)
+        Velocity velocity = Velocity.FromKilometersPerHour(833, VelocityType.GroundSpeed);
+        velocity.Knots.Should().Be(450);
+    }
+
+    [Fact]
+    public void FromMilesPerHour_Knots_RoundsCorrectly()
+    {
+        // 518 mph / 1.15078 = 450.06... → rounds to 450
+        Velocity velocity = Velocity.FromMilesPerHour(518, VelocityType.GroundSpeed);
+        velocity.Knots.Should().Be(450);
+    }
+
+    [Fact]
+    public void FromKnots_KilometersPerHour_RoundTrip()
+    {
+        // FromKnots(450) → .KilometersPerHour → FromKilometersPerHour → .Knots = 450
+        Velocity original = Velocity.FromKnots(450, VelocityType.GroundSpeed);
+        Velocity roundTripped = Velocity.FromKilometersPerHour(original.KilometersPerHour, VelocityType.GroundSpeed);
+        roundTripped.Knots.Should().Be(450);
     }
 }
