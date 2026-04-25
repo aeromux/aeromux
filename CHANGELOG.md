@@ -20,6 +20,7 @@ All notable changes to Aeromux will be documented in this file.
 - **Database Asset Filename Validation** — Added path traversal validation for the database asset filename before passing it to `InstallDatabase`. Rejects filenames containing invalid characters, directory traversal sequences (`..`), or path separators.
 - **Daemon Shutdown Delay** — Removed redundant explicit `StopAsync` call before `DisposeAsync` on the web application. `DisposeAsync` internally calls `StopAsync`, so the explicit call added an unnecessary shutdown timeout delay.
 - **Non-Loopback Bind Address Warning** — Added a log warning when the daemon binds to a non-loopback address (including the default `0.0.0.0`), informing that services are accessible from the network.
+- **Database Download ANSI Escape Codes** — Fixed garbled progress output when stdout is redirected (piped to file, CI runners, non-VT terminals). ANSI cursor movement codes are now only emitted to TTY terminals; redirected output prints progress at 25% intervals instead.
 
 ## [0.6.1] — 2026-04-17
 

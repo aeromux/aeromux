@@ -79,8 +79,14 @@ public static class DatabaseDownloader
             long totalBytesRead = 0;
             int bytesRead;
 
-            // Print an empty line so the cursor starts below the progress area
-            Console.WriteLine();
+            bool isTty = !Console.IsOutputRedirected;
+            int lastReportedPercent = -1;
+
+            // Print an empty line so the cursor starts below the progress area (TTY only)
+            if (isTty)
+            {
+                Console.WriteLine();
+            }
 
             while ((bytesRead = await downloadStream.ReadAsync(buffer, cancellationToken)) > 0)
             {
@@ -90,8 +96,21 @@ public static class DatabaseDownloader
                 double percentage = contentLength > 0 ? (double)totalBytesRead / contentLength * 100 : 0;
                 string progress = $"  {FormatBytes(totalBytesRead)} / {FormatBytes(contentLength)} ({percentage:F0}%)";
 
-                // Move cursor up, clear the line, write progress, move cursor back down
-                Console.Write($"\x1b[A\x1b[2K{progress}\n");
+                if (isTty)
+                {
+                    // Move cursor up, clear the line, write progress, move cursor back down
+                    Console.Write($"\x1b[A\x1b[2K{progress}\n");
+                }
+                else
+                {
+                    // Non-TTY: print progress at 25% intervals to avoid flooding
+                    int percentBucket = (int)(percentage / 25) * 25;
+                    if (percentBucket > lastReportedPercent)
+                    {
+                        lastReportedPercent = percentBucket;
+                        Console.WriteLine(progress);
+                    }
+                }
             }
 
             Log.Debug("Download complete: {TotalBytes} bytes written to {TempFile}", totalBytesRead, tempFile);
