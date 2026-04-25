@@ -100,7 +100,7 @@ public sealed class SurfaceCprDecoder
 
         // Calculate latitude index j
         int j = (int)Math.Floor(reference.Latitude / dLat) +
-                (int)Math.Floor(0.5 + ((reference.Latitude % dLat) / dLat) - yz);
+                (int)Math.Floor(0.5 + (CprMod(reference.Latitude, dLat) / dLat) - yz);
 
         // Calculate latitude
         double lat = dLat * (j + yz);
@@ -137,7 +137,7 @@ public sealed class SurfaceCprDecoder
 
         // Calculate longitude index m
         int m = (int)Math.Floor(reference.Longitude / dLon) +
-                (int)Math.Floor(0.5 + ((reference.Longitude % dLon) / dLon) - xz);
+                (int)Math.Floor(0.5 + (CprMod(reference.Longitude, dLon) / dLon) - xz);
 
         // Calculate longitude
         double lon = dLon * (m + xz);
@@ -169,6 +169,20 @@ public sealed class SurfaceCprDecoder
         19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  // 60-75°
         9,  8,  7,  6,  5,  4,  3,  2,  1,  1    // 75-90°
     ];
+
+    /// <summary>
+    /// Modulo operation that always returns a positive result.
+    /// C#'s % operator preserves the sign of the dividend, which produces
+    /// incorrect zone indices for negative coordinates (Southern/Western Hemisphere).
+    /// </summary>
+    /// <param name="a">Dividend.</param>
+    /// <param name="b">Divisor.</param>
+    /// <returns>Positive modulo result.</returns>
+    private static double CprMod(double a, double b)
+    {
+        double res = a % b;
+        return res < 0 ? res + b : res;
+    }
 
     /// <summary>
     /// Calculates the Number of Longitude Zones (NL) for surface CPR at a given latitude.

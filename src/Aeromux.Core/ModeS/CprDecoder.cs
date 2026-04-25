@@ -17,6 +17,7 @@
 using System.Collections.Concurrent;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
+using Serilog;
 
 namespace Aeromux.Core.ModeS;
 
@@ -37,7 +38,7 @@ public sealed class CprDecoder
     /// <summary>
     /// Per-aircraft CPR state storage for frame pairing.
     /// Each aircraft must maintain separate even/odd frames for global decoding.
-    /// Thread-safe for concurrent frame processing from multiple SDRs.
+    /// Each DeviceWorker owns its own CprDecoder instance (single-threaded access).
     /// </summary>
     private readonly ConcurrentDictionary<string, CprFramePair> _aircraftCprState = new();
     private readonly List<string> _staleKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
@@ -147,6 +148,7 @@ public sealed class CprDecoder
         bool useOdd = state.OddFrame.Timestamp > state.EvenFrame.Timestamp;
 
         GeographicCoordinate? result = DecodeCprGlobal(
+            icaoAddress,
             state.EvenFrame.Lat,
             state.EvenFrame.Lon,
             state.OddFrame.Lat,
@@ -167,6 +169,7 @@ public sealed class CprDecoder
     /// Global CPR decoding using even and odd frame pair.
     /// Calculates unambiguous latitude/longitude from paired CPR-encoded positions.
     /// </summary>
+    /// <param name="icaoAddress">Aircraft ICAO address (for diagnostic logging).</param>
     /// <param name="evenCprLat">CPR latitude from even frame (17 bits).</param>
     /// <param name="evenCprLon">CPR longitude from even frame (17 bits).</param>
     /// <param name="oddCprLat">CPR latitude from odd frame (17 bits).</param>
@@ -174,6 +177,7 @@ public sealed class CprDecoder
     /// <param name="useOddFrame">True to use odd frame's position, false for even frame.</param>
     /// <returns>Decoded geographic coordinate, or null if validation fails.</returns>
     private static GeographicCoordinate? DecodeCprGlobal(
+        string icaoAddress,
         int evenCprLat, int evenCprLon,
         int oddCprLat, int oddCprLon,
         bool useOddFrame)
@@ -227,7 +231,9 @@ public sealed class CprDecoder
         // This catches aircraft crossing latitude zone boundaries during frame pair
         if (CprNL(rlat0) != CprNL(rlat1))
         {
-            return null;  // Zone transition, wait for consistent pair
+            Log.Debug("CPR: zone transition for {Icao}, NL({Rlat0:F4})={NL0} != NL({Rlat1:F4})={NL1}, dropping frame pair",
+                icaoAddress, rlat0, CprNL(rlat0), rlat1, CprNL(rlat1));
+            return null;
         }
 
         // Choose final latitude based on which frame is newer.
