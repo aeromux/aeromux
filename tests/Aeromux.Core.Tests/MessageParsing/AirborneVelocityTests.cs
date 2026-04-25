@@ -139,4 +139,49 @@ public class AirborneVelocityTests
         velocity.NACv.Should().Be(expectedNACv);
     }
 
+    /// <summary>
+    /// TC 19 subtype 2 (supersonic ground speed) with moderate velocity components.
+    /// Vew=200, Vns=150 → with ×4 multiplier: vx=796, vy=596 → magnitude ≈ 994 knots.
+    /// Frame: 8D AAAAAA 9A 08 C8 12 C0 00 00 000000
+    /// </summary>
+    [Fact]
+    public void ParseMessage_DF17_TC19_SupersonicGroundSpeed_ModerateVelocity_Parses()
+    {
+        // Arrange — TC 19 subtype 2 frame with Vew=200, Vns=150 (supersonic multiplier ×4)
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData("8DAAAAAA9A08C812C0000000000000")
+            .WithIcaoAddress("AAAAAA")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert — magnitude ~994 knots, well within 4096 cap
+        message.Should().NotBeNull();
+        AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
+        velocity.Velocity.Should().NotBeNull();
+        velocity.Velocity!.Knots.Should().BeInRange(990, 1000);
+        velocity.Subtype.Should().Be(VelocitySubtype.GroundSpeedSupersonic);
+    }
+
+    /// <summary>
+    /// TC 19 subtype 2 (supersonic ground speed) with both axes maxed.
+    /// Vew=1023, Vns=1023 → with ×4 multiplier: magnitude ≈ 5781 knots → exceeds 4096, rejected as corrupt.
+    /// Frame: 8D AAAAAA 9A 0B FF 7F E0 00 00 000000
+    /// </summary>
+    [Fact]
+    public void ParseMessage_DF17_TC19_SupersonicGroundSpeed_BothAxesMaxed_ReturnsNull()
+    {
+        // Arrange — TC 19 subtype 2 frame with Vew=1023, Vns=1023 (both maxed)
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData("8DAAAAAA9A0BFF7FE0000000000000")
+            .WithIcaoAddress("AAAAAA")
+            .Build();
+
+        // Act — magnitude ~5781 knots exceeds 4096, rejected as corrupt data
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().BeNull();
+    }
 }

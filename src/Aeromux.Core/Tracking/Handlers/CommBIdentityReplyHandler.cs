@@ -352,14 +352,13 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
 
         // Update velocity with BDS 5,0 speed and track data
         // These fields provide redundancy to TC 19 for cross-validation
-        // Note: TAS can be 0-2046 knots, but Velocity value object only supports 0-1500 knots
         TrackedVelocity velocity = aircraft.Velocity with
         {
             TrackAngle = data.TrackAngle ?? aircraft.Velocity.TrackAngle,
-            CommBTrueAirspeed = data.TrueAirspeed is <= 1500
+            CommBTrueAirspeed = data.TrueAirspeed.HasValue
                 ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
                 : aircraft.Velocity.CommBTrueAirspeed,
-            CommBGroundSpeed = data.GroundSpeed is <= 1500
+            CommBGroundSpeed = data.GroundSpeed.HasValue
                 ? Velocity.FromKnots(data.GroundSpeed.Value, VelocityType.GroundSpeed)
                 : aircraft.Velocity.CommBGroundSpeed,
             LastUpdate = timestamp
@@ -434,13 +433,12 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         };
 
         // Update velocity with BDS 5,3 airspeed data
-        // Note: IAS range 0-500 knots (OK), TAS range 0-2046 knots (validate ≤1500)
         TrackedVelocity velocity = aircraft.Velocity with
         {
             CommBIndicatedAirspeed = data.IndicatedAirspeed.HasValue
                 ? Velocity.FromKnots(data.IndicatedAirspeed.Value, VelocityType.IndicatedAirspeed)
                 : aircraft.Velocity.CommBIndicatedAirspeed,
-            CommBTrueAirspeed = data.TrueAirspeed is <= 1500
+            CommBTrueAirspeed = data.TrueAirspeed.HasValue
                 ? Velocity.FromKnots(data.TrueAirspeed.Value, VelocityType.TrueAirspeed)
                 : aircraft.Velocity.CommBTrueAirspeed,
             LastUpdate = timestamp

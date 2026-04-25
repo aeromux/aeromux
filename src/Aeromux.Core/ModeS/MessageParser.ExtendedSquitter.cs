@@ -278,6 +278,12 @@ public sealed partial class MessageParser
         // Calculate ground speed (magnitude)
         int groundSpeed = (int)Math.Sqrt((vx * vx) + (vy * vy));
 
+        // Reject implausible ground speed (both axes simultaneously maxed = bit corruption)
+        if (groundSpeed > 4096)
+        {
+            return null;
+        }
+
         // Calculate track angle (0-360°, North = 0°)
         double trackAngle = Math.Atan2(vx, vy) * 180.0 / Math.PI;
         double normalizedHeading = ((trackAngle % 360) + 360) % 360;

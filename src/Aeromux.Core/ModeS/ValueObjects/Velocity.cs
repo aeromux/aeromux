@@ -46,12 +46,12 @@ public record Velocity : IComparable<Velocity>, IComparable
 
     private Velocity(int knots, VelocityType type)
     {
-        if (knots is < 0 or > 1500)
+        if (knots is < 0 or > 4096)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(knots),
                 knots,
-                "Velocity must be between 0 and 1500 knots (0 allows stationary, 1500 covers supersonic)");
+                "Velocity must be between 0 and 4096 knots (0 allows stationary, 4096 covers full supersonic encoding range)");
         }
 
         _knots = knots;
@@ -61,7 +61,7 @@ public record Velocity : IComparable<Velocity>, IComparable
     /// <summary>
     /// Creates a velocity from knots.
     /// </summary>
-    /// <param name="knots">Velocity in knots (0 to 1500).</param>
+    /// <param name="knots">Velocity in knots (0 to 4096).</param>
     /// <param name="type">Type of velocity measurement.</param>
     /// <returns>A Velocity instance.</returns>
     public static Velocity FromKnots(int knots, VelocityType type) => new(knots, type);
