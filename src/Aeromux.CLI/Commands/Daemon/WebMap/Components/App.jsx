@@ -48,7 +48,7 @@ export function App() {
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
     const defaultSections = {
-        identification: true, database: true, profile: true, status: true,
+        identification: true, photo: true, database: true, profile: true, status: true,
         position: true, velocity: true, autopilot: false, meteorology: false,
         acas: false, capabilities: false, dataQuality: false,
     };
@@ -410,6 +410,7 @@ export function App() {
                         stateHistory={stateHistory}
                         sections={sections}
                         showMore={showMore}
+                        settings={settings}
                         onToggleSection={toggleSection}
                         onToggleMore={toggleMore}
                         onResetLayout={resetLayout}

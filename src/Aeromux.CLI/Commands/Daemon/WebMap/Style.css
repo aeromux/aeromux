@@ -850,3 +850,72 @@ body {
         max-width: calc(100vw - 32px);
     }
 }
+
+/* ── Aircraft photo section ──────────────────────────────────────────────── */
+
+/* Rendered inside a DetailSection between Identification and Aircraft Database.
+   .section-content has no horizontal padding of its own (padding lives in
+   .section-fields, which the photo doesn't use), so the image is full-bleed
+   automatically. The attribution row keeps the standard 12px inset to align
+   with data fields in surrounding sections. */
+/* The <img> itself renders at its native aspect ratio (Planespotters'
+   thumbnail_large is fixed-height 280 px / variable width — ratios from
+   ~3:2 to ~16:9 in practice). We accept a layout shift between aircraft
+   in exchange for never cropping the airframe. The skeleton + empty
+   placeholders below DO need an explicit aspect ratio because they have
+   no intrinsic content to size from. */
+.aircraft-photo {
+    width: 100%;            /* full panel width — fills regardless of source size */
+    height: auto;           /* native aspect ratio; no cropping */
+    display: block;
+}
+
+/* Loading skeleton: fixed 3:2 box with animated low-contrast wash.
+   Switches to native ratio when the real photo loads. */
+.aircraft-photo-skeleton {
+    aspect-ratio: 3 / 2;
+    background: linear-gradient(
+        90deg,
+        var(--color-hover-bg) 0%,
+        var(--color-selected-bg) 50%,
+        var(--color-hover-bg) 100%
+    );
+    background-size: 200% 100%;
+    animation: aircraft-photo-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes aircraft-photo-pulse {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* No-photo / error placeholder: fixed 3:2 box so unphotographed aircraft
+   still occupy meaningful vertical space (rather than collapsing to a thin
+   strip). Photos render at their native aspect ratio above, which means
+   the panel height already varies between aircraft. */
+.aircraft-photo-empty {
+    aspect-ratio: 3 / 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-style: italic;
+}
+
+/* Attribution caption — uses the standard 12px horizontal inset to align with
+   the section-fields above and below the image. */
+.aircraft-photo-attribution {
+    padding: 6px 12px 12px 12px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.aircraft-photo-attribution a {
+    color: var(--color-section-header);
+    text-decoration: none;
+}
+
+.aircraft-photo-attribution a:hover {
+    text-decoration: underline;
+}

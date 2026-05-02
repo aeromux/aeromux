@@ -17,6 +17,7 @@
 using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Database;
+using Aeromux.Infrastructure.Photos;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Serilog;
@@ -41,6 +42,8 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     private AircraftDatabaseLookupService? _databaseLookup;
     private ReceiverStream? _receiverStream;
     private AircraftStateTracker? _aircraftTracker;
+    private AircraftPhotoCache? _photoCache;
+    private AircraftPhotoService? _photoService;
     private DaemonBroadcasterCollection? _broadcasters;
     private WebApplication? _webApp;
     private bool _disposed;
@@ -129,11 +132,21 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         _aircraftTracker.StartConsuming(_receiverStream.Subscribe(), cancellationToken);
         Log.Information("Aircraft state tracker started");
 
+        // Photo metadata cache + Planespotters lookup service. The service
+        // subscribes to AircraftStateTracker.OnAircraftExpired in its
+        // constructor, so it must be created after the tracker and disposed
+        // before it (see DisposeAsync ordering).
+        _photoCache = new AircraftPhotoCache();
+        IPlanespottersApiClient planespottersClient = new PlanespottersApiClient();
+        _photoService = new AircraftPhotoService(planespottersClient, _photoCache, _aircraftTracker);
+        Log.Information("Aircraft photo service started (Planespotters metadata cache, cap {Cap})",
+            _photoCache.Capacity);
+
         // Start REST API server (if enabled)
         if (_config.ApiEnabled)
         {
             DateTime startTime = DateTime.UtcNow;
-            _webApp = DaemonApiServer.Build(_config, _aircraftTracker,
+            _webApp = DaemonApiServer.Build(_config, _aircraftTracker, _photoService,
                 () => _receiverStream?.GetStatistics(), startTime);
             await _webApp.StartAsync(cancellationToken);
             Log.Information("REST API listening on http://{Bind}:{Port}/api/v1",
@@ -196,7 +209,11 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             await _receiverStream.DisposeAsync();
         }
 
-        // Step 4: Dispose aircraft tracker
+        // Step 4: Dispose photo service first (it has a subscription to the tracker;
+        // unsubscribe before the tracker goes away).
+        _photoService?.Dispose();
+
+        // Step 5: Dispose aircraft tracker
         // Tracker.Dispose() waits for consumer task to complete, then disposes cleanup timer
         if (_aircraftTracker != null)
         {
@@ -204,7 +221,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             Log.Information("Aircraft state tracker stopped");
         }
 
-        // Step 5: Close database connection
+        // Step 6: Close database connection
         _databaseLookup?.Dispose();
 
         Console.WriteLine("All device workers and TCP broadcasters stopped.");

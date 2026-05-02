@@ -2,6 +2,13 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.7.0] — Unreleased
+
+### Added
+
+- **Web Map Aircraft Photos** — New "Photo" section in the aircraft detail panel showing a representative photo of the airframe sourced from [Planespotters.net](https://www.planespotters.net/). Photos are fetched lazily on selection, with a loading skeleton, photographer attribution, and a clickable link back to the photo's page on planespotters.net (required by Planespotters' usage rules). Aeromux caches **photo metadata only** (URL + photographer + link); the browser fetches the JPEG directly from the Planespotters CDN and uses its own HTTP cache. Toggleable from the settings panel under "Aircraft photos" (default on, persisted in localStorage).
+- **REST API: Aircraft Photo Endpoint** — `GET /api/v1/aircraft/{icao}/photo` returns photo metadata (`HasPhoto`, `ThumbnailUrl`, `Photographer`, `Link`) sourced from Planespotters.net. Cached in memory and evicted when the aircraft expires from the tracker, with a 1000-entry LRU safety cap. Transient upstream failures (429, 5xx, network, timeout) return 502 and are not cached. Documented in [API Guide](docs/API.md). Attribution to Planespotters.net is mandatory for downstream consumers.
+
 ## [0.6.2] — 2026-04-25
 
 ### Fixed
@@ -107,6 +114,7 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.7.0]: https://github.com/aeromux/aeromux/releases/tag/v0.7.0
 [0.6.2]: https://github.com/aeromux/aeromux/releases/tag/v0.6.2
 [0.6.1]: https://github.com/aeromux/aeromux/releases/tag/v0.6.1
 [0.6.0]: https://github.com/aeromux/aeromux/releases/tag/v0.6.0

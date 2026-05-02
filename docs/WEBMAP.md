@@ -58,12 +58,12 @@ Aircraft: 12 in view / 34 total
 
 Below the statistics row is a scrollable table of all aircraft visible on the current map viewport. Each row shows:
 
-| Column   | Description                                                                                  |
-|----------|----------------------------------------------------------------------------------------------|
-| Callsign | The flight callsign (or `N/A` if not yet received), with the ICAO address displayed below it |
-| Altitude | Barometric altitude in the currently selected unit                                           |
-| Speed    | Ground speed in the currently selected unit                                                  |
-| Distance | Distance from the receiver, when the receiver location is configured                         |
+| Column   | Description                                                                                   |
+|----------|-----------------------------------------------------------------------------------------------|
+| Callsign | The flight callsign (or `N/A` if not yet received), with the ICAO address displayed below it  |
+| Altitude | Barometric altitude in the currently selected unit                                            |
+| Speed    | Ground speed in the currently selected unit                                                   |
+| Distance | Distance from the receiver, when the receiver location is configured                          |
 
 ### Sorting
 
@@ -87,6 +87,7 @@ Clicking an aircraft in the list or on the map opens the detail view, which repl
 The detail view is organized into the following sections:
 
 - **Identification** — The aircraft's ICAO address, callsign, wake turbulence category, squawk code, and emergency state.
+- **Aircraft Photo** — A representative photo of the airframe sourced from [Planespotters.net](https://www.planespotters.net/), with photographer attribution and a link back to the photo's page on planespotters.net. Lazy-loaded on selection. Aeromux caches the photo metadata only — the browser fetches the JPEG directly from Planespotters' CDN. The section can be toggled off entirely from the settings panel.
 - **Aircraft Database** — Static metadata from the [aeromux-db](https://github.com/aeromux/aeromux-db) database, including registration, operator, manufacturer, aircraft type, and regulatory flags such as FAA PIA and LADD.
 - **Flight Profile** — A dual-axis chart showing barometric altitude (blue line, left axis) and ground speed (orange line, right axis) over time. The chart loads historical data on selection and extends in real-time as new state updates arrive. A legend above the chart indicates the color and unit for each series. When state history is not enabled or no data is available, an informational message is shown instead.
 - **Status** — Timestamps for when the aircraft was first and last seen, message counts broken down by type (position, velocity, identification), and the current signal strength.
@@ -98,7 +99,7 @@ The detail view is organized into the following sections:
 - **Capabilities** — Transponder level, ADS-B version, data link feature support (1090ES, UAT, CDTI), operational flags, aircraft dimensions, GPS antenna offsets, downlink request, utility message, data link capability, and supported BDS registers.
 - **Data Quality** — Navigation accuracy (NACp, NACv), navigation integrity (NICbaro, NIC supplements), surveillance integrity (SIL), geometric vertical accuracy, antenna configuration, and system design assurance level.
 
-Sections 1 through 6 are expanded by default; sections 7 through 11 are collapsed. Sections with many fields include a "See more" link to reveal additional details. The detail view updates in real-time as new data is received. If the selected aircraft expires (no messages received within the timeout period), an `[EXPIRED]` banner is displayed at the top of the detail view.
+Sections 1 through 7 are expanded by default; sections 8 through 12 are collapsed. Sections with many fields include a "See more" link to reveal additional details. The detail view updates in real-time as new data is received. If the selected aircraft expires (no messages received within the timeout period), an `[EXPIRED]` banner is displayed at the top of the detail view.
 
 ## Control Panel (Top Right)
 
@@ -141,10 +142,11 @@ Unit changes are applied immediately across the entire interface — the aircraf
 
 #### Interface
 
-| Option        | Description                                                        | Default  |
-|---------------|--------------------------------------------------------------------|----------|
-| Range rings   | Show or hide the range rings on the map                            | On       |
-| Range outline | Show or hide the receiver coverage outline (requires receiver location) | On       |
+| Option           | Description                                                                                                                                                        | Default  |
+|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| Range rings      | Show or hide the range rings on the map                                                                                                                            | On       |
+| Range outline    | Show or hide the receiver coverage outline (requires receiver location)                                                                                            | On       |
+| Aircraft photos  | Show or hide the Aircraft Photo section in the detail panel. When off, the section is removed entirely (not just collapsed) so it can't be accidentally re-opened. | On       |
 
 #### Reset
 

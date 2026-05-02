@@ -192,6 +192,12 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                         </div>
                         Range outline
                     </div>
+                    <div class="settings-toggle" onClick={() => toggleSetting('aircraftPhotos')}>
+                        <div class={`toggle-track${settings.aircraftPhotos ? ' active' : ''}`}>
+                            <div class="toggle-knob" />
+                        </div>
+                        Aircraft photos
+                    </div>
                     <div class="settings-category">Legend</div>
                     <div class="legend-items">
                         <div class="legend-item">

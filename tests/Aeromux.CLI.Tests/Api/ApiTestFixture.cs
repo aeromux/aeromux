@@ -21,6 +21,7 @@ using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Photos;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Moq;
@@ -41,6 +42,12 @@ public sealed class ApiTestFixture : IAsyncDisposable
     public Mock<IAircraftStateTracker> TrackerMock { get; }
 
     /// <summary>
+    /// Mock photo service. Default behaviour: returns NoPhoto for any ICAO. Override
+    /// per-test by reconfiguring the mock.
+    /// </summary>
+    public Mock<IAircraftPhotoService> PhotoServiceMock { get; }
+
+    /// <summary>
     /// Stream statistics to return from the stats endpoint.
     /// </summary>
     public StreamStatistics? Statistics { get; set; }
@@ -53,11 +60,16 @@ public sealed class ApiTestFixture : IAsyncDisposable
     /// <summary>
     /// Creates a new test fixture. Call InitializeAsync() to start the server.
     /// </summary>
-    private ApiTestFixture(WebApplication app, HttpClient client, Mock<IAircraftStateTracker> trackerMock)
+    private ApiTestFixture(
+        WebApplication app,
+        HttpClient client,
+        Mock<IAircraftStateTracker> trackerMock,
+        Mock<IAircraftPhotoService> photoServiceMock)
     {
         _app = app;
         _client = client;
         TrackerMock = trackerMock;
+        PhotoServiceMock = photoServiceMock;
     }
 
     /// <summary>
@@ -68,6 +80,11 @@ public sealed class ApiTestFixture : IAsyncDisposable
         var trackerMock = new Mock<IAircraftStateTracker>();
         trackerMock.Setup(t => t.GetAllAircraft()).Returns(new List<Aircraft>());
         trackerMock.Setup(t => t.Count).Returns(0);
+
+        var photoServiceMock = new Mock<IAircraftPhotoService>();
+        photoServiceMock
+            .Setup(s => s.GetAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PhotoResult(PhotoOutcome.NoPhoto, PhotoMetadata.Negative()));
 
         var config = new DaemonValidatedConfig
         {
@@ -100,11 +117,12 @@ public sealed class ApiTestFixture : IAsyncDisposable
         DateTime startTime = DateTime.UtcNow;
 
         // Use a shared reference so the lambda captures the same fixture instance we return
-        var fixture = new ApiTestFixture(null!, null!, trackerMock);
+        var fixture = new ApiTestFixture(null!, null!, trackerMock, photoServiceMock);
 
         WebApplication app = DaemonApiServer.Build(
             config,
             trackerMock.Object,
+            photoServiceMock.Object,
             () => fixture.Statistics,
             startTime);
 

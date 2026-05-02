@@ -18,6 +18,7 @@ import { h, Fragment } from 'preact';
 import { DetailSection } from './DetailSection.jsx';
 import { DetailField } from './DetailField.jsx';
 import { FlightProfileChart } from './FlightProfileChart.jsx';
+import { AircraftPhoto } from './AircraftPhoto.jsx';
 import { formatAltitude, formatSpeed, haversineDistance, convertDistance } from '../Services/UnitConversion.js';
 
 function fmtBool(v) { return v == null ? null : v ? 'Yes' : 'No'; }
@@ -36,7 +37,7 @@ function fmtAgo(v) {
 function fmtDeg(v) { return v != null ? `${v.toFixed(2)}\u00B0` : null; }
 function fmtNum(v, suffix) { return v != null ? `${v}${suffix || ''}` : null; }
 
-export function AircraftDetail({ detail, expired, units, receiverLocation, stateHistory, sections, showMore, onToggleSection, onToggleMore, onResetLayout, onBack }) {
+export function AircraftDetail({ detail, expired, units, receiverLocation, stateHistory, sections, showMore, settings, onToggleSection, onToggleMore, onResetLayout, onBack }) {
     if (!detail) {
         return (
             <div class="detail-scroll">
@@ -103,7 +104,16 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                 </div>
             </DetailSection>
 
-            {/* 2. Aircraft Database */}
+            {/* 2. Aircraft Photo (Planespotters.net). When the toggle in the
+                 settings panel is off, the entire section is hidden — users
+                 can't accidentally expand it. */}
+            {settings?.aircraftPhotos && (
+                <DetailSection title="Aircraft Photo" expanded={sections.photo} onToggle={() => onToggleSection('photo')}>
+                    <AircraftPhoto icao={id.ICAO} />
+                </DetailSection>
+            )}
+
+            {/* 3. Aircraft Database */}
             <DetailSection title="Aircraft Database" expanded={sections.database} onToggle={() => onToggleSection('database')}>
                 {db === null && detail.Identification ? (
                     <div class="db-disabled-message">Aircraft database not enabled</div>

@@ -27,15 +27,16 @@ When the API is disabled, the HTTP server is not started and the port is not ope
 
 ## Endpoints
 
-The API exposes five endpoints, all under the `/api/v1/` prefix. All endpoints accept only `GET` requests:
+The API exposes six endpoints, all under the `/api/v1/` prefix. All endpoints accept only `GET` requests:
 
-| Endpoint                              | Description                                                                    |
-|---------------------------------------|--------------------------------------------------------------------------------|
-| `GET /api/v1/aircraft`                | Returns a compact list of all currently tracked aircraft                       |
-| `GET /api/v1/aircraft/{icao}`         | Returns detailed information for a single aircraft, organized into 10 sections |
-| `GET /api/v1/aircraft/{icao}/history` | Returns position, altitude, velocity, and state history for a single aircraft  |
-| `GET /api/v1/stats`                   | Returns receiver and session statistics including uptime and frame rates       |
-| `GET /api/v1/health`                  | Lightweight health check for Docker, monitoring tools, and readiness probes    |
+| Endpoint                              | Description                                                                         |
+|---------------------------------------|-------------------------------------------------------------------------------------|
+| `GET /api/v1/aircraft`                | Returns a compact list of all currently tracked aircraft                            |
+| `GET /api/v1/aircraft/{icao}`         | Returns detailed information for a single aircraft, organized into 10 sections      |
+| `GET /api/v1/aircraft/{icao}/history` | Returns position, altitude, velocity, and state history for a single aircraft       |
+| `GET /api/v1/aircraft/{icao}/photo`   | Returns photo metadata sourced from Planespotters.net (thumbnail URL + attribution) |
+| `GET /api/v1/stats`                   | Returns receiver and session statistics including uptime and frame rates            |
+| `GET /api/v1/health`                  | Lightweight health check for Docker, monitoring tools, and readiness probes         |
 
 ## Aircraft List
 
@@ -528,6 +529,52 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=State"
   }
 }
 ```
+
+## Aircraft Photo
+
+The aircraft photo endpoint returns metadata for a representative photo of the airframe sourced from [Planespotters.net](https://www.planespotters.net/) via their public `/pub/` API. Aeromux acts as a metadata cache only — it queries Planespotters on cache miss, caches the result in memory, and returns the metadata to the client. The browser then fetches the thumbnail JPEG directly from Planespotters' CDN. Aeromux is not in the byte path.
+
+```bash
+curl -s "http://localhost:8080/api/v1/aircraft/4CA87C/photo"
+```
+
+```json
+{
+  "HasPhoto": true,
+  "ThumbnailUrl": "https://t.plnspttrs.net/03699/1234567_abc_280.jpg",
+  "Photographer": "Jane Doe",
+  "Link": "https://www.planespotters.net/photo/1234567/foo?utm_source=api"
+}
+```
+
+When no photo is available — Planespotters returned an empty result, or returned 404/410 — `HasPhoto` is `false` and the other fields are `null`:
+
+```json
+{
+  "HasPhoto": false,
+  "ThumbnailUrl": null,
+  "Photographer": null,
+  "Link": null
+}
+```
+
+### Lookup behaviour
+
+The endpoint first looks up the photo by 24-bit ICAO hex address. If that returns no photo and the local aircraft database is enabled and has a registration for the ICAO, a second lookup is attempted by registration. Both terminal results (positive and "no photo") are cached in memory until the aircraft expires from the tracker, with a 1000-entry LRU safety cap.
+
+Transient upstream failures (HTTP 429, 5xx, network error, timeout) are **not** cached. The endpoint returns `502 Bad Gateway` and the next request retries from scratch.
+
+### Image bytes
+
+The browser is responsible for fetching the thumbnail JPEG. Set the `<img>` tag's `src` attribute to the returned `ThumbnailUrl` and let the browser/CDN handle the bytes and HTTP cache:
+
+```html
+<img src="https://t.plnspttrs.net/03699/1234567_abc_280.jpg" alt="Aircraft photo by Jane Doe">
+```
+
+### Attribution requirement
+
+Planespotters' usage rules **require** that every displayed image shows the photographer's name and a clickable link to the photo's page on planespotters.net. Clients consuming this endpoint MUST render the `Photographer` value as the visible attribution and the `Link` value as the photographer's clickable link. Stripping or omitting these fields violates the API's terms of use.
 
 ## Statistics
 

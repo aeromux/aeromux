@@ -36,3 +36,13 @@ export const fetchStateHistory = (icao) =>
 
 export const searchAircraft = (query) =>
     fetch(`${API}/aircraft?search=${encodeURIComponent(query)}`).then(r => r.json());
+
+// Fetches photo metadata (Planespotters.net) for the given ICAO. Caller passes
+// an AbortSignal so selecting a different aircraft cancels an in-flight request.
+// On any non-OK response (400, 502), throws an Error so the component renders
+// the "No photo available" placeholder.
+export const fetchAircraftPhoto = (icao, signal) =>
+    fetch(`${API}/aircraft/${icao}/photo`, { signal }).then(r => {
+        if (!r.ok) throw new Error(`photo:${r.status}`);
+        return r.json();
+    });

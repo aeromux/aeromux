@@ -18,6 +18,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aeromux.CLI.Commands.Daemon.WebMap;
 using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Photos;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -37,15 +38,18 @@ public static class DaemonApiServer
     /// </summary>
     /// <param name="config">Validated daemon configuration.</param>
     /// <param name="tracker">Aircraft state tracker for data queries.</param>
+    /// <param name="photoService">Aircraft photo service used by the <c>/api/v1/aircraft/{icao}/photo</c> endpoint and registered as a DI singleton for the SignalR hub.</param>
     /// <param name="getStatistics">Function to get stream statistics.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
     /// <returns>A configured WebApplication ready to be started.</returns>
     public static WebApplication Build(
         DaemonValidatedConfig config,
         IAircraftStateTracker tracker,
+        IAircraftPhotoService photoService,
         Func<StreamStatistics?> getStatistics,
         DateTime startTime)
     {
+        ArgumentNullException.ThrowIfNull(photoService);
         ArgumentNullException.ThrowIfNull(config);
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
@@ -74,7 +78,8 @@ public static class DaemonApiServer
                 options.PayloadSerializerOptions.PropertyNamingPolicy = null; // PascalCase to match REST API
                 options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
             });
-        builder.Services.AddSingleton<IAircraftStateTracker>(tracker);
+        builder.Services.AddSingleton(tracker);
+        builder.Services.AddSingleton(photoService);
         builder.Services.AddSingleton<MapHubPushService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MapHubPushService>());
 
@@ -94,8 +99,10 @@ public static class DaemonApiServer
         ManifestEmbeddedFileProvider embeddedProvider = new(
             assembly: typeof(DaemonApiServer).Assembly);
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = embeddedProvider });
-        var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
-        contentTypes.Mappings[".woff2"] = "font/woff2";
+        var contentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider { Mappings =
+        {
+            [".woff2"] = "font/woff2"
+        } };
         // Embedded assets are baked into the assembly — safe to cache for 24 hours
         app.UseStaticFiles(new StaticFileOptions
         {
@@ -119,7 +126,7 @@ public static class DaemonApiServer
         };
 
         // Map all API routes
-        DaemonApiRoutes.MapRoutes(app, tracker, getStatistics, startTime, config, jsonOptions);
+        DaemonApiRoutes.MapRoutes(app, tracker, photoService, getStatistics, startTime, config, jsonOptions);
 
         return app;
     }

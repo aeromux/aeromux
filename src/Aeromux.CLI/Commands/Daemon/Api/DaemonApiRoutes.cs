@@ -14,9 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Photos;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -63,6 +65,7 @@ public static partial class DaemonApiRoutes
     public static void MapRoutes(
         WebApplication app,
         IAircraftStateTracker tracker,
+        IAircraftPhotoService photoService,
         Func<StreamStatistics?> getStatistics,
         DateTime startTime,
         DaemonValidatedConfig config,
@@ -93,14 +96,14 @@ public static partial class DaemonApiRoutes
                         $"Invalid bounds format: expected 4 comma-separated values (south,west,north,east), got {parts.Length}"));
                 }
 
-                if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double south) ||
-                    !double.TryParse(parts[1], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double west) ||
-                    !double.TryParse(parts[2], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double north) ||
-                    !double.TryParse(parts[3], System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double east))
+                if (!double.TryParse(parts[0], NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double south) ||
+                    !double.TryParse(parts[1], NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double west) ||
+                    !double.TryParse(parts[2], NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double north) ||
+                    !double.TryParse(parts[3], NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double east))
                 {
                     return Results.BadRequest(new ErrorResponse(
                         $"Invalid bounds values: all values must be valid numbers"));
@@ -252,6 +255,40 @@ public static partial class DaemonApiRoutes
             }
 
             return Results.Json(response, jsonOptions);
+        });
+
+        // GET /api/v1/aircraft/{icao}/photo — Aircraft photo metadata (Planespotters.net)
+        app.MapGet("/api/v1/aircraft/{icao}/photo", async (string icao, HttpContext httpContext) =>
+        {
+            if (!IcaoPattern().IsMatch(icao))
+            {
+                return Results.BadRequest(new ErrorResponse($"Invalid ICAO address: {icao}"));
+            }
+
+            uint icaoUint = uint.Parse(icao, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+            PhotoResult result = await photoService.GetAsync(icaoUint, httpContext.RequestAborted);
+
+            // Per docs/API.md "Response Format": all fields are always present;
+            // ThumbnailUrl/Photographer/Link are null (not omitted) when HasPhoto is false.
+            // result.Metadata is non-null for both HasPhoto and NoPhoto outcomes (positive
+            // entry in the first case, PhotoMetadata.Negative() in the second).
+            return result.Outcome switch
+            {
+                PhotoOutcome.HasPhoto or PhotoOutcome.NoPhoto => Results.Json(new
+                {
+                    result.Metadata!.HasPhoto,
+                    result.Metadata.ThumbnailUrl,
+                    result.Metadata.Photographer,
+                    result.Metadata.Link,
+                }, jsonOptions),
+
+                PhotoOutcome.UpstreamFailure => Results.Json(
+                    new ErrorResponse("Upstream photo lookup failed; try again."),
+                    statusCode: StatusCodes.Status502BadGateway),
+
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError),
+            };
         });
 
         // GET /api/v1/aircraft/{icao}/history — Aircraft history
