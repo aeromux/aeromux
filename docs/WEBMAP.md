@@ -163,3 +163,5 @@ The web map requires a modern browser with WebGL support:
 | Safari           | 17.2+           |
 | Edge             | 120+            |
 | Samsung Internet | 25+             |
+
+If WebGL is unavailable — typically because hardware acceleration is disabled in the browser settings — the web map displays an informational message in place of the map, with instructions for enabling hardware acceleration.

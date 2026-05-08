@@ -9,6 +9,10 @@ All notable changes to Aeromux will be documented in this file.
 - **Web Map Aircraft Photos** — New "Photo" section in the aircraft detail panel showing a representative photo of the airframe sourced from [Planespotters.net](https://www.planespotters.net/). Photos are fetched lazily on selection, with a loading skeleton, photographer attribution, and a clickable link back to the photo's page on planespotters.net (required by Planespotters' usage rules). Aeromux caches **photo metadata only** (URL + photographer + link); the browser fetches the JPEG directly from the Planespotters CDN and uses its own HTTP cache. Toggleable from the settings panel under "Aircraft photos" (default on, persisted in localStorage).
 - **REST API: Aircraft Photo Endpoint** — `GET /api/v1/aircraft/{icao}/photo` returns photo metadata (`HasPhoto`, `ThumbnailUrl`, `Photographer`, `Link`) sourced from Planespotters.net. Cached in memory and evicted when the aircraft expires from the tracker, with a 1000-entry LRU safety cap. Transient upstream failures (429, 5xx, network, timeout) return 502 and are not cached. Documented in [API Guide](docs/API.md). Attribution to Planespotters.net is mandatory for downstream consumers.
 
+### Fixed
+
+- **Web Map WebGL Unavailability** — Replaced the blank page and uncaught console error shown when the browser cannot create a WebGL context (typically due to disabled hardware acceleration) with a centered, branded message explaining the requirement and pointing users to their browser's hardware-acceleration setting.
+
 ## [0.6.2] — 2026-04-25
 
 ### Fixed

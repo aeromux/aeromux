@@ -66,6 +66,13 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Gray backdrop only when the WebGL error panel is in the DOM. The map
+   covers the body in normal state, so an unconditional body background
+   would never show — but it would briefly flash during initial paint. */
+body:has(.webgl-error) {
+    background: #e5e7eb;
+}
+
 /* ── Map Container ────────────────────────────────────────────────────────── */
 
 .map-container {
@@ -918,4 +925,38 @@ body {
 
 .aircraft-photo-attribution a:hover {
     text-decoration: underline;
+}
+
+/* ── WebGL Error ──────────────────────────────────────────────────────────── */
+
+.webgl-error {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 480px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.webgl-error-body {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    overflow-y: auto;
+}
+
+.webgl-error-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.webgl-error-body p {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
 }

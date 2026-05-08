@@ -16,5 +16,21 @@
 
 import { h, render } from 'preact';
 import { App } from './Components/App.jsx';
+import { WebGLError } from './Components/WebGLError.jsx';
 
-render(<App />, document.getElementById('app'));
+// Pre-flight WebGL probe — gates mounting <App /> when the browser cannot
+// create a WebGL context (typically due to disabled hardware acceleration).
+// Mirrors maplibre-gl's own context-creation order (webgl2 → webgl);
+// maplibregl.supported() was removed in v5 so we roll our own. The outer
+// try/catch defends against locked-down environments where canvas creation
+// itself throws.
+function isWebGLAvailable() {
+    try {
+        const canvas = document.createElement('canvas');
+        return !!(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+    } catch {
+        return false;
+    }
+}
+
+render(isWebGLAvailable() ? <App /> : <WebGLError />, document.getElementById('app'));
