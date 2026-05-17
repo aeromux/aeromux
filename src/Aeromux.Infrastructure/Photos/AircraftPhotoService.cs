@@ -52,8 +52,9 @@ public sealed record PhotoResult(PhotoOutcome Outcome, PhotoMetadata? Metadata);
 /// fallback → cache insert. Single-flight per-ICAO so concurrent requests
 /// for the same aircraft trigger only one upstream call. Subscribes to
 /// <see cref="AircraftStateTracker.OnAircraftExpired"/> and routes evictions
-/// through the same per-ICAO semaphore so the insert-vs-eviction race stays
-/// correct (see AIRCRAFT-PICTURE.md §6.4).
+/// through the same per-ICAO semaphore so an in-flight insert and a tracker
+/// eviction for the same ICAO are serialised — preventing a stale entry from
+/// surviving the aircraft's expiry.
 /// </summary>
 public interface IAircraftPhotoService
 {
@@ -138,8 +139,7 @@ public sealed class AircraftPhotoService : IAircraftPhotoService, IDisposable
             }
 
             // Hex returned terminal "no photo" — try registration fallback if
-            // the tracker has a registration for this ICAO. (Phase 0.3
-            // confirmed the access path: aircraft.DatabaseRecord.Registration.)
+            // the tracker has a registration for this ICAO.
             string hex = icao.ToString("X6", CultureInfo.InvariantCulture);
             Aircraft? aircraft = _tracker.GetAircraft(hex);
             string? registration = aircraft?.DatabaseRecord.Registration;
@@ -209,8 +209,7 @@ public sealed class AircraftPhotoService : IAircraftPhotoService, IDisposable
     /// <summary>
     /// Returns the per-ICAO single-flight semaphore, lazily creating it on
     /// first access. Semaphores accumulate over the daemon's lifetime
-    /// (~80 bytes per unique ICAO ever seen) — accepted overhead per
-    /// AIRCRAFT-PICTURE.md §6.4.
+    /// (~80 bytes per unique ICAO ever seen) — accepted overhead.
     /// </summary>
     private SemaphoreSlim GetSemaphore(uint icao) =>
         _semaphores.GetOrAdd(icao, static _ => new SemaphoreSlim(1, 1));

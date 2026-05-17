@@ -572,9 +572,18 @@ The browser is responsible for fetching the thumbnail JPEG. Set the `<img>` tag'
 <img src="https://t.plnspttrs.net/03699/1234567_abc_280.jpg" alt="Aircraft photo by Jane Doe">
 ```
 
-### Attribution requirement
+### Planespotters usage rules
 
-Planespotters' usage rules **require** that every displayed image shows the photographer's name and a clickable link to the photo's page on planespotters.net. Clients consuming this endpoint MUST render the `Photographer` value as the visible attribution and the `Link` value as the photographer's clickable link. Stripping or omitting these fields violates the API's terms of use.
+Photo metadata returned by this endpoint originates from Planespotters' public photo API and is governed by the [Planespotters Photo API Terms of Use](https://www.planespotters.net/photo/api). Aeromux is designed to satisfy those rules out of the box; clients consuming this endpoint MUST preserve that compliance:
+
+- **Attribution is mandatory.** Render the `Photographer` value as visible text next to the image, and the `Link` value as a clickable anchor pointing to the photo's page on planespotters.net. The link must be a plain anchor without `rel="nofollow"` or equivalent. Aeromux's bundled web map uses `rel="noopener"` (security only) and `target="_blank"`.
+- **Use URLs unchanged.** `ThumbnailUrl` and `Link` must be passed through verbatim. Do not proxy, rewrite, or hot-link-protection-bypass them. The image must be loaded by the end user's browser directly from `ThumbnailUrl`.
+- **Do not download or re-host the image bytes.** Aeromux only caches the JSON metadata; the binary JPEG never touches the daemon. Clients must do the same.
+- **Metadata caching ≤ 24 h.** Aeromux's in-memory cache evicts entries when the aircraft expires from the tracker, well inside the 24-hour limit. Downstream clients that add their own cache must respect the same upper bound.
+- **No re-exposure as a separate dataset.** This endpoint exists to render photos in the bundled Aeromux web map for the end user operating the daemon. It is not a redistribution feed: building a public proxy, bulk export, or third-party API on top of it is not permitted by Planespotters' terms.
+- **No ML/AI training.** The returned metadata and the images it points to must not be used to train, fine-tune, evaluate, or build datasets for machine-learning models.
+
+Upstream, the daemon identifies itself to Planespotters with a descriptive `User-Agent` (`Aeromux/{version} (+https://github.com/aeromux/aeromux)`) as required for server-side clients. No API key is needed.
 
 ## Statistics
 

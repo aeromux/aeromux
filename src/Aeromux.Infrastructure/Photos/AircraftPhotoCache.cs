@@ -28,12 +28,11 @@ namespace Aeromux.Infrastructure.Photos;
 /// The cache is intentionally dumb: it doesn't subscribe to anything and
 /// has no understanding of the per-ICAO single-flight semaphore. The service
 /// is responsible for serialising <see cref="Insert"/> and <see cref="Evict"/>
-/// calls per-ICAO so that the insert-vs-eviction race stays correct. See
-/// AIRCRAFT-PICTURE.md §6.4 for the full thread-safety rationale.
+/// calls per-ICAO so that the insert-vs-eviction race stays correct.
 /// </remarks>
 public sealed class AircraftPhotoCache
 {
-    /// <summary>Default cap — see AIRCRAFT-PICTURE.md §6.2 for rationale.</summary>
+    /// <summary>Default hard cap. Bounds memory use to a few hundred KB even if every cached entry is a positive hit.</summary>
     private const int DefaultCapacity = 1000;
 
     private readonly int _capacity;
@@ -80,10 +79,10 @@ public sealed class AircraftPhotoCache
     /// <summary>
     /// Inserts or replaces the entry for the given ICAO. The cache wraps the
     /// metadata in a fresh <see cref="CacheEntry"/> with
-    /// <c>LastAccessTicks = Environment.TickCount64</c> — load-bearing per
-    /// AIRCRAFT-PICTURE.md §6.1, since a default-zero ticks value would make
-    /// the new entry the immediate LRU candidate. If <see cref="Count"/> is
-    /// already at <see cref="Capacity"/>, an LRU sweep evicts one entry first.
+    /// <c>LastAccessTicks = Environment.TickCount64</c> — load-bearing because
+    /// a default-zero ticks value would make the new entry the immediate LRU
+    /// candidate. If <see cref="Count"/> is already at <see cref="Capacity"/>,
+    /// an LRU sweep evicts one entry first.
     /// </summary>
     /// <param name="icao">24-bit ICAO address to associate with the metadata.</param>
     /// <param name="metadata">Photo metadata to cache. Must not be null. May be a positive or negative <see cref="PhotoMetadata"/>; both are valid cache entries.</param>

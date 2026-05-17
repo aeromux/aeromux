@@ -77,7 +77,7 @@ export function AircraftPhoto({ icao }) {
                     onError={() => setState({ kind: 'error', data: null })}
                 />
                 <div class="aircraft-photo-attribution">
-                    Photo: <a href={m.Link} target="_blank" rel="noopener noreferrer">{m.Photographer}</a>
+                    Photo: <a href={m.Link} target="_blank" rel="noopener">{m.Photographer}</a>
                     {' · Planespotters'}
                 </div>
             </Fragment>

@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using Serilog;
 
@@ -59,8 +60,26 @@ public sealed class PlanespottersApiClient : IPlanespottersApiClient
     private const string RegUrlTemplate = "https://api.planespotters.net/pub/photos/reg/{0}";
     private const string LinkPrefix = "https://www.planespotters.net/";
     private const string CdnPrefix = "https://t.plnspttrs.net/";
-    private const string UserAgent = "aeromux";
+
+    // Planespotters rejects requests whose UA does not identify the application
+    // (see https://www.planespotters.net/photo/api).
+    private static readonly string UserAgent = BuildUserAgent();
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Builds the Planespotters-compliant User-Agent once at type init:
+    /// <c>Aeromux/{version} (+contact URL)</c>. Reads the assembly's
+    /// <see cref="AssemblyInformationalVersionAttribute"/>, stripping any
+    /// <c>+commitHash</c> SDK suffix, and falls back to <c>"unknown"</c>
+    /// when the attribute is absent.
+    /// </summary>
+    private static string BuildUserAgent()
+    {
+        string informational = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        string version = informational.Split('+')[0];
+        return $"Aeromux/{version} (+https://github.com/aeromux/aeromux)";
+    }
 
     private readonly HttpMessageHandler? _handlerOverride;
 
@@ -129,7 +148,7 @@ public sealed class PlanespottersApiClient : IPlanespottersApiClient
         }
     }
 
-    /// <summary>Maps an HTTP response to a metadata result per the per-status table in §10 of the design doc.</summary>
+    /// <summary>Maps an HTTP response to a positive/negative <see cref="PhotoMetadata"/> (200, 404, 410) or <c>null</c> for transient failures (everything else).</summary>
     private static async Task<PhotoMetadata?> MapResponseAsync(
         HttpResponseMessage response,
         string url,
@@ -189,8 +208,8 @@ public sealed class PlanespottersApiClient : IPlanespottersApiClient
                 photos.ValueKind != JsonValueKind.Array)
             {
                 // Missing or wrong-shape `photos` field — treat as no photo so we cache
-                // the result and don't keep retrying. Per design doc §10 "Planespotters
-                // API breaking change" row.
+                // the result and don't keep retrying against an upstream that has
+                // broken its response shape.
                 Log.Warning("Planespotters response missing `photos` array for {Url}", url);
                 return PhotoMetadata.Negative();
             }
@@ -226,9 +245,9 @@ public sealed class PlanespottersApiClient : IPlanespottersApiClient
             return null;
         }
 
-        // Defensive sanitization per design doc §8.1: reject thumbnail URLs not on the
-        // Planespotters CDN, and links not on planespotters.net. Cheap insurance against
-        // upstream feed corruption being interpolated into our HTML.
+        // Defensive sanitization: reject thumbnail URLs not on the Planespotters CDN,
+        // and links not on planespotters.net. Cheap insurance against upstream feed
+        // corruption being interpolated into our HTML.
         if (!thumbnailUrl.StartsWith(CdnPrefix, StringComparison.Ordinal) ||
             !link.StartsWith(LinkPrefix, StringComparison.Ordinal))
         {
