@@ -12,6 +12,9 @@ dotnet test tests/Aeromux.Core.Tests           # Core tests only
 dotnet test tests/Aeromux.Infrastructure.Tests # Infrastructure tests only
 dotnet test tests/Aeromux.CLI.Tests            # CLI tests only
 dotnet run --project src/Aeromux.CLI           # Run the application
+
+# Web Map JS tests (node --test, no npm deps)
+node --test src/Aeromux.CLI/Commands/Daemon/WebMap/Tests/
 ```
 
 ### Release Build

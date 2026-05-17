@@ -88,6 +88,7 @@ public sealed class AircraftDatabaseLookupService : IAircraftDatabaseLookup, IDi
             TypeCode = GetStringOrNull(reader, "aircraft_type_code"),
             TypeDescription = GetStringOrNull(reader, "type_description"),
             TypeIcaoClass = GetStringOrNull(reader, "type_icao_class"),
+            TypeWtc = GetStringOrNull(reader, "type_wtc"),
             Model = GetStringOrNull(reader, "model"),
             ManufacturerIcao = GetStringOrNull(reader, "aircraft_manufacturer_icao"),
             ManufacturerName = GetStringOrNull(reader, "manufacturer_name"),

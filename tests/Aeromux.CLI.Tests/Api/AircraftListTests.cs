@@ -84,6 +84,8 @@ public class AircraftListTests : IAsyncLifetime
         item.GetProperty("DatabaseEnabled").GetBoolean().Should().BeTrue();
         item.GetProperty("Registration").GetString().Should().Be("G-VWHO");
         item.GetProperty("TypeCode").GetString().Should().Be("A346");
+        item.GetProperty("TypeIcaoClass").GetString().Should().Be("L4J");
+        item.GetProperty("TypeWtc").GetString().Should().Be("H");
         item.GetProperty("OperatorName").GetString().Should().Be("Virgin Atlantic");
     }
 
@@ -136,6 +138,8 @@ public class AircraftListTests : IAsyncLifetime
         item.GetProperty("DatabaseEnabled").GetBoolean().Should().BeFalse();
         item.GetProperty("Registration").ValueKind.Should().Be(JsonValueKind.Null);
         item.GetProperty("TypeCode").ValueKind.Should().Be(JsonValueKind.Null);
+        item.GetProperty("TypeIcaoClass").ValueKind.Should().Be(JsonValueKind.Null);
+        item.GetProperty("TypeWtc").ValueKind.Should().Be(JsonValueKind.Null);
         item.GetProperty("OperatorName").ValueKind.Should().Be(JsonValueKind.Null);
     }
 

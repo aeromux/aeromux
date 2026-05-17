@@ -201,6 +201,8 @@ public sealed class ApiTestFixture : IAsyncDisposable
                     Country = "United Kingdom",
                     TypeCode = "A346",
                     TypeDescription = "Airbus A340-642",
+                    TypeIcaoClass = "L4J",
+                    TypeWtc = "H",
                     OperatorName = "Virgin Atlantic"
                 }
                 : AircraftDatabaseRecord.Empty,

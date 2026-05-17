@@ -6,12 +6,18 @@ All notable changes to Aeromux will be documented in this file.
 
 ### Added
 
+- **Web Map: Type-Specific Aircraft Icons** — The Web Map now renders top-down aircraft silhouettes specific to each aircraft type (A320, B777, Cessna, helicopter, balloon, …) instead of a single generic icon. Resolution falls through ICAO type designator → 3-character type description + wake-turbulence category → first-character description → ADS-B emitter category → a generic `unknown` fallback, so every aircraft renders a sensible shape even without a database hit. Existing altitude/military/privacy/selected palettes are preserved unchanged. Shape data and lookup tables are derived from [tar1090](https://github.com/wiedehopf/tar1090) (GPLv3); see `README.md` and `docs/WEBMAP.md` for attribution.
+- **REST API: TypeIcaoClass + TypeWtc on Aircraft List** — `AircraftListItem` (used by `GET /api/v1/aircraft` and the SignalR map push) gains two nullable string fields: `TypeIcaoClass` (ICAO type classification, e.g. `"L2J"`) and `TypeWtc` (wake-turbulence category, one of `"L"` / `"M"` / `"H"` / `"J"`). Both are sourced from aeromux-db's `aircraft_view`. Clients that ignore unknown fields are unaffected.
 - **Web Map Aircraft Photos** — New "Photo" section in the aircraft detail panel showing a representative photo of the airframe sourced from [Planespotters.net](https://www.planespotters.net/). Photos are fetched lazily on selection, with a loading skeleton, photographer attribution, and a clickable link back to the photo's page on planespotters.net (required by Planespotters' usage rules). Aeromux caches **photo metadata only** (URL + photographer + link); the browser fetches the JPEG directly from the Planespotters CDN and uses its own HTTP cache. Toggleable from the settings panel under "Aircraft photos" (default on, persisted in localStorage).
 - **REST API: Aircraft Photo Endpoint** — `GET /api/v1/aircraft/{icao}/photo` returns photo metadata (`HasPhoto`, `ThumbnailUrl`, `Photographer`, `Link`) sourced from Planespotters.net. Cached in memory and evicted when the aircraft expires from the tracker, with a 1000-entry LRU safety cap. Transient upstream failures (429, 5xx, network, timeout) return 502 and are not cached. Documented in [API Guide](docs/API.md). Attribution to Planespotters.net is mandatory for downstream consumers.
 
 ### Fixed
 
 - **Web Map WebGL Unavailability** — Replaced the blank page and uncaught console error shown when the browser cannot create a WebGL context (typically due to disabled hardware acceleration) with a centered, branded message explaining the requirement and pointing users to their browser's hardware-acceleration setting.
+
+### Removed
+
+- **`Graphics/aircraft.svg`** — Replaced by the `unknown` shape inside the new `AircraftShapes.js` module. No longer referenced anywhere in the source tree.
 
 ## [0.6.2] — 2026-04-25
 

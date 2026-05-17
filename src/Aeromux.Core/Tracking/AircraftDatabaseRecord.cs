@@ -54,6 +54,12 @@ public sealed record AircraftDatabaseRecord
     public string? TypeIcaoClass { get; init; }
 
     /// <summary>
+    /// ICAO wake-turbulence category. One of "L" (light), "M" (medium), "H" (heavy),
+    /// "J" (super), or null when the source row does not provide it.
+    /// </summary>
+    public string? TypeWtc { get; init; }
+
+    /// <summary>
     /// Full aircraft model (e.g., "Boeing 777-36N").
     /// </summary>
     public string? Model { get; init; }

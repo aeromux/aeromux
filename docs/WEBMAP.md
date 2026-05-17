@@ -32,9 +32,22 @@ When `apiEnabled` is `false`, the HTTP server is not started and neither the API
 
 The main area of the screen is a full-screen interactive map rendered using OpenStreetMap raster tiles. A dark overlay is applied on top of the map tiles to improve contrast with the aircraft markers.
 
-Aircraft are displayed as rotated plane markers whose color reflects altitude — lighter blue at ground level, deeper blue at cruise altitude. The currently selected aircraft is highlighted in orange. Hovering over any aircraft shows a tooltip with the callsign, ICAO address, speed, and altitude.
+Aircraft are displayed as top-down silhouettes specific to each aircraft type (A320, B777, Cessna, helicopter, balloon, …), rotated by heading, and sized for comfortable on-screen visibility at typical map zoom levels. Marker color reflects altitude — lighter blue at ground level, deeper blue at cruise altitude. Military aircraft use a green palette; privacy aircraft (LADD / PIA) use red. The currently selected aircraft is highlighted in orange. Hovering over any aircraft shows a tooltip with the callsign, ICAO address, speed, and altitude.
 
 When an aircraft is selected, a blue gradient trail is drawn along its recent flight path. The trail is fetched from the position history on selection and extended in real-time as new positions arrive. The trail fades from transparent (oldest position) to opaque (newest position).
+
+### Aircraft Icon Resolution
+
+The icon shape for each aircraft is selected by a five-layer fall-through:
+
+1. **ICAO type designator** — direct lookup (e.g. `A320` → airliner-shape `a320`, `B77W` → `heavy_2e`).
+2. **3-character type description + WTC** — composite key like `L2J-H` distinguishes a heavy 777 from a medium-weight CRJ.
+3. **3-character type description (bare)** — fall-back when wake-turbulence is missing; includes synthesised entries for classes that tar1090 only ships as WTC-suffixed (`L2J` → `airliner`, `L3J` → `md11`).
+4. **First character of type description** — `H` → helicopter, `G` → gyrocopter.
+5. **ADS-B emitter category** — `Light`, `Heavy`, `Rotorcraft`, etc. from the downlink itself, so a sensible shape renders even without a database hit.
+6. A generic `unknown` silhouette is the universal fallback when every layer above misses.
+
+Shape data and lookup tables are derived from [tar1090](https://github.com/wiedehopf/tar1090). See the project `README.md` for full attribution.
 
 ### Range Rings
 

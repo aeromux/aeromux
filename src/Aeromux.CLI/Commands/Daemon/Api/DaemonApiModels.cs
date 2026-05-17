@@ -52,6 +52,8 @@ public sealed record AircraftListItem(
     bool DatabaseEnabled,
     string? Registration,
     string? TypeCode,
+    string? TypeIcaoClass,
+    string? TypeWtc,
     string? OperatorName,
     bool? Military,
     bool? Ladd,

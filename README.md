@@ -244,6 +244,7 @@ Aeromux is free software, released under the [GNU General Public License v3.0 or
 
 - **[aeromux-db](https://github.com/aeromux/aeromux-db)** — Aircraft metadata database for registration, type, and operator enrichment
 - **[readsb](https://github.com/wiedehopf/readsb)** — Reference implementation for Mode S demodulation techniques
+- **[tar1090](https://github.com/wiedehopf/tar1090)** — Web Map type-specific aircraft silhouettes and the resolver mapping (designator → description+WTC → category) are derived from tar1090's `html/markers.js` (GPLv3). Specific shapes carry their own attribution: `a319` / `a320` / `a321` / `e390` by pimlie; `f16` / `hi_perf` by alkissack; `c130` by Peter Lowden (CC BY 4.0); `a400` by bukadako.
 - **[pyModeS](https://github.com/junzis/pyModeS)** — Comprehensive Mode S/ADS-B decoder and reference for decoding algorithms
 - **[Mode S Made Easy](https://mode-s.org)** — Excellent technical documentation on Mode S and ADS-B protocols
 - **[RtlSdrManager](https://github.com/nandortoth/RtlSdrManager)** — RTL-SDR device management library for .NET

@@ -14,18 +14,41 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-// Renders the aircraft silhouette (from Graphics/aircraft.svg) onto HTML Canvas
-// elements with a black stroke border and altitude-based fill color. Each color
-// variant is registered as a separate MapLibre image, avoiding SDF limitations.
+// Renders type-specific aircraft silhouettes as SVG-data-URI bitmaps
+// and registers them with MapLibre via addImage(). One bitmap per
+// (shape, category, altStep) variant, plus one per (shape) for the
+// selected state. The 64 `unknown` fallback variants are pre-decoded
+// eagerly at map setup; type-specific bitmaps are decoded lazily on
+// first sight and dedupe-and-poison via the `registeredImages` Set
+// so failed decodes are never retried.
 
-const CANVAS_SIZE = 128;
-const STROKE_WIDTH = 5;
-const VIEWBOX = 122.88;
+import { SHAPES } from './AircraftShapes.js';
 
-// SVG path data from Graphics/aircraft.svg (viewBox 0 0 122.88 122.88)
-const AIRCRAFT_PATH = 'M16.63,105.75c0.01-4.03,2.3-7.97,6.03-12.38L1.09,79.73c-1.36-0.59-1.33-1.42-0.54-2.4l4.57-3.9c0.83-0.51,1.71-0.73,2.66-0.47l26.62,4.5l22.18-24.02L4.8,18.41c-1.31-0.77-1.42-1.64-0.07-2.65l7.47-5.96l67.5,18.97L99.64,7.45c6.69-5.79,13.19-8.38,18.18-7.15c2.75,0.68,3.72,1.5,4.57,4.08c1.65,5.06-0.91,11.86-6.96,18.86L94.11,43.18l18.97,67.5l-5.96,7.47c-1.01,1.34-1.88,1.23-2.65-0.07L69.43,66.31L45.41,88.48l4.5,26.62c0.26,0.94,0.05,1.82-0.47,2.66l-3.9,4.57c-0.97,0.79-1.81,0.82-2.4-0.54l-13.64-21.57c-4.43,3.74-8.37,6.03-12.42,6.03C16.71,106.24,16.63,106.11,16.63,105.75L16.63,105.75z';
+// ---------- public constants ----------
 
-// Altitude color stops per category (feet → [r, g, b])
+// Over-resolution factor on the registered bitmap. Chosen to comfortably
+// exceed Retina (DPR 2) and iPhone (DPR 3) device pixel ratios even at
+// the resolver's largest per-type scale (~1.12). MapLibre is told the
+// bitmap is over-resolved via the pixelRatio option to addImage(), so
+// it draws at the shape's nominal w × h logical pixels.
+export const PIXEL_RATIO  = 4;
+// Body-stroke width in logical pixels, before multiplying by per-shape
+// strokeScale. Initial value tuned to land at a comfortable visual
+// weight at the default PIXEL_RATIO; expect a follow-up tuning pass on
+// Retina/iPhone.
+export const STROKE_WIDTH = 0.75;
+export const ALTITUDE_STEP = 2000;
+export const MAX_ALTITUDE  = 40000;
+
+// Global on-screen icon-size multiplier applied at draw time, in
+// addition to the resolver's per-type iconScale. Lets us tune overall
+// marker size in one place without touching the underlying shape data
+// or the per-type scaling tables.
+export const ICON_SIZE = 1.25;
+
+// Altitude color stops per palette (feet → [r, g, b]). Identical to
+// the previous canvas pipeline — preserving the visual gradient is
+// part of the contract for this rewrite.
 const COLOR_STOPS_NORMAL = [
     [0,     [179, 217, 255]],  // light blue
     [10000, [102, 178, 255]],  // medium blue
@@ -47,22 +70,24 @@ const COLOR_STOPS_PRIVACY = [
     [40000, [160, 0,   0]]     // dark crimson
 ];
 
-const CATEGORIES = [
+export const CATEGORIES = [
     { prefix: 'normal',   stops: COLOR_STOPS_NORMAL },
     { prefix: 'military', stops: COLOR_STOPS_MILITARY },
     { prefix: 'privacy',  stops: COLOR_STOPS_PRIVACY }
 ];
 
-const SELECTED_COLOR = [230, 126, 34]; // #e67e22
-const ALTITUDE_STEP = 2000;
-const MAX_ALTITUDE = 40000;
+export const SELECTED_COLOR = [230, 126, 34]; // #e67e22
 
-function interpolateColor(altitude, stops) {
+// ---------- public colour helper ----------
+
+// Linear interpolation between adjacent palette stops. Returns the
+// nearest stop color for out-of-range altitudes (i.e. clamps).
+export function interpolateColor(altitude, stops) {
     if (altitude <= stops[0][0]) return stops[0][1];
     if (altitude >= stops[stops.length - 1][0]) return stops[stops.length - 1][1];
 
     for (let i = 0; i < stops.length - 1; i++) {
-        const [altLow, colorLow] = stops[i];
+        const [altLow,  colorLow]  = stops[i];
         const [altHigh, colorHigh] = stops[i + 1];
         if (altitude >= altLow && altitude <= altHigh) {
             const t = (altitude - altLow) / (altHigh - altLow);
@@ -76,72 +101,130 @@ function interpolateColor(altitude, stops) {
     return stops[stops.length - 1][1];
 }
 
-function renderIcon(rgb) {
-    const canvas = document.createElement('canvas');
-    canvas.width = CANVAS_SIZE;
-    canvas.height = CANVAS_SIZE;
-    const ctx = canvas.getContext('2d');
+// ---------- module-local registration state ----------
 
-    // Rotate so the nose points north (up) — the SVG path faces northeast (~45°)
-    // Scale reduced to 0.65 to fit the rotated shape within the canvas bounds
-    const scale = (CANVAS_SIZE / VIEWBOX) * 0.65;
-    ctx.translate(CANVAS_SIZE / 2, CANVAS_SIZE / 2);
-    ctx.rotate(-45 * Math.PI / 180);
-    ctx.translate(-CANVAS_SIZE / 2, -CANVAS_SIZE / 2);
+// Set of MapLibre image names this module has already attempted to
+// register (regardless of decode outcome). The .add() happens before
+// the await so two close-spaced ticks dedupe to a single decode, and
+// a permanent decode failure stays in the Set so the poisoned slot
+// is never retried.
+export const registeredImages = new Set();
 
-    // Scale the 122.88 viewBox into the canvas with margin for stroke
-    const offset = (CANVAS_SIZE - VIEWBOX * scale) / 2;
-    ctx.translate(offset, offset);
-    ctx.scale(scale, scale);
+// Set of TypeCode strings already emitted as `[aircraft-icon]
+// unmapped TypeCode` debug logs in the current session. Exported so
+// the MapManager log site can `.has() / .add()` against the same Set
+// the styledata handler clears.
+export const loggedUnknownTypes = new Set();
 
-    const path = new Path2D(AIRCRAFT_PATH);
+// MapLibre map reference, captured at first call. ensureRegistered()
+// and preregisterUnknownVariants() require an attached map.
+let map = null;
 
-    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = STROKE_WIDTH / scale;
-    ctx.lineJoin = 'round';
+// ---------- SVG-data-URI rendering ----------
 
-    ctx.stroke(path);
-    ctx.fill(path);
+// Builds a synthetic SVG string for one (shape, fillRGB) pair, encoded
+// as a base64 data URI. Uses `paint-order="stroke"` with stroke-width
+// 2× the desired width so the fill cleanly overpaints the inside half
+// of the stroke and the outside edge stays crisp.
+function buildSvgDataUri(shapeName, fillRGB, strokeRGB = '#000') {
+    const shape  = SHAPES[shapeName];
+    if (!shape) {
+        throw new Error(`buildSvgDataUri: missing shape '${shapeName}'`);
+    }
+    const fill   = `rgb(${fillRGB[0]},${fillRGB[1]},${fillRGB[2]})`;
+    const stroke = strokeRGB;
+    const sw     = STROKE_WIDTH * (shape.strokeScale ?? 1);
+    const accW   = 0.6 * STROKE_WIDTH * (shape.accentMult ?? 1);
+    const wPx    = shape.w * PIXEL_RATIO;
+    const hPx    = shape.h * PIXEL_RATIO;
 
-    const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    return { width: CANVAS_SIZE, height: CANVAS_SIZE, data: new Uint8Array(imageData.data.buffer) };
-}
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" `
+            + `width="${wPx}" height="${hPx}" `
+            + `viewBox="${shape.viewBox}"`
+            + (shape.noAspect ? ` preserveAspectRatio="none"` : '')
+            + `>`;
+    if (shape.transform) {
+        svg += `<g transform="${shape.transform}">`;
+    }
 
-export function registerAircraftIcons(map) {
-    const pixelRatio = CANVAS_SIZE / 34;
-
-    // Altitude-based variants for each category
-    for (const { prefix, stops } of CATEGORIES) {
-        for (let alt = 0; alt <= MAX_ALTITUDE; alt += ALTITUDE_STEP) {
-            const color = interpolateColor(alt, stops);
-            const canvas = renderIcon(color);
-            map.addImage(`aircraft-${prefix}-${alt}`, canvas, { pixelRatio });
+    // Body — paint-order="stroke" + 2× width gives a clean fill/stroke seam.
+    const paths = Array.isArray(shape.path) ? shape.path : [shape.path];
+    for (const p of paths) {
+        svg += `<path paint-order="stroke" fill="${fill}" stroke="${stroke}" `
+             + `stroke-width="${2 * sw}" stroke-linejoin="round" d="${p}"/>`;
+    }
+    // Accent paths (engines, panel lines, etc.) — stroke only, 60% width × accentMult.
+    if (shape.accent) {
+        const accents = Array.isArray(shape.accent) ? shape.accent : [shape.accent];
+        for (const a of accents) {
+            svg += `<path fill="none" stroke="${stroke}" `
+                 + `stroke-width="${accW}" stroke-linejoin="round" d="${a}"/>`;
         }
     }
 
-    // Selected variant (orange)
-    const selectedCanvas = renderIcon(SELECTED_COLOR);
-    map.addImage('aircraft-selected', selectedCanvas, { pixelRatio });
-}
-
-function buildAltitudeSteps(prefix) {
-    const steps = ['step', ['get', 'altitude'], `aircraft-${prefix}-0`];
-    for (let alt = ALTITUDE_STEP; alt <= MAX_ALTITUDE; alt += ALTITUDE_STEP) {
-        steps.push(alt, `aircraft-${prefix}-${alt}`);
+    if (shape.transform) {
+        svg += `</g>`;
     }
-    return steps;
+    svg += `</svg>`;
+    return 'data:image/svg+xml;base64,' + btoa(svg);
 }
 
-export function getIconImageExpression() {
-    return [
-        'case',
-        ['==', ['get', 'selected'], true],
-        'aircraft-selected',
-        ['==', ['get', 'category'], 'military'],
-        buildAltitudeSteps('military'),
-        ['==', ['get', 'category'], 'privacy'],
-        buildAltitudeSteps('privacy'),
-        buildAltitudeSteps('normal')
-    ];
+// ---------- registration ----------
+
+// Lazily register one variant. The first caller for a given imageName
+// claims the slot in `registeredImages` before awaiting the decoding so
+// concurrent ticks dedupe to a single decode. A decode failure leaves
+// the imageName in `registeredImages` (poisoned) so the slot is never
+// retried — the layer's `coalesce` keeps the affected features showing
+// the corresponding `unknown` fallback.
+export async function ensureRegistered(imageName, shapeName, fillRGB) {
+    if (!map) {
+        throw new Error('ensureRegistered: no map bound — call setMap() first');
+    }
+    if (registeredImages.has(imageName)) return;
+    registeredImages.add(imageName);
+    try {
+        const img = new Image();
+        img.src = buildSvgDataUri(shapeName, fillRGB);
+        await img.decode();
+        if (!map.hasImage(imageName)) {
+            map.addImage(imageName, img, { pixelRatio: PIXEL_RATIO });
+        }
+    } catch (e) {
+        console.warn(`[aircraft-icon] decode failed for '${shapeName}' (${imageName}): ${e.message}`);
+        // imageName stays in registeredImages → never retried.
+    }
+}
+
+// Binds the MapLibre map instance used by all subsequent
+// ensureRegistered() and preregisterUnknownVariants() calls. Called
+// once from MapManager during map setup.
+export function setMap(mapInstance) {
+    map = mapInstance;
+}
+
+// Eagerly registers all 64 `unknown` fallback variants in parallel:
+// one per (category, altStep) × 3 palettes + 1 selected. Awaited
+// before SignalR subscription so the layer's coalesce always has a
+// fallback for the first frame of any feature.
+export async function preregisterUnknownVariants() {
+    const tasks = [];
+    for (const { prefix, stops } of CATEGORIES) {
+        for (let alt = 0; alt <= MAX_ALTITUDE; alt += ALTITUDE_STEP) {
+            const fillColor = interpolateColor(alt, stops);
+            tasks.push(ensureRegistered(`aircraft-unknown-${prefix}-${alt}`,
+                                         'unknown', fillColor));
+        }
+    }
+    tasks.push(ensureRegistered('aircraft-unknown-selected', 'unknown', SELECTED_COLOR));
+    await Promise.all(tasks);
+}
+
+// Clears both registration caches. Called from the MapManager
+// `styledata` handler before re-running preregisterUnknownVariants() —
+// MapLibre wipes registered images on a base-style change, so the
+// caches must follow.
+export function clearImageCaches() {
+    registeredImages.clear();
+    loggedUnknownTypes.clear();
 }

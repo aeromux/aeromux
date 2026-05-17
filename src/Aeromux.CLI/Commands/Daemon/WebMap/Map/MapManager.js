@@ -14,7 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-import { registerAircraftIcons, getIconImageExpression } from './AircraftIcons.js';
+import { resolveShape } from './AircraftIconResolver.js';
+import { SHAPES } from './AircraftShapes.js';
+import {
+    ALTITUDE_STEP,
+    MAX_ALTITUDE,
+    SELECTED_COLOR,
+    CATEGORIES,
+    ICON_SIZE,
+    interpolateColor,
+    ensureRegistered,
+    preregisterUnknownVariants,
+    clearImageCaches,
+    setMap as setIconMap,
+    loggedUnknownTypes,
+} from './AircraftIcons.js';
 
 let map = null;
 let viewportCallback = null;
@@ -56,8 +70,13 @@ export function init(containerId) {
         zoom: 2
     });
 
-    map.on('load', () => {
-        registerAircraftIcons(map);
+    map.on('load', async () => {
+        setIconMap(map);
+        // Eager-register the 64 `unknown` fallback variants before any
+        // feature can reference them via the layer's coalesce. The
+        // ~0.3–1s blank-marker window during this decode is an
+        // accepted trade for guaranteed-correct first frames.
+        await preregisterUnknownVariants();
         addLayers();
 
         if (pendingRangeRings) {
@@ -71,6 +90,16 @@ export function init(containerId) {
             pendingRangeOutline = null;
             updateRangeOutline(p.coordinates, p.visible);
         }
+    });
+
+    // Base-style change wipes MapLibre's registered images; clear the
+    // local caches and re-run eager preregister so the layer's
+    // coalesce has a valid fallback for the next tick. Lazy
+    // registration of type-specific bitmaps resumes naturally.
+    map.on('styledata', async () => {
+        if (!map.isStyleLoaded()) return;
+        clearImageCaches();
+        await preregisterUnknownVariants();
     });
 
     // Viewport change events (debounced)
@@ -194,15 +223,21 @@ function addLayers() {
         data: { type: 'FeatureCollection', features: [] }
     });
 
-    // Aircraft layer with pre-rendered canvas icons (fill + black stroke baked in)
+    // Aircraft layer: per-feature iconImage / iconFallback / iconScale
+    // / iconRotate properties set by updateMarkers(). coalesce falls
+    // back to the eagerly-pre-registered `unknown` variant while a
+    // type-specific bitmap is mid-decode or has failed decode.
     map.addLayer({
         id: 'aircraft-layer',
         type: 'symbol',
         source: 'aircraft-source',
         layout: {
-            'icon-image': getIconImageExpression(),
-            'icon-size': 1.0,
-            'icon-rotate': ['get', 'heading'],
+            'icon-image': ['coalesce',
+                ['image', ['get', 'iconImage']],
+                ['image', ['get', 'iconFallback']],
+            ],
+            'icon-size':   ['*', ICON_SIZE, ['get', 'iconScale']],
+            'icon-rotate': ['get', 'iconRotate'],
             'icon-rotation-alignment': 'map',
             'icon-allow-overlap': true,
             'icon-ignore-placement': true
@@ -232,6 +267,64 @@ export function updateMarkers(aircraftMap) {
     const features = [];
     aircraftMap.forEach((aircraft, icao) => {
         if (!aircraft.Coordinate) return;
+
+        const altitude = aircraft.BarometricAltitude ? aircraft.BarometricAltitude.Feet : 0;
+        const heading  = aircraft.Track || aircraft.TrackOnGround || 0;
+        const selected = icao === selectedIcao;
+        const category = aircraft.Military ? 'military'
+                       : (aircraft.Ladd || aircraft.Pia) ? 'privacy'
+                       : 'normal';
+
+        // Layer-by-layer resolve to a shape + per-type scale.
+        const { shapeName, scale, resolvedVia } = resolveShape(
+            aircraft.TypeCode,
+            aircraft.TypeIcaoClass,
+            aircraft.TypeWtc,
+            aircraft.Category
+        );
+
+        // Log once per session per unmapped TypeCode so maintainers
+        // running with verbose console can grow the resolver tables.
+        if (aircraft.TypeCode
+                && resolvedVia !== 'designator'
+                && !loggedUnknownTypes.has(aircraft.TypeCode)) {
+            loggedUnknownTypes.add(aircraft.TypeCode);
+            console.debug('[aircraft-icon] unmapped TypeCode', {
+                typeCode:      aircraft.TypeCode,
+                typeIcaoClass: aircraft.TypeIcaoClass,
+                typeWtc:       aircraft.TypeWtc,
+                category:      aircraft.Category,
+                shapeUsed:     shapeName,
+                resolvedVia,
+            });
+        }
+
+        // Clamp altitude into the discrete bucket grid. Math.max(0,…)
+        // catches below-MSL altitudes (Dead Sea airports, calibration
+        // drift, occasional negative-altitude broadcasts).
+        const altStep = Math.max(0, Math.min(
+            Math.round(altitude / ALTITUDE_STEP) * ALTITUDE_STEP,
+            MAX_ALTITUDE
+        ));
+
+        // Palette stops by category (defaults defensively to 'normal').
+        const palette = (CATEGORIES.find(c => c.prefix === category)
+                         ?? CATEGORIES[0]).stops;
+        const fillColor = selected
+            ? SELECTED_COLOR
+            : interpolateColor(altStep, palette);
+
+        const imageName = selected
+            ? `aircraft-${shapeName}-selected`
+            : `aircraft-${shapeName}-${category}-${altStep}`;
+        const fallback = selected
+            ? `aircraft-unknown-selected`
+            : `aircraft-unknown-${category}-${altStep}`;
+
+        // Fire-and-forget; updateMarkers ticks aren't awaited.
+        // ensureRegistered dedupes per imageName.
+        ensureRegistered(imageName, shapeName, fillColor);
+
         features.push({
             type: 'Feature',
             geometry: {
@@ -239,15 +332,23 @@ export function updateMarkers(aircraftMap) {
                 coordinates: [aircraft.Coordinate.Longitude, aircraft.Coordinate.Latitude]
             },
             properties: {
-                icao: icao,
+                icao,
                 callsign: aircraft.Callsign || icao,
-                altitude: aircraft.BarometricAltitude ? aircraft.BarometricAltitude.Feet : 0,
+                altitude,
                 speed: aircraft.Speed ? aircraft.Speed.Knots : 0,
-                heading: aircraft.Track || aircraft.TrackOnGround || 0,
-                selected: icao === selectedIcao,
-                category: aircraft.Military ? 'military'
-                    : (aircraft.Ladd || aircraft.Pia) ? 'privacy'
-                    : 'normal'
+                heading,
+                selected,
+                category,
+
+                iconImage:    imageName,
+                iconFallback: fallback,
+                iconScale:    scale,
+                // Per-feature rotation; balloon (the only noRotate
+                // shape currently) renders north-up regardless of
+                // heading.
+                iconRotate:   SHAPES[shapeName].noRotate ? 0 : heading,
+                shapeName,
+                resolvedVia,
             }
         });
     });
