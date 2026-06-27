@@ -17,6 +17,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aeromux.CLI.Commands.Daemon.Api;
+using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
@@ -83,23 +84,36 @@ public sealed class MapHubPushService : BackgroundService
     {
         IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
         int totalCount = allAircraft.Count;
+        bool hasClients = !MapHub.ClientStates.IsEmpty;
 
-        // Feed positions into range outline tracker and compute outline once for all clients
-        List<RangeOutlineCoordinate>? outline = null;
-        int outlineHash = 0;
-        if (_rangeOutlineTracker is not null)
+        // Single pass over all aircraft:
+        //   - Feed positions into the range outline tracker (always, regardless of clients).
+        //   - Project + change-hash each positioned aircraft once per tick, shared across
+        //     all clients. Skipped entirely when no client is connected so an idle daemon
+        //     does no per-aircraft mapping work.
+        var snapshot = new List<(string Icao, AircraftListItem Item, int Hash)>(hasClients ? allAircraft.Count : 0);
+        if (_rangeOutlineTracker is not null || hasClients)
         {
             foreach (Aircraft aircraft in allAircraft)
             {
-                if (aircraft.Position.Coordinate is not null)
+                if (aircraft.Position.Coordinate is null)
                 {
-                    _rangeOutlineTracker.RecordPosition(aircraft.Position.Coordinate);
+                    continue;
+                }
+
+                _rangeOutlineTracker?.RecordPosition(aircraft.Position.Coordinate);
+
+                if (hasClients)
+                {
+                    AircraftListItem item = DaemonApiMapper.ToListItem(aircraft);
+                    snapshot.Add((aircraft.Identification.ICAO, item, ComputeListItemHash(item)));
                 }
             }
-
-            outline = _rangeOutlineTracker.GetOutline();
-            outlineHash = ComputeHash(outline);
         }
+
+        // Compute the coverage outline once for all clients.
+        List<RangeOutlineCoordinate>? outline = _rangeOutlineTracker?.GetOutline();
+        int outlineHash = outline is not null ? ComputeHash(outline) : 0;
 
         foreach ((string connectionId, MapHubClientState state) in MapHub.ClientStates)
         {
@@ -110,7 +124,7 @@ public sealed class MapHubPushService : BackgroundService
 
             try
             {
-                await PushToClient(connectionId, state, allAircraft, totalCount, outline, outlineHash, clientCts.Token);
+                await PushToClient(connectionId, state, snapshot, totalCount, outline, outlineHash, clientCts.Token);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -127,7 +141,7 @@ public sealed class MapHubPushService : BackgroundService
     private async Task PushToClient(
         string connectionId,
         MapHubClientState state,
-        IReadOnlyList<Aircraft> allAircraft,
+        IReadOnlyList<(string Icao, AircraftListItem Item, int Hash)> snapshot,
         int totalCount,
         List<RangeOutlineCoordinate>? outline,
         int outlineHash,
@@ -135,33 +149,20 @@ public sealed class MapHubPushService : BackgroundService
     {
         IClientProxy client = _hubContext.Clients.Client(connectionId);
 
-        // Filter aircraft by viewport
-        Dictionary<string, AircraftListItem> visibleAircraft = new();
+        // Filter the shared snapshot by this client's viewport and diff against
+        // its last-pushed hashes. Each item/hash was computed once per tick in
+        // PushUpdates and is reused across all clients here.
+        HashSet<string> visibleIcaos = new();
 
-        if (state.ViewportBounds is not null)
+        foreach ((string icao, AircraftListItem item, int hash) in snapshot)
         {
-            foreach (Aircraft aircraft in allAircraft)
+            GeographicCoordinate coordinate = item.Coordinate!; // non-null by snapshot construction
+            if (!IsInViewport(coordinate.Latitude, coordinate.Longitude, state))
             {
-                if (aircraft.Position.Coordinate is null)
-                {
-                    continue;
-                }
-
-                double lat = aircraft.Position.Coordinate.Latitude;
-                double lon = aircraft.Position.Coordinate.Longitude;
-
-                if (IsInViewport(lat, lon, state))
-                {
-                    AircraftListItem item = DaemonApiMapper.ToListItem(aircraft);
-                    visibleAircraft[aircraft.Identification.ICAO] = item;
-                }
+                continue;
             }
-        }
 
-        // Compute diffs: new/changed aircraft
-        foreach ((string icao, AircraftListItem item) in visibleAircraft)
-        {
-            int hash = ComputeHash(item);
+            visibleIcaos.Add(icao);
 
             if (!state.LastPushedAircraft.TryGetValue(icao, out int lastHash) || lastHash != hash)
             {
@@ -175,7 +176,7 @@ public sealed class MapHubPushService : BackgroundService
         List<string> toRemove = new();
         foreach (string icao in state.LastPushedAircraft.Keys)
         {
-            if (!visibleAircraft.ContainsKey(icao) && icao != state.SelectedIcao)
+            if (!visibleIcaos.Contains(icao) && icao != state.SelectedIcao)
             {
                 await client.SendAsync("AircraftRemoved", icao, cancellationToken);
                 toRemove.Add(icao);
@@ -243,11 +244,52 @@ public sealed class MapHubPushService : BackgroundService
     /// <summary>
     /// Computes a hash by JSON-serializing the object and hashing the resulting string.
     /// Trades a short-lived string allocation for simple, reliable deep-equality detection.
+    /// Used for the cold detail and outline paths.
     /// </summary>
+    /// <param name="obj">The object to hash; serialized with the shared push options.</param>
+    /// <returns>An ordinal hash of the object's JSON representation.</returns>
     private int ComputeHash(object obj)
     {
         string json = JsonSerializer.Serialize(obj, _jsonOptions);
         return json.GetHashCode(StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Computes an allocation-free change hash for a list item over its render-affecting
+    /// fields. Deliberately excludes <see cref="AircraftListItem.SignalStrength"/>,
+    /// <see cref="AircraftListItem.TotalMessages"/>, and <see cref="AircraftListItem.LastSeen"/>
+    /// so per-message telemetry churn does not trigger a push for an otherwise-unchanged
+    /// aircraft. Any change to a rendered field still sends the full item, so moving aircraft
+    /// stay fully fresh; the detail panel keeps those fields live for the selected aircraft.
+    /// </summary>
+    /// <param name="i">The list item to hash.</param>
+    /// <returns>An allocation-free hash over the item's render-affecting fields.</returns>
+    private static int ComputeListItemHash(AircraftListItem i)
+    {
+        HashCode hash = new();
+        hash.Add(i.ICAO);
+        hash.Add(i.Callsign);
+        hash.Add(i.Squawk);
+        hash.Add(i.Category);
+        hash.Add(i.Coordinate);
+        hash.Add(i.BarometricAltitude);
+        hash.Add(i.GeometricAltitude);
+        hash.Add(i.IsOnGround);
+        hash.Add(i.Speed);
+        hash.Add(i.Track);
+        hash.Add(i.SpeedOnGround);
+        hash.Add(i.TrackOnGround);
+        hash.Add(i.VerticalRate);
+        hash.Add(i.DatabaseEnabled);
+        hash.Add(i.Registration);
+        hash.Add(i.TypeCode);
+        hash.Add(i.TypeIcaoClass);
+        hash.Add(i.TypeWtc);
+        hash.Add(i.OperatorName);
+        hash.Add(i.Military);
+        hash.Add(i.Ladd);
+        hash.Add(i.Pia);
+        return hash.ToHashCode();
     }
 
     private static bool IsInViewport(double lat, double lon, MapHubClientState state)

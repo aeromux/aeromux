@@ -71,7 +71,12 @@ curl -s "http://localhost:8080/api/v1/aircraft"
       "DatabaseEnabled": true,
       "Registration": "D-AIBL",
       "TypeCode": "A320",
-      "OperatorName": "Lufthansa"
+      "TypeIcaoClass": "L2J",
+      "TypeWtc": "M",
+      "OperatorName": "Lufthansa",
+      "Military": false,
+      "Ladd": false,
+      "Pia": false
     }
   ]
 }
@@ -254,6 +259,7 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=DatabaseRecord"
     "TypeCode": "A346",
     "TypeDescription": "Airbus A340-642",
     "TypeIcaoClass": "L4J",
+    "TypeWtc": "H",
     "Model": "A340-642",
     "ManufacturerIcao": "AIRBUS",
     "ManufacturerName": "AIRBUS",
@@ -595,7 +601,7 @@ curl -s "http://localhost:8080/api/v1/stats"
 
 ```json
 {
-  "Version": "0.6.2",
+  "Version": "0.7.0",
   "Timestamp": "2026-03-13T14:30:00Z",
   "Uptime": 3600,
   "AircraftCount": 42,

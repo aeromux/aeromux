@@ -38,7 +38,7 @@ When an aircraft is selected, a blue gradient trail is drawn along its recent fl
 
 ### Aircraft Icon Resolution
 
-The icon shape for each aircraft is selected by a five-layer fall-through:
+The icon shape for each aircraft is selected by a six-layer fall-through:
 
 1. **ICAO type designator** — direct lookup (e.g. `A320` → airliner-shape `a320`, `B77W` → `heavy_2e`).
 2. **3-character type description + WTC** — composite key like `L2J-H` distinguishes a heavy 777 from a medium-weight CRJ.

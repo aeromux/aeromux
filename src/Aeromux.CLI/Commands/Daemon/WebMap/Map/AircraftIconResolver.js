@@ -557,6 +557,26 @@ export const CATEGORY = {
  * @returns {{shapeName: string, scale: number, resolvedVia: string}}
  */
 export function resolveShape(typeDesignator, typeIcaoClass, typeWtc, emitterCategory) {
+    // Memoize on the input tuple. updateMarkers re-resolves every aircraft on
+    // every marker rebuild (which can fire several times within a one-second
+    // push burst), but the inputs for a given airframe essentially never change.
+    // Real ICAO type designators/descriptions are alphanumeric, so '|' is a safe
+    // key separator. Callers treat the result as immutable (destructure only), so
+    // returning the shared cached object is fine. The cache is naturally bounded
+    // by the count of distinct real type tuples.
+    const cacheKey = `${typeDesignator}|${typeIcaoClass}|${typeWtc}|${emitterCategory}`;
+    const cached = resolveShapeCache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = resolveShapeUncached(typeDesignator, typeIcaoClass, typeWtc, emitterCategory);
+    resolveShapeCache.set(cacheKey, result);
+    return result;
+}
+
+const resolveShapeCache = new Map();
+
+// Uncached core; see resolveShape's JSDoc for the layer semantics and contract.
+function resolveShapeUncached(typeDesignator, typeIcaoClass, typeWtc, emitterCategory) {
     if (typeDesignator) {
         const key = typeDesignator.toUpperCase();
         const v = TYPE_DESIGNATOR[key];

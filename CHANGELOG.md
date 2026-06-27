@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.7.0] — Unreleased
+## [0.7.0] — 2026-06-26
 
 ### Added
 
@@ -10,6 +10,13 @@ All notable changes to Aeromux will be documented in this file.
 - **REST API: TypeIcaoClass + TypeWtc on Aircraft List** — `AircraftListItem` (used by `GET /api/v1/aircraft` and the SignalR map push) gains two nullable string fields: `TypeIcaoClass` (ICAO type classification, e.g. `"L2J"`) and `TypeWtc` (wake-turbulence category, one of `"L"` / `"M"` / `"H"` / `"J"`). Both are sourced from aeromux-db's `aircraft_view`. Clients that ignore unknown fields are unaffected.
 - **Web Map Aircraft Photos** — New "Photo" section in the aircraft detail panel showing a representative photo of the airframe sourced from [Planespotters.net](https://www.planespotters.net/). Photos are fetched lazily on selection, with a loading skeleton, photographer attribution, and a clickable link back to the photo's page on planespotters.net (required by Planespotters' usage rules). Aeromux caches **photo metadata only** (URL + photographer + link); the browser fetches the JPEG directly from the Planespotters CDN and uses its own HTTP cache. Toggleable from the settings panel under "Aircraft photos" (default on, persisted in localStorage).
 - **REST API: Aircraft Photo Endpoint** — `GET /api/v1/aircraft/{icao}/photo` returns photo metadata (`HasPhoto`, `ThumbnailUrl`, `Photographer`, `Link`) sourced from Planespotters.net. Cached in memory and evicted when the aircraft expires from the tracker, with a 1000-entry LRU safety cap. Transient upstream failures (429, 5xx, network, timeout) return 502 and are not cached. Documented in [API Guide](docs/API.md). Attribution to Planespotters.net is mandatory for downstream consumers.
+
+### Changed
+
+- **RtlSdrManager 0.6.3** — Upgraded the RtlSdrManager RTL-SDR access library from 0.6.1 to 0.6.3.
+- **SQLite Dependency Security Update** — Upgraded `Microsoft.Data.Sqlite` from 9.0.3 to 10.0.9 (aligning with .NET 10) and added an explicit `SQLitePCLRaw.bundle_e_sqlite3` 3.0.3 reference to resolve [GHSA-2m69-gcr7-jv3q](https://github.com/advisories/GHSA-2m69-gcr7-jv3q), a high-severity vulnerability in the SQLite engine bundled by SQLitePCLRaw ≤ 2.1.11. The override can be removed once `Microsoft.Data.Sqlite` depends on SQLitePCLRaw 3.x directly.
+- **Web Map Push Performance** — The MapHub push loop now projects and change-hashes each aircraft once per tick and shares the result across all connected clients, instead of repeating the projection and hash for every client. Change detection switched from JSON-serialization-based hashing to allocation-free structural hashing, eliminating a throwaway JSON string per aircraft per client each tick. When no web map client is connected, the loop skips all per-aircraft projection work entirely. The aircraft-list change key now ignores per-message telemetry fields (signal strength, total message count, last-seen), so aircraft whose rendered state is unchanged no longer trigger a list push every second; the detail panel continues to update those fields live for the selected aircraft.
+- **Web Map Icon Resolution Caching** — Memoized the aircraft shape/scale resolver so the five-layer type lookup runs once per distinct aircraft type tuple instead of for every aircraft on every marker rebuild.
 
 ### Fixed
 

@@ -167,6 +167,7 @@ Each output line is a self-contained JSON object terminated by a newline charact
     "TypeCode": "A320",
     "TypeDescription": "Airbus A320-214",
     "TypeIcaoClass": "L2J",
+    "TypeWtc": "M",
     "Model": "A320-214",
     "ManufacturerIcao": "AIRBUS",
     "ManufacturerName": "AIRBUS",

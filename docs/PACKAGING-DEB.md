@@ -6,19 +6,19 @@ Packages are built using `dpkg-deb` and can be cross-compiled from any platform,
 
 ## Package Metadata
 
-| Field         | Value                                                 |
-|---------------|-------------------------------------------------------|
-| Package       | `aeromux`                                             |
-| Version       | From `src/Directory.Build.props` (e.g., `0.6.2-1`)    |
-| Section       | `misc`                                                |
-| Priority      | `optional`                                            |
-| Architecture  | `arm64` or `amd64`                                    |
-| Depends       | `librtlsdr0`                                          |
-| Maintainer    | `Nandor Toth <dev@nandortoth.com>`                    |
+| Field         | Value                                              |
+|---------------|----------------------------------------------------|
+| Package       | `aeromux`                                          |
+| Version       | From `src/Directory.Build.props` (e.g., `0.7.0-1`) |
+| Section       | `misc`                                             |
+| Priority      | `optional`                                         |
+| Architecture  | `arm64` or `amd64`                                 |
+| Depends       | `librtlsdr0`                                       |
+| Maintainer    | `Nandor Toth <dev@nandortoth.com>`                 |
 | Homepage      | `https://github.com/aeromux/aeromux`               |
-| License       | GPL-3.0-or-later                                      |
+| License       | GPL-3.0-or-later                                   |
 
-The version string follows Debian conventions: `<upstream-version>-<debian-revision>` (e.g., `0.6.2-1`). The upstream version is read from `src/Directory.Build.props` at packaging time.
+The version string follows Debian conventions: `<upstream-version>-<debian-revision>` (e.g., `0.7.0-1`). The upstream version is read from `src/Directory.Build.props` at packaging time.
 
 ## Filesystem Layout
 
@@ -110,11 +110,11 @@ The `--target all` option packages both Linux architectures (`arm64` and `amd64`
 
 ### Options
 
-| Option      | Description                                                        |
-|-------------|--------------------------------------------------------------------|
-| `--target`  | Target platform: `linux-arm64`, `linux-x64`, or `all` (required)   |
-| `--rebuild` | Force rebuild of the binary even if it exists and is recent         |
-| `--silent`  | Suppress all output (only errors are shown)                        |
+| Option      | Description                                                      |
+|-------------|------------------------------------------------------------------|
+| `--target`  | Target platform: `linux-arm64`, `linux-x64`, or `all` (required) |
+| `--rebuild` | Force rebuild of the binary even if it exists and is recent      |
+| `--silent`  | Suppress all output (only errors are shown)                      |
 
 ### Workflow
 
@@ -157,7 +157,7 @@ The packaging script supports building packages for any Linux target from any ho
 ### Install
 
 ```bash
-sudo dpkg -i aeromux_0.6.2-1_arm64.deb
+sudo dpkg -i aeromux_0.7.0-1_arm64.deb
 ```
 
 Creates the data and log directories, creates the `aeromux` system user and group, reloads udev rules and systemd, and displays a post-install message with next steps.
@@ -165,7 +165,7 @@ Creates the data and log directories, creates the `aeromux` system user and grou
 ### Upgrade
 
 ```bash
-sudo dpkg -i aeromux_0.6.2-1_arm64.deb
+sudo dpkg -i aeromux_0.7.0-1_arm64.deb
 ```
 
 Stops the running service, installs new files, and restarts the service. If the configuration file has been modified by the user, `dpkg` prompts whether to keep the user's version or install the new package version.
