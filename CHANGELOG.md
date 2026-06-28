@@ -6,6 +6,7 @@ All notable changes to Aeromux will be documented in this file.
 
 ### Added
 
+- **Web Map: Resizable Mobile Panel** — On phone-sized screens the bottom sheet (aircraft list / detail panel) now has a drag handle on its top edge for raising or lowering its height, letting you trade off how much of the map versus the list is visible. The chosen height is saved across sessions (stored as a fraction of the viewport, so it survives rotation and transfers between devices). "Reset layout" — now also shown in the aircraft list, on the right of the aircraft count — restores the default height along with the collapsed-section state it already reset. Resizing is available only on phone-sized screens; tablet and desktop panels remain at full height.
 - **Web Map: Pinned Tooltip for Selected Aircraft** — Selecting an aircraft now keeps a permanent tooltip pinned to it on the map, tracking the aircraft as it moves and as the map is panned or zoomed. Hovering a *different* aircraft shows a second, transient tooltip at the same time. The pinned tooltip is distinguished by an accent border. The pinned tooltip clears when the aircraft is deselected or expires.
 
 ### Changed

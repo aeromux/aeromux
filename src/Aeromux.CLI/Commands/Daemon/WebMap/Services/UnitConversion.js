@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+import { normalizeStoredFraction } from './SheetHeight.js';
+
 // User preferences (units, sort, interface settings) persisted across sessions
 const STORAGE_KEY = 'aeromux-units';
 
@@ -80,12 +82,45 @@ export function saveSettings(settings) {
     }
 }
 
+// Mobile bottom-sheet height, persisted as a viewport fraction so it survives
+// rotation and transfers sensibly between devices of different sizes.
+const SHEET_HEIGHT_STORAGE_KEY = 'aeromux-sheet-height';
+
+export function loadSheetHeight() {
+    try {
+        const stored = localStorage.getItem(SHEET_HEIGHT_STORAGE_KEY);
+        if (stored !== null) {
+            return normalizeStoredFraction(parseFloat(stored));
+        }
+    } catch (e) {
+        // Ignore parse errors
+    }
+    return null;
+}
+
+export function saveSheetHeight(fraction) {
+    try {
+        localStorage.setItem(SHEET_HEIGHT_STORAGE_KEY, String(fraction));
+    } catch (e) {
+        // Ignore storage errors
+    }
+}
+
+export function clearSheetHeight() {
+    try {
+        localStorage.removeItem(SHEET_HEIGHT_STORAGE_KEY);
+    } catch (e) {
+        // Ignore storage errors
+    }
+}
+
 // Clears all persisted preferences so load functions fall back to defaults
 export function resetAllSettings() {
     try {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(SORT_STORAGE_KEY);
         localStorage.removeItem(SETTINGS_STORAGE_KEY);
+        localStorage.removeItem(SHEET_HEIGHT_STORAGE_KEY);
     } catch (e) {
         // Ignore storage errors
     }

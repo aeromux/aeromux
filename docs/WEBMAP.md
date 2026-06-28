@@ -116,6 +116,14 @@ The detail view is organized into the following sections:
 
 Sections 1 through 7 are expanded by default; sections 8 through 12 are collapsed. Sections with many fields include a "See more" link to reveal additional details. The detail view updates in real-time as new data is received. If the selected aircraft expires (no messages received within the timeout period), an `[EXPIRED]` banner is displayed at the top of the detail view.
 
+### Resizing the Panel (Mobile)
+
+On phone-sized screens the left panel is docked to the bottom of the screen as a sheet rather than floating on the left. A drag handle along its top edge — the pill, or anywhere on the AEROMUX header — lets you raise or lower the sheet to trade off how much of the map versus the list/detail is visible. The chosen height is saved in the browser and restored on the next visit. Tablet and desktop layouts place the panel on the left at full height and are not resizable.
+
+### Reset Layout
+
+A **Reset layout** button restores the panel to its defaults: the expanded/collapsed state of the detail sections (including any expanded "See more" details) and, on mobile, the saved sheet height. It appears on all screen sizes in both views — to the right of the aircraft count in the list, and in the detail toolbar next to the back button. This is separate from the settings "Reset to defaults", which clears units, interface options, and sort preferences.
+
 ## Control Panel (Top Right)
 
 The control panel in the top-right corner provides search and settings functionality.

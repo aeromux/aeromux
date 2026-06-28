@@ -19,7 +19,8 @@ import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { fetchStats, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
-import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings } from '../Services/UnitConversion.js';
+import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight } from '../Services/UnitConversion.js';
+import { clampSheetPx, pxToFraction } from '../Services/SheetHeight.js';
 import { HoverTooltip } from './HoverTooltip.jsx';
 import { AircraftList } from './AircraftList.jsx';
 import { AircraftDetail } from './AircraftDetail.jsx';
@@ -40,6 +41,8 @@ export function App() {
     const [settings, setSettings] = useState(loadSettings);
     const [sort, setSort] = useState(loadSort);
     const aircraftMapRef = useRef(new Map());
+    const panelRef = useRef(null);
+    const sheetDrag = useRef(null);
     const selectedRef = useRef(null);
     const trailRef = useRef([]);
     const [stateHistory, setStateHistory] = useState(null);
@@ -196,10 +199,63 @@ export function App() {
     const toggleMore = useCallback((key) => {
         setShowMore(prev => ({ ...prev, [key]: !prev[key] }));
     }, []);
+    // Mobile bottom-sheet height — applied imperatively as a CSS custom property
+    // rather than via a React `style` prop. The panel re-renders on every
+    // buffered aircraft update; managing the property outside React's render
+    // cycle keeps live drag values from being clobbered mid-gesture. The desktop
+    // layout never reads --sheet-height, so it has no visual effect above the breakpoint.
+    const applySheetHeight = useCallback((cssValue) => {
+        const panel = panelRef.current;
+        if (!panel) return;
+        if (cssValue) {
+            panel.style.setProperty('--sheet-height', cssValue);
+        } else {
+            panel.style.removeProperty('--sheet-height');
+        }
+    }, []);
+
+    const handleGrabberPointerDown = useCallback((e) => {
+        // Resizing only exists in the mobile bottom-sheet layout; on wider
+        // screens the header is a plain (non-draggable) element.
+        if (!window.matchMedia('(max-width: 768px)').matches) return;
+        const panel = panelRef.current;
+        if (!panel) return;
+        sheetDrag.current = {
+            startY: e.clientY,
+            startHeight: panel.getBoundingClientRect().height,
+            lastPx: panel.getBoundingClientRect().height,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    }, []);
+
+    const handleGrabberPointerMove = useCallback((e) => {
+        const drag = sheetDrag.current;
+        if (!drag) return;
+        // Drag up (smaller clientY) grows the sheet.
+        const desired = drag.startHeight + (drag.startY - e.clientY);
+        const px = clampSheetPx(desired, window.innerHeight);
+        drag.lastPx = px;
+        applySheetHeight(`${px}px`);
+    }, [applySheetHeight]);
+
+    const handleGrabberPointerUp = useCallback((e) => {
+        const drag = sheetDrag.current;
+        if (!drag) return;
+        sheetDrag.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        const fraction = pxToFraction(drag.lastPx, window.innerHeight);
+        // Persist as a fraction and re-apply as dvh so rotation is handled by CSS.
+        applySheetHeight(`${(fraction * 100).toFixed(2)}dvh`);
+        saveSheetHeight(fraction);
+    }, [applySheetHeight]);
+
     const resetLayout = useCallback(() => {
         setSections({ ...defaultSections });
         setShowMore({});
-    }, []);
+        applySheetHeight(null);
+        clearSheetHeight();
+    }, [applySheetHeight]);
 
     // Reset all settings to defaults
     const handleReset = useCallback(() => {
@@ -207,7 +263,8 @@ export function App() {
         setUnits(loadUnits());
         setSettings(loadSettings());
         setSort(loadSort());
-    }, []);
+        applySheetHeight(null);
+    }, [applySheetHeight]);
 
     // Initialize on mount
     useEffect(() => {
@@ -375,6 +432,12 @@ export function App() {
         }
     }, []);
 
+    // Apply the persisted bottom-sheet height on mount.
+    useEffect(() => {
+        const fraction = loadSheetHeight();
+        if (fraction) applySheetHeight(`${(fraction * 100).toFixed(2)}dvh`);
+    }, [applySheetHeight]);
+
     // Update range rings when settings or distance unit changes
     useEffect(() => {
         if (receiverLocation) {
@@ -401,12 +464,26 @@ export function App() {
                 overlapping tooltips. */}
             <HoverTooltip hover={hover && hover.icao !== selectedIcao ? hover : null} units={units} />
 
-            <div class="left-panel panel">
-                <div class="logo-header">
-                    <img src="img/logo.svg" alt="Aeromux" class="logo-img" />
-                    <div class="logo-text">
-                        <div class="logo-title">AEROMUX</div>
-                        <div class="logo-subtitle">Web Map{version ? ` (v${version})` : ''}</div>
+            <div class="left-panel panel" ref={panelRef}>
+                {/* The whole grabber + header strip is the drag target for
+                    resizing the bottom sheet on mobile; the pill is just the
+                    visual affordance. Pointer capture routes move/up here, and
+                    the handler is a no-op above the mobile breakpoint. */}
+                <div
+                    class="sheet-drag-region"
+                    onPointerDown={handleGrabberPointerDown}
+                    onPointerMove={handleGrabberPointerMove}
+                    onPointerUp={handleGrabberPointerUp}
+                >
+                    <div class="sheet-grabber">
+                        <div class="sheet-grabber-pill"></div>
+                    </div>
+                    <div class="logo-header">
+                        <img src="img/logo.svg" alt="Aeromux" class="logo-img" />
+                        <div class="logo-text">
+                            <div class="logo-title">AEROMUX</div>
+                            <div class="logo-subtitle">Web Map{version ? ` (v${version})` : ''}</div>
+                        </div>
                     </div>
                 </div>
                 {selectedIcao ? (
@@ -433,6 +510,7 @@ export function App() {
                         sort={sort}
                         onSortChange={handleSortChange}
                         onSelect={(icao) => handleSelect(icao, { panTo: true })}
+                        onResetLayout={resetLayout}
                         viewCount={viewCount}
                         totalCount={totalCount}
                     />

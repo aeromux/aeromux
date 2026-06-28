@@ -31,6 +31,8 @@ Output goes to `artifacts/binaries/{runtime-id}/aeromux`. Supported targets: `li
 
 `run.sh` is an interactive quick-start helper for building and launching during development.
 
+The Web Map frontend (`Commands/Daemon/WebMap`) is a Preact/JSX SPA bundled by esbuild via `build.sh` (entry point `Index.jsx` → `js/app.js`). `dotnet build` does **not** rebuild it — run `./build.sh` or `run.sh` after editing any `.jsx`/`.js` to regenerate the bundle. `node_modules` is installed on demand by the build and is not checked in.
+
 ## Tech Stack
 
 - **.NET 10**, C# with nullable reference types and implicit usings
@@ -40,6 +42,7 @@ Output goes to `artifacts/binaries/{runtime-id}/aeromux`. Supported targets: `li
 - **Microsoft.Data.Sqlite** — local database
 - **YamlDotNet** — configuration file parsing
 - **ASP.NET Core** — streaming/web infrastructure
+- **Preact + esbuild** — Web Map single-page frontend (`src/Aeromux.CLI/Commands/Daemon/WebMap`), JSX bundled to `js/app.js`
 - **xUnit** + **FluentAssertions** + **Moq** — testing
 - **Coverlet** — code coverage
 

@@ -41,7 +41,7 @@ function getRawValue(item, column) {
     }
 }
 
-export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, units, sort, onSortChange, onSelect, viewCount, totalCount }) {
+export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, units, sort, onSortChange, onSelect, onResetLayout, viewCount, totalCount }) {
     const handleHeaderClick = useCallback((column) => {
         const next = sort.column === column
             ? { column, direction: sort.direction === 'asc' ? 'desc' : 'asc' }
@@ -110,7 +110,8 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
     return (
         <div class="aircraft-list">
             <div class="aircraft-list-stats">
-                Aircraft: <span class="stats-count">{viewCount}</span> in view / <span class="stats-count">{totalCount}</span> total
+                <span>Aircraft: <span class="stats-count">{viewCount}</span> in view / <span class="stats-count">{totalCount}</span> total</span>
+                <button class="reset-layout" onClick={onResetLayout}>Reset layout</button>
             </div>
             <table class="aircraft-list-table">
                 <thead>

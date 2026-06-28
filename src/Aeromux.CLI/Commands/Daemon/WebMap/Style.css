@@ -105,6 +105,19 @@ body:has(.webgl-error) {
     overflow: hidden;
 }
 
+/* Wraps the grabber pill and the logo header into a single drag target for
+   resizing the mobile bottom sheet (see the max-width: 768px block below).
+   Carries no visual styling of its own, so the header looks identical. */
+.sheet-drag-region {
+    flex-shrink: 0;
+}
+
+/* Bottom-sheet drag handle. Hidden by default; only shown in the mobile
+   bottom-sheet layout (see the max-width: 768px block below). */
+.sheet-grabber {
+    display: none;
+}
+
 .logo-header {
     background: var(--color-brand-dark);
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
@@ -661,9 +674,18 @@ body:has(.webgl-error) {
 .aircraft-list-stats {
     font-size: 12px;
     color: var(--color-text-secondary);
-    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-md);
     border-bottom: 1px solid var(--color-panel-border);
+}
+
+/* The stats-row reset button reuses .reset-layout but should not carry the
+   detail toolbar's larger padding, which would unbalance the row. */
+.aircraft-list-stats .reset-layout {
+    padding: 0;
 }
 
 .stats-count {
@@ -862,8 +884,48 @@ body:has(.webgl-error) {
         left: 0;
         top: auto;
         bottom: 0;
-        max-height: 50vh;
+        /* Without a saved height: size to content, capped at 50dvh (prior
+           behavior). With a saved/dragged height: both properties pin the
+           sheet to that exact value, overriding the cap up to the JS clamp. */
+        height: var(--sheet-height, auto);
+        max-height: var(--sheet-height, 50dvh);
         border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    }
+
+    /* The entire grabber + header strip resizes the sheet on mobile. */
+    .sheet-drag-region {
+        cursor: ns-resize;
+        touch-action: none;
+        user-select: none;
+    }
+
+    .sheet-grabber {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 14px;
+        flex-shrink: 0;
+        background: var(--color-brand-dark);
+        border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+        cursor: ns-resize;
+        touch-action: none;
+        user-select: none;
+    }
+
+    .sheet-grabber-pill {
+        width: 36px;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.4);
+    }
+
+    /* The grabber already supplies the top inset, so drop the header's own top
+       padding to keep the logo close to the drag handle. touch-action: none so
+       a drag starting on the header resizes the sheet instead of scrolling. */
+    .logo-header {
+        border-radius: 0;
+        padding-top: var(--spacing-xs);
+        touch-action: none;
     }
 
     .control-panel {
