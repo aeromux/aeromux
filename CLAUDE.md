@@ -69,6 +69,16 @@ Dependency direction: CLI -> Infrastructure -> Core. CLI also references Core di
 
 Always present a plan before modifying code, even for small changes. Get user approval before editing files.
 
+## Versioning
+
+The single source of truth for the version number is `<Version>` in `src/Directory.Build.props`; all projects inherit it. When bumping the version:
+
+1. Update `<Version>` in `src/Directory.Build.props`.
+2. Add a matching section to `CHANGELOG.md` (newest first). Use `— Unreleased` in the heading until the release is cut, then replace it with the release date (`YYYY-MM-DD`).
+3. On release, add the version-link footnote at the bottom of `CHANGELOG.md` pointing to the GitHub release tag.
+
+The project follows [Semantic Versioning](https://semver.org/) and the [Keep a Changelog](https://keepachangelog.com/) format.
+
 ## Domain Terminology
 
 | Term | Meaning |
