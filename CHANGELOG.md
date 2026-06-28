@@ -4,7 +4,13 @@ All notable changes to Aeromux will be documented in this file.
 
 ## [0.7.1] — Unreleased
 
-Features for this release will be added later.
+### Added
+
+- **Web Map: Pinned Tooltip for Selected Aircraft** — Selecting an aircraft now keeps a permanent tooltip pinned to it on the map, tracking the aircraft as it moves and as the map is panned or zoomed. Hovering a *different* aircraft shows a second, transient tooltip at the same time. The pinned tooltip is distinguished by an accent border. The pinned tooltip clears when the aircraft is deselected or expires.
+
+### Fixed
+
+- **Web Map: Hover Tooltip Covering Panels** — The aircraft hover tooltip used a higher stacking order (`z-index: 20`) than the UI panels (`z-index: 10`), so it could be drawn on top of the search box and the aircraft detail panel. The tooltip now sits above the map but below the panels (`z-index: 5`), so it no longer obscures them.
 
 ## [0.7.0] — 2026-06-26
 

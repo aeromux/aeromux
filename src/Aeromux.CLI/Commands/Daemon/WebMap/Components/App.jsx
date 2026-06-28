@@ -33,6 +33,7 @@ export function App() {
     const [totalCount, setTotalCount] = useState(0);
     const [receiverLocation, setReceiverLocation] = useState(null);
     const [hover, setHover] = useState(null);
+    const [selectedTooltip, setSelectedTooltip] = useState(null);
     const [units, setUnits] = useState(loadUnits());
     const [trail, setTrail] = useState([]);
     const [version, setVersion] = useState(null);
@@ -219,6 +220,7 @@ export function App() {
             (data) => setHover(data),
             () => setHover(null)
         );
+        MapManager.onSelectedTooltip((data) => setSelectedTooltip(data));
 
         // Viewport changes → send to SignalR
         MapManager.onViewportChange((bounds) => {
@@ -391,7 +393,13 @@ export function App() {
         <div>
             <div id="map-container" class="map-container"></div>
 
-            <HoverTooltip hover={hover} units={units} />
+            {/* Pinned tooltip for the selected aircraft (always shown while
+                selected); rendered first so a transient hover paints on top. */}
+            <HoverTooltip hover={selectedTooltip} units={units} pinned />
+            {/* Hover tooltip for any aircraft except the selected one, whose
+                tooltip is already pinned above — avoids two identical
+                overlapping tooltips. */}
+            <HoverTooltip hover={hover && hover.icao !== selectedIcao ? hover : null} units={units} />
 
             <div class="left-panel panel">
                 <div class="logo-header">

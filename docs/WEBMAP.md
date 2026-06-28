@@ -34,6 +34,8 @@ The main area of the screen is a full-screen interactive map rendered using Open
 
 Aircraft are displayed as top-down silhouettes specific to each aircraft type (A320, B777, Cessna, helicopter, balloon, …), rotated by heading, and sized for comfortable on-screen visibility at typical map zoom levels. Marker color reflects altitude — lighter blue at ground level, deeper blue at cruise altitude. Military aircraft use a green palette; privacy aircraft (LADD / PIA) use red. The currently selected aircraft is highlighted in orange. Hovering over any aircraft shows a tooltip with the callsign, ICAO address, speed, and altitude.
 
+The selected aircraft keeps a permanent (pinned) tooltip that follows it as it moves and as the map is panned or zoomed. The pinned tooltip is distinguished by an accent border, and a second transient tooltip is shown simultaneously when hovering a different aircraft. The pinned tooltip clears when the aircraft is deselected or expires.
+
 When an aircraft is selected, a blue gradient trail is drawn along its recent flight path. The trail is fetched from the position history on selection and extended in real-time as new positions arrive. The trail fades from transparent (oldest position) to opaque (newest position).
 
 ### Aircraft Icon Resolution

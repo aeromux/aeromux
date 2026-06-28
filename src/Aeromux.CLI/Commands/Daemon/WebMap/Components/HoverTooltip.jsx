@@ -17,14 +17,14 @@
 import { h } from 'preact';
 import { convertSpeed, convertAltitude } from '../Services/UnitConversion.js';
 
-export function HoverTooltip({ hover, units }) {
+export function HoverTooltip({ hover, units, pinned = false }) {
     if (!hover) return null;
 
     const speed = hover.speed ? convertSpeed(hover.speed, units.speed) : null;
     const alt = hover.altitude ? convertAltitude(hover.altitude, units.altitude) : null;
 
     return (
-        <div class="hover-tooltip" style={{ left: hover.x + 'px', top: hover.y - 20 + 'px', transform: 'translate(-50%, -100%)' }}>
+        <div class={pinned ? 'hover-tooltip hover-tooltip--pinned' : 'hover-tooltip'} style={{ left: hover.x + 'px', top: hover.y - 20 + 'px', transform: 'translate(-50%, -100%)' }}>
             <div class="hover-tooltip-callsign">{hover.callsign || 'N/A'}</div>
             <div class="hover-tooltip-field">{hover.icao}</div>
             {speed && <div class="hover-tooltip-field">{speed.value} {speed.label}</div>}

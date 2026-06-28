@@ -43,6 +43,9 @@ let pendingRangeOutline = null;
 let hoveredIcao = null;
 let hoveredCoords = null;
 let hoveredProps = null;
+let selectedCoords = null;
+let selectedProps = null;
+let selectedTooltipCallback = null;
 
 // Trail colors per aircraft category — matches the CSS category dot colors (darkened for line contrast)
 const TRAIL_COLORS = {
@@ -166,11 +169,15 @@ export function init(containerId) {
         }
     });
 
-    // Re-project tooltip position on map move/zoom
+    // Re-project tooltip positions on map move/zoom
     map.on('move', () => {
         if (hoveredIcao && hoveredCoords && hoveredProps && markerHoverEnterCallback) {
             const pt = map.project(hoveredCoords);
             markerHoverEnterCallback({ ...hoveredProps, x: pt.x, y: pt.y });
+        }
+        if (selectedIcao && selectedCoords && selectedProps && selectedTooltipCallback) {
+            const pt = map.project(selectedCoords);
+            selectedTooltipCallback({ ...selectedProps, x: pt.x, y: pt.y });
         }
     });
 
@@ -265,6 +272,7 @@ export function updateMarkers(aircraftMap) {
     if (!map) return;
 
     const features = [];
+    let selectedFeature = null;
     aircraftMap.forEach((aircraft, icao) => {
         if (!aircraft.Coordinate) return;
 
@@ -325,7 +333,7 @@ export function updateMarkers(aircraftMap) {
         // ensureRegistered dedupes per imageName.
         ensureRegistered(imageName, shapeName, fillColor);
 
-        features.push({
+        const feature = {
             type: 'Feature',
             geometry: {
                 type: 'Point',
@@ -350,7 +358,11 @@ export function updateMarkers(aircraftMap) {
                 shapeName,
                 resolvedVia,
             }
-        });
+        };
+        features.push(feature);
+        // Capture the selected feature in-loop so the pinned tooltip can be
+        // re-projected without a second O(n) scan over the feature list.
+        if (selected) selectedFeature = feature;
     });
 
     const source = map.getSource('aircraft-source');
@@ -382,6 +394,27 @@ export function updateMarkers(aircraftMap) {
             }
         }
     }
+
+    // Update the pinned tooltip for the selected aircraft (it may have moved,
+    // just been selected, or expired). Clears when the selection has no
+    // on-map feature (no position yet, or removed).
+    if (selectedIcao && selectedTooltipCallback) {
+        if (selectedFeature) {
+            selectedCoords = selectedFeature.geometry.coordinates;
+            selectedProps = {
+                icao: selectedFeature.properties.icao,
+                callsign: selectedFeature.properties.callsign,
+                altitude: selectedFeature.properties.altitude,
+                speed: selectedFeature.properties.speed
+            };
+            const pt = map.project(selectedCoords);
+            selectedTooltipCallback({ ...selectedProps, x: pt.x, y: pt.y });
+        } else {
+            selectedCoords = null;
+            selectedProps = null;
+            selectedTooltipCallback(null);
+        }
+    }
 }
 
 export function highlightSelected(icao) {
@@ -390,6 +423,9 @@ export function highlightSelected(icao) {
 
 export function clearSelection() {
     selectedIcao = null;
+    selectedCoords = null;
+    selectedProps = null;
+    if (selectedTooltipCallback) selectedTooltipCallback(null);
 }
 
 export function panTo(lat, lon, keepZoom = false) {
@@ -664,3 +700,4 @@ export function onMarkerHover(enterCb, leaveCb) {
     markerHoverEnterCallback = enterCb;
     markerHoverLeaveCallback = leaveCb;
 }
+export function onSelectedTooltip(callback) { selectedTooltipCallback = callback; }
