@@ -8,9 +8,14 @@ All notable changes to Aeromux will be documented in this file.
 
 - **Web Map: Pinned Tooltip for Selected Aircraft** — Selecting an aircraft now keeps a permanent tooltip pinned to it on the map, tracking the aircraft as it moves and as the map is panned or zoomed. Hovering a *different* aircraft shows a second, transient tooltip at the same time. The pinned tooltip is distinguished by an accent border. The pinned tooltip clears when the aircraft is deselected or expires.
 
+### Changed
+
+- **Web Map: Mobile Search Bar Layout** — On phone-sized screens (≤ 480 px wide), the search/settings control panel is now pinned full-width and flush to the top edge with only its bottom corners rounded, mirroring the bottom-anchored aircraft list/detail panel, instead of floating as a centered pill. The search input also stretches to fill the available width up to the settings button. Tablet (iPad) and desktop layouts are unchanged.
+
 ### Fixed
 
 - **Web Map: Hover Tooltip Covering Panels** — The aircraft hover tooltip used a higher stacking order (`z-index: 20`) than the UI panels (`z-index: 10`), so it could be drawn on top of the search box and the aircraft detail panel. The tooltip now sits above the map but below the panels (`z-index: 5`), so it no longer obscures them.
+- **Web Map: Settings Panel Overflowing the Viewport** — An expanded settings panel could run off the bottom of the screen with no way to reach "Reset to defaults" (short desktop windows, landscape phones, and the new full-width mobile bar). The control panel now caps its height to the viewport and the settings list scrolls internally while the search row stays pinned in place.
 
 ## [0.7.0] — 2026-06-26
 

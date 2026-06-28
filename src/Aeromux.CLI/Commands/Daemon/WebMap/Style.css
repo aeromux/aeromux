@@ -438,12 +438,20 @@ body:has(.webgl-error) {
     right: 16px;
     width: 280px;
     padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    /* Cap height so an expanded settings panel scrolls rather than running
+       off-screen (short desktop windows, landscape phones). dvh tracks the
+       mobile address bar; vh is the fallback for older browsers. */
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
 }
 
 .control-panel-row {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    flex-shrink: 0;
 }
 
 .settings-btn {
@@ -478,6 +486,8 @@ body:has(.webgl-error) {
     margin-top: var(--spacing-sm);
     padding-top: var(--spacing-sm);
     border-top: 1px solid var(--color-panel-border);
+    overflow-y: auto;
+    min-height: 0;   /* allow shrinking below content height in the flex column */
 }
 
 .settings-category {
@@ -663,6 +673,7 @@ body:has(.webgl-error) {
 
 .search-input-wrapper {
     position: relative;
+    flex: 1;   /* fill the row so the input stretches up to the settings button */
 }
 
 .search-input {
@@ -863,6 +874,21 @@ body:has(.webgl-error) {
         width: auto;
         min-width: 200px;
         max-width: calc(100vw - 32px);
+    }
+}
+
+@media (max-width: 480px) {
+    .control-panel {
+        top: 0;
+        left: 0;
+        right: 0;
+        transform: none;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        /* Flush to the top edge → round only the bottom corners, mirroring the
+           bottom-anchored list/detail panel. */
+        border-radius: 0 0 var(--radius-panel) var(--radius-panel);
     }
 }
 
