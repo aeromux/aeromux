@@ -137,6 +137,10 @@ public class ConfigurationBuilder
             {
                 Enabled = false,
                 Path = null
+            },
+            Heatmap = new HeatmapConfig
+            {
+                Collect = true
             }
         };
     }
@@ -157,7 +161,8 @@ public class ConfigurationBuilder
             Tracking = yamlConfig.Tracking ?? baseConfig.Tracking,
             Receiver = yamlConfig.Receiver ?? baseConfig.Receiver,
             Mlat = yamlConfig.Mlat ?? baseConfig.Mlat,
-            Database = yamlConfig.Database ?? baseConfig.Database
+            Database = yamlConfig.Database ?? baseConfig.Database,
+            Heatmap = yamlConfig.Heatmap ?? baseConfig.Heatmap
         };
     }
 

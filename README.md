@@ -27,7 +27,7 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 - **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints. See the [API Guide](docs/API.md) for full documentation.
 
-- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, and range rings. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
+- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, range rings, and an optional traffic-density heatmap. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
 - **Beast TCP Input** — Connect to one or more external Beast-compatible servers (dump1090, readsb, or another Aeromux daemon) over the network. Beast sources can be used alone or combined with local SDR devices. Includes automatic reconnection with exponential backoff if a connection drops.
 
@@ -197,6 +197,7 @@ The main sections are:
 - **`receiver`** — Your station's geographic location (latitude, longitude, altitude). This is needed for surface vehicle position decoding and for MLAT triangulation.
 - **`database`** — Aircraft metadata database settings. Configure the storage path and enable database enrichment for aircraft identification data.
 - **`mlat`** — Multilateration input settings. When enabled, Aeromux can receive position data from mlat-client for aircraft that do not broadcast ADS-B positions.
+- **`heatmap`** — Web-map traffic-density heatmap. Controls whether the daemon aggregates the in-memory 24-hour distinct-aircraft grid used by the map overlay; set `collect: false` to disable it and save memory on constrained hosts.
 - **`logging`** — Log level, console and file output, log rotation, and retention.
 
 ## Network Ports

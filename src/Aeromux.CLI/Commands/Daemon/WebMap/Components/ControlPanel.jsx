@@ -17,6 +17,8 @@
 import { h, Fragment } from 'preact';
 import { useState, useRef, useEffect, useCallback } from 'preact/hooks';
 import { searchAircraft } from '../Services/ApiClient.js';
+import { formatCellSizeLabel, distanceUnitLabel } from '../Services/UnitConversion.js';
+import { HeatmapLegend } from './HeatmapLegend.jsx';
 
 // Splits text around a case-insensitive query match and wraps the matched portion in a highlight span
 function highlightMatch(text, query) {
@@ -32,7 +34,7 @@ function highlightMatch(text, query) {
     );
 }
 
-export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation }) {
+export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation, heatmapCollectionEnabled, heatmapScale }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -198,6 +200,36 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                         </div>
                         Aircraft photos
                     </div>
+                    <div class="settings-category">Heatmap</div>
+                    <div class={`settings-toggle${!heatmapCollectionEnabled ? ' disabled' : ''}`}
+                         onClick={() => heatmapCollectionEnabled && toggleSetting('heatmap')}
+                         title={heatmapCollectionEnabled ? '' : 'Collection disabled in server config'}>
+                        <div class={`toggle-track${heatmapCollectionEnabled && settings.heatmap ? ' active' : ''}`}>
+                            <div class="toggle-knob" />
+                        </div>
+                        Traffic heatmap
+                    </div>
+                    {heatmapCollectionEnabled && settings.heatmap && (
+                        <>
+                            <div class="settings-field-label">Cell size ({distanceUnitLabel(units.distance)})</div>
+                            <div class="unit-group">
+                                {[2, 5, 10, 20, 40].map((n) => (
+                                    <button class={`unit-btn${settings.heatmapCellNm === n ? ' active' : ''}`}
+                                            onClick={() => onSettingsChange({ ...settings, heatmapCellNm: n })}>{formatCellSizeLabel(n, units.distance)}</button>
+                                ))}
+                            </div>
+                            <div class="settings-field-label">Window</div>
+                            <div class="unit-group">
+                                {[1, 6, 12, 24].map((hrs) => (
+                                    <button class={`unit-btn${settings.heatmapWindowHours === hrs ? ' active' : ''}`}
+                                            onClick={() => onSettingsChange({ ...settings, heatmapWindowHours: hrs })}>{hrs} h</button>
+                                ))}
+                            </div>
+                            {heatmapScale && (
+                                <HeatmapLegend scaleMax={heatmapScale.scaleMax} maxCount={heatmapScale.maxCount} />
+                            )}
+                        </>
+                    )}
                     <div class="settings-category">Legend</div>
                     <div class="legend-items">
                         <div class="legend-item">

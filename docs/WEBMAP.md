@@ -63,6 +63,16 @@ A convex hull polygon showing the receiver's coverage area based on the farthest
 
 The range outline can be toggled on or off from the settings panel. It is enabled by default. When the receiver location is not configured, the toggle is disabled.
 
+### Traffic Heatmap
+
+An optional overlay that divides the map into a grid of equal-size squares and colours each by how many **distinct aircraft** (unique ICAO addresses) passed through it over a recent time window (24 hours by default). Colours run from green (least busy) through yellow to red (busiest), on a logarithmic scale so that everyday and very busy squares remain distinguishable. Over time the overlay traces out the approach and departure corridors, holding patterns, and airways over the receiver's coverage.
+
+Squares are a fixed size in nautical miles regardless of the selected distance unit, so switching units never resizes the grid — only the cell-size labels are converted to the chosen unit. Only squares where aircraft were actually seen are drawn — empty areas show the plain map. Hovering (or tapping) a square shows its exact aircraft count, and the settings panel's Heatmap section shows a colour-scale legend.
+
+The heatmap is **off by default** and toggled from the settings panel. When enabled, two controls appear: **Cell size** (2, 5, 10, 20, or 40 nm) and **Window** (1, 6, 12, or 24 hours), both adjustable live. The overlay is held in memory and is not persisted, so a daemon restart clears it and it refills over the following window.
+
+Server-side collection is controlled by the `heatmap.collect` option in the configuration file (default on). When collection is disabled, no data is gathered and the settings toggle is greyed out with an explanatory note.
+
 ## Aircraft List (Left Panel)
 
 The left panel displays the Aeromux logo and version at the top, followed by a statistics row showing the number of aircraft currently in view and the total number of tracked aircraft:
@@ -170,6 +180,7 @@ Unit changes are applied immediately across the entire interface — the aircraf
 | Range rings      | Show or hide the range rings on the map                                                                                                                            | On       |
 | Range outline    | Show or hide the receiver coverage outline (requires receiver location)                                                                                            | On       |
 | Aircraft photos  | Show or hide the Aircraft Photo section in the detail panel. When off, the section is removed entirely (not just collapsed) so it can't be accidentally re-opened. | On       |
+| Traffic heatmap  | Show or hide the traffic-density heatmap overlay, with live cell-size and window controls. Disabled when server-side collection is turned off (`heatmap.collect: false`).                | Off      |
 
 #### Reset
 

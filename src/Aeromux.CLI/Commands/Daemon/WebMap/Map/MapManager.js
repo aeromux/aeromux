@@ -29,6 +29,7 @@ import {
     setMap as setIconMap,
     loggedUnknownTypes,
 } from './AircraftIcons.js';
+import { RDYLGN_STOPS, payloadToFeatures } from '../Services/HeatmapScale.js';
 
 let map = null;
 let viewportCallback = null;
@@ -40,6 +41,9 @@ let debounceTimer = null;
 let selectedIcao = null;
 let rangeOutlineAdded = false;
 let pendingRangeOutline = null;
+let heatmapInitialized = false;
+let pendingHeatmap = null;
+let heatmapHoverCallback = null;
 let hoveredIcao = null;
 let hoveredCoords = null;
 let hoveredProps = null;
@@ -92,6 +96,12 @@ export function init(containerId) {
             const p = pendingRangeOutline;
             pendingRangeOutline = null;
             updateRangeOutline(p.coordinates, p.visible);
+        }
+
+        if (pendingHeatmap) {
+            const p = pendingHeatmap;
+            pendingHeatmap = null;
+            setHeatmap(p);
         }
     });
 
@@ -168,6 +178,16 @@ export function init(containerId) {
             markerHoverLeaveCallback();
         }
     });
+
+    // Heatmap cell hover — aircraft markers take priority.
+    map.on('mousemove', (e) => {
+        if (!heatmapHoverCallback || !heatmapInitialized) return;
+        const overAircraft = map.queryRenderedFeatures(e.point, { layers: ['aircraft-layer'] });
+        if (overAircraft.length > 0) { heatmapHoverCallback(null); return; }
+        const count = heatmapCellAt(e.point);
+        heatmapHoverCallback(count != null ? { count, x: e.point.x, y: e.point.y } : null);
+    });
+    map.on('mouseout', () => { if (heatmapHoverCallback) heatmapHoverCallback(null); });
 
     // Re-project tooltip positions on map move/zoom
     map.on('move', () => {
@@ -692,6 +712,63 @@ export function updateRangeRings(lat, lon, visible, distanceUnit) {
     });
     map.setLayoutProperty('range-center-layer', 'visibility', 'visible');
 }
+
+// ---- Heatmap overlay ----
+
+function ensureHeatmapSources() {
+    if (heatmapInitialized || !map) return;
+    if (!map.getLayer('overlay-layer')) return;
+    heatmapInitialized = true;
+
+    map.addSource('heatmap-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+    // Data-driven green→red fill from the precomputed per-feature `t`.
+    const colour = ['interpolate', ['linear'], ['get', 't'], ...RDYLGN_STOPS.flat()];
+
+    // Insert below the range overlays / trail / aircraft so live traffic is never
+    // obscured. 'trail-layer' always exists; the range overlays are lazy.
+    const beforeId = map.getLayer('range-outline-fill-layer') ? 'range-outline-fill-layer'
+        : map.getLayer('range-rings-layer') ? 'range-rings-layer'
+        : 'trail-layer';
+
+    map.addLayer({
+        id: 'heatmap-fill',
+        type: 'fill',
+        source: 'heatmap-source',
+        paint: { 'fill-color': colour, 'fill-opacity': 0.55 },
+    }, beforeId);
+
+    map.addLayer({
+        id: 'heatmap-border',
+        type: 'line',
+        source: 'heatmap-source',
+        paint: { 'line-color': colour, 'line-width': 0.5, 'line-opacity': 0.6 },
+    }, beforeId);
+}
+
+export function setHeatmap(payload) {
+    if (!map) return;
+    ensureHeatmapSources();
+    if (!heatmapInitialized) { pendingHeatmap = payload; return; }
+    const src = map.getSource('heatmap-source');
+    if (src) src.setData({ type: 'FeatureCollection', features: payloadToFeatures(payload) });
+}
+
+export function clearHeatmap() {
+    pendingHeatmap = null;
+    if (!map || !heatmapInitialized) return;
+    const src = map.getSource('heatmap-source');
+    if (src) src.setData({ type: 'FeatureCollection', features: [] });
+}
+
+// Exact distinct-aircraft count of the heatmap cell under a screen point, or null.
+export function heatmapCellAt(point) {
+    if (!map || !map.getLayer('heatmap-fill')) return null;
+    const features = map.queryRenderedFeatures(point, { layers: ['heatmap-fill'] });
+    return features.length ? features[0].properties.count : null;
+}
+
+export function onHeatmapHover(callback) { heatmapHoverCallback = callback; }
 
 export function onViewportChange(callback) { viewportCallback = callback; }
 export function onMarkerClick(callback) { markerClickCallback = callback; }

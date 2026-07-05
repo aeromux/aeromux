@@ -70,3 +70,7 @@ database:
 mlat:
   enabled: true                           # Enable MLAT input from mlat-client (default: true, daemon mode only)
   inputPort: 30104                        # TCP port to receive MLAT positions from mlat-client (default: 30104)
+
+# Web-map traffic-density heatmap
+heatmap:
+  collect: true                           # Aggregate the 24h distinct-aircraft grid in memory (default: true).

@@ -33,23 +33,29 @@ public sealed class MapHubPushService : BackgroundService
 {
     private static readonly TimeSpan ClientPushTimeout = TimeSpan.FromSeconds(5);
 
+    private static readonly TimeSpan HeatmapPruneInterval = TimeSpan.FromSeconds(60);
+
     private readonly IAircraftStateTracker _tracker;
     private readonly IHubContext<MapHub> _hubContext;
     private readonly RangeOutlineTracker? _rangeOutlineTracker;
+    private readonly HeatmapTracker? _heatmapTracker;
     private readonly JsonSerializerOptions _jsonOptions;
+    private DateTime _lastHeatmapPrune = DateTime.MinValue;
 
     /// <summary>
     /// Initializes the push service with the aircraft tracker, hub context,
-    /// and optional range outline tracker.
+    /// and optional range-outline and heatmap trackers.
     /// </summary>
     public MapHubPushService(
         IAircraftStateTracker tracker,
         IHubContext<MapHub> hubContext,
-        RangeOutlineTracker? rangeOutlineTracker = null)
+        RangeOutlineTracker? rangeOutlineTracker = null,
+        HeatmapTracker? heatmapTracker = null)
     {
         _tracker = tracker;
         _hubContext = hubContext;
         _rangeOutlineTracker = rangeOutlineTracker;
+        _heatmapTracker = heatmapTracker;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = null,
@@ -87,12 +93,13 @@ public sealed class MapHubPushService : BackgroundService
         bool hasClients = !MapHub.ClientStates.IsEmpty;
 
         // Single pass over all aircraft:
-        //   - Feed positions into the range outline tracker (always, regardless of clients).
+        //   - Feed positions into the range-outline and heatmap trackers (always, regardless
+        //     of clients, whenever either tracker is registered).
         //   - Project + change-hash each positioned aircraft once per tick, shared across
         //     all clients. Skipped entirely when no client is connected so an idle daemon
         //     does no per-aircraft mapping work.
         var snapshot = new List<(string Icao, AircraftListItem Item, int Hash)>(hasClients ? allAircraft.Count : 0);
-        if (_rangeOutlineTracker is not null || hasClients)
+        if (_rangeOutlineTracker is not null || _heatmapTracker is not null || hasClients)
         {
             foreach (Aircraft aircraft in allAircraft)
             {
@@ -102,6 +109,7 @@ public sealed class MapHubPushService : BackgroundService
                 }
 
                 _rangeOutlineTracker?.RecordPosition(aircraft.Position.Coordinate);
+                _heatmapTracker?.RecordPosition(aircraft.Identification.ICAO, aircraft.Position.Coordinate);
 
                 if (hasClients)
                 {
@@ -109,6 +117,13 @@ public sealed class MapHubPushService : BackgroundService
                     snapshot.Add((aircraft.Identification.ICAO, item, ComputeListItemHash(item)));
                 }
             }
+        }
+
+        // Periodically prune stale heatmap entries (once per minute, independent of clients).
+        if (_heatmapTracker is not null && DateTime.UtcNow - _lastHeatmapPrune > HeatmapPruneInterval)
+        {
+            _heatmapTracker.Prune();
+            _lastHeatmapPrune = DateTime.UtcNow;
         }
 
         // Compute the coverage outline once for all clients.
@@ -220,6 +235,30 @@ public sealed class MapHubPushService : BackgroundService
         {
             await client.SendAsync("RangeOutlineUpdated", outline, cancellationToken);
             state.LastPushedOutlineHash = outlineHash;
+        }
+
+        // Push heatmap for this client if enabled (and collection is running).
+        if (_heatmapTracker is not null && state.HeatmapEnabled)
+        {
+            HeatmapResult result = _heatmapTracker.GetCells(
+                state.HeatmapCellSizeNm, state.HeatmapWindow, state.ViewportBounds,
+                state.HeatmapLastScaleMax);
+            state.HeatmapLastScaleMax = result.ScaleMax; // smoothing continuity
+
+            var heatmap = new
+            {
+                CellSizeNm = state.HeatmapCellSizeNm,
+                WindowMinutes = (int)state.HeatmapWindow.TotalMinutes,
+                ScaleMax = result.ScaleMax,
+                MaxCount = result.MaxCount,
+                Cells = result.Cells
+            };
+            int heatmapHash = ComputeHash(heatmap);
+            if (heatmapHash != state.LastPushedHeatmapHash)
+            {
+                await client.SendAsync("HeatmapUpdated", heatmap, cancellationToken);
+                state.LastPushedHeatmapHash = heatmapHash;
+            }
         }
     }
 

@@ -67,4 +67,10 @@ public class AeromuxConfig
     /// Controls database enrichment of decoded aircraft data.
     /// </summary>
     public DatabaseConfig? Database { get; set; }
+
+    /// <summary>
+    /// Gets or sets the web-map heatmap configuration (optional).
+    /// A missing section defaults to collection enabled.
+    /// </summary>
+    public HeatmapConfig? Heatmap { get; set; }
 }

@@ -90,6 +90,14 @@ public static class DaemonApiServer
                 config.Config.Receiver.Latitude.Value, config.Config.Receiver.Longitude.Value));
         }
 
+        // Heatmap tracker — registered unless collection is explicitly disabled in config.
+        // The receiver latitude (if configured) squares the grid to the coverage area and
+        // aligns its columns; falls back to 45° when no receiver is set.
+        if (config.Config.Heatmap?.Collect != false)
+        {
+            builder.Services.AddSingleton(new HeatmapTracker(config.Config.Receiver?.Latitude));
+        }
+
         // Bind to configured address and port
         builder.WebHost.UseUrls($"http://{config.BindAddress}:{config.ApiPort}");
 

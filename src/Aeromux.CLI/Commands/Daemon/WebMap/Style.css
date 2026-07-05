@@ -837,6 +837,51 @@ body:has(.webgl-error) {
     color: var(--color-text-secondary);
 }
 
+/* ── Heatmap overlay ──────────────────────────────────────────────────────── */
+
+.heatmap-legend {
+    font-size: 11px;
+}
+
+.heatmap-legend-bar {
+    height: 10px;
+    border-radius: 3px;
+    border: 1px solid var(--color-panel-border);
+}
+
+.heatmap-legend-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    color: var(--color-text-muted);
+}
+
+.heatmap-legend-peak {
+    margin-top: 3px;
+    color: var(--color-text-muted);
+}
+
+.heatmap-tooltip {
+    position: fixed;
+    background: white;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-tooltip);
+    z-index: 5;
+    pointer-events: none;
+    font-size: 12px;
+    color: var(--color-text-primary);
+    transform: translate(-50%, -100%);
+    white-space: nowrap;
+}
+
+.settings-field-label {
+    font-family: var(--font-family);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin: var(--spacing-sm) 0 var(--spacing-xs);
+}
+
 /* ── Flight Profile Chart ────────────────────────────────────────────────── */
 
 .flight-profile-container {

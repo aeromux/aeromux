@@ -617,11 +617,12 @@ curl -s "http://localhost:8080/api/v1/stats"
     "Longitude": 19.693172,
     "AltitudeMeters": 120,
     "Name": "Kecskemét"
-  }
+  },
+  "HeatmapCollectionEnabled": true
 }
 ```
 
-The `Uptime` field is in seconds. The `Stream` section shows cumulative frame counts since the daemon started, along with the current frame processing rate. The `Receiver` section includes the station's geographic location as configured in the YAML file, which is useful for clients that need to calculate distances or render the receiver on a map.
+The `Uptime` field is in seconds. The `Stream` section shows cumulative frame counts since the daemon started, along with the current frame processing rate. The `Receiver` section includes the station's geographic location as configured in the YAML file, which is useful for clients that need to calculate distances or render the receiver on a map. The `HeatmapCollectionEnabled` field reflects the `heatmap.collect` configuration option — whether the daemon is aggregating the web-map traffic-density heatmap grid.
 
 ## Health Check
 

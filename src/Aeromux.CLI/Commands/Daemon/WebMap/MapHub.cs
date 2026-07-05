@@ -94,4 +94,41 @@ public sealed partial class MapHub : Hub
             state.LastPushedDetailHash = 0;
         }
     }
+
+    private static readonly int[] AllowedHeatmapCellSizesNm = [2, 5, 10, 20, 40];
+    private static readonly int[] AllowedHeatmapWindowMinutes = [60, 360, 720, 1440];
+
+    /// <summary>
+    /// Sets the client's heatmap overlay parameters. Out-of-range values fall back to
+    /// defaults (5 nm / 24 h). Toggling off stops server heatmap pushes.
+    /// </summary>
+    /// <param name="enabled">Whether this client renders the heatmap overlay.</param>
+    /// <param name="cellSizeNm">Display cell size in nm (one of 2/5/10/20/40).</param>
+    /// <param name="windowMinutes">Rolling window in minutes (one of 60/360/720/1440).</param>
+    public void UpdateHeatmap(bool enabled, int cellSizeNm, int windowMinutes)
+    {
+        if (!AllowedHeatmapCellSizesNm.Contains(cellSizeNm))
+        {
+            cellSizeNm = 5;
+        }
+        if (!AllowedHeatmapWindowMinutes.Contains(windowMinutes))
+        {
+            windowMinutes = 1440;
+        }
+
+        if (ClientStates.TryGetValue(Context.ConnectionId, out MapHubClientState? state))
+        {
+            bool changed = state.HeatmapCellSizeNm != cellSizeNm
+                           || state.HeatmapWindow != TimeSpan.FromMinutes(windowMinutes);
+            state.HeatmapEnabled = enabled;
+            state.HeatmapCellSizeNm = cellSizeNm;
+            state.HeatmapWindow = TimeSpan.FromMinutes(windowMinutes);
+            if (changed)
+            {
+                // Parameters changed — re-derive the colour scale cleanly and force a re-push.
+                state.HeatmapLastScaleMax = 0;
+                state.LastPushedHeatmapHash = 0;
+            }
+        }
+    }
 }

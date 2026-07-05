@@ -52,4 +52,29 @@ public sealed class MapHubClientState
     /// Used to avoid pushing unchanged outline data.
     /// </summary>
     public int LastPushedOutlineHash { get; set; }
+
+    /// <summary>
+    /// Whether this client is currently viewing the heatmap overlay.
+    /// </summary>
+    public bool HeatmapEnabled { get; set; }
+
+    /// <summary>
+    /// Client-selected heatmap display cell size in nautical miles.
+    /// </summary>
+    public int HeatmapCellSizeNm { get; set; } = 5;
+
+    /// <summary>
+    /// Client-selected heatmap rolling window.
+    /// </summary>
+    public TimeSpan HeatmapWindow { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Previous heatmap colour anchor, carried across ticks for scale smoothing.
+    /// </summary>
+    public int HeatmapLastScaleMax { get; set; }
+
+    /// <summary>
+    /// Hash of the last pushed heatmap payload. Used to avoid pushing unchanged data.
+    /// </summary>
+    public int LastPushedHeatmapHash { get; set; }
 }

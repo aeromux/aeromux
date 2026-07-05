@@ -49,6 +49,9 @@ export function App() {
     const stateHistoryRef = useRef(null);
     const [rangeOutline, setRangeOutline] = useState([]);
     const rangeOutlineRef = useRef([]);
+    const [heatmapCollectionEnabled, setHeatmapCollectionEnabled] = useState(false);
+    const [heatmapScale, setHeatmapScale] = useState(null);
+    const [heatmapHover, setHeatmapHover] = useState(null);
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
     const defaultSections = {
@@ -278,6 +281,7 @@ export function App() {
             () => setHover(null)
         );
         MapManager.onSelectedTooltip((data) => setSelectedTooltip(data));
+        MapManager.onHeatmapHover((data) => setHeatmapHover(data));
 
         // Viewport changes → send to SignalR
         MapManager.onViewportChange((bounds) => {
@@ -289,6 +293,7 @@ export function App() {
             try {
                 const stats = await fetchStats();
                 if (stats.Version) setVersion(stats.Version);
+                setHeatmapCollectionEnabled(stats.HeatmapCollectionEnabled === true);
                 if (stats.Receiver && stats.Receiver.Latitude != null && stats.Receiver.Longitude != null) {
                     const loc = { lat: stats.Receiver.Latitude, lon: stats.Receiver.Longitude };
                     setReceiverLocation(loc);
@@ -403,6 +408,10 @@ export function App() {
                         rangeOutlineRef.current = data;
                         setRangeOutline(data);
                     },
+                    onHeatmapUpdated: (data) => {
+                        MapManager.setHeatmap(data);
+                        setHeatmapScale({ scaleMax: data.ScaleMax, maxCount: data.MaxCount });
+                    },
                     onReconnected: async () => {
                         // Re-fetch aircraft to reconcile stale state
                         const bounds = MapManager.getViewportBounds();
@@ -419,6 +428,11 @@ export function App() {
                                 // Ignore
                             }
                         }
+                        // Re-assert heatmap params so server state matches the UI.
+                        const s = loadSettings();
+                        if (s.heatmap) {
+                            SignalR.updateHeatmap(true, s.heatmapCellNm, s.heatmapWindowHours * 60);
+                        }
                     }
                 }
             }).then(() => {
@@ -427,6 +441,13 @@ export function App() {
                         initialBounds.south, initialBounds.west,
                         initialBounds.north, initialBounds.east
                     );
+                }
+                // Assert heatmap params once the connection is up. The settings-sync
+                // effect runs at mount before the connection is Connected, so its
+                // enable call is lost; re-send it here (and on reconnect).
+                const s = loadSettings();
+                if (s.heatmap) {
+                    SignalR.updateHeatmap(true, s.heatmapCellNm, s.heatmapWindowHours * 60);
                 }
             });
         }
@@ -450,6 +471,18 @@ export function App() {
         MapManager.updateRangeOutline(rangeOutline, settings.rangeOutline);
     }, [settings.rangeOutline, rangeOutline]);
 
+    // Sync heatmap overlay with settings (drives the toggle AND Reset-to-defaults).
+    useEffect(() => {
+        if (settings.heatmap) {
+            SignalR.updateHeatmap(true, settings.heatmapCellNm, settings.heatmapWindowHours * 60);
+        } else {
+            SignalR.updateHeatmap(false, settings.heatmapCellNm, settings.heatmapWindowHours * 60);
+            MapManager.clearHeatmap();
+            setHeatmapScale(null);
+            setHeatmapHover(null);
+        }
+    }, [settings.heatmap, settings.heatmapCellNm, settings.heatmapWindowHours]);
+
     const viewCount = aircraftMap.size;
 
     return (
@@ -463,6 +496,12 @@ export function App() {
                 tooltip is already pinned above — avoids two identical
                 overlapping tooltips. */}
             <HoverTooltip hover={hover && hover.icao !== selectedIcao ? hover : null} units={units} />
+
+            {settings.heatmap && heatmapCollectionEnabled && heatmapHover && (
+                <div class="heatmap-tooltip" style={{ left: heatmapHover.x + 'px', top: (heatmapHover.y - 12) + 'px' }}>
+                    {heatmapHover.count} aircraft · last {settings.heatmapWindowHours} h
+                </div>
+            )}
 
             <div class="left-panel panel" ref={panelRef}>
                 {/* The whole grabber + header strip is the drag target for
@@ -525,6 +564,8 @@ export function App() {
                 onSelect={(icao, coordinate) => handleSelect(icao, { panTo: true, coordinate })}
                 onReset={handleReset}
                 receiverLocation={receiverLocation}
+                heatmapCollectionEnabled={heatmapCollectionEnabled}
+                heatmapScale={heatmapScale}
             />
         </div>
     );

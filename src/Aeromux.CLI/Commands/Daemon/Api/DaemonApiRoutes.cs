@@ -413,7 +413,8 @@ public static partial class DaemonApiRoutes
         {
             StreamStatistics? stats = getStatistics();
             return Results.Ok(DaemonApiMapper.ToStats(
-                stats, tracker, config.EnabledSdrSources.Count, startTime, config.Config.Receiver));
+                stats, tracker, config.EnabledSdrSources.Count, startTime, config.Config.Receiver,
+                config.Config.Heatmap?.Collect != false));
         });
 
         // GET /api/v1/health — Health check

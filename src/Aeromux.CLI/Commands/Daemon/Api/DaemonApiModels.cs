@@ -314,7 +314,8 @@ public sealed record StatsResponse(
     int AircraftCount,
     int Devices,
     StatsStream Stream,
-    StatsReceiver? Receiver);
+    StatsReceiver? Receiver,
+    bool HeatmapCollectionEnabled);
 
 /// <summary>
 /// Stream statistics sub-object.

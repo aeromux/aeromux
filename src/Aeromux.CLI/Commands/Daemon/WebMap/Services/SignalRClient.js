@@ -30,6 +30,7 @@ export function connect({ handlers }) {
     connection.on('AircraftDetailUpdated', (data) => handlers.onDetailUpdated?.(data));
     connection.on('Metadata', (meta) => handlers.onMetadata?.(meta));
     connection.on('RangeOutlineUpdated', (data) => handlers.onRangeOutlineUpdated?.(data));
+    connection.on('HeatmapUpdated', (data) => handlers.onHeatmapUpdated?.(data));
 
     connection.onreconnected(() => handlers.onReconnected?.());
 
@@ -46,4 +47,11 @@ export function selectAircraft(icao) {
 
 export function deselectAircraft() {
     return connection?.invoke('DeselectAircraft');
+}
+
+export function updateHeatmap(enabled, cellSizeNm, windowMinutes) {
+    // Swallow rejection when called before the connection reaches the Connected
+    // state (e.g. the settings-sync effect at mount); the connect/reconnect
+    // handlers re-assert the params once connected.
+    return connection?.invoke('UpdateHeatmap', enabled, cellSizeNm, windowMinutes).catch(() => {});
 }

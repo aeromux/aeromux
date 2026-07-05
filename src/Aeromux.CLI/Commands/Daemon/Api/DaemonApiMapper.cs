@@ -691,13 +691,15 @@ public static class DaemonApiMapper
     /// <param name="deviceCount">Number of enabled SDR devices.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
     /// <param name="receiverConfig">Receiver configuration, or null if not configured.</param>
+    /// <param name="heatmapCollectionEnabled">Whether server-side heatmap collection is running.</param>
     /// <returns>The stats response with derived fields (CrcErrors, FramesPerSecond).</returns>
     public static StatsResponse ToStats(
         StreamStatistics? stats,
         IAircraftStateTracker tracker,
         int deviceCount,
         DateTime startTime,
-        Core.Configuration.ReceiverConfig? receiverConfig)
+        Core.Configuration.ReceiverConfig? receiverConfig,
+        bool heatmapCollectionEnabled)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         int uptime = (int)(DateTime.UtcNow - startTime).TotalSeconds;
@@ -738,7 +740,8 @@ public static class DaemonApiMapper
             AircraftCount: tracker.Count,
             Devices: deviceCount,
             Stream: stream,
-            Receiver: receiver);
+            Receiver: receiver,
+            HeatmapCollectionEnabled: heatmapCollectionEnabled);
     }
 
     // === Private Helpers ===

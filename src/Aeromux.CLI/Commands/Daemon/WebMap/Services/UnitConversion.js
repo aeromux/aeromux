@@ -55,7 +55,14 @@ export function saveSort(sort) {
 
 // Interface settings (range rings toggle, etc.) persisted across sessions
 const SETTINGS_STORAGE_KEY = 'aeromux-settings';
-const SETTINGS_DEFAULTS = { rangeRings: true, rangeOutline: true, aircraftPhotos: true };
+const SETTINGS_DEFAULTS = {
+    rangeRings: true,
+    rangeOutline: true,
+    aircraftPhotos: true,
+    heatmap: false,          // traffic-density overlay, off by default
+    heatmapCellNm: 5,        // fixed-nm display cell size
+    heatmapWindowHours: 24   // rolling window
+};
 
 export function loadSettings() {
     try {
@@ -65,7 +72,10 @@ export function loadSettings() {
             return {
                 rangeRings: parsed.rangeRings !== undefined ? parsed.rangeRings : SETTINGS_DEFAULTS.rangeRings,
                 rangeOutline: parsed.rangeOutline !== undefined ? parsed.rangeOutline : SETTINGS_DEFAULTS.rangeOutline,
-                aircraftPhotos: parsed.aircraftPhotos !== undefined ? parsed.aircraftPhotos : SETTINGS_DEFAULTS.aircraftPhotos
+                aircraftPhotos: parsed.aircraftPhotos !== undefined ? parsed.aircraftPhotos : SETTINGS_DEFAULTS.aircraftPhotos,
+                heatmap: parsed.heatmap !== undefined ? parsed.heatmap : SETTINGS_DEFAULTS.heatmap,
+                heatmapCellNm: parsed.heatmapCellNm !== undefined ? parsed.heatmapCellNm : SETTINGS_DEFAULTS.heatmapCellNm,
+                heatmapWindowHours: parsed.heatmapWindowHours !== undefined ? parsed.heatmapWindowHours : SETTINGS_DEFAULTS.heatmapWindowHours
             };
         }
     } catch (e) {
@@ -135,6 +145,20 @@ export function convertNauticalMiles(nm, unit) {
         default:
             return { value: Math.round(nm * 1.852), label: 'km' };
     }
+}
+
+// Short unit label for a distance unit ('nm' | 'km' | 'mi').
+export function distanceUnitLabel(unit) {
+    return unit === 'mi' ? 'mi' : unit === 'nm' ? 'nm' : 'km';
+}
+
+// Display string for a nautical-mile cell size in the selected unit. The underlying
+// value stays in nm; this only converts the label (e.g. 2 nm → "3.7" km). Rendered to
+// one decimal with a trailing ".0" stripped.
+export function formatCellSizeLabel(nm, unit) {
+    if (unit === 'nm') return String(nm);
+    const factor = unit === 'mi' ? 1.15078 : 1.852;
+    return String(Math.round(nm * factor * 10) / 10);
 }
 
 export function loadUnits() {
