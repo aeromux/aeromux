@@ -601,7 +601,7 @@ curl -s "http://localhost:8080/api/v1/stats"
 
 ```json
 {
-  "Version": "0.7.0",
+  "Version": "0.7.5",
   "Timestamp": "2026-03-13T14:30:00Z",
   "Uptime": 3600,
   "AircraftCount": 42,
