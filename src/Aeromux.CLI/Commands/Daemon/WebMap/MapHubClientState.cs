@@ -61,7 +61,7 @@ public sealed class MapHubClientState
     /// <summary>
     /// Client-selected heatmap display cell size in nautical miles.
     /// </summary>
-    public int HeatmapCellSizeNm { get; set; } = 5;
+    public int HeatmapCellSizeNm { get; set; } = 2;
 
     /// <summary>
     /// Client-selected heatmap rolling window.

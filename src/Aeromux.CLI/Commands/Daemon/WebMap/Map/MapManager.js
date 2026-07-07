@@ -725,11 +725,15 @@ function ensureHeatmapSources() {
     // Data-driven green→red fill from the precomputed per-feature `t`.
     const colour = ['interpolate', ['linear'], ['get', 't'], ...RDYLGN_STOPS.flat()];
 
-    // Insert below the range overlays / trail / aircraft so live traffic is never
-    // obscured. 'trail-layer' always exists; the range overlays are lazy.
-    const beforeId = map.getLayer('range-outline-fill-layer') ? 'range-outline-fill-layer'
-        : map.getLayer('range-rings-layer') ? 'range-rings-layer'
-        : 'trail-layer';
+    // Insert directly above the base dim overlay so the heatmap sits at the very bottom
+    // of the overlay stack — map → dim → heatmap → range rings → range outline → trail →
+    // aircraft — regardless of the order the (lazy) range layers were added, so the rings
+    // and outline stay readable on top of the fill.
+    const styleLayers = map.getStyle().layers;
+    const overlayIdx = styleLayers.findIndex((l) => l.id === 'overlay-layer');
+    const beforeId = (overlayIdx >= 0 && overlayIdx + 1 < styleLayers.length)
+        ? styleLayers[overlayIdx + 1].id
+        : undefined;
 
     map.addLayer({
         id: 'heatmap-fill',

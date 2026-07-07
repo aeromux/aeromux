@@ -100,7 +100,7 @@ public sealed partial class MapHub : Hub
 
     /// <summary>
     /// Sets the client's heatmap overlay parameters. Out-of-range values fall back to
-    /// defaults (5 nm / 24 h). Toggling off stops server heatmap pushes.
+    /// defaults (2 nm / 24 h). Toggling off stops server heatmap pushes.
     /// </summary>
     /// <param name="enabled">Whether this client renders the heatmap overlay.</param>
     /// <param name="cellSizeNm">Display cell size in nm (one of 2/5/10/20/40).</param>
@@ -109,7 +109,7 @@ public sealed partial class MapHub : Hub
     {
         if (!AllowedHeatmapCellSizesNm.Contains(cellSizeNm))
         {
-            cellSizeNm = 5;
+            cellSizeNm = 2;
         }
         if (!AllowedHeatmapWindowMinutes.Contains(windowMinutes))
         {

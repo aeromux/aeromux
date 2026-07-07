@@ -60,7 +60,7 @@ const SETTINGS_DEFAULTS = {
     rangeOutline: true,
     aircraftPhotos: true,
     heatmap: false,          // traffic-density overlay, off by default
-    heatmapCellNm: 5,        // fixed-nm display cell size
+    heatmapCellNm: 2,        // fixed-nm display cell size
     heatmapWindowHours: 24   // rolling window
 };
 
