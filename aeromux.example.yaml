@@ -74,6 +74,11 @@ receiver:
 database:
   enabled: false                          # Enable database enrichment at runtime (default: false)
   path: "artifacts/db/"                   # Directory for database storage (relative or absolute path)
+  autoUpdate:                             # Daemon-only auto-update (requires enabled + a writable path)
+    enabled: true                         # Keep the database current from GitHub releases (default: true)
+    checkOnStartup: true                  # Check shortly after the daemon starts (default: true)
+    checkIntervalHours: 24                # Re-check every N hours of uptime (default: 24)
+    pruneOldDatabases: true               # Remove superseded database files after an update (default: true)
 
 # MLAT (Multilateration) input configuration
 mlat:

@@ -38,6 +38,7 @@ export function App() {
     const [units, setUnits] = useState(loadUnits());
     const [trail, setTrail] = useState([]);
     const [version, setVersion] = useState(null);
+    const [databaseVersion, setDatabaseVersion] = useState(null);
     const [settings, setSettings] = useState(loadSettings);
     const [sort, setSort] = useState(loadSort);
     const aircraftMapRef = useRef(new Map());
@@ -403,6 +404,7 @@ export function App() {
                     },
                     onMetadata: (meta) => {
                         setTotalCount(meta.TotalAircraftCount);
+                        setDatabaseVersion(meta.DatabaseEnabled ? (meta.DatabaseVersion ?? null) : null);
                     },
                     onRangeOutlineUpdated: (data) => {
                         rangeOutlineRef.current = data;
@@ -521,7 +523,7 @@ export function App() {
                         <img src="img/logo.svg" alt="Aeromux" class="logo-img" />
                         <div class="logo-text">
                             <div class="logo-title">AEROMUX</div>
-                            <div class="logo-subtitle">Web Map{version ? ` (v${version})` : ''}</div>
+                            <div class="logo-subtitle">Web Map{version ? ` (v${version})` : ''}{databaseVersion ? ` with Database Enrichment (${databaseVersion})` : ''}</div>
                         </div>
                     </div>
                 </div>

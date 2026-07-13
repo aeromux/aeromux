@@ -95,38 +95,7 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
     /// Creates the directory if it does not exist.
     /// </summary>
     /// <returns>An error message, or <c>null</c> if validation passes.</returns>
-    private static string? ValidateDirectory(string path)
-    {
-        // Check if the path points to an existing file (not a directory)
-        if (File.Exists(path))
-        {
-            return $"The database path {path} is a file, not a directory.";
-        }
-
-        // Create directory if it doesn't exist
-        try
-        {
-            Directory.CreateDirectory(path);
-        }
-        catch (Exception ex)
-        {
-            return $"Cannot create database directory {path}: {ex.Message}";
-        }
-
-        // Verify writability by testing a temp file
-        try
-        {
-            string testFile = Path.Combine(path, $".aeromux-write-test-{Guid.NewGuid():N}");
-            File.WriteAllText(testFile, "");
-            File.Delete(testFile);
-        }
-        catch
-        {
-            return $"The database directory {path} is not writable.";
-        }
-
-        return null;
-    }
+    private static string? ValidateDirectory(string path) => DatabaseDirectory.ValidateWritable(path);
 
     /// <summary>
     /// Reports an unknown action and returns a failure exit code.
@@ -142,8 +111,9 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Executes the <c>update</c> action: fetches the latest release, compares with the installed
-    /// database, downloads if needed, verifies integrity, and installs atomically.
+    /// Executes the <c>update</c> action by running the shared <see cref="DatabaseUpdateService"/>
+    /// (fetch latest, compare, download if needed, verify integrity, install atomically) with console
+    /// progress and status reporters, then maps the result to console notes and an exit code.
     /// </summary>
     private static async Task<int> ExecuteUpdateAsync(DatabaseSettings settings, CancellationToken cancellationToken)
     {
@@ -163,130 +133,33 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
             return 1;
         }
 
-        // Fetch latest release
-        Console.WriteLine("Fetching latest release information...");
-        GitHubReleaseClient.Result releaseResult = await GitHubReleaseClient.GetLatestReleaseAsync(cancellationToken);
+        // Run the shared update orchestration, rendering its stage messages and download
+        // progress to the console. The daemon auto-updater uses the same service silently.
+        var updateService = new DatabaseUpdateService();
+        var progressReporter = new ConsoleDownloadProgressReporter();
+        DatabaseUpdateResult result = await updateService.CheckAndUpdateAsync(
+            dbPath, progressReporter, Console.WriteLine, cancellationToken);
 
-        if (!releaseResult.Success)
+        switch (result.Status)
         {
-            Console.WriteLine($"Error: {releaseResult.Error}");
-            return 1;
-        }
-
-        GitHubReleaseInfo release = releaseResult.Release!;
-        Console.WriteLine($"Latest version: {release.TagName}");
-
-        // Check installed database
-        DatabaseDiscovery.DiscoveryResult discovery = DatabaseDiscovery.Discover(dbPath);
-        InstalledDatabase? installed = discovery.Database;
-
-        if (installed != null &&
-            installed.VersionFromFilename.VersionString == release.TagName)
-        {
-            // Same version — verify integrity
-            Console.WriteLine();
-            Console.WriteLine("Installed version matches the latest release. Verifying integrity...");
-
-            bool integrityOk = VerifyIntegrityWithOutput(installed.FilePath, release.AssetDigest, installed.Metadata);
-
-            if (integrityOk)
-            {
-                Console.WriteLine();
-                Console.WriteLine("Database is up-to-date.");
+            case DatabaseUpdateStatus.UpToDate:
                 return 0;
-            }
 
-            // Integrity failed — re-download
-            Console.WriteLine();
-            Console.WriteLine("Integrity check failed. Re-downloading...");
-        }
+            case DatabaseUpdateStatus.Updated:
+                // Check if database.enabled is false and --database was not used
+                if (!WasDatabaseCliProvided(settings) && !IsDatabaseEnabled())
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Note: Database support is currently disabled. To use the database for aircraft enrichment,");
+                    Console.WriteLine("set database.enabled to true in the configuration file, or pass --database <path> to");
+                    Console.WriteLine("daemon/live commands (which implicitly enables database support).");
+                }
 
-        // Download
-        Console.WriteLine();
-        Console.WriteLine($"Downloading {release.AssetName}...");
+                return 0;
 
-        DatabaseDownloader.DownloadResult downloadResult =
-            await DatabaseDownloader.DownloadToTempFileAsync(release.AssetUrl, release.AssetName, release.AssetSize, cancellationToken);
-
-        if (downloadResult.Cancelled)
-        {
-            Console.WriteLine();
-            Console.WriteLine("Download cancelled. No changes were made.");
-            return 1;
-        }
-
-        if (!downloadResult.Success)
-        {
-            Console.WriteLine($"Error: {downloadResult.Error}");
-            return 1;
-        }
-
-        string tempFile = downloadResult.FilePath!;
-
-        try
-        {
-            // Verify downloaded file
-            Console.WriteLine();
-            Console.WriteLine("Verifying download integrity...");
-
-            // Read metadata from downloaded file for record count check
-            DatabaseMetadata? downloadedMetadata = DatabaseDiscovery.ReadMetadata(tempFile);
-
-            bool downloadIntegrityOk = VerifyIntegrityWithOutput(tempFile, release.AssetDigest, downloadedMetadata);
-
-            if (!downloadIntegrityOk)
-            {
-                Console.WriteLine();
-                Console.WriteLine("Error: Download integrity check failed. The downloaded file has been discarded.");
-                Console.WriteLine("The previous database (if any) is unchanged. Try running the command again.");
-                DatabaseDownloader.CleanupTempFile(tempFile);
+            default:
+                // Cancelled / Failed — the service already reported the reason.
                 return 1;
-            }
-
-            // Validate asset filename — defense in depth against path traversal via compromised release metadata
-            if (release.AssetName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                release.AssetName.Contains("..") ||
-                release.AssetName != Path.GetFileName(release.AssetName))
-            {
-                Console.WriteLine($"Error: Invalid asset filename: {release.AssetName}");
-                DatabaseDownloader.CleanupTempFile(tempFile);
-                return 1;
-            }
-
-            // Install atomically
-            string installedPath = DatabaseDownloader.InstallDatabase(tempFile, dbPath, release.AssetName);
-
-            Console.WriteLine();
-            Console.WriteLine($"Database installed: {release.AssetName}");
-            Console.WriteLine($"  Path: {Path.GetFullPath(installedPath)}");
-
-            Log.Information("Database installed: {FileName} at {Path}", release.AssetName, installedPath);
-
-            // Check for older database files
-            string[] existingFiles = Directory.GetFiles(dbPath, "aeromux-db_*.sqlite");
-            if (existingFiles.Length > 1)
-            {
-                Console.WriteLine();
-                Console.WriteLine($"Note: Previous database files are still in {Path.GetFullPath(dbPath)} and can be removed manually.");
-            }
-
-            // Check if database.enabled is false and --database was not used
-            if (!WasDatabaseCliProvided(settings) && !IsDatabaseEnabled())
-            {
-                Console.WriteLine();
-                Console.WriteLine("Note: Database support is currently disabled. To use the database for aircraft enrichment,");
-                Console.WriteLine("set database.enabled to true in the configuration file, or pass --database <path> to");
-                Console.WriteLine("daemon/live commands (which implicitly enables database support).");
-            }
-
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            Log.Debug(ex, "Failed to install database");
-            DatabaseDownloader.CleanupTempFile(tempFile);
-            Console.WriteLine($"Error: Failed to install database: {ex.Message}");
-            return 1;
         }
     }
 
@@ -485,65 +358,6 @@ public class DatabaseCommand : AsyncCommand<DatabaseSettings>
     // ────────────────────────────────────────────────────────────────────────
     //  Helpers
     // ────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Runs all three integrity checks with formatted console output.
-    /// Short-circuits on first failure in update mode.
-    /// </summary>
-    /// <returns><c>true</c> if all checks pass.</returns>
-    private static bool VerifyIntegrityWithOutput(string filePath, string expectedDigest, DatabaseMetadata? metadata)
-    {
-        // SHA-256
-        if (!string.IsNullOrEmpty(expectedDigest))
-        {
-            IntegrityChecker.CheckResult sha256Result = IntegrityChecker.VerifySha256(filePath, expectedDigest);
-            if (sha256Result.Passed)
-            {
-                Console.WriteLine("  SHA-256 checksum: OK");
-            }
-            else
-            {
-                Console.WriteLine("  SHA-256 checksum: FAILED");
-                Console.WriteLine($"  Expected: {sha256Result.Expected}");
-                Console.WriteLine($"  Actual:   {sha256Result.Actual}");
-                Log.Information("SHA-256 verification failed for {FilePath}: expected={Expected}, actual={Actual}",
-                    filePath, sha256Result.Expected, sha256Result.Actual);
-                return false;
-            }
-        }
-
-        // SQLite integrity
-        IntegrityChecker.CheckResult sqliteResult = IntegrityChecker.VerifySqliteIntegrity(filePath);
-        if (sqliteResult.Passed)
-        {
-            Console.WriteLine("  SQLite integrity: OK");
-        }
-        else
-        {
-            Console.WriteLine("  SQLite integrity: FAILED");
-            Log.Information("SQLite integrity check failed for {FilePath}", filePath);
-            return false;
-        }
-
-        // Record count
-        if (metadata != null)
-        {
-            IntegrityChecker.CheckResult recordResult = IntegrityChecker.VerifyRecordCount(filePath, metadata.RecordCount);
-            if (recordResult.Passed)
-            {
-                Console.WriteLine($"  Record count:     OK ({metadata.RecordCount:N0})");
-            }
-            else
-            {
-                Console.WriteLine($"  Record count:     FAILED (expected {recordResult.Expected}, found {recordResult.Actual})");
-                Log.Information("Record count verification failed for {FilePath}: expected={Expected}, actual={Actual}",
-                    filePath, recordResult.Expected, recordResult.Actual);
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     /// <summary>
     /// Prints the SHA-256 verification result as a single-line OK/FAILED status.

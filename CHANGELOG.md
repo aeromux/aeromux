@@ -2,6 +2,13 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.7.6] — Unreleased
+
+### Added
+
+- **Daemon: Automatic Database Updates** — The daemon can now keep the aircraft metadata database current on its own, downloading and verifying newer releases and applying them **without a restart** by hot-swapping the live database. Newly seen aircraft are enriched from the updated data immediately (already-tracked aircraft keep theirs until they cycle out); on a fresh host the first check downloads a database and brings enrichment live. Superseded files are pruned after each update. Configured under a new `database.autoUpdate` YAML section — daemon-only, on by default, but dormant unless `database.enabled` is true and the directory is writable. Checks run at startup and every 24 h (configurable); failures are logged and retried and never disturb a running receiver.
+- **Web Map: Active Database Indicator** — When database enrichment is active, the Web Map header subtitle now reads "Web Map (vX.Y.Z) with Database Enrichment (\<db-version\>)", showing which database vintage is loaded. It updates live over the existing SignalR channel when the daemon hot-swaps a new database, with no page reload.
+
 ## [0.7.5] — 2026-07-07
 
 ### Added

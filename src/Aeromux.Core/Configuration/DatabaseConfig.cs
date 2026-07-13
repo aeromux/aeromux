@@ -37,4 +37,11 @@ public class DatabaseConfig
     /// Can be overridden via the <c>--database</c> CLI option.
     /// </summary>
     public string? Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the daemon automatic-update configuration (optional).
+    /// When omitted from a YAML <c>database</c> section this is <c>null</c> and is treated as the
+    /// built-in default (enabled); see <see cref="DatabaseAutoUpdateConfig.Resolve"/>. Daemon-only.
+    /// </summary>
+    public DatabaseAutoUpdateConfig? AutoUpdate { get; set; }
 }

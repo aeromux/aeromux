@@ -39,23 +39,26 @@ public sealed class MapHubPushService : BackgroundService
     private readonly IHubContext<MapHub> _hubContext;
     private readonly RangeOutlineTracker? _rangeOutlineTracker;
     private readonly HeatmapTracker? _heatmapTracker;
+    private readonly SwappableAircraftDatabaseLookup? _databaseLookup;
     private readonly JsonSerializerOptions _jsonOptions;
     private DateTime _lastHeatmapPrune = DateTime.MinValue;
 
     /// <summary>
     /// Initializes the push service with the aircraft tracker, hub context,
-    /// and optional range-outline and heatmap trackers.
+    /// optional range-outline and heatmap trackers, and the optional live database lookup.
     /// </summary>
     public MapHubPushService(
         IAircraftStateTracker tracker,
         IHubContext<MapHub> hubContext,
         RangeOutlineTracker? rangeOutlineTracker = null,
-        HeatmapTracker? heatmapTracker = null)
+        HeatmapTracker? heatmapTracker = null,
+        SwappableAircraftDatabaseLookup? databaseLookup = null)
     {
         _tracker = tracker;
         _hubContext = hubContext;
         _rangeOutlineTracker = rangeOutlineTracker;
         _heatmapTracker = heatmapTracker;
+        _databaseLookup = databaseLookup;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = null,
@@ -91,6 +94,11 @@ public sealed class MapHubPushService : BackgroundService
         IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
         int totalCount = allAircraft.Count;
         bool hasClients = !MapHub.ClientStates.IsEmpty;
+
+        // Live enrichment-database state for the Web Map header subtitle (read once per tick so
+        // every client sees the same value; reflects a hot-swap on the next tick).
+        string? databaseVersion = _databaseLookup?.CurrentVersion;
+        bool databaseEnabled = databaseVersion is not null;
 
         // Single pass over all aircraft:
         //   - Feed positions into the range-outline and heatmap trackers (always, regardless
@@ -139,7 +147,7 @@ public sealed class MapHubPushService : BackgroundService
 
             try
             {
-                await PushToClient(connectionId, state, snapshot, totalCount, outline, outlineHash, clientCts.Token);
+                await PushToClient(connectionId, state, snapshot, totalCount, databaseEnabled, databaseVersion, outline, outlineHash, clientCts.Token);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -158,6 +166,8 @@ public sealed class MapHubPushService : BackgroundService
         MapHubClientState state,
         IReadOnlyList<(string Icao, AircraftListItem Item, int Hash)> snapshot,
         int totalCount,
+        bool databaseEnabled,
+        string? databaseVersion,
         List<RangeOutlineCoordinate>? outline,
         int outlineHash,
         CancellationToken cancellationToken)
@@ -209,7 +219,7 @@ public sealed class MapHubPushService : BackgroundService
             Aircraft? selectedAircraft = _tracker.GetAircraft(state.SelectedIcao);
             if (selectedAircraft is not null)
             {
-                var detail = BuildDetailResponse(selectedAircraft);
+                Dictionary<string, object?> detail = BuildDetailResponse(selectedAircraft);
                 int detailHash = ComputeHash(detail);
 
                 if (detailHash != state.LastPushedDetailHash)
@@ -228,7 +238,9 @@ public sealed class MapHubPushService : BackgroundService
         }
 
         // Push metadata
-        await client.SendAsync("Metadata", new { TotalAircraftCount = totalCount }, cancellationToken);
+        await client.SendAsync("Metadata",
+            new { TotalAircraftCount = totalCount, DatabaseEnabled = databaseEnabled, DatabaseVersion = databaseVersion },
+            cancellationToken);
 
         // Push range outline if changed
         if (outline is not null && outlineHash != state.LastPushedOutlineHash)

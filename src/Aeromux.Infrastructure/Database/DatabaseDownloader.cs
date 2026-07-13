@@ -19,6 +19,13 @@ using Serilog;
 namespace Aeromux.Infrastructure.Database;
 
 /// <summary>
+/// Progress update for an in-flight database download.
+/// </summary>
+/// <param name="BytesRead">Bytes downloaded so far.</param>
+/// <param name="TotalBytes">Total expected bytes (from the response, or the caller-supplied size).</param>
+public readonly record struct DownloadProgress(long BytesRead, long TotalBytes);
+
+/// <summary>
 /// Downloads database assets from GitHub releases with progress reporting and atomic installation.
 /// Uses a temporary file for download, then moves to the target path on success.
 /// </summary>
@@ -40,7 +47,7 @@ public static class DatabaseDownloader
         /// <summary>Gets the error message (on failure).</summary>
         public string? Error { get; init; }
 
-        /// <summary>Gets whether the download was canceled by the user.</summary>
+        /// <summary>Gets whether the download was canceled (by the user, or by a shutdown/cancellation token).</summary>
         public bool Cancelled { get; init; }
     }
 
@@ -50,13 +57,15 @@ public static class DatabaseDownloader
     /// </summary>
     /// <param name="downloadUrl">The URL to download from.</param>
     /// <param name="assetName">The asset filename (for display).</param>
-    /// <param name="totalSize">The expected total size in bytes (for progress display).</param>
+    /// <param name="totalSize">The expected total size in bytes (used when the response omits a length).</param>
+    /// <param name="progress">Optional progress sink. When <c>null</c> the download is silent (daemon path).</param>
     /// <param name="cancellationToken">Cancellation token for graceful cancellation.</param>
     /// <returns>The download result with the temp file path on success.</returns>
     public static async Task<DownloadResult> DownloadToTempFileAsync(
         string downloadUrl,
         string assetName,
         long totalSize,
+        IProgress<DownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         string tempFile = Path.GetTempFileName();
@@ -79,38 +88,11 @@ public static class DatabaseDownloader
             long totalBytesRead = 0;
             int bytesRead;
 
-            bool isTty = !Console.IsOutputRedirected;
-            int lastReportedPercent = -1;
-
-            // Print an empty line so the cursor starts below the progress area (TTY only)
-            if (isTty)
-            {
-                Console.WriteLine();
-            }
-
             while ((bytesRead = await downloadStream.ReadAsync(buffer, cancellationToken)) > 0)
             {
                 await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
                 totalBytesRead += bytesRead;
-
-                double percentage = contentLength > 0 ? (double)totalBytesRead / contentLength * 100 : 0;
-                string progress = $"  {FormatBytes(totalBytesRead)} / {FormatBytes(contentLength)} ({percentage:F0}%)";
-
-                if (isTty)
-                {
-                    // Move cursor up, clear the line, write progress, move cursor back down
-                    Console.Write($"\x1b[A\x1b[2K{progress}\n");
-                }
-                else
-                {
-                    // Non-TTY: print progress at 25% intervals to avoid flooding
-                    int percentBucket = (int)(percentage / 25) * 25;
-                    if (percentBucket > lastReportedPercent)
-                    {
-                        lastReportedPercent = percentBucket;
-                        Console.WriteLine(progress);
-                    }
-                }
+                progress?.Report(new DownloadProgress(totalBytesRead, contentLength));
             }
 
             Log.Debug("Download complete: {TotalBytes} bytes written to {TempFile}", totalBytesRead, tempFile);
@@ -174,16 +156,48 @@ public static class DatabaseDownloader
     }
 
     /// <summary>
-    /// Formats a byte count into a human-readable string (e.g., <c>142.8 MB</c>).
+    /// Deletes every <c>aeromux-db_*.sqlite</c> file in the directory except the kept file.
+    /// Best-effort: per-file failures are logged and ignored. Used by the daemon auto-updater to
+    /// remove superseded databases after a successful swap.
     /// </summary>
-    private static string FormatBytes(long bytes)
+    /// <param name="directory">The database directory.</param>
+    /// <param name="keepFilePath">Path of the file to keep (the just-installed database).</param>
+    /// <returns>The number of files actually deleted (for the caller's summary log).</returns>
+    public static int DeleteSupersededDatabases(string directory, string keepFilePath)
     {
-        return bytes switch
+        string keepName = Path.GetFileName(keepFilePath);
+
+        string[] files;
+        try
         {
-            >= 1_073_741_824 => $"{bytes / 1_073_741_824.0:F1} GB",
-            >= 1_048_576 => $"{bytes / 1_048_576.0:F1} MB",
-            >= 1024 => $"{bytes / 1024.0:F1} KB",
-            _ => $"{bytes} B"
-        };
+            files = Directory.GetFiles(directory, "aeromux-db_*.sqlite");
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Failed to enumerate database files in {Directory} for pruning", directory);
+            return 0;
+        }
+
+        int deleted = 0;
+        foreach (string file in files)
+        {
+            if (string.Equals(Path.GetFileName(file), keepName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                File.Delete(file);
+                deleted++;
+                Log.Debug("Removed superseded database file {File}", file);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Failed to remove superseded database file {File}", file);
+            }
+        }
+
+        return deleted;
     }
 }

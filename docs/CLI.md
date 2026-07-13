@@ -178,6 +178,19 @@ aeromux database update --database artifacts/db/
 aeromux database info --database artifacts/db/
 ```
 
+#### Automatic Updates (daemon)
+
+The `daemon` command can keep the database current on its own, without running `database update` by hand and without a restart. This is configured under the `database.autoUpdate` section of the YAML file (it is daemon-only and has no CLI options):
+
+| Setting              | Description                                                                                       | Default |
+|----------------------|--------------------------------------------------------------------------------------------------|---------|
+| `enabled`            | Whether the daemon automatically checks for and installs newer databases                         | `true`  |
+| `checkOnStartup`     | Run a check shortly after the daemon starts, in addition to the interval                         | `true`  |
+| `checkIntervalHours` | How often, in hours of uptime, to re-check (monotonic from the previous check, not a fixed time) | `24`    |
+| `pruneOldDatabases`  | Remove superseded database files after a successful update; set `false` to keep them (archival/rollback) | `true`  |
+
+Auto-update is **on by default** but only runs when database enrichment is actually in use — that is, `database.enabled` is `true` and `database.path` points to a **writable** directory. Because `database.enabled` defaults to `false`, a daemon that has not turned enrichment on does nothing new. When it does run, the daemon downloads and verifies a newer release exactly as `database update` does, then hot-swaps the live enrichment connection over to it so newly seen aircraft are enriched from the updated data immediately (aircraft already being tracked keep their existing data until they cycle out). On a host with no database yet, the first check downloads one and brings enrichment live. When enrichment is active, the Web Map header shows the loaded database version and updates live after a swap. After a successful update the daemon removes the superseded database file(s), keeping only the newly installed one so the directory does not accumulate old copies; set `pruneOldDatabases` to `false` to keep them (e.g. for archival or manual rollback). Failures (network, GitHub rate limits, integrity, or a non-writable directory) are logged and retried on the next check and never interrupt a running receiver. To opt out of auto-update entirely, set `database.autoUpdate.enabled` to `false`.
+
 ### `device`
 
 The device command lists all RTL-SDR USB receivers detected on the system. This is useful for identifying device indices and confirming that your hardware is recognized before configuring the `sdrSources` section of the YAML file. With the `--verbose` flag, it also displays detailed tuner parameters including supported gains and frequency ranges, which can help when fine-tuning the gain settings in your configuration.

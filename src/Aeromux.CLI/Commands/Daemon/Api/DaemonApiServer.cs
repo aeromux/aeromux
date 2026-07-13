@@ -41,13 +41,15 @@ public static class DaemonApiServer
     /// <param name="photoService">Aircraft photo service used by the <c>/api/v1/aircraft/{icao}/photo</c> endpoint and registered as a DI singleton for the SignalR hub.</param>
     /// <param name="getStatistics">Function to get stream statistics.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
+    /// <param name="databaseLookup">Optional live enrichment lookup, used to report the active database version to the Web Map.</param>
     /// <returns>A configured WebApplication ready to be started.</returns>
     public static WebApplication Build(
         DaemonValidatedConfig config,
         IAircraftStateTracker tracker,
         IAircraftPhotoService photoService,
         Func<StreamStatistics?> getStatistics,
-        DateTime startTime)
+        DateTime startTime,
+        SwappableAircraftDatabaseLookup? databaseLookup = null)
     {
         ArgumentNullException.ThrowIfNull(photoService);
         ArgumentNullException.ThrowIfNull(config);
@@ -80,6 +82,16 @@ public static class DaemonApiServer
             });
         builder.Services.AddSingleton(tracker);
         builder.Services.AddSingleton(photoService);
+
+        // Register the app-created wrapper instance (not a factory/type) so the DI container does
+        // NOT own its lifetime — the orchestrator disposes it during ordered shutdown. A factory
+        // registration would let the container dispose it at web-app shutdown, before the tracker's
+        // consumer stops, silently killing enrichment mid-shutdown.
+        if (databaseLookup is not null)
+        {
+            builder.Services.AddSingleton(databaseLookup);
+        }
+
         builder.Services.AddSingleton<MapHubPushService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MapHubPushService>());
 

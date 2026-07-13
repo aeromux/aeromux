@@ -136,7 +136,8 @@ public class ConfigurationBuilder
             Database = new DatabaseConfig
             {
                 Enabled = false,
-                Path = null
+                Path = null,
+                AutoUpdate = new DatabaseAutoUpdateConfig()
             },
             Heatmap = new HeatmapConfig
             {

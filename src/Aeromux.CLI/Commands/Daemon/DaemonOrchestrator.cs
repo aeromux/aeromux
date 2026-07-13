@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.CLI.Commands.Daemon.Api;
+using Aeromux.Core.Configuration;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Database;
 using Aeromux.Infrastructure.Photos;
@@ -30,16 +31,18 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// </summary>
 /// <remarks>
 /// CRITICAL SHUTDOWN ORDER enforced by DisposeAsync:
+/// 0. Stop the database auto-updater (so a hot-swap cannot race connection disposal)
 /// 1. Stop TCP broadcasters (unsubscribe from device stream)
 /// 2. Stop REST API server
 /// 3. Stop receiver stream (close RTL-SDR devices, complete broadcast channel)
 /// 4. Dispose aircraft tracker (wait for consumer task, dispose cleanup timer)
-/// 5. Close database connection
+/// 5. Close database connection (dispose the swappable enrichment lookup)
 /// </remarks>
 public sealed class DaemonOrchestrator : IAsyncDisposable
 {
     private readonly DaemonValidatedConfig _config;
-    private AircraftDatabaseLookupService? _databaseLookup;
+    private SwappableAircraftDatabaseLookup? _databaseLookup;
+    private DatabaseAutoUpdater? _autoUpdater;
     private ReceiverStream? _receiverStream;
     private AircraftStateTracker? _aircraftTracker;
     private AircraftPhotoCache? _photoCache;
@@ -88,8 +91,17 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         await _receiverStream.StartAsync(cancellationToken);
         Log.Information("Device stream started");
 
-        // Create database lookup service (null if database not configured or unavailable)
-        _databaseLookup = DatabaseLookupFactory.TryCreate(_config.Config.Database);
+        // Create the enrichment lookup. When database enrichment is enabled we always create a
+        // swappable wrapper — even if no database file exists yet — so the auto-updater can
+        // download one and hot-swap it in live (first-run) without a restart. When enrichment is
+        // disabled we leave it null exactly as before.
+        DatabaseConfig? databaseConfig = _config.Config.Database;
+        bool enrichmentEnabled = databaseConfig?.Enabled == true && !string.IsNullOrWhiteSpace(databaseConfig.Path);
+        if (enrichmentEnabled)
+        {
+            AircraftDatabaseLookupService? inner = DatabaseLookupFactory.TryCreate(databaseConfig, out string? version);
+            _databaseLookup = new SwappableAircraftDatabaseLookup(inner, version);
+        }
 
         // Create centralized aircraft state tracker for all devices
         // Tracks aircraft across multiple RTL-SDR devices (automatic deduplication by ICAO)
@@ -142,12 +154,16 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         Log.Information("Aircraft photo service started (Planespotters metadata cache, cap {Cap})",
             _photoCache.Capacity);
 
+        // Start database auto-update (daemon-only). Gated on enrichment being enabled, a writable
+        // directory, and the auto-update flag. Failures here never abort daemon startup.
+        StartDatabaseAutoUpdate(databaseConfig, cancellationToken);
+
         // Start REST API server (if enabled)
         if (_config.ApiEnabled)
         {
             DateTime startTime = DateTime.UtcNow;
             _webApp = DaemonApiServer.Build(_config, _aircraftTracker, _photoService,
-                () => _receiverStream?.GetStatistics(), startTime);
+                () => _receiverStream?.GetStatistics(), startTime, _databaseLookup);
             await _webApp.StartAsync(cancellationToken);
             Log.Information("REST API listening on http://{Bind}:{Port}/api/v1",
                 _config.BindAddress, _config.ApiPort);
@@ -160,6 +176,50 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         // Create and start TCP broadcasters
         _broadcasters = new DaemonBroadcasterCollection();
         return await _broadcasters.StartBroadcastersAsync(_config, _receiverStream, _aircraftTracker, cancellationToken);
+    }
+
+    /// <summary>
+    /// Starts the daemon database auto-updater when all preconditions hold: enrichment enabled with a
+    /// path (implied by a non-null <see cref="_databaseLookup"/>), the auto-update flag on, and the
+    /// directory writable. Each dormant reason is logged once; the daemon is never blocked.
+    /// </summary>
+    private void StartDatabaseAutoUpdate(DatabaseConfig? databaseConfig, CancellationToken cancellationToken)
+    {
+        if (_databaseLookup is not null)
+        {
+            // Enrichment is enabled and a path is set (that is what created the wrapper).
+            var autoUpdate = DatabaseAutoUpdateConfig.Resolve(databaseConfig!.AutoUpdate);
+            if (!autoUpdate.Enabled)
+            {
+                return;
+            }
+
+            string? writeError = DatabaseDirectory.ValidateWritable(databaseConfig.Path!);
+            if (writeError is null)
+            {
+                _autoUpdater = new DatabaseAutoUpdater(databaseConfig, autoUpdate, _databaseLookup, new DatabaseUpdateService());
+                _autoUpdater.Start(cancellationToken);
+            }
+            else
+            {
+                Log.Warning(
+                    "Database auto-update requested but {Path} is not writable — auto-update disabled. " +
+                    "To fix, run: sudo chown aeromux:aeromux {Path}",
+                    databaseConfig.Path, databaseConfig.Path);
+            }
+        }
+        else if (databaseConfig?.AutoUpdate is null || databaseConfig.AutoUpdate.Enabled)
+        {
+            // Auto-update wanted (default on) but enrichment cannot run — report the accurate reason.
+            if (databaseConfig is { Enabled: true } && string.IsNullOrWhiteSpace(databaseConfig.Path))
+            {
+                Log.Warning("Database auto-update requested but no database.path is configured — auto-update disabled.");
+            }
+            else
+            {
+                Log.Debug("Database auto-update dormant: database enrichment is off (database.enabled is false).");
+            }
+        }
     }
 
     /// <summary>
@@ -185,6 +245,13 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         Console.WriteLine();
         Console.WriteLine("Shutting down TCP broadcasters, tracker, and device stream...");
         Log.Information("Shutting down TCP broadcasters, tracker, and device stream...");
+
+        // Step 0: Stop the database auto-updater before anything else, so a hot-swap can never race
+        // the disposal of the enrichment connection (Step 6) or the tracker's consumer (Step 5).
+        if (_autoUpdater != null)
+        {
+            await _autoUpdater.DisposeAsync();
+        }
 
         // Step 1: Stop TCP broadcasters first (null-safe disposal)
         // Each DisposeAsync waits for background tasks then disposes clients

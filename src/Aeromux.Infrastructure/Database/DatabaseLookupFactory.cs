@@ -38,7 +38,18 @@ public static class DatabaseLookupFactory
     /// <param name="databaseConfig">Database configuration from the application config.</param>
     /// <returns>A ready-to-use lookup service, or null if validation fails.</returns>
     public static AircraftDatabaseLookupService? TryCreate(DatabaseConfig? databaseConfig)
+        => TryCreate(databaseConfig, out _);
+
+    /// <summary>
+    /// Attempts to create a database lookup service after validating the database, also surfacing the
+    /// loaded database version so callers can report it (e.g. the daemon's live database indicator).
+    /// </summary>
+    /// <param name="databaseConfig">Database configuration from the application config.</param>
+    /// <param name="loadedVersion">On success, the loaded database version (<c>db_version</c> metadata); otherwise null.</param>
+    /// <returns>A ready-to-use lookup service, or null if validation fails.</returns>
+    public static AircraftDatabaseLookupService? TryCreate(DatabaseConfig? databaseConfig, out string? loadedVersion)
     {
+        loadedVersion = null;
         // Check if database is configured
         if (databaseConfig == null || !databaseConfig.Enabled || string.IsNullOrEmpty(databaseConfig.Path))
         {
@@ -107,6 +118,7 @@ public static class DatabaseLookupFactory
             Log.Information("Database loaded: version {Version}, {RecordCount} records",
                 db.Metadata.DbVersion, db.Metadata.RecordCount);
 
+            loadedVersion = db.Metadata.DbVersion;
             return new AircraftDatabaseLookupService(db.FilePath, schemaVersion);
         }
         catch (Exception ex)
