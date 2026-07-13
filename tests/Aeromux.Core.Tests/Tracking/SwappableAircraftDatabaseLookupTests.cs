@@ -16,10 +16,6 @@
 
 using Aeromux.Core.Tracking;
 
-// CA2000: these tests deliberately exercise the wrapper's ownership/disposal semantics; the
-// wrapper takes ownership of the fake inners and disposal is the subject under test.
-#pragma warning disable CA2000
-
 namespace Aeromux.Core.Tests.Tracking;
 
 /// <summary>
@@ -28,7 +24,11 @@ namespace Aeromux.Core.Tests.Tracking;
 /// </summary>
 public class SwappableAircraftDatabaseLookupTests
 {
-    /// <summary>Fake inner lookup that records disposal and returns a marker registration.</summary>
+    /// <summary>
+    /// Fake inner lookup that records disposal and returns a marker registration. Disposal is
+    /// idempotent, so it is safe for both the wrapper (on swap/dispose) and the test's own
+    /// <c>using</c> to dispose the same instance.
+    /// </summary>
     private sealed class FakeLookup : IAircraftDatabaseLookup, IDisposable
     {
         private readonly string _registration;
@@ -52,8 +52,8 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public void LookupAircraft_DelegatesToCurrentInner()
     {
-        var inner = new FakeLookup("REG-1");
-        var wrapper = new SwappableAircraftDatabaseLookup(inner, "v1");
+        using var inner = new FakeLookup("REG-1");
+        using var wrapper = new SwappableAircraftDatabaseLookup(inner, "v1");
 
         wrapper.LookupAircraft("ABCDEF").Registration.Should().Be("REG-1");
         wrapper.CurrentVersion.Should().Be("v1");
@@ -62,7 +62,7 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public void NullInner_ReturnsEmpty_AndNullVersion()
     {
-        var wrapper = new SwappableAircraftDatabaseLookup(null, null);
+        using var wrapper = new SwappableAircraftDatabaseLookup(null, null);
 
         wrapper.LookupAircraft("ABCDEF").Should().BeSameAs(AircraftDatabaseRecord.Empty);
         wrapper.CurrentVersion.Should().BeNull();
@@ -71,9 +71,9 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public void Swap_UsesNewInner_DisposesOld_AndUpdatesVersion()
     {
-        var oldInner = new FakeLookup("OLD");
-        var newInner = new FakeLookup("NEW");
-        var wrapper = new SwappableAircraftDatabaseLookup(oldInner, "v1");
+        using var oldInner = new FakeLookup("OLD");
+        using var newInner = new FakeLookup("NEW");
+        using var wrapper = new SwappableAircraftDatabaseLookup(oldInner, "v1");
 
         wrapper.Swap(newInner, "v2");
 
@@ -86,8 +86,8 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public void Swap_ToNull_ReturnsEmpty_AndNullVersion()
     {
-        var oldInner = new FakeLookup("OLD");
-        var wrapper = new SwappableAircraftDatabaseLookup(oldInner, "v1");
+        using var oldInner = new FakeLookup("OLD");
+        using var wrapper = new SwappableAircraftDatabaseLookup(oldInner, "v1");
 
         wrapper.Swap(null, null);
 
@@ -99,8 +99,8 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public void Dispose_DisposesInner_AndIsIdempotent()
     {
-        var inner = new FakeLookup("REG");
-        var wrapper = new SwappableAircraftDatabaseLookup(inner, "v1");
+        using var inner = new FakeLookup("REG");
+        using var wrapper = new SwappableAircraftDatabaseLookup(inner, "v1");
 
         wrapper.Dispose();
         wrapper.Dispose(); // idempotent — must not throw
@@ -112,11 +112,11 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public void Swap_AfterDispose_DisposesNewInner_AndDoesNotAdopt()
     {
-        var inner = new FakeLookup("REG");
-        var wrapper = new SwappableAircraftDatabaseLookup(inner, "v1");
+        using var inner = new FakeLookup("REG");
+        using var wrapper = new SwappableAircraftDatabaseLookup(inner, "v1");
         wrapper.Dispose();
 
-        var lateInner = new FakeLookup("LATE");
+        using var lateInner = new FakeLookup("LATE");
         wrapper.Swap(lateInner, "v2");
 
         lateInner.Disposed.Should().BeTrue();
@@ -126,7 +126,8 @@ public class SwappableAircraftDatabaseLookupTests
     [Fact]
     public async Task ConcurrentLookupAndSwap_NeverTouchesDisposedInner()
     {
-        var wrapper = new SwappableAircraftDatabaseLookup(new FakeLookup("v0"), "v0");
+        using var initialInner = new FakeLookup("v0");
+        using var wrapper = new SwappableAircraftDatabaseLookup(initialInner, "v0");
 
         // Bounded, cooperative iterations (with frequent yields) rather than a busy-spin, kept small
         // so this test adds negligible CPU load to other (timing-sensitive) tests running in
@@ -141,7 +142,8 @@ public class SwappableAircraftDatabaseLookupTests
             }
         })).ToArray();
 
-        // Writer: swap in fresh inners, disposing the old under the lock each time.
+        // Writer: swap in fresh inners, disposing the old under the lock each time. Each swapped-in
+        // fake is owned and disposed by the wrapper (on the next swap, or on final disposal).
         Task writer = Task.Run(() =>
         {
             for (int i = 1; i <= 2_000; i++)

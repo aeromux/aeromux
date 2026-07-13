@@ -127,7 +127,7 @@ public sealed class DatabaseAutoUpdater : IAsyncDisposable
                             "Database auto-update: installed {Tag} ({RecordCount} records) and swapped the live database.",
                             result.Version, result.RecordCount);
 
-                        // Remove superseded files now that the swap has released the old connection.
+                        // Remove superseded files now that the swap has disposed the old inner service.
                         // Safe on the POSIX targets even if a pooled handle lingers (unlink detaches it).
                         if (_cfg.PruneOldDatabases && result.InstalledPath is not null)
                         {

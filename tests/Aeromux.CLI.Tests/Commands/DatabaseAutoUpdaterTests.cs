@@ -30,6 +30,7 @@ namespace Aeromux.CLI.Tests.Commands;
 /// </summary>
 public class DatabaseAutoUpdaterTests
 {
+    /// <summary>Scripted update service: returns a fixed result, or throws, and counts calls.</summary>
     private sealed class FakeUpdateService : IDatabaseUpdateService
     {
         private readonly DatabaseUpdateResult _result;
