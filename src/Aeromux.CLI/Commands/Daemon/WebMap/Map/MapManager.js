@@ -512,6 +512,11 @@ function ensureRangeOutlineSources() {
 
     map.addSource('range-outline-source', { type: 'geojson', data: emptyPoly });
 
+    // Keep the outline beneath the range rings and their labels. If the rings
+    // were already added, anchor below their bottom-most layer; otherwise fall
+    // back to trail-layer (the rings, added later, still land above the outline).
+    const beforeId = map.getLayer('range-rings-layer') ? 'range-rings-layer' : 'trail-layer';
+
     map.addLayer({
         id: 'range-outline-fill-layer',
         type: 'fill',
@@ -520,7 +525,7 @@ function ensureRangeOutlineSources() {
             'fill-color': '#006192',
             'fill-opacity': 0.08
         }
-    }, 'trail-layer');
+    }, beforeId);
 
     map.addLayer({
         id: 'range-outline-line-layer',
@@ -530,7 +535,7 @@ function ensureRangeOutlineSources() {
             'line-color': '#006192',
             'line-width': 1.5
         }
-    }, 'trail-layer');
+    }, beforeId);
 }
 
 export function updateRangeOutline(coordinates, visible) {
@@ -726,7 +731,7 @@ function ensureHeatmapSources() {
     const colour = ['interpolate', ['linear'], ['get', 't'], ...RDYLGN_STOPS.flat()];
 
     // Insert directly above the base dim overlay so the heatmap sits at the very bottom
-    // of the overlay stack — map → dim → heatmap → range rings → range outline → trail →
+    // of the overlay stack — map → dim → heatmap → range outline → range rings → trail →
     // aircraft — regardless of the order the (lazy) range layers were added, so the rings
     // and outline stay readable on top of the fill.
     const styleLayers = map.getStyle().layers;
