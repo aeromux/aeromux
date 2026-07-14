@@ -523,7 +523,7 @@ export function App() {
                         <img src="img/logo.svg" alt="Aeromux" class="logo-img" />
                         <div class="logo-text">
                             <div class="logo-title">AEROMUX</div>
-                            <div class="logo-subtitle">Web Map{version ? ` (v${version})` : ''}{databaseVersion ? ` with Database Enrichment (${databaseVersion})` : ''}</div>
+                            <div class="logo-subtitle">Web Map{version ? ` (${version})` : ''}{databaseVersion ? ` with Database (${databaseVersion})` : ''}</div>
                         </div>
                     </div>
                 </div>
