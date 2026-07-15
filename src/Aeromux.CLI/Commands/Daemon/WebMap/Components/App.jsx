@@ -53,6 +53,10 @@ export function App() {
     const [heatmapCollectionEnabled, setHeatmapCollectionEnabled] = useState(false);
     const [heatmapScale, setHeatmapScale] = useState(null);
     const [heatmapHover, setHeatmapHover] = useState(null);
+    // Mirror the toggle into a ref so the mount-registered push handler sees the current
+    // state and drops heatmap frames arriving right after the overlay is toggled off.
+    const heatmapEnabledRef = useRef(settings.heatmap);
+    heatmapEnabledRef.current = settings.heatmap;
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
     const defaultSections = {
@@ -411,6 +415,9 @@ export function App() {
                         setRangeOutline(data);
                     },
                     onHeatmapUpdated: (data) => {
+                        // Drop frames that arrive after toggle-off — an in-flight push would
+                        // otherwise repopulate the cleared overlay.
+                        if (!heatmapEnabledRef.current) return;
                         MapManager.setHeatmap(data);
                         setHeatmapScale({ scaleMax: data.ScaleMax, maxCount: data.MaxCount });
                     },

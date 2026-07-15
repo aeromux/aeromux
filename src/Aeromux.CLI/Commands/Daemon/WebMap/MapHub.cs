@@ -120,12 +120,14 @@ public sealed partial class MapHub : Hub
         {
             bool changed = state.HeatmapCellSizeNm != cellSizeNm
                            || state.HeatmapWindow != TimeSpan.FromMinutes(windowMinutes);
+            bool enabling = enabled && !state.HeatmapEnabled;
             state.HeatmapEnabled = enabled;
             state.HeatmapCellSizeNm = cellSizeNm;
             state.HeatmapWindow = TimeSpan.FromMinutes(windowMinutes);
-            if (changed)
+            if (changed || enabling)
             {
-                // Parameters changed — re-derive the colour scale cleanly and force a re-push.
+                // Params changed, or the overlay was just re-enabled — re-derive the colour
+                // scale cleanly and force a re-push so the client renders without delay.
                 state.HeatmapLastScaleMax = 0;
                 state.LastPushedHeatmapHash = 0;
             }

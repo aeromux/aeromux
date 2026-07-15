@@ -12,6 +12,7 @@ All notable changes to Aeromux will be documented in this file.
 ### Fixed
 
 - **Web Map: Range Outline Covering Range Rings** — The receiver coverage-range outline could render on top of the range rings and their distance labels, obscuring them. The outline is now anchored beneath the range-ring layers regardless of which overlay loads first, so the rings and labels stay readable.
+- **Web Map: Heatmap Lingering After Toggle-Off** — Turning off the traffic-density heatmap could leave it frozen inside the previous viewport when a server frame already in flight repopulated the just-cleared overlay. The client now ignores heatmap frames that arrive after the overlay is toggled off, and re-enabling it renders immediately.
 
 ## [0.7.5] — 2026-07-07
 
