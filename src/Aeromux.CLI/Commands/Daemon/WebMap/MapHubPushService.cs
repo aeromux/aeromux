@@ -290,7 +290,9 @@ public sealed class MapHubPushService : BackgroundService
                     MaxCount = result.MaxCount,
                     Cells = result.Cells
                 };
-                int heatmapHash = ComputeHash(heatmap);
+                int heatmapHash = ComputeHeatmapHash(
+                    state.HeatmapCellSizeNm, (int)state.HeatmapWindow.TotalMinutes,
+                    result.ScaleMax, result.MaxCount, result.Cells);
                 if (heatmapHash != state.LastPushedHeatmapHash)
                 {
                     await client.SendAsync("HeatmapUpdated", heatmap, cancellationToken);
@@ -372,6 +374,28 @@ public sealed class MapHubPushService : BackgroundService
     {
         string json = JsonSerializer.Serialize(obj, _jsonOptions);
         return json.GetHashCode(StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Allocation-free structural hash of the heatmap payload's render-affecting fields, used to
+    /// decide whether the overlay actually changed before pushing it. Order-independent so that a
+    /// differing cell iteration order between rebuilds does not read as a change and trigger a
+    /// needless re-push of an identical overlay.
+    /// </summary>
+    /// <param name="cellSizeNm">Display cell size in nautical miles.</param>
+    /// <param name="windowMinutes">Rolling window in minutes.</param>
+    /// <param name="scaleMax">Smoothed colour anchor.</param>
+    /// <param name="maxCount">Busiest-cell count.</param>
+    /// <param name="cells">The coloured cells within the client's viewport.</param>
+    /// <returns>An order-independent hash over the payload's render-affecting fields.</returns>
+    private static int ComputeHeatmapHash(int cellSizeNm, int windowMinutes, int scaleMax, int maxCount, IReadOnlyList<HeatmapCell> cells)
+    {
+        int cellsAcc = 0;
+        foreach (HeatmapCell c in cells)
+        {
+            cellsAcc += HashCode.Combine(c.South, c.West, c.North, c.East, c.Count); // commutative → order-independent
+        }
+        return HashCode.Combine(cellSizeNm, windowMinutes, scaleMax, maxCount, cells.Count, cellsAcc);
     }
 
     /// <summary>
