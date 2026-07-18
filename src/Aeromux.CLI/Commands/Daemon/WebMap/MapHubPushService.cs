@@ -313,7 +313,8 @@ public sealed class MapHubPushService : BackgroundService
     /// <param name="nowUtc">The current tick time, shared with the rest of the push loop.</param>
     private void RefreshHeatmapSnapshots(DateTime nowUtc)
     {
-        // Distinct heatmap configurations among currently enabled clients.
+        // Collect the distinct configurations in use, so each is built once below and shared by
+        // every client on it rather than rebuilt per client.
         var needed = new HashSet<(int, long)>();
         foreach ((_, MapHubClientState state) in MapHub.ClientStates)
         {

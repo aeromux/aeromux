@@ -128,36 +128,37 @@ public sealed class HeatmapTracker
         TimeSpan effWindow = window > Retention ? Retention : window;
         DateTime cutoff = DateTime.UtcNow - effWindow;
 
-        // Re-bin base cells into display cells (whole grid), unioning in-window ICAOs.
+        // Aggregate the whole grid (not just the viewport) into display cells, so the colour
+        // anchor computed below reflects every cell and stays stable while the client pans.
         var display = new Dictionary<long, HashSet<string>>();
         lock (_lock)
         {
             foreach ((long baseId, Dictionary<string, DateTime> inner) in _cells)
             {
-                List<string>? recent = null;
+                // Union in-window ICAOs straight into the display cell's set, resolving that cell
+                // lazily on the first recent hit — a fully-stale base cell then costs no geometry
+                // and allocates no set.
+                HashSet<string>? set = null;
                 foreach ((string icao, DateTime seen) in inner)
                 {
-                    if (seen >= cutoff)
+                    if (seen < cutoff)
                     {
-                        (recent ??= new()).Add(icao);
+                        continue;
                     }
+                    if (set is null)
+                    {
+                        (int br, int bc) = Unpack(baseId);
+                        (double clat, double clon) = CentreOf(br, bc, BaseCellNm);
+                        (int dr, int dc) = IndexOf(clat, clon, cellSizeNm);
+                        long did = Pack(dr, dc);
+                        if (!display.TryGetValue(did, out set))
+                        {
+                            set = new HashSet<string>();
+                            display[did] = set;
+                        }
+                    }
+                    set.Add(icao);
                 }
-                if (recent is null)
-                {
-                    continue;
-                }
-
-                (int br, int bc) = Unpack(baseId);
-                (double clat, double clon) = CentreOf(br, bc, BaseCellNm);
-                (int dr, int dc) = IndexOf(clat, clon, cellSizeNm);
-                long did = Pack(dr, dc);
-
-                if (!display.TryGetValue(did, out HashSet<string>? set))
-                {
-                    set = new HashSet<string>();
-                    display[did] = set;
-                }
-                set.UnionWith(recent);
             }
         }
 
@@ -181,7 +182,7 @@ public sealed class HeatmapTracker
     /// <summary>
     /// Projects a <see cref="BuildSnapshot"/> result to one client: emits the display cells
     /// intersecting the viewport and folds the client's previous anchor into the smoothed
-    /// colour scale. Cheap and lock-free — the snapshot is immutable once built.
+    /// colour scale. Cheap and lock-free — the snapshot is never mutated after building.
     /// </summary>
     /// <param name="snapshot">A snapshot from <see cref="BuildSnapshot"/>.</param>
     /// <param name="viewport">Client viewport (south, west, north, east); null → empty.</param>
