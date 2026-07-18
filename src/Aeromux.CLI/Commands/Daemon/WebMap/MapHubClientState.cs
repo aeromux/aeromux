@@ -77,4 +77,16 @@ public sealed class MapHubClientState
     /// Hash of the last pushed heatmap payload. Used to avoid pushing unchanged data.
     /// </summary>
     public int LastPushedHeatmapHash { get; set; }
+
+    /// <summary>
+    /// Viewport the heatmap was last projected for. A change means the client panned,
+    /// so it must re-project even if the shared snapshot has not been rebuilt.
+    /// </summary>
+    public (double South, double West, double North, double East)? HeatmapLastViewport { get; set; }
+
+    /// <summary>
+    /// Build time of the shared snapshot this client last projected. The client re-projects
+    /// only once this advances (or its viewport changes), so an idle view does no per-tick work.
+    /// </summary>
+    public DateTime HeatmapLastSnapshotUtc { get; set; } = DateTime.MinValue;
 }

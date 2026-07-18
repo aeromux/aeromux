@@ -87,10 +87,9 @@ public sealed class HeatmapTracker
     }
 
     /// <summary>
-    /// Returns the coloured display cells within the viewport, plus the colour anchor.
-    /// Base cells are re-binned into display cells by their geographic centre and their
-    /// in-window distinct-ICAO sets unioned. The colour anchor (<c>ScaleMax</c>) is a
-    /// smoothed, nice-rounded 99th percentile over the whole grid.
+    /// Convenience over <see cref="BuildSnapshot"/> + <see cref="Project"/>: builds a
+    /// snapshot for the configuration and projects it to the viewport in one call.
+    /// Callers pushing to many clients build the snapshot once and project per client.
     /// </summary>
     /// <param name="cellSizeNm">Display cell size in nautical miles.</param>
     /// <param name="window">Rolling window; clamped to the 24 h retention.</param>
@@ -111,7 +110,21 @@ public sealed class HeatmapTracker
         {
             return HeatmapResult.Empty;
         }
+        return Project(BuildSnapshot(cellSizeNm, window), viewport, previousScaleMax);
+    }
 
+    /// <summary>
+    /// Re-bins the whole base grid into display cells and captures the viewport-independent
+    /// state: the distinct in-window aircraft count per display cell plus the whole-grid
+    /// colour-scale inputs. Independent of any viewport, so one snapshot serves every client
+    /// on the same configuration; the colour anchor is computed over the whole grid so colour
+    /// is identical for every cell and stable while panning.
+    /// </summary>
+    /// <param name="cellSizeNm">Display cell size in nautical miles.</param>
+    /// <param name="window">Rolling window; clamped to the 24 h retention.</param>
+    /// <returns>A snapshot to hand to <see cref="Project"/>; empty when no cell is in-window.</returns>
+    public HeatmapSnapshot BuildSnapshot(int cellSizeNm, TimeSpan window)
+    {
         TimeSpan effWindow = window > Retention ? Retention : window;
         DateTime cutoff = DateTime.UtcNow - effWindow;
 
@@ -150,30 +163,62 @@ public sealed class HeatmapTracker
 
         if (display.Count == 0)
         {
+            return HeatmapSnapshot.Empty(cellSizeNm);
+        }
+
+        int[] counts = display.Values.Select(s => s.Count).ToArray();
+        int rawScaleP99 = Percentile99(counts);
+        int maxCount = counts.Max();
+
+        var displayCounts = new Dictionary<long, int>(display.Count);
+        foreach ((long did, HashSet<string> set) in display)
+        {
+            displayCounts[did] = set.Count;
+        }
+        return new HeatmapSnapshot(cellSizeNm, displayCounts, rawScaleP99, maxCount);
+    }
+
+    /// <summary>
+    /// Projects a <see cref="BuildSnapshot"/> result to one client: emits the display cells
+    /// intersecting the viewport and folds the client's previous anchor into the smoothed
+    /// colour scale. Cheap and lock-free — the snapshot is immutable once built.
+    /// </summary>
+    /// <param name="snapshot">A snapshot from <see cref="BuildSnapshot"/>.</param>
+    /// <param name="viewport">Client viewport (south, west, north, east); null → empty.</param>
+    /// <param name="previousScaleMax">The client's last colour anchor, for smoothing.</param>
+    /// <returns>
+    /// The coloured cells intersecting the viewport plus the smoothed anchor;
+    /// <see cref="HeatmapResult.Empty"/> when the viewport is null or the snapshot is empty.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="snapshot"/> is null.</exception>
+    public HeatmapResult Project(
+        HeatmapSnapshot snapshot,
+        (double South, double West, double North, double East)? viewport,
+        int previousScaleMax)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        if (viewport is null || snapshot.DisplayCounts.Count == 0)
+        {
             return HeatmapResult.Empty;
         }
 
-        // Colour anchor over the WHOLE grid, so colour is identical for every cell
-        // and stable while panning.
-        int[] counts = display.Values.Select(s => s.Count).ToArray();
-        int scaleMax = SmoothScaleMax(Percentile99(counts), previousScaleMax);
-        int maxCount = counts.Max();
+        int scaleMax = SmoothScaleMax(snapshot.RawScaleP99, previousScaleMax);
 
-        // Emit only display cells intersecting the viewport.
         var cells = new List<HeatmapCell>();
         (double vS, double vW, double vN, double vE) = viewport.Value;
-        foreach ((long did, HashSet<string> set) in display)
+        foreach ((long did, int count) in snapshot.DisplayCounts)
         {
             (int dr, int dc) = Unpack(did);
-            (double s, double w, double n, double e) = BoundsOf(dr, dc, cellSizeNm);
+            (double s, double w, double n, double e) = BoundsOf(dr, dc, snapshot.CellSizeNm);
             if (n < vS || s > vN || e < vW || w > vE)
             {
                 continue; // no overlap
             }
-            cells.Add(new HeatmapCell(s, w, n, e, set.Count));
+            cells.Add(new HeatmapCell(s, w, n, e, count));
         }
 
-        return new HeatmapResult(scaleMax, maxCount, cells);
+        return new HeatmapResult(scaleMax, snapshot.MaxCount, cells);
     }
 
     /// <summary>
@@ -288,6 +333,39 @@ public sealed class HeatmapTracker
         }
         return Math.Max(ScaleFloor, NiceCeil(p99));
     }
+}
+
+/// <summary>
+/// Viewport-independent heatmap state for one (cellSizeNm, window): the distinct
+/// in-window aircraft count per display cell plus the whole-grid colour-scale inputs.
+/// Built once by <see cref="HeatmapTracker.BuildSnapshot"/> and shared across every
+/// client on the same configuration, then turned into per-client results by
+/// <see cref="HeatmapTracker.Project"/>.
+/// </summary>
+public sealed class HeatmapSnapshot
+{
+    internal HeatmapSnapshot(int cellSizeNm, Dictionary<long, int> displayCounts, int rawScaleP99, int maxCount)
+    {
+        CellSizeNm = cellSizeNm;
+        DisplayCounts = displayCounts;
+        RawScaleP99 = rawScaleP99;
+        MaxCount = maxCount;
+    }
+
+    /// <summary>Display cell size in nautical miles the snapshot was binned to.</summary>
+    internal int CellSizeNm { get; }
+
+    /// <summary>Distinct in-window aircraft count keyed by packed display cell id.</summary>
+    internal Dictionary<long, int> DisplayCounts { get; }
+
+    /// <summary>Whole-grid 99th-percentile count: the un-smoothed colour anchor.</summary>
+    internal int RawScaleP99 { get; }
+
+    /// <summary>Whole-grid busiest-cell count, for the legend's peak note.</summary>
+    internal int MaxCount { get; }
+
+    /// <summary>Empty snapshot: no cells. RawScaleP99 is unused — Project short-circuits on empty.</summary>
+    internal static HeatmapSnapshot Empty(int cellSizeNm) => new(cellSizeNm, new(), 0, 0);
 }
 
 /// <summary>Result of a heatmap query: coloured cells plus the colour anchor.</summary>

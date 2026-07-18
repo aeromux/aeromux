@@ -130,6 +130,8 @@ public sealed partial class MapHub : Hub
                 // scale cleanly and force a re-push so the client renders without delay.
                 state.HeatmapLastScaleMax = 0;
                 state.LastPushedHeatmapHash = 0;
+                // A fresh view must repaint on the next tick, not wait out the refresh interval.
+                state.HeatmapLastSnapshotUtc = DateTime.MinValue;
             }
         }
     }

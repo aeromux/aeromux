@@ -235,4 +235,55 @@ public class HeatmapTrackerTests
 
         r.Cells.Should().ContainSingle();
     }
+
+    [Fact]
+    public void BuildSnapshotThenProject_MatchesGetCells()
+    {
+        var t = new HeatmapTracker();
+        t.RecordPosition("AAAAAA", At(47.0, 19.0));
+        t.RecordPosition("BBBBBB", At(47.0, 19.0));
+        t.RecordPosition("CCCCCC", At(47.0, 20.0));
+
+        HeatmapResult viaGetCells = t.GetCells(5, Day, World, 0);
+        HeatmapResult viaProject = t.Project(t.BuildSnapshot(5, Day), World, 0);
+
+        viaProject.ScaleMax.Should().Be(viaGetCells.ScaleMax);
+        viaProject.MaxCount.Should().Be(viaGetCells.MaxCount);
+        viaProject.Cells.Should().HaveCount(viaGetCells.Cells.Count);
+    }
+
+    [Fact]
+    public void SharedSnapshot_ProjectsPerViewport_WithWholeGridAnchor()
+    {
+        var t = new HeatmapTracker();
+        t.RecordPosition("VIS001", At(47.0, 19.0));             // in viewport A, count 1
+        for (int i = 0; i < 10; i++)
+        {
+            t.RecordPosition($"FAR{i:000}", At(-40.0, -100.0)); // in viewport B, count 10
+        }
+
+        // One shared build, projected to two different viewports.
+        HeatmapSnapshot snapshot = t.BuildSnapshot(5, Day);
+        HeatmapResult a = t.Project(snapshot, (46.0, 18.0, 48.0, 20.0), 0);
+        HeatmapResult b = t.Project(snapshot, (-41.0, -101.0, -39.0, -99.0), 0);
+
+        a.Cells.Should().ContainSingle();
+        a.Cells[0].Count.Should().Be(1);
+        b.Cells.Should().ContainSingle();
+        b.Cells[0].Count.Should().Be(10);
+        // MaxCount is a whole-grid quantity, identical from the one snapshot regardless of viewport.
+        a.MaxCount.Should().Be(10);
+        b.MaxCount.Should().Be(10);
+    }
+
+    [Fact]
+    public void Project_NullViewportOrEmptySnapshot_ReturnsEmpty()
+    {
+        var t = new HeatmapTracker();
+        t.RecordPosition("AAAAAA", At(47.0, 19.0));
+        t.Project(t.BuildSnapshot(5, Day), null, 0).Cells.Should().BeEmpty();
+
+        var empty = new HeatmapTracker();
+        empty.Project(empty.BuildSnapshot(5, Day), World, 0).Cells.Should().BeEmpty();
+    }
 }

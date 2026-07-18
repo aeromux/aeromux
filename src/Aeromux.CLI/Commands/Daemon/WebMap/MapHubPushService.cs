@@ -35,6 +35,13 @@ public sealed class MapHubPushService : BackgroundService
 
     private static readonly TimeSpan HeatmapPruneInterval = TimeSpan.FromSeconds(60);
 
+    // Cadence at which the shared heatmap snapshots are rebuilt. The overlay aggregates a
+    // minutes-to-hours window, so it changes negligibly second-to-second; a longer interval
+    // avoids re-binning the grid for a picture that looks identical. Interactive actions
+    // (enable, cell-size/window change, pan) still refresh immediately, so this only paces the
+    // periodic self-refresh of an untouched view.
+    private static readonly TimeSpan HeatmapRefreshInterval = TimeSpan.FromSeconds(15);
+
     private readonly IAircraftStateTracker _tracker;
     private readonly IHubContext<MapHub> _hubContext;
     private readonly RangeOutlineTracker? _rangeOutlineTracker;
@@ -42,6 +49,11 @@ public sealed class MapHubPushService : BackgroundService
     private readonly SwappableAircraftDatabaseLookup? _databaseLookup;
     private readonly JsonSerializerOptions _jsonOptions;
     private DateTime _lastHeatmapPrune = DateTime.MinValue;
+
+    // Shared heatmap snapshots keyed by (cell size, window): built once per configuration per
+    // refresh and reused across every client on it. Touched only from the single push-loop
+    // thread (RefreshHeatmapSnapshots and the client loop), so it needs no locking.
+    private readonly Dictionary<(int CellSizeNm, long WindowTicks), (HeatmapSnapshot Snapshot, DateTime BuiltUtc)> _heatmapSnapshots = new();
 
     /// <summary>
     /// Initializes the push service with the aircraft tracker, hub context,
@@ -91,6 +103,7 @@ public sealed class MapHubPushService : BackgroundService
 
     private async Task PushUpdates(CancellationToken cancellationToken)
     {
+        DateTime nowUtc = DateTime.UtcNow;
         IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
         int totalCount = allAircraft.Count;
         bool hasClients = !MapHub.ClientStates.IsEmpty;
@@ -128,10 +141,16 @@ public sealed class MapHubPushService : BackgroundService
         }
 
         // Periodically prune stale heatmap entries (once per minute, independent of clients).
-        if (_heatmapTracker is not null && DateTime.UtcNow - _lastHeatmapPrune > HeatmapPruneInterval)
+        if (_heatmapTracker is not null && nowUtc - _lastHeatmapPrune > HeatmapPruneInterval)
         {
             _heatmapTracker.Prune();
-            _lastHeatmapPrune = DateTime.UtcNow;
+            _lastHeatmapPrune = nowUtc;
+        }
+
+        // Rebuild the shared heatmap snapshots (throttled) so each client only projects below.
+        if (_heatmapTracker is not null)
+        {
+            RefreshHeatmapSnapshots(nowUtc);
         }
 
         // Compute the coverage outline once for all clients.
@@ -249,28 +268,78 @@ public sealed class MapHubPushService : BackgroundService
             state.LastPushedOutlineHash = outlineHash;
         }
 
-        // Push heatmap for this client if enabled (and collection is running).
-        if (_heatmapTracker is not null && state.HeatmapEnabled)
+        // Push heatmap for this client if enabled (and collection is running). Project from the
+        // shared snapshot only when it has been rebuilt since this client last projected, or the
+        // client has panned — an idle, unchanged view does no work here.
+        if (_heatmapTracker is not null && state.HeatmapEnabled &&
+            _heatmapSnapshots.TryGetValue((state.HeatmapCellSizeNm, state.HeatmapWindow.Ticks), out var entry))
         {
-            HeatmapResult result = _heatmapTracker.GetCells(
-                state.HeatmapCellSizeNm, state.HeatmapWindow, state.ViewportBounds,
-                state.HeatmapLastScaleMax);
-            state.HeatmapLastScaleMax = result.ScaleMax; // smoothing continuity
+            bool viewportChanged = state.ViewportBounds != state.HeatmapLastViewport;
+            bool snapshotAdvanced = entry.BuiltUtc != state.HeatmapLastSnapshotUtc;
+            if (viewportChanged || snapshotAdvanced)
+            {
+                HeatmapResult result = _heatmapTracker.Project(
+                    entry.Snapshot, state.ViewportBounds, state.HeatmapLastScaleMax);
+                state.HeatmapLastScaleMax = result.ScaleMax; // smoothing continuity
 
-            var heatmap = new
-            {
-                CellSizeNm = state.HeatmapCellSizeNm,
-                WindowMinutes = (int)state.HeatmapWindow.TotalMinutes,
-                ScaleMax = result.ScaleMax,
-                MaxCount = result.MaxCount,
-                Cells = result.Cells
-            };
-            int heatmapHash = ComputeHash(heatmap);
-            if (heatmapHash != state.LastPushedHeatmapHash)
-            {
-                await client.SendAsync("HeatmapUpdated", heatmap, cancellationToken);
-                state.LastPushedHeatmapHash = heatmapHash;
+                var heatmap = new
+                {
+                    CellSizeNm = state.HeatmapCellSizeNm,
+                    WindowMinutes = (int)state.HeatmapWindow.TotalMinutes,
+                    ScaleMax = result.ScaleMax,
+                    MaxCount = result.MaxCount,
+                    Cells = result.Cells
+                };
+                int heatmapHash = ComputeHash(heatmap);
+                if (heatmapHash != state.LastPushedHeatmapHash)
+                {
+                    await client.SendAsync("HeatmapUpdated", heatmap, cancellationToken);
+                    state.LastPushedHeatmapHash = heatmapHash;
+                }
+
+                state.HeatmapLastSnapshotUtc = entry.BuiltUtc;
+                state.HeatmapLastViewport = state.ViewportBounds;
             }
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the shared heatmap snapshots for the configurations currently in use, throttled to
+    /// <see cref="HeatmapRefreshInterval"/>, and drops any that no client needs. One build per distinct
+    /// (cell size, window) serves every client on it, so additional viewers do not multiply the cost.
+    /// </summary>
+    /// <param name="nowUtc">The current tick time, shared with the rest of the push loop.</param>
+    private void RefreshHeatmapSnapshots(DateTime nowUtc)
+    {
+        // Distinct heatmap configurations among currently enabled clients.
+        var needed = new HashSet<(int, long)>();
+        foreach ((_, MapHubClientState state) in MapHub.ClientStates)
+        {
+            if (state.HeatmapEnabled)
+            {
+                needed.Add((state.HeatmapCellSizeNm, state.HeatmapWindow.Ticks));
+            }
+        }
+
+        // Drop cached snapshots no client needs this tick, so the cache tracks only live configs.
+        if (_heatmapSnapshots.Count > 0)
+        {
+            foreach ((int, long) key in _heatmapSnapshots.Keys.Where(k => !needed.Contains(k)).ToList())
+            {
+                _heatmapSnapshots.Remove(key);
+            }
+        }
+
+        // Build or refresh each needed configuration, throttled by the refresh interval.
+        foreach ((int CellSizeNm, long WindowTicks) key in needed)
+        {
+            if (_heatmapSnapshots.TryGetValue(key, out (HeatmapSnapshot Snapshot, DateTime BuiltUtc) entry) &&
+                nowUtc - entry.BuiltUtc < HeatmapRefreshInterval)
+            {
+                continue; // still fresh
+            }
+            HeatmapSnapshot snapshot = _heatmapTracker!.BuildSnapshot(key.CellSizeNm, TimeSpan.FromTicks(key.WindowTicks));
+            _heatmapSnapshots[key] = (snapshot, nowUtc);
         }
     }
 
