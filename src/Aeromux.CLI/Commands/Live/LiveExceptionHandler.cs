@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Infrastructure.Sdr;
 using RtlSdrManager.Exceptions;
 using Serilog;
 
@@ -48,7 +49,7 @@ public static class LiveExceptionHandler
             // Unexpected errors
             default:
                 Log.Error(ex, "Unexpected error in Live command");
-                Console.WriteLine(ex);
+                Console.WriteLine($"Unexpected error: {ex.Message}");
                 break;
         }
 
@@ -67,9 +68,18 @@ public static class LiveExceptionHandler
 
         switch (ex)
         {
+            // No RTL-SDR hardware present (thrown by ReceiverStream before opening devices)
+            case NoRtlSdrDeviceException:
+                Log.Error("No supported RTL-SDR device found on the system");
+                Console.WriteLine("Error: No supported RTL-SDR device found. Please check:");
+                Console.WriteLine("  1. Device is connected via USB");
+                Console.WriteLine("  2. Drivers are installed (librtlsdr)");
+                Console.WriteLine("  3. Run 'aeromux device' to verify detection");
+                break;
+
             // RTL-SDR device already in use by another process
             case RtlSdrLibraryExecutionException:
-                Log.Error(ex, "RTL-SDR device already in use");
+                Log.Error("RTL-SDR device already in use");
                 Console.WriteLine("Error: Cannot open RTL-SDR device (already in use)");
                 Console.WriteLine("This usually means another instance is running.");
                 Console.WriteLine("Try:");
@@ -77,20 +87,27 @@ public static class LiveExceptionHandler
                 Console.WriteLine("  2. Stop daemon: aeromux daemon stop");
                 break;
 
-            // RTL-SDR device not found
-            case Exception when ex.GetType().Name.Contains("RtlSdr") && ex.Message.Contains("not found"):
-                Log.Error(ex, "RTL-SDR device not found");
-                Console.WriteLine("Error: RTL-SDR device not found");
-                Console.WriteLine("Please check:");
+            // RTL-SDR device not found by index
+            case Exception when ex.GetType().Name.Contains("RtlSdr") && ex.Message.Contains("does not exist"):
+                Log.Error("RTL-SDR device not found with the given index");
+                Console.WriteLine("Error: RTL-SDR device not found with the given index. Please check:");
                 Console.WriteLine("  1. Device is connected via USB");
                 Console.WriteLine("  2. Drivers are installed (librtlsdr)");
-                Console.WriteLine("  3. Run 'rtl_test' to verify device detection");
+                Console.WriteLine("  3. Device index is correct in configuration");
+                Console.WriteLine("  4. Run 'aeromux device' to verify detection");
                 break;
 
             // Other RTL-SDR errors
             case Exception when ex.GetType().Name.Contains("RtlSdr"):
-                Log.Error(ex, "RTL-SDR error");
+                Log.Error("RTL-SDR error: {Message}", ex.Message);
                 Console.WriteLine($"RTL-SDR Error: {ex.Message}");
+                break;
+
+            // Other validation/state failures from stream startup (the no-device case is
+            // handled by NoRtlSdrDeviceException above)
+            case InvalidOperationException:
+                Log.Error(ex.Message);
+                Console.WriteLine($"Error: {ex.Message}");
                 break;
 
             // Unexpected errors

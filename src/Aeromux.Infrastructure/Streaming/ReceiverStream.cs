@@ -22,6 +22,7 @@ using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Aggregation;
 using Aeromux.Infrastructure.Mlat;
 using Aeromux.Infrastructure.Sdr;
+using RtlSdrManager;
 using Serilog;
 
 namespace Aeromux.Infrastructure.Streaming;
@@ -167,6 +168,15 @@ public sealed class ReceiverStream : IFrameStream
             // Create DeviceWorkers with shared confidence tracker (if SDR sources configured)
             if (_sourceConfigs != null)
             {
+                // Fail fast with a clear message when SDR sources are configured but no
+                // RTL-SDR hardware is present. RtlSdrManager 0.7.0+ enumeration returns an
+                // empty set instead of throwing, so check the device count explicitly.
+                RtlSdrDeviceManager deviceManager = RtlSdrDeviceManager.Instance;
+                if (_sourceConfigs.Count > 0 && deviceManager.CountDevices == 0)
+                {
+                    throw new NoRtlSdrDeviceException();
+                }
+
                 foreach (SdrSourceConfig sourceConfig in _sourceConfigs)
                 {
                     var worker = new DeviceWorker(

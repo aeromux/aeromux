@@ -69,10 +69,10 @@ public sealed class DeviceWorker : IDisposable
         IcaoConfidenceTracker? confidenceTracker = null,
         Action<ValidatedFrame, ModeSMessage?>? onDataParsed = null)
     {
-        // RtlSdrManager handles console output suppression automatically during device operations
-        // using scoped suppression with reference counting (fixed in RtlSdrManager v0.5.2+).
-        // Default is false (show librtlsdr messages). Applications can set
-        // RtlSdrDeviceManager.SuppressLibraryConsoleOutput = true to suppress if needed.
+        // Suppress librtlsdr console output (e.g. "Found Rafael Micro R820T tuner").
+        // RtlSdrManager applies suppression only during device operations using a
+        // reference-counted scope and restores stdout/stderr afterwards. The default is
+        // false (messages shown); Aeromux opts into suppression here.
         RtlSdrDeviceManager.SuppressLibraryConsoleOutput = true;
 
         _config = sourceConfig ?? throw new ArgumentNullException(nameof(sourceConfig));
@@ -116,18 +116,25 @@ public sealed class DeviceWorker : IDisposable
     private long _totalSamplesReceived;        // Total IQ samples received since StartReceiving()
     private long _lastLoggedSampleCount;       // Sample count at last statistics log (for delta calculation)
     private DateTime _receptionStartTime;      // When StartReceiving() was called (tracked via time provider)
+    private Exception? _lastLoggedAsyncReadError;  // Last async read error surfaced to the log (dedupes repeat logging)
 
     /// <summary>
     /// Opens the RTL-SDR device and configures it according to the config.
     /// Sets center frequency, sample rate, gain mode, and USB buffer parameters.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when device cannot be opened or configured.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the configured device index, gain mode, tuner gain (out of range or not a
+    /// supported step), or PPM correction is invalid.
+    /// </exception>
     /// <remarks>
+    /// Failures to open or configure the underlying device surface as RtlSdrManager library
+    /// exceptions (for example, the configured device index does not exist, or the device is
+    /// already in use by another process).
     /// Must be called before StartReceiving(). USB buffer configuration is critical for stable operation.
     /// </remarks>
     public void OpenDevice()
     {
-        Log.Information("Opening RTL-SDR device: {DeviceName} (index={DeviceIndex})",
+        Log.Information("Opening RTL-SDR device: {DeviceName} (index: {DeviceIndex})",
             _config.Name, _config.DeviceIndex);
 
         // Validate device index
@@ -161,8 +168,8 @@ public sealed class DeviceWorker : IDisposable
 
         try
         {
-            // Open device with friendly name
-            // Console output suppression is enabled by default in RtlSdrManager v0.5.0+
+            // Open device with friendly name (console output is suppressed via the
+            // scope-based suppressor configured in the constructor).
             _deviceManager.OpenManagedDevice((uint)_config.DeviceIndex, _config.Name);
             _device = _deviceManager[_config.Name];
 
@@ -177,6 +184,24 @@ public sealed class DeviceWorker : IDisposable
             // IMPORTANT: Attempting to set TunerGain while in AGC mode throws an exception
             if (_config.GainMode == TunerGainModes.Manual)
             {
+                // The tuner only accepts discrete gain steps. RtlSdrManager validates the
+                // requested value against the device's supported steps and throws
+                // ArgumentOutOfRangeException otherwise. Validate here first so the error
+                // names the device and lists the supported gains rather than surfacing a
+                // bare library error.
+                List<double> supportedGains = _device.SupportedTunerGains;
+                if (supportedGains.Count > 0)
+                {
+                    int requestedTenths = (int)Math.Round(_config.TunerGain * 10);
+                    bool supported = supportedGains.Any(g => (int)Math.Round(g * 10) == requestedTenths);
+                    if (!supported)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(_config.TunerGain),
+                            $"Device '{_config.Name}': Tuner gain {_config.TunerGain} dB is not supported by this tuner. " +
+                            $"Supported gains (dB): {string.Join(", ", supportedGains.Select(g => g.ToString("F1")))}");
+                    }
+                }
+
                 _device.TunerGain = _config.TunerGain;
             }
 
@@ -207,9 +232,9 @@ public sealed class DeviceWorker : IDisposable
                 gainInfo,
                 _config.GainMode);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Log.Error(ex, "Failed to open device {DeviceName} (index={DeviceIndex})",
+            Log.Error("Failed to open device {DeviceName} (index: {DeviceIndex})",
                 _config.Name, _config.DeviceIndex);
             throw;
         }
@@ -276,9 +301,26 @@ public sealed class DeviceWorker : IDisposable
         if (_device != null)
         {
             _device.SamplesAvailable -= OnSamplesAvailable;
-            _device.StopReadSamplesAsync();
-            _deviceManager.CloseManagedDevice(_config.Name);
-            _device = null;
+
+            try
+            {
+                // RtlSdrManager 0.7.0+ surfaces any error that stopped async reading (or a
+                // stop-timeout) from StopReadSamplesAsync instead of ending silently. Log
+                // it, but always continue to close the device.
+                _device.StopReadSamplesAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Device '{DeviceName}' (index: {DeviceIndex}) reported an error while stopping asynchronous reading",
+                    _config.Name, _config.DeviceIndex);
+            }
+            finally
+            {
+                // CloseManagedDevice disposes the device; its Dispose is self-guarding and
+                // never throws, so the device is always released even after the error above.
+                _deviceManager.CloseManagedDevice(_config.Name);
+                _device = null;
+            }
         }
 
         if (_workerTask != null)
@@ -441,6 +483,19 @@ public sealed class DeviceWorker : IDisposable
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+
+                // Surface async read errors reported by the device (RtlSdrManager 0.7.0+).
+                // A non-null value means native async reading stopped on an error and the
+                // device is likely no longer streaming. Log once per distinct error to
+                // avoid repeating it every tick.
+                Exception? asyncReadError = _device?.AsyncReadException;
+                if (asyncReadError != null && !ReferenceEquals(asyncReadError, _lastLoggedAsyncReadError))
+                {
+                    _lastLoggedAsyncReadError = asyncReadError;
+                    Log.Warning(asyncReadError,
+                        "Device '{DeviceName}' (index: {DeviceIndex}) asynchronous sample reading reported an error; the device may have stopped streaming",
+                        _config.Name, _config.DeviceIndex);
+                }
 
                 // Calculate statistics for this interval
                 long currentTotal = _totalSamplesReceived;

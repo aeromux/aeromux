@@ -2,6 +2,22 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.7.7] — Unreleased
+
+### Added
+
+- **RTL-SDR Dead-Stream Detection** — Each SDR device now reports asynchronous read errors surfaced by the driver. If a device stops streaming mid-run, a warning is logged (with the underlying error) instead of the stream ending silently.
+- **RTL-SDR Tuner Gain Validation** — A configured manual `tunerGain` that is not a step supported by the tuner is now rejected at device open with a clear message listing the supported gains for that device, instead of surfacing a bare library error.
+
+### Changed
+
+- **RtlSdrManager 0.7.0** — Upgraded the RtlSdrManager RTL-SDR access library from 0.6.3 to 0.7.0. Device shutdown is now crash-safe: an error that stops asynchronous sample reading is logged and no longer escapes teardown or terminates the process. The tuner-gain conversion was corrected to round to the nearest supported step (tenths of a dB), so the configured gain maps to the exact value the hardware applies.
+
+### Fixed
+
+- **Clearer "No RTL-SDR Device" Message** — When SDR sources are configured but no RTL-SDR hardware is present, Aeromux now fails fast with an actionable message (check the USB connection, install librtlsdr, run `aeromux device`). Previously, with the upgraded driver's changed enumeration behaviour, this could surface as a generic device error.
+- **Clearer RTL-SDR Device Errors** — When a device can't be opened — most often because the configured device index doesn't match a connected receiver — Aeromux now explains what went wrong and how to fix it (check the device index, run `aeromux device`) instead of printing a technical error, and keeps the log tidy. The `live` and `daemon` commands report it the same way.
+
 ## [0.7.6] — 2026-07-18
 
 ### Added
