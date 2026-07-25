@@ -28,7 +28,7 @@ public sealed class RangeOutlineTracker
     private const int SectorSize = 5;
     private const int SectorCount = 360 / SectorSize;
     private const double MaxDistanceNm = 300.0;
-    private static readonly TimeSpan Retention = TimeSpan.FromHours(4);
+    private static readonly TimeSpan Retention = TimeSpan.FromHours(24);
 
     private readonly GeographicCoordinate _receiver;
     private readonly RangeOutlineEntry?[] _sectors = new RangeOutlineEntry?[SectorCount];

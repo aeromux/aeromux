@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.7.7] — Unreleased
+## [0.7.7] — 2026-07-25
 
 ### Added
 
@@ -11,6 +11,7 @@ All notable changes to Aeromux will be documented in this file.
 
 ### Changed
 
+- **Web Map Range Outline Window** — The receiver coverage range outline now reflects the farthest aircraft received over the last 24 hours instead of 4, giving a fuller, more stable coverage picture that better survives quiet periods.
 - **RtlSdrManager 0.7.1** — Upgraded the RtlSdrManager RTL-SDR access library from 0.6.3 to 0.7.1. Device shutdown is now crash-safe: an error that stops asynchronous sample reading is logged and no longer escapes teardown or terminates the process. The tuner-gain conversion was corrected to round to the nearest supported step (tenths of a dB), so the configured gain maps to the exact value the hardware applies.
 
 ### Fixed
@@ -113,7 +114,7 @@ All notable changes to Aeromux will be documented in this file.
 
 - **Web Map Aircraft Category Dots** — Colored category indicator dots in the aircraft list and detail panel header, matching the map marker colors: blue for normal, green for military, red for privacy (LADD/PIA). Category colors are defined as shared CSS classes used across the legend, list, and detail views.
 - **Web Map Category-Colored Trail** — Aircraft position trail now uses the selected aircraft's category color (dark blue for normal, dark green for military, dark crimson for privacy) instead of a fixed blue gradient.
-- **Web Map Range Outline** — Coverage polygon connecting the farthest aircraft positions received in each 1-degree bearing sector over the last 4 hours. Positions beyond 300 nm are discarded. Rendered as a semi-transparent fill with a dashed border below the range rings. On by default, toggleable from the settings panel. The toggle is disabled when receiver location is not configured. Resets on restart.
+- **Web Map Range Outline** — Coverage polygon connecting the farthest aircraft positions received in each 5-degree bearing sector over the last 4 hours. Positions beyond 300 nm are discarded. Rendered as a semi-transparent fill with a dashed border below the range rings. On by default, toggleable from the settings panel. The toggle is disabled when receiver location is not configured. Resets on restart.
 - **CPR Position Validation** — Three-layer position validation to eliminate wildly incorrect aircraft positions (appearing as long straight lines across the map) caused by CPR global decode errors from bit corruption passing CRC. Layer 1: receiver range check rejects decoded positions beyond 300 NM from receiver (skipped when receiver location is not configured). Layer 2: speed/distance plausibility check validates that position changes are physically possible given elapsed time and aircraft speed. Layer 3: position persistence counter requires 4 consecutive implausible positions before overwriting a known good position, preventing single bad decodes from corrupting tracks.
 
 ### Fixed
@@ -180,6 +181,7 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.7.7]: https://github.com/aeromux/aeromux/releases/tag/v0.7.7
 [0.7.6]: https://github.com/aeromux/aeromux/releases/tag/v0.7.6
 [0.7.5]: https://github.com/aeromux/aeromux/releases/tag/v0.7.5
 [0.7.0]: https://github.com/aeromux/aeromux/releases/tag/v0.7.0

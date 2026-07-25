@@ -59,7 +59,7 @@ Range rings can be toggled on or off from the settings panel. They are enabled b
 
 ### Range Outline
 
-A convex hull polygon showing the receiver's coverage area based on the farthest aircraft positions received in each 1-degree bearing sector. The outline grows over time as aircraft are received in new directions and at greater distances. Positions beyond 300 nm from the receiver are discarded. The outline uses a 4-hour sliding window and resets when the daemon is restarted.
+A polygon showing the receiver's coverage area, connecting the farthest aircraft position received in each 5-degree bearing sector. Empty sectors are skipped, so the shape follows actual reception coverage and can be irregular rather than smoothly convex. The outline grows over time as aircraft are received in new directions and at greater distances. Positions beyond 300 nm from the receiver are discarded. The outline uses a 24-hour sliding window and resets when the daemon is restarted.
 
 The range outline can be toggled on or off from the settings panel. It is enabled by default. When the receiver location is not configured, the toggle is disabled.
 
