@@ -11,7 +11,7 @@ All notable changes to Aeromux will be documented in this file.
 
 ### Changed
 
-- **RtlSdrManager 0.7.0** — Upgraded the RtlSdrManager RTL-SDR access library from 0.6.3 to 0.7.0. Device shutdown is now crash-safe: an error that stops asynchronous sample reading is logged and no longer escapes teardown or terminates the process. The tuner-gain conversion was corrected to round to the nearest supported step (tenths of a dB), so the configured gain maps to the exact value the hardware applies.
+- **RtlSdrManager 0.7.1** — Upgraded the RtlSdrManager RTL-SDR access library from 0.6.3 to 0.7.1. Device shutdown is now crash-safe: an error that stops asynchronous sample reading is logged and no longer escapes teardown or terminates the process. The tuner-gain conversion was corrected to round to the nearest supported step (tenths of a dB), so the configured gain maps to the exact value the hardware applies.
 
 ### Fixed
 
