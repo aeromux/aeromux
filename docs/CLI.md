@@ -193,13 +193,13 @@ Auto-update is **on by default** but only runs when database enrichment is actua
 
 ### `device`
 
-The device command lists all RTL-SDR USB receivers detected on the system. This is useful for identifying device indices and confirming that your hardware is recognized before configuring the `sdrSources` section of the YAML file. With the `--verbose` flag, it also displays detailed tuner parameters including supported gains and frequency ranges, which can help when fine-tuning the gain settings in your configuration.
+The device command lists all RTL-SDR USB receivers detected on the system. This is useful for identifying device indices and confirming that your hardware is recognized before configuring the `sdrSources` section of the YAML file. With the `--verbose` flag, it also displays detailed tuner parameters including supported gains and tunable frequency ranges, which help when fine-tuning the gain settings in your configuration and confirming that a receiver can reach the 1090 MHz Mode S frequency at all.
 
 #### Options
 
 | Option      | Description                                                                                           |
 |-------------|-------------------------------------------------------------------------------------------------------|
-| `--verbose` | Show detailed tuner parameters including supported gains and frequency range for each detected device |
+| `--verbose` | Show detailed tuner parameters including supported gains and tunable frequency ranges for each detected device |
 
 #### Usage Examples
 

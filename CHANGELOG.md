@@ -2,6 +2,20 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.7.8] — Unreleased
+
+### Added
+
+- **Device Tuner Coverage** — `aeromux device --verbose` now lists the frequency ranges each receiver's tuner can reach, and flags a tuner that cannot reach 1090 MHz as unusable for Mode S. Such a receiver previously aborted the entire verbose listing with an unhandled error; it is now reported inline and the remaining devices are listed normally.
+
+### Changed
+
+- **RtlSdrManager 0.8.0** — Upgraded the RtlSdrManager RTL-SDR access library from 0.7.1 to 0.8.0. Using a device after it has been closed is now a hard error inside the library rather than undefined behaviour; most importantly, starting a read on a closed device no longer terminates the process. Aeromux's sample callback now ends quietly when a device is closed mid-callback, so shutting down a device that did not stop within its timeout no longer logs a spurious processing error. The dropped-sample counter is now updated atomically.
+
+### Fixed
+
+- **Minimum Tuner Gain Accepted** — A `tunerGain` of `0` is now accepted on R820T/R828D receivers, where it is the tuner's lowest gain step. The driver previously reported 28 of the tuner's 29 gain steps and rejected `0`, so `aeromux device --verbose` under-reported the available gains and a valid configuration was refused at device open.
+
 ## [0.7.7] — 2026-07-25
 
 ### Added

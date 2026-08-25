@@ -241,7 +241,7 @@ For Mode S reception, Aeromux configures every device with the same radio parame
 | Center frequency | 1090 MHz | Mode S/ADS-B transponder frequency |
 | Sample rate | 2.4 MSPS | Required by the preamble detection algorithm |
 | USB buffer size | 512 KB | Depth of the USB bulk transfer buffer |
-| Samples per callback | 131,072 (8 × 16,384) | Batch size delivered per `SamplesAvailable` event |
+| Samples per callback | 131,072 | Batch size delivered per `SamplesAvailable` event |
 
 Gain mode (AGC or manual) and frequency correction (PPM) are configurable per device in the YAML configuration file.
 

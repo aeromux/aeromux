@@ -247,7 +247,8 @@ public sealed class DeviceWorker : IDisposable
     /// <param name="cancellationToken">Token to signal shutdown. When canceled, stops sample reception.</param>
     /// <exception cref="InvalidOperationException">Thrown when OpenDevice() has not been called first.</exception>
     /// <remarks>
-    /// This method starts async sample reading with 131,072 samples (8 buffers × 16384).
+    /// This method starts async sample reading with 131,072 samples per read, which the
+    /// driver fills across its transfer buffers in rotation.
     /// Samples are delivered via the OnSamplesAvailable event handler.
     /// Statistics are logged every 10 seconds via the background StatisticsLoop task.
     /// </remarks>
@@ -267,7 +268,8 @@ public sealed class DeviceWorker : IDisposable
         // Subscribe to sample availability events from RtlSdrManager
         _device.SamplesAvailable += OnSamplesAvailable;
 
-        // Start async reading with 8 buffers of 16384 samples each (131,072 total)
+        // Start async reading with 131,072 samples per read (~55 ms at 2.4 MSPS). The driver
+        // rotates through its own transfer buffers, each sized for one read.
         _device.StartReadSamplesAsync(requestedSamples: 8 * 16384);
 
         // Start background task for periodic statistics logging (every 10 seconds)
@@ -349,7 +351,9 @@ public sealed class DeviceWorker : IDisposable
     /// </remarks>
     private void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs args)
     {
-        // Race condition check: device may be closing while events are still firing
+        // Race condition check: device may be closing while events are still firing.
+        // Best-effort only — the device can still be closed after this check (see the
+        // ObjectDisposedException handler below).
         if (_device == null)
         {
             return;
@@ -457,6 +461,13 @@ public sealed class DeviceWorker : IDisposable
                 // Always return the pooled buffer, even if processing throws
                 rawBuffer.Return();
             }
+        }
+        catch (ObjectDisposedException)
+        {
+            // The device was closed between the null check above and the buffer read. The
+            // event handler is unsubscribed before the device is closed, so this can only be
+            // an invocation that was already in flight when shutdown began. Expected during
+            // teardown of a device that did not stop within its timeout — not an error.
         }
         catch (Exception ex)
         {

@@ -120,17 +120,48 @@ public class DeviceCommand : Command<DeviceSettings>
                 manager.OpenManagedDevice(device.Index, friendlyName);
                 RtlSdrManagedDevice managed = manager[friendlyName];
 
+                // Read the tuner's coverage before tuning. A tuner that cannot reach 1090 MHz
+                // rejects the center frequency outright, which would abort the probe for every
+                // remaining device.
+                IReadOnlyList<FrequencyRange> ranges = managed.SupportedFrequencyRanges;
+                Frequency modeSFrequency = Frequency.FromMHz(CenterFrequency);
+                bool reachesModeS = ranges.Any(range => range.Contains(modeSFrequency));
+
                 // Configure with Aeromux defaults
-                managed.CenterFrequency = Frequency.FromMHz(CenterFrequency);
                 managed.SampleRate = Frequency.FromMHz(SampleRate);
                 managed.TunerGainMode = TunerGainModes.AGC;
+
+                if (reachesModeS)
+                {
+                    managed.CenterFrequency = modeSFrequency;
+                }
+
                 managed.ResetDeviceBuffer();
+
+                // The ranges the tuner can reach, or the ADC's while direct sampling is
+                // active. A receiver that stops short of 1090 MHz cannot be used for Mode S
+                // at all, so say so rather than leaving the reader to compare the numbers.
+                string supportedFrequencies = ranges.Count == 0
+                    ? "unknown"
+                    : string.Join(", ", ranges);
+
+                if (!reachesModeS)
+                {
+                    supportedFrequencies += $" (cannot reach {CenterFrequency} MHz for Mode S)";
+                }
+
+                // Reading the center frequency before one has been set is an error, so report
+                // the untuned device rather than asking it for a value it does not have.
+                string centerFrequency = reachesModeS
+                    ? $"{managed.CenterFrequency.MHz} MHz"
+                    : "not set";
 
                 // Print all parameters aligned to the widest label (22 chars)
                 Console.WriteLine($"    {"Serial",-22}: {device.Serial}");
                 Console.WriteLine($"    {"Name",-22}: {device.Name}");
                 Console.WriteLine($"    {"Tuner type",-22}: {managed.TunerType}");
-                Console.WriteLine($"    {"Center frequency",-22}: {managed.CenterFrequency.MHz} MHz");
+                Console.WriteLine($"    {"Supported frequencies",-22}: {supportedFrequencies}");
+                Console.WriteLine($"    {"Center frequency",-22}: {centerFrequency}");
                 Console.WriteLine($"    {"Crystal frequency",-22}: {managed.CrystalFrequency}");
                 Console.WriteLine($"    {"Frequency correction",-22}: {managed.FrequencyCorrection} ppm");
                 Console.WriteLine($"    {"Bandwidth selection",-22}: {managed.TunerBandwidthSelectionMode}");
