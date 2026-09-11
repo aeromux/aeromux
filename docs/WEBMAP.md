@@ -32,6 +32,8 @@ When `apiEnabled` is `false`, the HTTP server is not started and neither the API
 
 The main area of the screen is a full-screen interactive map rendered using OpenStreetMap raster tiles. A dark overlay is applied on top of the map tiles to improve contrast with the aircraft markers.
 
+The map is the default of two views. See [Sky View](#sky-view) for the receiver-centric alternative, which shows the same aircraft as they appear in the sky above the antenna rather than on the ground.
+
 Aircraft are displayed as top-down silhouettes specific to each aircraft type (A320, B777, Cessna, helicopter, balloon, …), rotated by heading, and sized for comfortable on-screen visibility at typical map zoom levels. Marker color reflects altitude — lighter blue at ground level, deeper blue at cruise altitude. Military aircraft use a green palette; privacy aircraft (LADD / PIA) use red. The currently selected aircraft is highlighted in orange. Hovering over any aircraft shows a tooltip with the callsign, ICAO address, speed, and altitude.
 
 The selected aircraft keeps a permanent (pinned) tooltip that follows it as it moves and as the map is panned or zoomed. The pinned tooltip is distinguished by an accent border, and a second transient tooltip is shown simultaneously when hovering a different aircraft. The pinned tooltip clears when the aircraft is deselected or expires.
@@ -72,6 +74,72 @@ Squares are a fixed size in nautical miles regardless of the selected distance u
 The heatmap is **off by default** and toggled from the settings panel. When enabled, two controls appear: **Cell size** (2, 5, 10, 20, or 40 nm) and **Window** (1, 6, 12, or 24 hours), both adjustable live. The overlay is held in memory and is not persisted, so a daemon restart clears it and it refills over the following window.
 
 Server-side collection is controlled by the `heatmap.collect` option in the configuration file (default on). When collection is disabled, no data is gathered and the settings toggle is greyed out with an explanatory note.
+
+## Sky View
+
+An alternative view that shows where aircraft are **relative to the receiver** rather than relative to the ground. Where the map answers "where are the aircraft on the Earth?", the Sky View answers "if I stand at my antenna and look in this direction, where in the sky is each aircraft?".
+
+<div align="center">
+  <img src="images/webmap/skyview.jpeg" alt="Sky View" width="800">
+  <br>
+  <em>Sky View with the elevation grid, compass, aircraft at their bearing and elevation, and the coverage ribbon along the foot</em>
+</div>
+<br>
+
+The view is a perspective window on the sky: a virtual camera at the receiver's configured position and altitude, looking along a heading you control. Aircraft are placed by bearing and elevation angle, sized and hazed by distance, and tied to their bearing by a thin stem down to the horizon. Selecting an aircraft works exactly as it does on the map — the same detail panel, photo, and flight-profile chart appear in the left panel, and the selection survives switching between views.
+
+Sky View **requires a configured receiver location**; without one the `Sky` button is disabled. Setting `receiver.altitude` as well is optional but improves accuracy for elevated sites, since the horizon depends on antenna height.
+
+### Switching Views
+
+A `Map` / `Sky` control sits in the control panel at the top right, directly below the search box. The chosen view is remembered in the browser. Switching never clears the current selection: select an aircraft on the map, switch to Sky, and the camera swings round to face it.
+
+### Moving the Camera
+
+| Action | Effect |
+|--------|--------|
+| Drag left / right | Turn the camera. The scene follows your pointer one-to-one, so whatever you grab stays under it. |
+| Drag up / down | Tilt up towards the zenith. Tilting far enough carries the horizon out of the frame — which is what looking up means. |
+| Scroll | Field of view, 30°–120°. Also selectable in the settings panel. |
+| Click / tap an aircraft | Select it |
+| Click / tap empty sky | Deselect |
+| Double-click / double-tap | Reset heading, tilt, and field of view |
+
+At rest the camera is level and the horizon sits low in the frame, so the sky gets most of the view and the ground — which has nothing drawn on it — gets little. Traffic is concentrated near the horizon: at 20 nm even an aircraft at FL350 is only about 16° above it, and it takes a pass within a few miles to climb past 40°. A level camera covers roughly 0–39° of elevation, which contains almost everything.
+
+### What You See
+
+| Element | Meaning |
+|---------|---------|
+| Elevation grid | Arcs at 10°, 20°, 30°, 45° and 60° above the horizon. Deliberately uneven — nearly all traffic sits below 30°, so the grid is tighter low down. |
+| Compass | Bearing along the horizon: a tick every 10°, a number every 30°, and a letter at `N` / `E` / `S` / `W`. When tilting up carries the horizon out of view, the compass moves down to sit above the coverage ribbon so bearings stay readable. |
+| Horizon | Level for a receiver at sea level, slightly below level for an elevated one. |
+| Aircraft | Coloured by altitude using the same palette as the map — lighter at ground level, deeper at cruise; green for military, red for LADD/PIA, orange when selected. Nearer aircraft are drawn larger and more opaque. A short tick shows the direction of travel. |
+| Sub-horizon marks | Flattened marks sitting **on** the horizon, for aircraft hidden by the curve of the Earth — surface traffic, and very low traffic far away. Their true (negative) elevation is still shown in the tooltip. |
+| Coverage ribbon | A strip along the foot of the view showing how far you actually receive in each direction. See below. |
+| Readout | Camera heading, field of view, how many aircraft are in view versus in range, and counts of any shown as sub-horizon marks or omitted for having no altitude. |
+
+There are deliberately **no range rings and no ground plane**. At a realistic antenna height the visible ground is a sliver at the horizon — a 10 m rooftop antenna sees only about 6.6 nm of ground before the Earth curves away — so rings would be invisible rather than merely cluttered. Distance is carried by the tooltips and the coverage ribbon instead.
+
+### Coverage Ribbon
+
+The strip along the bottom shows the farthest aircraft received in each 5° of bearing over the last 24 hours — the same measurements the map draws as a range outline, laid out against bearing instead of on a map. A notch is a direction nothing has been heard from, which over time traces out where buildings or terrain block the antenna.
+
+Its scale is marked down the left edge, each tick labelled in the current distance unit. The scale is the farthest bearing rounded up to the next 50 nm, so a given height means a fixed distance rather than rescaling every time a distant contact arrives. It is computed across all bearings, not just the ones on screen, which is why the visible profile often does not fill the band — that keeps heights comparable as you turn the camera.
+
+The ribbon needs at least three bearings with contacts before it appears, so a freshly started daemon shows nothing until traffic has been seen in a few directions. It can be turned off in the settings panel.
+
+### Accuracy
+
+Elevation angles account for the receiver's altitude, the curvature of the Earth, and atmospheric refraction. This matters more than it sounds: an aircraft at 10 km and 300 km away sits less than a degree above the horizon, where naive flat-Earth geometry would place it at nearly 2° — floating in clear sky instead of grazing the horizon.
+
+Geometric (GNSS) altitude is used when an aircraft reports it, falling back to barometric otherwise. Because barometric altitude is always referenced to standard pressure, that fallback can be out by around 1 000 ft in a non-standard atmosphere. Combined with the small difference between the GNSS and sea-level altitude references, elevation angles are good to roughly a degree for close traffic — ample for knowing where to look, but not a survey instrument.
+
+### 360° Flattened Mode
+
+A **Flatten to 360°** toggle switches from the camera-like view to a single panorama of the whole sky, with bearing running across the full width. Dragging scrolls it so the bearing of interest sits centre-frame; tilt and field of view no longer apply.
+
+Use it to see everything at once, including traffic directly overhead; use the default view to see what you would actually see looking in one direction.
 
 ## Aircraft List (Left Panel)
 
@@ -136,7 +204,7 @@ A **Reset layout** button restores the panel to its defaults: the expanded/colla
 
 ## Control Panel (Top Right)
 
-The control panel in the top-right corner provides search and settings functionality.
+The control panel in the top-right corner provides search, the `Map` / `Sky` view switch, and settings functionality.
 
 ### Search
 
@@ -175,12 +243,27 @@ Unit changes are applied immediately across the entire interface — the aircraf
 
 #### Interface
 
+Range rings, range outline, and the heatmap describe the map, so they are shown only in Map mode; in Sky mode they are replaced by the Sky View options below. Units and aircraft photos apply to both.
+
 | Option           | Description                                                                                                                                                        | Default  |
 |------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| Range rings      | Show or hide the range rings on the map                                                                                                                            | On       |
-| Range outline    | Show or hide the receiver coverage outline (requires receiver location)                                                                                            | On       |
+| Range rings      | Show or hide the range rings on the map (Map mode)                                                                                                                 | On       |
+| Range outline    | Show or hide the receiver coverage outline, requires receiver location (Map mode)                                                                                  | On       |
 | Aircraft photos  | Show or hide the Aircraft Photo section in the detail panel. When off, the section is removed entirely (not just collapsed) so it can't be accidentally re-opened. | On       |
-| Traffic heatmap  | Show or hide the traffic-density heatmap overlay, with live cell-size and window controls. Disabled when server-side collection is turned off (`heatmap.collect: false`).                | Off      |
+| Traffic heatmap  | Show or hide the traffic-density heatmap overlay, with live cell-size and window controls. Disabled when server-side collection is turned off (`heatmap.collect: false`). (Map mode)                | Off      |
+
+#### Sky View
+
+Shown in place of the map-only options when [Sky View](#sky-view) is active.
+
+| Option          | Description                                                                                       | Default |
+|-----------------|---------------------------------------------------------------------------------------------------|---------|
+| Maximum range   | How far from the receiver to show traffic, labelled in the selected distance unit                  | 150 nm  |
+| Field of view   | Width of the camera view. Disabled in flattened mode, where the whole sky is shown at a fixed scale. | 75°     |
+| Labels          | Whether aircraft callsigns are drawn beside their marks: only the selection, automatically where they do not collide, or all of them. The selected and hovered aircraft are never labelled — their callsign is already in the tooltip. | Auto on desktop, Selected on mobile |
+| Flatten to 360° | Switch to the whole-sky panorama                                                                   | Off     |
+| Coverage ribbon | Show the measured per-bearing reception range along the foot of the view                           | On      |
+| Selection trail | Draw the selected aircraft's recent path through the sky                                           | On      |
 
 #### Reset
 
@@ -189,6 +272,8 @@ The "Reset to defaults" button at the bottom of the settings dropdown restores a
 ## Browser Requirements
 
 The web map requires a modern browser with WebGL support:
+
+Sky View is drawn on a plain 2D canvas rather than with WebGL, so it keeps working on a browser where the map itself cannot start.
 
 | Browser          | Minimum Version |
 |------------------|-----------------|

@@ -2,18 +2,21 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.7.8] — Unreleased
+## [0.8.0] — Unreleased
 
 ### Added
 
+- **Web Map: Sky View** — A second Web Map view showing where aircraft are relative to the receiver rather than on a flat map. A virtual camera at the configured receiver position looks along a heading you control; aircraft are placed by bearing and elevation angle, sized and hazed by distance. A `Map` / `Sky` control in the control panel switches views, sharing the selection, detail panel, and search with the map. Elevation angles account for receiver altitude, the curvature of the Earth, and atmospheric refraction, so distant traffic sits correctly near the horizon instead of floating above it; aircraft hidden by the curve are marked on the horizon line rather than silently dropped, and their true elevation is still reported. A coverage ribbon along the foot of the view shows how far the receiver has actually heard in each 5° of bearing over the last 24 hours, on a labelled distance scale. An optional 360° flattened mode shows the whole sky at once. Drawn on a plain 2D canvas, so it works where the WebGL map cannot start. Requires a configured receiver location; `receiver.altitude` is optional but improves accuracy for elevated sites.
 - **Device Tuner Coverage** — `aeromux device --verbose` now lists the frequency ranges each receiver's tuner can reach, and flags a tuner that cannot reach 1090 MHz as unusable for Mode S. Such a receiver previously aborted the entire verbose listing with an unhandled error; it is now reported inline and the remaining devices are listed normally.
 
 ### Changed
 
+- **Web Map Viewport Subscription** — Which aircraft the server pushes is now explicit client-side state rather than being derived from the map camera, so the two views can request different regions over the same API. Map behaviour is unchanged.
 - **RtlSdrManager 0.8.0** — Upgraded the RtlSdrManager RTL-SDR access library from 0.7.1 to 0.8.0. Using a device after it has been closed is now a hard error inside the library rather than undefined behaviour; most importantly, starting a read on a closed device no longer terminates the process. Aeromux's sample callback now ends quietly when a device is closed mid-callback, so shutting down a device that did not stop within its timeout no longer logs a spurious processing error. The dropped-sample counter is now updated atomically.
 
 ### Fixed
 
+- **Web Map Flight Profile Altitude** — The flight-profile chart now falls back to geometric (GNSS) altitude when an aircraft reports no barometric altitude. Such aircraft previously contributed no altitude points at all, leaving gaps in the chart.
 - **Minimum Tuner Gain Accepted** — A `tunerGain` of `0` is now accepted on R820T/R828D receivers, where it is the tuner's lowest gain step. The driver previously reported 28 of the tuner's 29 gain steps and rejected `0`, so `aeromux device --verbose` under-reported the available gains and a valid configuration was refused at device open.
 
 ## [0.7.7] — 2026-07-25

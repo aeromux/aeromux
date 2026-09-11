@@ -27,7 +27,7 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 - **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints. See the [API Guide](docs/API.md) for full documentation.
 
-- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, range rings, and an optional traffic-density heatmap. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
+- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, range rings, and an optional traffic-density heatmap. A second **Sky View** shows where aircraft are relative to the receiver — bearing, elevation angle, and distance from your antenna — rather than on a flat map, along with the coverage actually measured in each direction. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
 - **Beast TCP Input** — Connect to one or more external Beast-compatible servers (dump1090, readsb, or another Aeromux daemon) over the network. Beast sources can be used alone or combined with local SDR devices. Includes automatic reconnection with exponential backoff if a connection drops.
 
@@ -57,6 +57,13 @@ See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, a
 </div>
 <br>
 
+<div align="center">
+  <img src="docs/images/webmap/skyview.jpeg" alt="Sky View" width="800">
+  <br>
+  <em>Sky View — the same aircraft seen from the receiver, by bearing and elevation, with measured coverage along the foot</em>
+</div>
+<br>
+
 See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
 ## Installation
@@ -68,7 +75,7 @@ Pre-built packages are available on the [GitHub Releases](https://github.com/aer
 Download the `.deb` package for your architecture (ARM64 for Raspberry Pi, x64 for standard Linux) and install:
 
 ```bash
-sudo dpkg -i aeromux_0.7.8-1_arm64.deb
+sudo dpkg -i aeromux_0.8.0-1_arm64.deb
 ```
 
 The package installs a systemd service that starts automatically. Configuration is at `/etc/aeromux/aeromux.yaml`. Requires `librtlsdr0` — install with `sudo apt-get install librtlsdr0`.
@@ -80,7 +87,7 @@ See the [Debian Packaging Guide](docs/PACKAGING-DEB.md) for details on configura
 Download the `.pkg` installer for your architecture (Apple Silicon or Intel) and double-click to install, or use the command line:
 
 ```bash
-sudo installer -pkg aeromux_0.7.8_macos_arm64.pkg -target /
+sudo installer -pkg aeromux_0.8.0_macos_arm64.pkg -target /
 ```
 
 The installer places the binary at `/opt/aeromux/bin/aeromux` with a symlink in `/usr/local/bin/` for PATH access. Configuration and data are stored under `~/Library/Application Support/aeromux/`. Requires `librtlsdr` — install with `brew install librtlsdr`.
