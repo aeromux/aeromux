@@ -524,20 +524,25 @@ test('the ribbon states its own scale, so the bars are readable without a key', 
         (c) => c.name === 'fillText' && ['200 nm', '100 nm', '0 nm'].includes(c.args[0])
     );
     assert.equal(axisText.length, 3, 'all three ticks drawn');
+    // On the right: the aircraft list and detail panel own the left of the viewport
+    // and either can reach far enough down to cover a left-hand gutter.
     for (const label of axisText) {
         const [text, x] = label.args;
-        assert.ok(x > 8 && x < 80, `${text} sits in the gutter, clear of the edge (x=${x})`);
+        assert.ok(
+            x > frame.safe.right - 60 && x < frame.safe.right,
+            `${text} sits in the right gutter, clear of the edge (x=${x})`
+        );
     }
 
     // Nothing may escape the strip — the backing chips are what actually bound the
     // labels, so they are the thing to check.
     const chips = calls.filter(
-        (c) => c.name === 'fillRect' && c.args[0] > 0 && c.args[0] < 80 && c.args[3] === 12
+        (c) => c.name === 'fillRect' && c.args[3] === 12 && c.args[0] > frame.safe.right - 120
     );
     assert.equal(chips.length, 3, 'each tick has a backing chip');
     for (const chip of chips) {
-        const [x, y, , h] = chip.args;
-        assert.ok(x > 0, 'the chip is clear of the frame edge');
+        const [x, y, w, h] = chip.args;
+        assert.ok(x + w < frame.safe.right, 'the chip stays clear of the frame edge');
         assert.ok(y >= frame.ribbonTop, `a chip at ${y} stays below the band top`);
         assert.ok(y + h <= frame.ribbonBottom, `a chip at ${y}+${h} stays above the band bottom`);
     }

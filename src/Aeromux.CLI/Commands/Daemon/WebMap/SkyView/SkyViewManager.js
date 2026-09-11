@@ -63,9 +63,10 @@ const RIBBON_BAND_PX = 64;
 // sit on their gridlines without any part of them escaping the strip.
 const RIBBON_PAD_TOP = 11;
 const RIBBON_PAD_BOTTOM = 7;
-// Right edge of the scale labels. Wide enough for "100 nm" with a margin from the
-// frame edge, so the text is never flush against it.
-const RIBBON_AXIS_X = 56;
+// Distance of the scale labels from the right edge of the view. They sit on the
+// right because the aircraft list and detail panel occupy the left, and either can
+// reach far enough down the viewport to cover a left-hand gutter entirely.
+const RIBBON_AXIS_MARGIN = 12;
 
 // Where the horizon sits, as a fraction of the view height, with the camera level.
 // The projection's principal point is placed here rather than at the middle of the
@@ -761,19 +762,20 @@ function drawRibbon(frame) {
     ctx.lineTo(frame.full.width, plotBottom);
     ctx.stroke();
 
-    drawRibbonAxis(plotTop, plotBottom);
+    drawRibbonAxis(frame, plotTop, plotBottom);
 }
 
 // Without these the bars are self-evidently something, but nothing says what. Every
 // tick carries its unit: reading a bare "50" against a distance scale means working
 // out what it is measured in from the one label that happens to say.
-function drawRibbonAxis(plotTop, plotBottom) {
+function drawRibbonAxis(frame, plotTop, plotBottom) {
     const half = plotTop + (plotBottom - plotTop) / 2;
     const ticks = [
         [plotTop, `${outlineScaleNm} nm`],
         [half, `${Math.round(outlineScaleNm / 2)} nm`],
         [plotBottom, '0 nm']
     ];
+    const right = frame.safe.right - RIBBON_AXIS_MARGIN;
 
     ctx.font = LABEL_FONT;
     ctx.textAlign = 'right';
@@ -784,9 +786,9 @@ function drawRibbonAxis(plotTop, plotBottom) {
         // over one is unreadable. Centred on its gridline, which the band's padding
         // guarantees room for.
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillRect(RIBBON_AXIS_X - width - 4, y - 6, width + 7, 12);
+        ctx.fillRect(right - width - 4, y - 6, width + 7, 12);
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillText(text, RIBBON_AXIS_X, y + 3.5);
+        ctx.fillText(text, right, y + 3.5);
     }
 
     ctx.textAlign = 'left';
