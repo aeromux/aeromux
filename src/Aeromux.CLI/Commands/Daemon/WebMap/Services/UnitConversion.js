@@ -61,7 +61,16 @@ const SETTINGS_DEFAULTS = {
     aircraftPhotos: true,
     heatmap: false,          // traffic-density overlay, off by default
     heatmapCellNm: 2,        // fixed-nm display cell size
-    heatmapWindowHours: 24   // rolling window
+    heatmapWindowHours: 24,  // rolling window
+    viewMode: 'map',         // 'map' | 'sky' — which view is rendering
+    skyMaxRangeNm: 150,      // Sky View range from the receiver
+    skyFov: 75,              // horizontal field of view, degrees
+    skyPitch: 15,            // camera tilt above the horizon, degrees
+    skyFlatten: false,       // 360-degree equirectangular panorama
+    skyRibbon: true,         // coverage ribbon below the horizon
+    skyTrail: true,          // 3D path for the selected aircraft
+    skyLabels: null          // 'selection' | 'auto' | 'all'; null = not yet
+                             // resolved for this device, see App.jsx
 };
 
 export function loadSettings() {
@@ -75,7 +84,15 @@ export function loadSettings() {
                 aircraftPhotos: parsed.aircraftPhotos !== undefined ? parsed.aircraftPhotos : SETTINGS_DEFAULTS.aircraftPhotos,
                 heatmap: parsed.heatmap !== undefined ? parsed.heatmap : SETTINGS_DEFAULTS.heatmap,
                 heatmapCellNm: parsed.heatmapCellNm !== undefined ? parsed.heatmapCellNm : SETTINGS_DEFAULTS.heatmapCellNm,
-                heatmapWindowHours: parsed.heatmapWindowHours !== undefined ? parsed.heatmapWindowHours : SETTINGS_DEFAULTS.heatmapWindowHours
+                heatmapWindowHours: parsed.heatmapWindowHours !== undefined ? parsed.heatmapWindowHours : SETTINGS_DEFAULTS.heatmapWindowHours,
+                viewMode: parsed.viewMode !== undefined ? parsed.viewMode : SETTINGS_DEFAULTS.viewMode,
+                skyMaxRangeNm: parsed.skyMaxRangeNm !== undefined ? parsed.skyMaxRangeNm : SETTINGS_DEFAULTS.skyMaxRangeNm,
+                skyFov: parsed.skyFov !== undefined ? parsed.skyFov : SETTINGS_DEFAULTS.skyFov,
+                skyPitch: parsed.skyPitch !== undefined ? parsed.skyPitch : SETTINGS_DEFAULTS.skyPitch,
+                skyFlatten: parsed.skyFlatten !== undefined ? parsed.skyFlatten : SETTINGS_DEFAULTS.skyFlatten,
+                skyRibbon: parsed.skyRibbon !== undefined ? parsed.skyRibbon : SETTINGS_DEFAULTS.skyRibbon,
+                skyTrail: parsed.skyTrail !== undefined ? parsed.skyTrail : SETTINGS_DEFAULTS.skyTrail,
+                skyLabels: parsed.skyLabels !== undefined ? parsed.skyLabels : SETTINGS_DEFAULTS.skyLabels
             };
         }
     } catch (e) {
@@ -134,6 +151,13 @@ export function resetAllSettings() {
     } catch (e) {
         // Ignore storage errors
     }
+}
+
+// Nautical miles to kilometers. Settings store distances in nautical miles
+// regardless of the user's display unit, so conversions happen at the point of
+// use rather than in storage.
+export function nmToKm(nm) {
+    return nm * 1.852;
 }
 
 export function convertNauticalMiles(nm, unit) {

@@ -19,7 +19,8 @@ import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { fetchStats, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
-import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight } from '../Services/UnitConversion.js';
+import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight, nmToKm } from '../Services/UnitConversion.js';
+import { receiverBox } from '../Services/SkyViewGeometry.js';
 import { clampSheetPx, pxToFraction } from '../Services/SheetHeight.js';
 import { HoverTooltip } from './HoverTooltip.jsx';
 import { AircraftList } from './AircraftList.jsx';
@@ -57,6 +58,11 @@ export function App() {
     // state and drops heatmap frames arriving right after the overlay is toggled off.
     const heatmapEnabledRef = useRef(settings.heatmap);
     heatmapEnabledRef.current = settings.heatmap;
+    // Mirror the view mode and receiver location into refs so the
+    // mount-registered SignalR handlers — onReconnected above all — read current
+    // values rather than the ones captured when they were registered.
+    const viewModeRef = useRef('map');
+    const receiverRef = useRef(null);
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
     const defaultSections = {
@@ -66,6 +72,30 @@ export function App() {
     };
     const [sections, setSections] = useState({ ...defaultSections });
     const [showMore, setShowMore] = useState({});
+
+    // Single source of truth for which region we are subscribed to. The server
+    // keeps one viewport per client, so both views share it: Map mode follows the
+    // MapLibre camera, Sky mode follows the receiver and its max-range setting.
+    // Every caller goes through here, otherwise a reconnect would silently revert
+    // the subscription to whatever the hidden map last showed.
+    const activeBounds = useCallback(() => {
+        if (viewModeRef.current === 'sky' && receiverRef.current) {
+            const { lat, lon } = receiverRef.current;
+            // Clamped because nothing validates persisted settings; 300 nm is the
+            // range-outline tracker's own cap.
+            const rangeNm = Math.min(300, Math.max(10, loadSettings().skyMaxRangeNm));
+            return receiverBox(lat, lon, nmToKm(rangeNm));
+        }
+        return MapManager.getViewportBounds();
+    }, []);
+
+    const applyBounds = useCallback(() => {
+        const bounds = activeBounds();
+        if (bounds) {
+            SignalR.updateViewport(bounds.south, bounds.west, bounds.north, bounds.east);
+        }
+        return bounds;
+    }, [activeBounds]);
 
     // Flush buffered aircraft updates to state and map.
     // SignalR pushes individual aircraft updates rapidly — batching them into 50ms
@@ -288,9 +318,13 @@ export function App() {
         MapManager.onSelectedTooltip((data) => setSelectedTooltip(data));
         MapManager.onHeatmapHover((data) => setHeatmapHover(data));
 
-        // Viewport changes → send to SignalR
-        MapManager.onViewportChange((bounds) => {
-            SignalR.updateViewport(bounds.south, bounds.west, bounds.north, bounds.east);
+        // Viewport changes → send to SignalR. Guarded by mode: map.resize() on the
+        // way back from Sky mode fires a move event, which would otherwise overwrite
+        // the sky subscription.
+        MapManager.onViewportChange(() => {
+            if (viewModeRef.current === 'map') {
+                applyBounds();
+            }
         });
 
         // Fetch stats for receiver location, then initial aircraft
@@ -300,7 +334,14 @@ export function App() {
                 if (stats.Version) setVersion(stats.Version);
                 setHeatmapCollectionEnabled(stats.HeatmapCollectionEnabled === true);
                 if (stats.Receiver && stats.Receiver.Latitude != null && stats.Receiver.Longitude != null) {
-                    const loc = { lat: stats.Receiver.Latitude, lon: stats.Receiver.Longitude };
+                    // altM feeds the Sky View horizon; the config key is optional, so
+                    // an unset altitude means a horizon exactly at eye level.
+                    const loc = {
+                        lat: stats.Receiver.Latitude,
+                        lon: stats.Receiver.Longitude,
+                        altM: stats.Receiver.AltitudeMeters ?? 0
+                    };
+                    receiverRef.current = loc;
                     setReceiverLocation(loc);
                     MapManager.setCenter(loc.lat, loc.lon, 8);
                     MapManager.updateRangeRings(loc.lat, loc.lon, loadSettings().rangeRings, loadUnits().distance);
@@ -308,7 +349,7 @@ export function App() {
 
                 // Wait for map to settle, then fetch initial aircraft
                 setTimeout(async () => {
-                    const bounds = MapManager.getViewportBounds();
+                    const bounds = activeBounds();
                     if (bounds) {
                         try {
                             const data = await fetchAircraft(bounds);
@@ -334,18 +375,17 @@ export function App() {
                     }
 
                     // Connect SignalR
-                    connectSignalR(bounds);
+                    connectSignalR();
                 }, 500);
             } catch (e) {
                 // Stats fetch failed — try aircraft without center
                 setTimeout(() => {
-                    const bounds = MapManager.getViewportBounds();
-                    connectSignalR(bounds);
+                    connectSignalR();
                 }, 500);
             }
         })();
 
-        function connectSignalR(initialBounds) {
+        function connectSignalR() {
             SignalR.connect({
                 handlers: {
                     onAircraftUpdated: (data) => {
@@ -422,8 +462,10 @@ export function App() {
                         setHeatmapScale({ scaleMax: data.ScaleMax, maxCount: data.MaxCount });
                     },
                     onReconnected: async () => {
-                        // Re-fetch aircraft to reconcile stale state
-                        const bounds = MapManager.getViewportBounds();
+                        // Re-fetch aircraft to reconcile stale state. Bounds come from
+                        // activeBounds() so a reconnect while in Sky mode re-asserts the
+                        // receiver box rather than the hidden map's stale viewport.
+                        const bounds = activeBounds();
                         if (bounds) {
                             try {
                                 const data = await fetchAircraft(bounds);
@@ -432,7 +474,7 @@ export function App() {
                                 aircraftMapRef.current = newMap;
                                 setAircraftMap(newMap);
                                 MapManager.updateMarkers(newMap);
-                                SignalR.updateViewport(bounds.south, bounds.west, bounds.north, bounds.east);
+                                applyBounds();
                             } catch (e) {
                                 // Ignore
                             }
@@ -445,12 +487,9 @@ export function App() {
                     }
                 }
             }).then(() => {
-                if (initialBounds) {
-                    SignalR.updateViewport(
-                        initialBounds.south, initialBounds.west,
-                        initialBounds.north, initialBounds.east
-                    );
-                }
+                // Re-derived here rather than captured at call time, so the bounds sent
+                // are whatever the active view wants once the connection is actually up.
+                applyBounds();
                 // Assert heatmap params once the connection is up. The settings-sync
                 // effect runs at mount before the connection is Connected, so its
                 // enable call is lost; re-send it here (and on reconnect).
