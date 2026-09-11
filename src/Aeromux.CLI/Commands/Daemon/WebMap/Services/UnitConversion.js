@@ -65,7 +65,7 @@ const SETTINGS_DEFAULTS = {
     viewMode: 'map',         // 'map' | 'sky' — which view is rendering
     skyMaxRangeNm: 150,      // Sky View range from the receiver
     skyFov: 75,              // horizontal field of view, degrees
-    skyPitch: 15,            // camera tilt above the horizon, degrees
+    skyPitch: 0,             // camera tilt above the horizon, degrees
     skyFlatten: false,       // 360-degree equirectangular panorama
     skyRibbon: true,         // coverage ribbon below the horizon
     skyTrail: true,          // 3D path for the selected aircraft
@@ -99,6 +99,15 @@ export function loadSettings() {
         // Ignore parse errors
     }
     return { ...SETTINGS_DEFAULTS };
+}
+
+// Some defaults depend on the device rather than being fixed, so they are stored as
+// null until first resolved. Anything that restores defaults has to run settings
+// through here, otherwise the sentinel survives and no option in the group matches —
+// the control then renders with nothing selected at all.
+export function resolveDeviceDefaults(settings, isMobile) {
+    if (settings.skyLabels != null) return settings;
+    return { ...settings, skyLabels: isMobile ? 'selection' : 'auto' };
 }
 
 export function saveSettings(settings) {

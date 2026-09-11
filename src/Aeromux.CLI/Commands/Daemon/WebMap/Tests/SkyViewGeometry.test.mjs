@@ -24,6 +24,8 @@ import {
     aircraftAltitudeM,
     destinationPoint,
     wrap180,
+    ribbonScaleNm,
+    RIBBON_SCALE_STEP_NM,
     receiverBox
 } from '../Services/SkyViewGeometry.js';
 import { nmToKm, haversineDistance } from '../Services/UnitConversion.js';
@@ -261,6 +263,31 @@ test('destinationPoint steps the right way and the right distance', () => {
     const east = destinationPoint(50, 8, 90, 100);
     assert.ok(east.Longitude > 8, 'moved east');
     near(haversineDistance(50, 8, east.Latitude, east.Longitude), 100, 0.5, 'distance east');
+});
+
+// -------------------- ribbon scale --------------------
+
+test('the ribbon scale rounds a measured reach up to a fixed step', () => {
+    assert.equal(ribbonScaleNm(70), 100);
+    assert.equal(ribbonScaleNm(1), 50);
+    assert.equal(ribbonScaleNm(120), 150);
+    assert.equal(ribbonScaleNm(200), 200, 'an exact multiple is left alone');
+});
+
+test('the scale holds until a step boundary is crossed', () => {
+    // The point of rounding: one distant contact must not rescale the whole
+    // profile, which would change what a given block height means.
+    const step = RIBBON_SCALE_STEP_NM;
+    const scale = ribbonScaleNm(step + 10);
+    for (const reach of [step + 10, step + 25, step * 2 - 0.1]) {
+        assert.equal(ribbonScaleNm(reach), scale, `a reach of ${reach} holds the scale`);
+    }
+    assert.ok(ribbonScaleNm(step * 2 + 1) > scale, 'and it steps up once passed');
+});
+
+test('no coverage yields no scale, so nothing is drawn', () => {
+    assert.equal(ribbonScaleNm(0), 0);
+    assert.equal(ribbonScaleNm(-5), 0);
 });
 
 // -------------------- receiverBox --------------------

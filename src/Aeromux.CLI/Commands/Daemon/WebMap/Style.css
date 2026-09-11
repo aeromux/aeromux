@@ -81,6 +81,28 @@ body:has(.webgl-error) {
     z-index: 0;
 }
 
+/* Sky View canvas. Sits in the same place as the map; only one is visible at a
+   time. touch-action: none so the canvas owns drag and pinch rather than the page
+   scrolling or zooming underneath it. */
+.sky-container {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    touch-action: none;
+}
+
+.sky-container canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Applied to whichever view is inactive. Both stay mounted so neither renderer is
+   torn down and rebuilt on a switch. */
+.hidden-view {
+    display: none;
+}
+
 /* ── Panel Base ───────────────────────────────────────────────────────────── */
 
 .panel {
@@ -467,6 +489,66 @@ body:has(.webgl-error) {
     flex-shrink: 0;
 }
 
+/* Sky View readout. Positioned imperatively by the renderer, which knows how much
+   of the canvas the panels cover; the 16px it adds matches their own inset from the
+   corner, so the readout lines up with them. */
+/* Background, blur, shadow and radius come from .panel, which this element also
+   carries — only its layout and placement are set here. */
+.sky-hud {
+    top: 16px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-family: var(--font-family);
+    line-height: 1;
+    white-space: nowrap;
+    /* Never a target: it is a readout, and the scene behind it stays draggable. */
+    pointer-events: none;
+}
+
+.sky-hud-item {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.sky-hud-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+
+.sky-hud-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    /* Equal-width digits, so a changing heading does not jitter the layout. */
+    font-variant-numeric: tabular-nums;
+}
+
+.sky-hud-note {
+    padding-left: var(--spacing-md);
+    border-left: 1px solid var(--color-panel-border);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+/* The view switch sits on its own row below the search input, so it inherits the
+   control panel's top-right to top-centre to full-width cascade unchanged. */
+.view-toggle-row {
+    margin-top: var(--spacing-sm);
+    margin-bottom: 0;
+}
+
+.unit-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .settings-btn {
     flex-shrink: 0;
     width: 34px;
@@ -819,6 +901,9 @@ body:has(.webgl-error) {
     pointer-events: none;
     font-size: 12px;
     min-width: 100px;
+    /* The box is positioned by its centre, so near a viewport edge the browser would
+       otherwise size it to the remaining space and wrap the text. */
+    white-space: nowrap;
 }
 
 /* Pinned tooltip for the selected aircraft — accent border so it reads as
@@ -873,6 +958,15 @@ body:has(.webgl-error) {
     color: var(--color-text-primary);
     transform: translate(-50%, -100%);
     white-space: nowrap;
+}
+
+/* Explanatory note under a setting, for overlays whose meaning is not obvious from
+   the control alone. */
+.settings-hint {
+    margin: 2px 0 var(--spacing-xs) 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
 }
 
 .settings-field-label {

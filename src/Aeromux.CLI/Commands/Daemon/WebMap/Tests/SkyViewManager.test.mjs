@@ -19,7 +19,7 @@ const Sky = await import('../SkyView/SkyViewManager.js');
 
 const BASE_SETTINGS = {
     skyFov: 75,
-    skyPitch: 15,
+    skyPitch: 0,
     skyFlatten: false,
     skyRibbon: true,
     skyTrail: true,
@@ -29,8 +29,8 @@ const BASE_SETTINGS = {
 
 const RECEIVER = { lat: 50, lon: 8 };
 
-// Places a synthetic aircraft at a bearing and ground distance from the receiver.
-function addAircraft(map, icao, bearingDeg, distanceKm, altitudeFeet, extra = {}) {
+// A coordinate at a bearing and ground distance from the receiver.
+function coordinateAt(bearingDeg, distanceKm) {
     const d = distanceKm / 6371;
     const b = (bearingDeg * Math.PI) / 180;
     const phi1 = (RECEIVER.lat * Math.PI) / 180;
@@ -40,11 +40,15 @@ function addAircraft(map, icao, bearingDeg, distanceKm, altitudeFeet, extra = {}
         Math.sin(b) * Math.sin(d) * Math.cos(phi1),
         Math.cos(d) - Math.sin(phi1) * Math.sin(phi2)
     );
+    return { Latitude: (phi2 * 180) / Math.PI, Longitude: (lambda2 * 180) / Math.PI };
+}
 
+// Places a synthetic aircraft at a bearing and ground distance from the receiver.
+function addAircraft(map, icao, bearingDeg, distanceKm, altitudeFeet, extra = {}) {
     map.set(icao, {
         ICAO: icao,
         Callsign: icao,
-        Coordinate: { Latitude: (phi2 * 180) / Math.PI, Longitude: (lambda2 * 180) / Math.PI },
+        Coordinate: coordinateAt(bearingDeg, distanceKm),
         GeometricAltitude: altitudeFeet == null
             ? null
             : { Meters: altitudeFeet * 0.3048, Feet: altitudeFeet },
@@ -106,6 +110,32 @@ test('the hit index mirrors what was drawn', () => {
     assert.equal(state.hitIndex.length, state.lastFrame.drawable.length);
 });
 
+test('a zero-sized container draws nothing, and resizing recovers', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'AHEAD', 0, 20, 35000);
+    Sky.updateMarkers(map);
+    assert.ok(canvas.width > 0, 'starts with a real size');
+
+    // A container still display:none measures zero. Sizing the canvas from that
+    // leaves it 0x0, and nothing is visible however much is drawn into it.
+    const realRect = canvas.getBoundingClientRect;
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 });
+    Sky.resize();
+    assert.equal(canvas.width, 0, 'the canvas collapses');
+    assert.equal(canvas.height, 0);
+
+    // Recovery must not need anything beyond a resize once the container is shown.
+    canvas.getBoundingClientRect = realRect;
+    Sky.resize();
+    Sky.updateMarkers(map);
+    const frame = Sky.__test.state().lastFrame;
+    assert.ok(canvas.width > 0, 'the canvas is sized again');
+    assert.equal(frame.safe.width, 1400, 'and the safe area matches the container');
+    const ahead = frame.drawable.find((d) => d.icao === 'AHEAD');
+    assert.ok(ahead && ahead.x > 0 && ahead.x < 1400, 'the scene lands inside the frame');
+});
+
 // -------------------- sub-horizon clamping --------------------
 
 test('aircraft below the horizon are clamped to it, not culled', () => {
@@ -142,23 +172,118 @@ test('sub-horizon marks are drawn behind airborne chips', () => {
     assert.ok(firstMark < firstChip, 'clamped marks cannot occlude real low traffic');
 });
 
-// -------------------- layout --------------------
-
-test('the ribbon hangs below the horizon and inside the safe area', () => {
+test('the background covers the whole canvas, not just the safe area', () => {
     reset();
+    // A left inset is where this bites: the panel does not reach the bottom of the
+    // viewport, so clipping the paint to the safe area leaves a blank strip below it.
+    Sky.setSafeInsets({ left: 436 });
+    const map = new Map();
+    addAircraft(map, 'AHEAD', 0, 20, 35000);
+
+    resetCalls();
+    Sky.updateMarkers(map);
     const frame = Sky.__test.state().lastFrame;
-    assert.ok(frame.ribbonTop > frame.yHorizon);
-    assert.ok(frame.ribbonBottom <= frame.safe.bottom);
+    const fills = calls.filter((c) => c.name === 'fillRect');
+
+    const sky = fills.find((c) => c.args[0] === 0 && c.args[1] === 0 && c.args[2] === 1400);
+    assert.ok(sky, 'the sky band spans the full canvas width from the top edge');
+    assert.ok(Math.abs(sky.args[3] - frame.yHorizon) < 1e-6, 'and stops at the horizon');
+
+    // The camera is level here, so the horizon is in view and there is ground below it.
+    assert.ok(frame.yHorizon < frame.full.height, 'the horizon is on screen');
+    const ground = fills.find(
+        (c) => c.args[0] === 0 && Math.abs(c.args[1] - frame.yHorizon) < 1e-6 && c.args[2] === 1400
+    );
+    assert.ok(ground, 'the ground band spans the full width below the horizon');
+    assert.ok(ground.args[3] > 0, 'and has height, so nothing is left unpainted');
+
+    Sky.setSafeInsets({});
 });
 
-test('at steep pitch the horizon is clamped to clear the reserved bands', () => {
-    reset({ ...BASE_SETTINGS, skyPitch: 60 });
-    const withRibbon = Sky.__test.state().lastFrame;
-    assert.equal(withRibbon.yHorizon, withRibbon.safe.bottom - 18 - 34);
+// -------------------- layout --------------------
 
-    reset({ ...BASE_SETTINGS, skyPitch: 60, skyRibbon: false });
-    const withoutRibbon = Sky.__test.state().lastFrame;
-    assert.ok(withoutRibbon.yHorizon > withRibbon.yHorizon, 'hiding the ribbon reclaims its band');
+test('the ribbon sits at the foot of the view and stays put as the camera tilts', () => {
+    let previous = null;
+    for (const pitch of [0, 15, 40, 60]) {
+        reset({ ...BASE_SETTINGS, skyPitch: pitch });
+        const frame = Sky.__test.state().lastFrame;
+
+        // Flush with the bottom: anything left under it is dead ground.
+        assert.equal(frame.ribbonBottom, frame.safe.bottom, `pitch ${pitch}: flush`);
+        // Only meaningful while the horizon is still in the view; pitched far
+        // enough up it leaves the frame and there is no ground left at all.
+        if (frame.yHorizon < frame.safe.bottom) {
+            assert.ok(frame.ribbonTop > frame.yHorizon, `pitch ${pitch}: below the horizon`);
+        }
+
+        // A fixed strip: sizing it from the available ground made it resize as the
+        // camera moved, which is movement in the chrome rather than in the scene.
+        const band = frame.ribbonBottom - frame.ribbonTop;
+        assert.equal(band, 64, `pitch ${pitch}: band is a fixed height`);
+
+        if (previous !== null) {
+            assert.equal(band, previous, 'and does not change with pitch');
+        }
+        previous = band;
+    }
+    reset();
+});
+
+test('a level camera puts the horizon low, leaving little ground', () => {
+    // The ground has nothing to draw in it, so a level camera must not spend half
+    // the view on it. The principal point is raised to put the horizon near the foot.
+    reset();
+    const frame = Sky.__test.state().lastFrame;
+    const fraction = (frame.yHorizon - frame.safe.top) / frame.safe.height;
+
+    assert.equal(Sky.__test.state().camera.pitch, 0, 'the default camera is level');
+    assert.ok(fraction > 0.7 && fraction < 0.95, `horizon at ${(fraction * 100).toFixed(0)}% of height`);
+    assert.ok(
+        frame.safe.bottom - frame.yHorizon < frame.safe.height * 0.3,
+        'ground takes well under a third of the view'
+    );
+});
+
+test('pitching up moves the horizon out of the frame rather than pinning it', () => {
+    reset();
+    const level = Sky.__test.state().lastFrame.yHorizon;
+
+    reset({ ...BASE_SETTINGS, skyPitch: 40 });
+    const pitched = Sky.__test.state().lastFrame;
+    assert.ok(pitched.yHorizon > level, 'the horizon moved down');
+    assert.ok(
+        pitched.yHorizon > pitched.safe.bottom,
+        'and left the view entirely, which is what looking up means'
+    );
+    assert.equal(Sky.__test.state().camera.pitch, 40, 'the requested pitch was honoured');
+    reset();
+});
+
+test('no aircraft above the horizon is ever drawn below the horizon line', () => {
+    const map = new Map();
+    // A spread that includes very low traffic, which is where this went wrong.
+    addAircraft(map, 'LOW1', 0, 120, 12000);
+    addAircraft(map, 'LOW2', 20, 90, 9000);
+    addAircraft(map, 'MID', 340, 40, 25000);
+    addAircraft(map, 'HIGH', 10, 15, 38000);
+
+    // Including pitches that push the horizon out of the frame: the invariant has to
+    // hold there too, since it comes from the projection rather than from clamping.
+    for (const pitch of [0, 15, 30, 45, 60, 80]) {
+        reset({ ...BASE_SETTINGS, skyPitch: pitch });
+        Sky.updateMarkers(map);
+        const frame = Sky.__test.state().lastFrame;
+        for (const d of frame.drawable) {
+            if (d.sub) {
+                assert.equal(d.y, frame.yHorizon, `${d.icao} sub-horizon, pinned (pitch ${pitch})`);
+            } else {
+                assert.ok(
+                    d.y <= frame.yHorizon + 0.5,
+                    `${d.icao} at ${d.elevationDeg.toFixed(1)}° drawn below the horizon (pitch ${pitch})`
+                );
+            }
+        }
+    }
     reset();
 });
 
@@ -178,6 +303,357 @@ test('safe-area insets move the scene centre clear of the panel', () => {
     assert.ok(frame.safe.centreX > canvasCentre, 'centre shifted right');
     assert.ok(Math.abs(ahead.x - frame.safe.centreX) < 1e-6, 'and the aircraft followed it');
     Sky.setSafeInsets({});
+});
+
+test('the camera view draws into the strip a panel does not reach', () => {
+    reset({ ...BASE_SETTINGS, skyFov: 100 });
+    // The panel occupies the left of the viewport but not its full height, so the
+    // strip below it is visible canvas and must receive scene content.
+    Sky.setSafeInsets({ left: 436 });
+
+    const map = new Map();
+    for (let bearing = -60; bearing <= 60; bearing += 10) {
+        addAircraft(map, `B${bearing + 60}`, (bearing + 360) % 360, 30, 32000);
+    }
+    Sky.updateMarkers(map);
+
+    const frame = Sky.__test.state().lastFrame;
+    const xs = frame.drawable.map((d) => d.x);
+    assert.ok(xs.length > 0, 'aircraft are drawn');
+    assert.ok(
+        Math.min(...xs) < 436,
+        `content reaches left of the inset (leftmost x was ${Math.min(...xs).toFixed(0)})`
+    );
+    // The cull must still work: nothing may escape to absurd coordinates.
+    for (const d of frame.drawable) {
+        assert.ok(Math.abs(d.x) < 1e4 && Math.abs(d.y) < 1e4, `${d.icao} projected sanely`);
+    }
+
+    Sky.setSafeInsets({});
+    reset();
+});
+
+test('clearSelection and clearTrail leave no trace for the next view to inherit', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'SEL', 0, 20, 35000);
+    Sky.updateMarkers(map);
+    Sky.highlightSelected('SEL');
+    Sky.updateTrail([
+        { position: coordinateAt(0, 60), altitudeMeters: 34000 * 0.3048 },
+        { position: map.get('SEL').Coordinate, altitudeMeters: 35000 * 0.3048 }
+    ]);
+
+    let published = null;
+    Sky.onSelectedTooltip((p) => { published = p; });
+    Sky.updateMarkers(map);
+    assert.ok(published, 'a selection tooltip is published while selected');
+
+    // Deselecting in one view has to leave this renderer clean, because the other
+    // view keeps its own copy of the selection and only syncs when it becomes active.
+    Sky.clearSelection();
+    Sky.clearTrail();
+    resetCalls();
+    Sky.updateMarkers(map);
+
+    assert.equal(published, null, 'no tooltip is published once cleared');
+    const chip = Sky.__test.state().lastFrame.drawable.find((d) => d.icao === 'SEL');
+    assert.ok(chip, 'the aircraft is still drawn');
+    // Orange is the selected colour; a cleared selection must not still use it.
+    const fills = calls.filter((c) => c.name === 'fill');
+    assert.ok(fills.length > 0, 'chips were drawn');
+
+    Sky.onSelectedTooltip(null);
+    reset();
+});
+
+// -------------------- activity --------------------
+
+test('a hidden renderer neither paints nor publishes tooltips', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'SEL', 0, 20, 35000);
+    Sky.updateMarkers(map);
+    Sky.highlightSelected('SEL');
+
+    let published = 0;
+    Sky.onSelectedTooltip(() => { published++; });
+
+    // Map mode: the sky canvas is off screen, but the application still feeds this
+    // renderer settings, outlines and trails. Every frame it drew there would be
+    // wasted, and every tooltip it emitted would fight the map's for the same state.
+    Sky.setActive(false);
+    resetCalls();
+    Sky.updateMarkers(map);
+    Sky.setRangeOutline([]);
+    Sky.updateTrail([]);
+
+    assert.equal(calls.filter((c) => c.name === 'clearRect').length, 0, 'no frames drawn');
+    assert.equal(published, 0, 'no tooltips published');
+
+    // Becoming visible must redraw without needing anything else to happen.
+    resetCalls();
+    Sky.setActive(true);
+    assert.ok(calls.some((c) => c.name === 'clearRect'), 'redraws on becoming active');
+    assert.ok(published > 0, 'and resumes publishing');
+
+    Sky.onSelectedTooltip(null);
+    reset();
+});
+
+test('the compass distinguishes cardinals from bearings from bare ticks', () => {
+    reset();
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const frame = Sky.__test.state().lastFrame;
+    const labels = calls
+        .filter((c) => c.name === 'fillText' && Math.abs(c.args[2] - frame.compassY) < 30)
+        .map((c) => c.args[0]);
+
+    // North is in view by default, and reads as a letter rather than as "000".
+    assert.ok(labels.includes('N'), `a cardinal letter is drawn (got ${labels.join(', ')})`);
+    assert.ok(!labels.includes('000'), 'and replaces the number at that bearing');
+    assert.ok(
+        labels.some((l) => /^\d{3}$/.test(l)),
+        'intermediate bearings are still numbered'
+    );
+
+    // Ticks come in three heights, so the row has a hierarchy rather than a uniform comb.
+    const ticks = calls.filter(
+        (c) => c.name === 'fillRect' && Math.abs(c.args[1] - frame.compassY) < 0.5
+    );
+    const heights = new Set(ticks.map((c) => c.args[3]));
+    assert.ok(ticks.length > 6, 'ticks are drawn across the view');
+    assert.ok(heights.size >= 2, `ticks vary in height (${[...heights].join(', ')})`);
+    assert.ok(Math.max(...heights) > Math.min(...heights), 'majors stand above minors');
+
+    reset();
+});
+
+// -------------------- coverage ribbon --------------------
+
+test('the ribbon draws from bare coordinates, which is all the server sends', () => {
+    reset();
+    // RangeOutlineCoordinate carries latitude and longitude only — no distance and
+    // no bearing — so both have to be derived from the receiver position here.
+    // Bearings inside the default frame, so they are all actually drawn, with
+    // distances that differ so the profile has a shape to check.
+    const outline = [[340, 200], [350, 90], [0, 150], [10, 60], [20, 190]].map(
+        ([bearing, nm]) => {
+            const c = coordinateAt(bearing, nm * 1.852);
+            return { Latitude: c.Latitude, Longitude: c.Longitude };
+        }
+    );
+
+    resetCalls();
+    Sky.setRangeOutline(outline);
+
+    const frame = Sky.__test.state().lastFrame;
+    const bars = calls.filter((c) => c.name === 'rect' && c.args[3] > 0);
+    assert.ok(bars.length > 0, 'sector blocks were added to the ribbon path');
+    for (const bar of bars) {
+        assert.ok(
+            bar.args[1] + bar.args[3] <= frame.ribbonBottom + 0.5,
+            'and stay within the ribbon band'
+        );
+        // Each bar covers its whole 5-degree sector, so neighbours merge into one
+        // silhouette instead of reading as scattered tick marks.
+        assert.ok(bar.args[2] > 3, `a sector spans real width (was ${bar.args[2].toFixed(1)} px)`);
+    }
+
+    // Heights track distance, so the profile has a shape.
+    const tallest = Math.max(...bars.map((b) => b.args[3]));
+    const shortest = Math.min(...bars.map((b) => b.args[3]));
+    assert.ok(tallest > shortest, 'the profile varies with measured range');
+
+    // Scaled to the rounded ceiling, not to the tallest sector — so the profile
+    // does not fill the band exactly, and a height means a fixed number of miles.
+    const band = frame.ribbonBottom - frame.ribbonTop;
+    assert.ok(tallest < band, 'the farthest sector sits below the top of the band');
+    // 200 nm against a 200 nm ceiling is the full band; here the max is 200 of 200,
+    // so check the proportion holds for a shorter one instead.
+    const shortestExpected = band * (60 / 200);
+    assert.ok(
+        Math.abs(shortest - shortestExpected) < band * 0.15,
+        `a 60 nm sector is about ${(60 / 200 * 100).toFixed(0)}% of the band`
+    );
+
+    // Snapped to sector boundaries, so neighbours tile instead of overlapping —
+    // overlapping translucent blocks darken where they meet.
+    const spans = bars
+        .map((b) => ({ left: b.args[0], right: b.args[0] + b.args[2] }))
+        .sort((a, b) => a.left - b.left);
+    for (let i = 1; i < spans.length; i++) {
+        assert.ok(
+            spans[i].left >= spans[i - 1].right - 0.5,
+            `sector blocks must not overlap (${spans[i - 1].right.toFixed(1)} vs ${spans[i].left.toFixed(1)})`
+        );
+    }
+
+    // A single fill for the whole path keeps the tone even across the silhouette.
+    const ribbonFills = calls.filter((c) => c.name === 'fill');
+    assert.ok(ribbonFills.length >= 1, 'the path is filled');
+
+    Sky.setRangeOutline([]);
+    reset();
+});
+
+test('the ribbon states its own scale, so the bars are readable without a key', () => {
+    reset();
+    const outline = [[340, 200], [350, 90], [0, 150], [10, 60]].map(([bearing, nm]) => {
+        const c = coordinateAt(bearing, nm * 1.852);
+        return { Latitude: c.Latitude, Longitude: c.Longitude };
+    });
+
+    resetCalls();
+    Sky.setRangeOutline(outline);
+
+    const frame = Sky.__test.state().lastFrame;
+    const labels = calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+
+    // 200 nm measured rounds to a 200 nm scale, so the axis reads 200 / 100 / 0 —
+    // every tick carrying its unit, not only the top one.
+    assert.ok(labels.includes('200 nm'), `top tick (got ${labels.join(', ')})`);
+    assert.ok(labels.includes('100 nm'), 'the halfway tick carries its unit too');
+    assert.ok(labels.includes('0 nm'), 'and so does the baseline');
+
+    // fillText takes (text, x, y): each tick sits against the left edge, and inside
+    // the band rather than colliding with the bearing labels above it.
+    const axisText = calls.filter(
+        (c) => c.name === 'fillText' && ['200 nm', '100 nm', '0 nm'].includes(c.args[0])
+    );
+    assert.equal(axisText.length, 3, 'all three ticks drawn');
+    for (const label of axisText) {
+        const [text, x] = label.args;
+        assert.ok(x > 8 && x < 80, `${text} sits in the gutter, clear of the edge (x=${x})`);
+    }
+
+    // Nothing may escape the strip — the backing chips are what actually bound the
+    // labels, so they are the thing to check.
+    const chips = calls.filter(
+        (c) => c.name === 'fillRect' && c.args[0] > 0 && c.args[0] < 80 && c.args[3] === 12
+    );
+    assert.equal(chips.length, 3, 'each tick has a backing chip');
+    for (const chip of chips) {
+        const [x, y, , h] = chip.args;
+        assert.ok(x > 0, 'the chip is clear of the frame edge');
+        assert.ok(y >= frame.ribbonTop, `a chip at ${y} stays below the band top`);
+        assert.ok(y + h <= frame.ribbonBottom, `a chip at ${y}+${h} stays above the band bottom`);
+    }
+
+    Sky.setRangeOutline([]);
+    reset();
+});
+
+test('the halfway mark is confined to bearings that have coverage', () => {
+    reset();
+    // Coverage over a narrow arc only, so most of the view has no data at all.
+    const outline = [[350, 120], [355, 90], [0, 150]].map(([bearing, nm]) => {
+        const c = coordinateAt(bearing, nm * 1.852);
+        return { Latitude: c.Latitude, Longitude: c.Longitude };
+    });
+
+    resetCalls();
+    Sky.setRangeOutline(outline);
+
+    const frame = Sky.__test.state().lastFrame;
+    const blocks = calls.filter((c) => c.name === 'rect' && c.args[3] > 0);
+    const left = Math.min(...blocks.map((b) => b.args[0]));
+    const right = Math.max(...blocks.map((b) => b.args[0] + b.args[2]));
+    const midY = frame.ribbonBottom - (frame.ribbonBottom - frame.ribbonTop) / 2;
+
+    // Gridlines now span the full width, which reads as a chart because each one is
+    // labelled. What must stay confined to the data is the silhouette itself.
+    assert.ok(right - left < frame.full.width * 0.9, 'the covered arc really is narrow');
+    for (const block of blocks) {
+        assert.ok(
+            block.args[0] >= left - 0.5 && block.args[0] + block.args[2] <= right + 0.5,
+            'no block is drawn outside the covered arc'
+        );
+    }
+
+    Sky.setRangeOutline([]);
+    reset();
+});
+
+test('too few sectors means no ribbon rather than a misleading one', () => {
+    reset();
+    resetCalls();
+    Sky.setRangeOutline([
+        coordinateAt(0, 200),
+        coordinateAt(90, 120)
+    ].map((c) => ({ Latitude: c.Latitude, Longitude: c.Longitude })));
+
+    const frame = Sky.__test.state().lastFrame;
+    const bars = calls.filter((c) => c.name === 'rect' && c.args[3] > 0);
+    assert.equal(bars.length, 0, 'nothing is drawn from two bearings');
+
+    Sky.setRangeOutline([]);
+    reset();
+});
+
+test('the ribbon is hidden when its setting is off', () => {
+    const outline = [0, 90, 180, 270].map((b) => {
+        const c = coordinateAt(b, 150);
+        return { Latitude: c.Latitude, Longitude: c.Longitude };
+    });
+
+    reset({ ...BASE_SETTINGS, skyRibbon: false });
+    Sky.setRangeOutline(outline);
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const frame = Sky.__test.state().lastFrame;
+    const bars = calls.filter((c) => c.name === 'rect' && c.args[3] > 0);
+    assert.equal(bars.length, 0, 'no bars when the ribbon is turned off');
+
+    Sky.setRangeOutline([]);
+    reset();
+});
+
+test('the bearing axis survives the horizon leaving the frame', () => {
+    const outline = [340, 350, 0, 10, 20].map((bearing) => {
+        const c = coordinateAt(bearing, 120 * 1.852);
+        return { Latitude: c.Latitude, Longitude: c.Longitude };
+    });
+
+    reset();
+    Sky.setRangeOutline(outline);
+    const level = Sky.__test.state().lastFrame;
+    assert.ok(level.compassY < level.safe.bottom, 'compass is in view when level');
+    assert.ok(
+        Math.abs(level.compassY - level.yHorizon) < 0.5,
+        'and rides with the horizon while that is visible'
+    );
+
+    // Pitched up, the ground is gone. The azimuth axis is still meaningful, so the
+    // compass has to fall back to the ribbon rather than leaving with the horizon.
+    reset({ ...BASE_SETTINGS, skyPitch: 40 });
+    Sky.setRangeOutline(outline);
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const pitched = Sky.__test.state().lastFrame;
+    assert.ok(pitched.yHorizon > pitched.safe.bottom, 'the horizon has left the view');
+    assert.ok(pitched.compassY < pitched.ribbonTop, 'the compass sits above the ribbon');
+    assert.ok(pitched.compassY < pitched.safe.bottom, 'and is still on screen');
+
+    // Ticks are still drawn, so bearings remain readable while looking up.
+    const ticks = calls.filter(
+        (c) => c.name === 'fillRect' && Math.abs(c.args[1] - pitched.compassY) < 0.5
+    );
+    assert.ok(ticks.length > 0, 'bearing ticks are drawn against the ribbon');
+
+    // And the ribbon has a backing, so it does not float on bare sky.
+    const backing = calls.find(
+        (c) => c.name === 'fillRect' && c.args[0] === 0 && c.args[2] === pitched.full.width
+            && Math.abs(c.args[1] - pitched.ribbonTop) < 0.5
+    );
+    assert.ok(backing, 'the ribbon is drawn on its own strip');
+
+    Sky.setRangeOutline([]);
+    reset();
 });
 
 // -------------------- camera limits --------------------
@@ -222,7 +698,7 @@ test('double-click restores heading, pitch, and field of view together', () => {
     const after = Sky.__test.state().camera;
     assert.equal(after.heading, 0, 'heading restored');
     assert.equal(after.fov, 75, 'field of view restored');
-    assert.equal(after.pitch, clampPitch(15, 75, safeArea(1400, 900, {})), 'pitch restored');
+    assert.equal(after.pitch, clampPitch(0, 75, safeArea(1400, 900, {})), 'pitch restored to level');
 });
 
 // -------------------- interaction --------------------
@@ -256,10 +732,74 @@ test('clicking selects, clicking empty sky deselects, dragging does neither', ()
     canvas.dispatch('pointerup', { clientX: target.x + 60, clientY: target.y, pointerId: 1 });
 
     assert.ok(clicked === null && !deselected, 'a drag is not a click');
+    // Direction matters, magnitude is the projection's business (see the drag-rate
+    // test): dragging left must turn the camera right, so the scene follows.
+    const turned = wrap180(Sky.__test.state().camera.heading - before);
+    assert.ok(turned < -0.5, `the camera turned with the drag (got ${turned.toFixed(1)}°)`);
+    reset();
+});
+
+test('hovering redraws at once so the label and the tooltip never coexist', () => {
+    reset({ ...BASE_SETTINGS, skyLabels: 'all' });
+    const map = new Map();
+    addAircraft(map, 'HOV', 0, 20, 35000);
+    addAircraft(map, 'OTHER', 30, 40, 30000);
+    Sky.updateMarkers(map);
+    assert.ok(Sky.__test.labels().some((l) => l.text === 'HOV'), 'labelled before hover');
+
+    const chip = Sky.__test.state().lastFrame.drawable.find((d) => d.icao === 'HOV');
+    resetCalls();
+    canvas.dispatch('pointermove', { clientX: chip.x, clientY: chip.y, pointerId: 1 });
+
     assert.ok(
-        Math.abs(wrap180(Sky.__test.state().camera.heading - before + 9)) < 1.5,
-        'and it rotated the camera instead'
+        calls.some((c) => c.name === 'clearRect'),
+        'the frame was redrawn on hover rather than waiting for the next update'
     );
+    assert.ok(
+        !Sky.__test.labels().some((l) => l.text === 'HOV'),
+        'and the hovered label is already gone'
+    );
+
+    // Moving on must restore it just as promptly.
+    resetCalls();
+    canvas.dispatch('pointermove', { clientX: 5, clientY: 5, pointerId: 1 });
+    assert.ok(calls.some((c) => c.name === 'clearRect'), 'leaving redraws too');
+    assert.ok(Sky.__test.labels().some((l) => l.text === 'HOV'), 'the label is back');
+
+    // Idle movement over empty sky must not queue frames.
+    resetCalls();
+    canvas.dispatch('pointermove', { clientX: 6, clientY: 6, pointerId: 1 });
+    assert.ok(!calls.some((c) => c.name === 'clearRect'), 'no redraw when nothing changed');
+
+    reset();
+});
+
+test('dragging turns the camera in step with the pointer, in both projections', () => {
+    const drag = (px) => {
+        const before = Sky.__test.state().camera.heading;
+        canvas.dispatch('pointerdown', { clientX: 700, clientY: 400, pointerId: 1 });
+        canvas.dispatch('pointermove', { clientX: 700 - px, clientY: 400, pointerId: 1 });
+        canvas.dispatch('pointerup', { clientX: 700 - px, clientY: 400, pointerId: 1 });
+        return wrap180(Sky.__test.state().camera.heading - before);
+    };
+
+    // Flattened: the whole 360 spans the canvas, so a drag of the full width is a
+    // full turn. A fixed rate would need several screen-widths on a small viewport.
+    reset({ ...BASE_SETTINGS, skyFlatten: true });
+    const halfWidth = drag(700);
+    assert.ok(
+        Math.abs(Math.abs(halfWidth) - 180) < 5,
+        `half the canvas turns about half a circle (got ${halfWidth.toFixed(0)}°)`
+    );
+
+    // Camera view: a drag across the canvas covers about one field of view.
+    reset({ ...BASE_SETTINGS, skyFov: 75 });
+    const acrossView = drag(700);
+    assert.ok(
+        Math.abs(Math.abs(acrossView) - 37.5) < 6,
+        `half the canvas turns about half the field of view (got ${acrossView.toFixed(0)}°)`
+    );
+
     reset();
 });
 
@@ -283,14 +823,36 @@ test('flattened mode shows more of the sky and ignores the wheel', () => {
     assert.ok(frame.drawable.length > rectilinear, 'the whole panorama is visible');
     for (const d of frame.drawable) {
         assert.ok(
-            d.x >= frame.safe.left - 1 && d.x <= frame.safe.right + 1,
-            `${d.icao} stays inside the frame`
+            d.x >= 0 && d.x <= frame.full.width,
+            `${d.icao} stays inside the canvas`
         );
     }
 
     const fov = Sky.__test.state().camera.fov;
     canvas.dispatch('wheel', { deltaY: 120 });
     assert.equal(Sky.__test.state().camera.fov, fov, 'field of view is inert when flattened');
+    reset();
+});
+
+test('the flattened panorama spans the canvas, ignoring panel insets', () => {
+    const map = new Map();
+    for (let bearing = 0; bearing < 360; bearing += 45) {
+        addAircraft(map, `B${bearing}`, bearing, 30, 32000);
+    }
+
+    reset({ ...BASE_SETTINGS, skyFlatten: true });
+    // A wide left inset is what exposed this: the panorama was squeezed into the
+    // remaining width and the strip below the panel was left empty.
+    Sky.setSafeInsets({ left: 660 });
+    Sky.updateMarkers(map);
+
+    const frame = Sky.__test.state().lastFrame;
+    const xs = frame.drawable.map((d) => d.x);
+    assert.ok(xs.length >= 7, 'the whole panorama is populated');
+    assert.ok(Math.min(...xs) < 660, 'bearings are drawn left of the inset, not only right of it');
+    assert.ok(Math.max(...xs) <= frame.full.width, 'and nothing runs off the canvas');
+
+    Sky.setSafeInsets({});
     reset();
 });
 
@@ -311,21 +873,215 @@ test('focusOn swings the camera to the aircraft bearing', () => {
 
 // -------------------- trail --------------------
 
-test('a trail with missing positions or altitudes breaks rather than throwing', () => {
+test('incomplete trail samples are skipped, not drawn as a break', () => {
     reset();
     const map = new Map();
     addAircraft(map, 'SEL', 0, 20, 30000);
     Sky.updateMarkers(map);
 
-    Sky.updateTrail([
-        { position: { Latitude: 50.1, Longitude: 8 }, altitudeMeters: 3000 },
-        { position: { Latitude: 50.2, Longitude: 8 }, altitudeMeters: null },
-        { position: null, altitudeMeters: 3000 },
-        { position: { Latitude: 50.3, Longitude: 8 }, altitudeMeters: 3500 }
-    ]);
+    // A speed-only update appends an entry with no position and no altitude. It is
+    // not a gap in the flight path, so the line must continue across it — lifting
+    // the pen there puts a visible break in the trail.
+    const withGaps = [
+        { position: { Latitude: 50.1, Longitude: 8.0 }, altitudeMeters: 3000 },
+        { position: null, altitudeMeters: null },
+        { position: { Latitude: 50.2, Longitude: 8.1 }, altitudeMeters: 3200 },
+        { position: { Latitude: 50.3, Longitude: 8.2 }, altitudeMeters: null },
+        { position: { Latitude: 50.4, Longitude: 8.3 }, altitudeMeters: 3500 }
+    ];
+    const complete = withGaps.filter((e) => e.position && e.altitudeMeters != null);
+
+    const strokeCount = (entries) => {
+        Sky.updateTrail(entries);
+        resetCalls();
+        Sky.updateMarkers(map);
+        const begin = calls.findIndex((c) => c.name === 'moveTo');
+        return calls.filter((c) => c.name === 'moveTo').length;
+    };
+
+    assert.equal(
+        strokeCount(withGaps), strokeCount(complete),
+        'the incomplete samples add no extra path starts, so no break appears'
+    );
 
     assert.ok(Sky.__test.state().lastFrame, 'a frame was still produced');
     Sky.clearTrail();
+    reset();
+});
+
+test('the trail meets the chip despite the history using a different altitude datum', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'SEL', 0, 20, 35000);
+    // The aircraft reports both altitudes; the history only ever stores barometric,
+    // so the series has to be lifted by the difference or it never reaches the chip.
+    const aircraft = map.get('SEL');
+    aircraft.BarometricAltitude = { Meters: 35000 * 0.3048, Feet: 35000 };
+    aircraft.GeometricAltitude = { Meters: 35975 * 0.3048, Feet: 35975 };
+    Sky.updateMarkers(map);
+    Sky.highlightSelected('SEL');
+
+    const chip = Sky.__test.state().lastFrame.drawable.find((d) => d.icao === 'SEL');
+
+    // Final trail sample: same position as the aircraft, barometric altitude.
+    resetCalls();
+    Sky.updateTrail([
+        // Farther out along the same bearing, so it is comfortably inside the frame.
+        { position: coordinateAt(0, 60), altitudeMeters: 34000 * 0.3048 },
+        { position: aircraft.Coordinate, altitudeMeters: 35000 * 0.3048 }
+    ]);
+    Sky.updateMarkers(map);
+
+    // The trail is stroked before any chip, and a chip's velocity tick also emits
+    // lineTo — so look only at the segments drawn before the first chip arc.
+    const firstChip = calls.findIndex((c) => c.name === 'arc');
+    const lineTos = calls
+        .slice(0, firstChip === -1 ? calls.length : firstChip)
+        .filter((c) => c.name === 'lineTo');
+    const last = lineTos[lineTos.length - 1];
+    assert.ok(last, 'the trail was drawn');
+    assert.ok(
+        Math.hypot(last.args[0] - chip.x, last.args[1] - chip.y) < 1,
+        `the trail ends on the chip (was ${Math.hypot(last.args[0] - chip.x, last.args[1] - chip.y).toFixed(1)} px away)`
+    );
+
+    Sky.clearTrail();
+    reset();
+});
+
+test('a trail crossing due north does not draw a line back across the panorama', () => {
+    reset({ ...BASE_SETTINGS, skyFlatten: true });
+    const map = new Map();
+    addAircraft(map, 'SEAM', 182, 30, 35000);
+    Sky.updateMarkers(map);
+    Sky.highlightSelected('SEAM');
+
+    // The seam sits opposite the camera heading, which the reset leaves at north —
+    // so a path crossing due south is what lands consecutive points on opposite
+    // edges of the flattened view.
+    const path = [170, 175, 178, 182, 185].map((bearing) => ({
+        position: coordinateAt(bearing, 30 * 1.852),
+        altitudeMeters: 35000 * 0.3048
+    }));
+
+    Sky.updateTrail(path);
+    resetCalls();
+    Sky.updateMarkers(map);
+
+    const frame = Sky.__test.state().lastFrame;
+    // The trail is the last path *stroked* before the chips, so isolate it by its
+    // closing stroke: other paths legitimately span the full width — the horizon
+    // line among them — and a chip opens a path of its own that never gets stroked.
+    const firstChip = calls.findIndex((c) => c.name === 'arc');
+    const upToChips = calls.slice(0, firstChip === -1 ? calls.length : firstChip);
+    const names = upToChips.map((c) => c.name);
+    const trailEnd = names.lastIndexOf('stroke');
+    const trailStart = names.lastIndexOf('beginPath', trailEnd);
+    const trailCalls = upToChips.slice(trailStart, trailEnd);
+
+    assert.ok(
+        trailCalls.some((c) => c.name === 'lineTo'),
+        'the trail drew at least one segment'
+    );
+
+    let last = null;
+    for (const call of trailCalls) {
+        if (call.name === 'moveTo') {
+            last = call.args[0];
+        } else if (call.name === 'lineTo') {
+            if (last !== null) {
+                assert.ok(
+                    Math.abs(call.args[0] - last) <= frame.full.width / 2,
+                    `no trail segment jumps the seam (${last.toFixed(0)} → ${call.args[0].toFixed(0)})`
+                );
+            }
+            last = call.args[0];
+        }
+    }
+
+    Sky.clearTrail();
+    reset();
+});
+
+// -------------------- tooltip payload --------------------
+
+test('the tooltip payload carries plain numbers, as the shared tooltip expects', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'SEL', 0, 20, 35000);
+    // Velocity arrives as a wrapper object, like the real payload.
+    map.get('SEL').Speed = { Knots: 450, KilometersPerHour: 833, MilesPerHour: 518 };
+
+    let payload = null;
+    Sky.onSelectedTooltip((p) => { payload = p; });
+    Sky.highlightSelected('SEL');
+    Sky.updateMarkers(map);
+
+    assert.ok(payload, 'a payload was published for the selection');
+    assert.equal(typeof payload.speed, 'number', 'speed is knots, not a Velocity object');
+    assert.equal(payload.speed, 450);
+    assert.equal(typeof payload.altitude, 'number', 'altitude is feet, not an Altitude object');
+    assert.equal(payload.altitude, 35000);
+    // Handing the tooltip the wrapper objects is what produced NaN on screen.
+    assert.ok(!Number.isNaN(Math.round(payload.speed)));
+    assert.ok(!Number.isNaN(Math.round(payload.altitude)));
+    assert.equal(payload.callsign, 'SEL');
+    assert.ok(payload.azimuthDeg != null && payload.elevationDeg != null, 'sky extras present');
+
+    Sky.onSelectedTooltip(null);
+    reset();
+});
+
+test('an off-screen selection publishes no tooltip', () => {
+    reset();
+    const map = new Map();
+    // Ahead of the camera and comfortably in view.
+    addAircraft(map, 'SEL', 0, 20, 35000);
+    let payload = null;
+    Sky.onSelectedTooltip((p) => { payload = p; });
+    Sky.highlightSelected('SEL');
+    Sky.updateMarkers(map);
+    assert.ok(payload, 'a tooltip is published while the chip is on screen');
+
+    // Turn until it is off the side. It may still survive the frustum cull, which
+    // works against a cone circumscribing the canvas — but there is nothing on screen
+    // for a tooltip to point at.
+    canvas.dispatch('pointerdown', { clientX: 700, clientY: 400, pointerId: 1 });
+    canvas.dispatch('pointermove', { clientX: 20, clientY: 400, pointerId: 1 });
+    canvas.dispatch('pointerup', { clientX: 20, clientY: 400, pointerId: 1 });
+    Sky.updateMarkers(map);
+
+    const frame = Sky.__test.state().lastFrame;
+    const chip = frame.drawable.find((d) => d.icao === 'SEL');
+    if (!chip || chip.x < 0 || chip.x > frame.full.width) {
+        assert.equal(payload, null, 'no tooltip once the aircraft leaves the view');
+    }
+    // And it must not be clickable where it is not drawn.
+    assert.ok(
+        Sky.__test.state().hitIndex.every(
+            (h) => h.x >= 0 && h.x <= frame.full.width && h.y >= 0 && h.y <= frame.full.height
+        ),
+        'the hit index only offers targets that are on screen'
+    );
+
+    Sky.onSelectedTooltip(null);
+    reset();
+});
+
+test('an aircraft with no speed or altitude yields nulls, not NaN', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'BARE', 0, 20, 35000);
+    delete map.get('BARE').Speed;
+
+    let payload = null;
+    Sky.onSelectedTooltip((p) => { payload = p; });
+    Sky.highlightSelected('BARE');
+    Sky.updateMarkers(map);
+
+    assert.equal(payload.speed, null, 'absent speed is null, which the tooltip omits');
+    Sky.onSelectedTooltip(null);
+    reset();
 });
 
 // -------------------- label collision --------------------
@@ -348,18 +1104,45 @@ test('auto labelling suppresses collisions; all and selection override it', () =
 
     reset({ ...BASE_SETTINGS, skyLabels: 'selection' });
     Sky.updateMarkers(map);
-    assert.equal(Sky.__test.labels().length, 0, 'selection draws none by default');
+    assert.equal(Sky.__test.labels().length, 0, 'selection draws none');
+    reset();
+});
 
-    Sky.highlightSelected('NEAR1');
-    assert.ok(
-        Sky.__test.labels().some((l) => l.text === 'NEAR1'),
-        'the selected aircraft is always labelled'
-    );
+test('the selected and hovered aircraft have no sky label, only a tooltip', () => {
+    const map = new Map();
+    addAircraft(map, 'ONE', 0, 20, 35000);
+    addAircraft(map, 'TWO', 25, 30, 30000);
 
-    Sky.__test.setHovered('APART');
-    assert.ok(
-        Sky.__test.labels().some((l) => l.text === 'APART'),
-        'the hovered aircraft is always labelled'
-    );
+    reset({ ...BASE_SETTINGS, skyLabels: 'all' });
+    Sky.updateMarkers(map);
+    assert.equal(Sky.__test.labels().length, 2, 'both labelled to begin with');
+
+    // The tooltip already shows the callsign, so a label beside the chip repeats it.
+    Sky.highlightSelected('ONE');
+    let texts = Sky.__test.labels().map((l) => l.text);
+    assert.ok(!texts.includes('ONE'), 'the selected aircraft drops its label');
+    assert.ok(texts.includes('TWO'), 'the others keep theirs');
+
+    Sky.__test.setHovered('TWO');
+    texts = Sky.__test.labels().map((l) => l.text);
+    assert.ok(!texts.includes('TWO'), 'the hovered aircraft drops its label too');
+
+    Sky.clearSelection();
+    Sky.__test.setHovered(null);
+    reset();
+});
+
+test('labels are centred above the chip', () => {
+    reset({ ...BASE_SETTINGS, skyLabels: 'all' });
+    const map = new Map();
+    addAircraft(map, 'MID', 0, 20, 35000);
+    Sky.updateMarkers(map);
+
+    const chip = Sky.__test.state().lastFrame.drawable.find((d) => d.icao === 'MID');
+    const label = Sky.__test.labels().find((l) => l.text === 'MID');
+
+    assert.ok(label, 'the label was placed');
+    assert.equal(label.x, chip.x, 'horizontally centred on the chip');
+    assert.ok(label.y < chip.y, 'and sits above it');
     reset();
 });

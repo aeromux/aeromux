@@ -33,6 +33,7 @@ import {
     projectRectilinear,
     projectEquirect,
     frustumCosLimit,
+    focalPx,
     safeArea,
     chipSizePx,
     hazeAlpha,
@@ -41,17 +42,37 @@ import {
     isSubHorizon,
     aircraftAltitudeM,
     destinationPoint,
-    clampPitch
+    clampPitch,
+    ribbonScaleNm
 } from '../Services/SkyViewGeometry.js';
 import { haversineDistance, nmToKm } from '../Services/UnitConversion.js';
 import { CATEGORIES, SELECTED_COLOR, interpolateColor } from '../Map/AircraftIcons.js';
 
-// Space reserved below the horizon for the compass labels and the coverage
-// ribbon. The ribbon hangs off the horizon rather than off the bottom of the
-// frame so that it shares the azimuth axis with the sky above it: a chip's stem
-// runs down to the ribbon bar at the same bearing.
-const COMPASS_BAND_PX = 18;
-const RIBBON_BAND_PX = 34;
+// The compass sits just under the horizon and travels with it. The ribbon instead
+// occupies a fixed strip at the foot of the view: bearing is a horizontal axis, so
+// pinning it there costs nothing in alignment — a chip's stem still meets its bar at
+// the same x — while filling the ground that would otherwise be dead space, and
+// keeping the ribbon still as the camera tilts rather than sliding with the horizon.
+const COMPASS_BAND_PX = 28;
+// A fixed strip at the foot of the view. Sizing it from whatever ground the current
+// pitch left over made it resize as the camera moved, which draws the eye to the
+// chrome rather than to the sky, and gave the coverage profile a scale that changed
+// underneath it.
+const RIBBON_BAND_PX = 64;
+// Inset of the plotted area within the band, leaving room for the scale labels to
+// sit on their gridlines without any part of them escaping the strip.
+const RIBBON_PAD_TOP = 11;
+const RIBBON_PAD_BOTTOM = 7;
+// Right edge of the scale labels. Wide enough for "100 nm" with a margin from the
+// frame edge, so the text is never flush against it.
+const RIBBON_AXIS_X = 56;
+
+// Where the horizon sits, as a fraction of the view height, with the camera level.
+// The projection's principal point is placed here rather than at the middle of the
+// frame: a level camera would otherwise put the horizon halfway up and give half the
+// view to ground that has nothing to draw in it. Pitching up from here moves the
+// horizon down and eventually out of the frame, which is what looking up should do.
+const HORIZON_AT_REST = 0.82;
 
 // Shorter than this and the velocity tick is a meaningless stub, which is worse
 // than no tick: a track pointing at or away from the receiver foreshortens to
@@ -61,11 +82,30 @@ const MIN_TICK_PX = 4;
 const HIT_RADIUS_PX = 18;
 const FOV_MIN = 30;
 const FOV_MAX = 120;
-const DEG_PER_PX = 0.15;
+// Angle subtended at the camera by a point that many pixels from the view's centre.
+// This is what makes a drag move the scene with the pointer instead of at some fixed
+// rate: a fixed rate is wrong by the ratio of the view's angular width to its pixel
+// width — on a phone in the flattened panorama, a whole turn would take six
+// screen-widths of dragging — and in the camera projection it also drifts towards the
+// edges, where a degree covers fewer pixels than it does at the centre.
+function viewAngleAt(offsetPx, safe) {
+    if (settings && settings.skyFlatten) {
+        // The panorama is linear in azimuth across the full canvas.
+        return (offsetPx / Math.max(1, canvas.width / dpr)) * 360;
+    }
+    return (Math.atan(offsetPx / focalPx(camera.fov, safe.width)) * 180) / Math.PI;
+}
 const DRAG_THRESHOLD_PX = 4;
 const SWING_MS = 400;
 const LABEL_FONT = '10px InterVariable, Inter, system-ui, sans-serif';
+const CARDINAL_FONT = '600 12px InterVariable, Inter, system-ui, sans-serif';
+const CARDINALS = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
 const LABEL_LINE_H = 11;
+const LABEL_GAP_PX = 4;
+// The range outline is recorded in 5-degree bearing sectors. Drawing each at its
+// true width lets neighbours merge into one silhouette, and leaves a real notch
+// wherever nothing has been heard.
+const OUTLINE_SECTOR_DEG = 5;
 const TRAIL_COLORS = {
     normal: 'rgb(0, 97, 146)',
     military: 'rgb(0, 110, 0)',
@@ -79,18 +119,28 @@ let receiver = null;
 let settings = null;
 let insets = {};
 let outline = [];
-let camera = { heading: 0, pitch: 15, fov: 75 };
+// The outline as bearing and distance, derived once per change rather than per
+// frame. The server sends plain coordinates, so both have to be computed here.
+let outlinePolar = [];
+let outlineMaxNm = 0;
+let outlineScaleNm = 0;
+let camera = { heading: 0, pitch: 0, fov: 75 };
 let aircraft = new Map();
 let selectedIcao = null;
 let hoveredIcao = null;
 let trail = [];
 let trailColor = TRAIL_COLORS.normal;
+// Whether this renderer is the visible one. Starts true so the module is usable on
+// its own; the application sets it on every view change.
+let active = true;
 let frameRequested = false;
 let anim = null;
 let animToken = 0;
 let drag = null;
 let hitIndex = [];
 let lastFrame = null;
+let hud = null;
+let hudNodes = null;
 let markerClickCallback = null;
 let mapClickCallback = null;
 let markerHoverEnterCallback = null;
@@ -110,6 +160,7 @@ export function init(containerId) {
         container.appendChild(canvas);
     }
     ctx = canvas.getContext('2d');
+    buildHud(container);
 
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
@@ -124,8 +175,69 @@ export function init(containerId) {
 export function destroy() {
     canvas = null;
     ctx = null;
+    hud = null;
+    hudNodes = null;
     lastFrame = null;
     hitIndex = [];
+}
+
+// The readout lives in the DOM rather than on the canvas so it picks up the same
+// typography, panel treatment and spacing as the rest of the interface, and lines
+// up with the panels instead of floating at an arbitrary offset. It is written to
+// imperatively — it changes on every frame of a drag, and routing that through the
+// component tree would re-render the aircraft list sixty times a second.
+function buildHud(container) {
+    if (!container || !container.appendChild) return;
+
+    const item = (labelText, leading) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'sky-hud-item';
+        const label = document.createElement('span');
+        label.className = 'sky-hud-label';
+        label.textContent = labelText;
+        const value = document.createElement('span');
+        value.className = 'sky-hud-value';
+        if (leading) {
+            wrap.appendChild(value);
+            wrap.appendChild(label);
+        } else {
+            wrap.appendChild(label);
+            wrap.appendChild(value);
+        }
+        return { wrap, value };
+    };
+
+    hud = document.createElement('div');
+    // Carries the shared panel class, so its background, blur, shadow and corner
+    // radius are the ones every other floating panel uses rather than a private copy
+    // of the same values that can drift away from them.
+    hud.className = 'panel sky-hud';
+
+    const heading = item('HDG', false);
+    const fov = item('FOV', false);
+    const count = item('in view', true);
+    const note = document.createElement('div');
+    note.className = 'sky-hud-note';
+
+    hud.appendChild(heading.wrap);
+    hud.appendChild(fov.wrap);
+    hud.appendChild(count.wrap);
+    hud.appendChild(note);
+    container.appendChild(hud);
+
+    hudNodes = {
+        heading: heading.value,
+        fov: fov.value,
+        fovItem: fov.wrap,
+        count: count.value,
+        note
+    };
+}
+
+function setText(node, text) {
+    if (node && node.textContent !== text) {
+        node.textContent = text;
+    }
 }
 
 export function resize() {
@@ -144,12 +256,54 @@ export function resize() {
 
 export function setReceiver(lat, lon, altM) {
     receiver = { lat, lon, altM: altM || 0 };
+    rebuildOutlinePolar();
     requestDraw();
 }
 
 export function setRangeOutline(coordinates) {
     outline = coordinates || [];
+    rebuildOutlinePolar();
     requestDraw();
+}
+
+// The range outline arrives as bare latitude/longitude pairs — the farthest
+// position seen in each bearing sector. The ribbon needs how far that is and in
+// which direction, both of which follow from the receiver position, so they are
+// derived here instead of asking the server for them.
+function rebuildOutlinePolar() {
+    if (!receiver || !outline.length) {
+        outlinePolar = [];
+        outlineMaxNm = 0;
+        outlineScaleNm = 0;
+        return;
+    }
+
+    outlinePolar = outline.map((point) => {
+        const bearing = bearingTo(receiver.lat, receiver.lon, point.Latitude, point.Longitude);
+        // Snapped to the sector it was recorded in. The coordinate is the farthest
+        // aircraft seen in that sector, which may lie anywhere across its five
+        // degrees — drawing a block centred on it would make neighbouring sectors
+        // overlap and leave slivers between others, instead of tiling.
+        const sectorStart = Math.floor(bearing / OUTLINE_SECTOR_DEG) * OUTLINE_SECTOR_DEG;
+        return {
+            bearing,
+            sectorStart,
+            sectorEnd: sectorStart + OUTLINE_SECTOR_DEG,
+            distanceNm: haversineDistance(
+                receiver.lat, receiver.lon, point.Latitude, point.Longitude
+            ) / 1.852
+        };
+    });
+    outlineMaxNm = outlinePolar.reduce((max, o) => Math.max(max, o.distanceNm), 0);
+    outlineScaleNm = ribbonScaleNm(outlineMaxNm);
+}
+
+// A hidden renderer must neither paint nor publish. Its canvas is not on screen, so
+// every frame it draws is wasted, and the tooltips it emits fight with the visible
+// view's over the same state.
+export function setActive(next) {
+    active = next;
+    if (active) requestDraw();
 }
 
 export function setSafeInsets(next) {
@@ -164,7 +318,7 @@ export function setSettings(next) {
         camera.pitch = next.skyPitch;
     }
     if (canvas) {
-        camera.pitch = clampPitch(camera.pitch, camera.fov, currentSafe());
+        camera.pitch = clampCameraPitch(camera.pitch);
     }
     requestDraw();
 }
@@ -230,8 +384,22 @@ function requestDraw() {
 
 function project(azimuthDeg, elevationDeg, frame) {
     return settings.skyFlatten
-        ? projectEquirect(azimuthDeg, elevationDeg, camera.heading, frame.safe, frame.yHorizon)
-        : projectRectilinear(enuVector(azimuthDeg, elevationDeg), frame.basis, frame.safe, camera.fov, frame.minCos);
+        ? projectEquirect(azimuthDeg, elevationDeg, camera.heading, frame.panorama, frame.yHorizon)
+        : projectRectilinear(enuVector(azimuthDeg, elevationDeg), frame.basis, frame.proj, camera.fov, frame.minCos);
+}
+
+// Horizontal position of a bearing along the azimuth axis. Culling is suppressed
+// because pitching up puts the horizon below the frame, where the ordinary cull
+// would reject it — yet the axis itself remains meaningful and is still drawn.
+// Points behind the camera are still rejected.
+function projectAxisX(bearingDeg, frame) {
+    const p = settings.skyFlatten
+        ? projectEquirect(bearingDeg, frame.hz.depressionDeg, camera.heading, frame.panorama, frame.yHorizon)
+        : projectRectilinear(
+            enuVector(bearingDeg, frame.hz.depressionDeg), frame.basis, frame.proj, camera.fov, 0
+        );
+    if (!p) return null;
+    return p.x >= 0 && p.x <= frame.full.width ? p.x : null;
 }
 
 function projectPoint(coord, altM, frame) {
@@ -241,31 +409,76 @@ function projectPoint(coord, altM, frame) {
     return project(azimuth, elevationDeg, frame);
 }
 
-function horizonBaselineY(safe, basis, hz) {
-    const reserved = COMPASS_BAND_PX + (settings.skyRibbon ? RIBBON_BAND_PX : 0);
-    const floor = safe.bottom - reserved;
+// Lowest the horizon may sit and still leave room for the compass ticks and the
+// coverage ribbon, both of which hang off it.
+function horizonFloor(safe) {
+    // Tolerates settings not having arrived yet: the camera can be reset before the
+    // first frame, and the renderer must not depend on ordering there.
+    const ribbon = settings ? settings.skyRibbon : false;
+    return safe.bottom - COMPASS_BAND_PX - (ribbon ? RIBBON_BAND_PX : 0);
+}
 
+// Pitch is bounded only by the zenith edge of the frame. The horizon is free to
+// leave the view when the camera looks far enough up — that is what looking up
+// means — and because it is always drawn where it truly projects, and screen
+// position is monotonic in elevation, nothing above the horizon can ever appear
+// below the line.
+function clampCameraPitch(value, safe = currentSafe()) {
+    return clampPitch(value, camera.fov, safe);
+}
+
+function horizonBaselineY(proj, basis, hz) {
     if (settings.skyFlatten) {
-        return floor;
+        return horizonFloor(proj);
     }
 
-    // The on-axis horizon point is always inside the frame, so culling is
-    // suppressed. In a pinhole projection the horizontal plane is a great circle,
-    // which means the horizon is a straight horizontal line at any pitch.
+    // Culling is suppressed because this point is on the camera axis by construction
+    // and may legitimately fall outside the frame — pitched far enough up, the
+    // horizon leaves the view entirely. In a pinhole projection the horizontal plane
+    // is a great circle, so the horizon is a straight horizontal line at any pitch.
     const p = projectRectilinear(
-        enuVector(camera.heading, hz.depressionDeg), basis, safe, camera.fov, 0
+        enuVector(camera.heading, hz.depressionDeg), basis, proj, camera.fov, 0
     );
-    return Math.min(p ? p.y : safe.centreY, floor);
+    return p ? p.y : proj.centreY;
 }
 
 function computeFrame() {
     const safe = currentSafe();
     const hz = horizon(receiver.altM);
     const basis = cameraBasis(camera.heading, camera.pitch);
-    const frame = { safe, hz, basis, minCos: frustumCosLimit(camera.fov, safe) };
-    frame.yHorizon = horizonBaselineY(safe, basis, hz);
-    frame.ribbonTop = frame.yHorizon + COMPASS_BAND_PX;
-    frame.ribbonBottom = Math.min(safe.bottom, frame.ribbonTop + RIBBON_BAND_PX);
+    // The safe area governs where the camera centres and where the horizon sits;
+    // painting still covers the whole canvas, so no strip is left blank where a
+    // panel does not in fact reach. The panels are opaque and float above, exactly
+    // as they do over the map.
+    const full = { width: canvas.width / dpr, height: canvas.height / dpr };
+    // The flattened panorama spans the whole canvas rather than the safe area.
+    // Insetting it would squeeze all 360 degrees into what the panels leave over
+    // and strand the rest of the width empty, and unlike the camera view there is
+    // no centring to protect here: every bearing is on screen at once, and heading
+    // drag brings anything hidden behind a panel back out.
+    const panorama = { left: 0, width: full.width, top: safe.top };
+    // Same rectangle, but with the principal point raised so a level camera puts the
+    // horizon near the foot of the view instead of halfway up it.
+    const proj = { ...safe, centreY: safe.top + HORIZON_AT_REST * safe.height };
+    // Everywhere a point may land, measured about the principal point at the
+    // centre of the safe area. The canvas reaches further on the panel side than
+    // the safe area does, and culling to the safe area alone would leave that
+    // strip permanently empty.
+    const coverage = {
+        width: 2 * Math.max(proj.centreX, full.width - proj.centreX),
+        height: 2 * Math.max(proj.centreY, full.height - proj.centreY)
+    };
+    const frame = {
+        safe, full, panorama, proj, hz, basis,
+        minCos: frustumCosLimit(camera.fov, proj, coverage)
+    };
+    frame.yHorizon = horizonBaselineY(proj, basis, hz);
+    // Rides with the horizon while it is in view, and falls back to the ribbon when
+    // pitching up carries the horizon out of the frame — otherwise looking at the sky
+    // would leave no bearing reference at all.
+    frame.ribbonBottom = safe.bottom;
+    frame.ribbonTop = frame.ribbonBottom - RIBBON_BAND_PX;
+    frame.compassY = Math.min(frame.yHorizon, frame.ribbonTop - COMPASS_BAND_PX);
 
     const maxRangeKm = nmToKm(settings.skyMaxRangeNm);
     const drawable = [];
@@ -336,7 +549,7 @@ function computeFrame() {
 // ---------- drawing ----------
 
 function draw() {
-    if (!ctx || !receiver || !settings) return;
+    if (!active || !ctx || !receiver || !settings) return;
 
     const frame = computeFrame();
     lastFrame = frame;
@@ -353,68 +566,128 @@ function draw() {
     drawLabels(frame);
     drawHud(frame);
 
-    hitIndex = frame.drawable.map((d) => ({ icao: d.icao, x: d.x, y: d.y, r: d.size }));
+    hitIndex = frame.drawable
+        .filter((d) => isOnScreen(d, frame))
+        .map((d) => ({ icao: d.icao, x: d.x, y: d.y, r: d.size }));
     publishSelectedTooltip(frame);
 }
 
+// Sky above the horizon, ground below it, both edge to edge. There is no ground
+// plane in the scene — at realistic antenna heights almost none would be visible —
+// so the lower band is a plain tone that grounds the horizon rather than a
+// perspective surface.
 function drawSkyGradient(frame) {
-    const gradient = ctx.createLinearGradient(0, frame.safe.top, 0, frame.yHorizon);
-    gradient.addColorStop(0, '#cfe3f2');
-    gradient.addColorStop(1, '#eef5fa');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(
-        frame.safe.left, frame.safe.top, frame.safe.width, frame.yHorizon - frame.safe.top
-    );
+    const skyHeight = Math.max(0, frame.yHorizon);
+    if (skyHeight > 0) {
+        // Deepest at the zenith and washing out towards the horizon, which is both
+        // how the sky actually looks and where the colour can go without costing
+        // anything: the top of the view is nearly always empty, while the band just
+        // above the horizon is where the traffic is and where the chips — themselves
+        // blue — need the background to stay out of their way.
+        const gradient = ctx.createLinearGradient(0, 0, 0, frame.yHorizon);
+        gradient.addColorStop(0, '#9dc4e4');
+        gradient.addColorStop(0.55, '#cfe3f3');
+        gradient.addColorStop(1, '#eff5fa');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, frame.full.width, skyHeight);
+    }
+
+    const groundHeight = Math.max(0, frame.full.height - frame.yHorizon);
+    if (groundHeight > 0) {
+        // A muted earth tone. The band really is the ground — occluded by the curve of
+        // the Earth rather than absent — so warmth is honest here even though no
+        // terrain is drawn on it, and it separates from the sky far better than a
+        // neutral did. Kept desaturated on purpose: the selected aircraft is orange,
+        // and a clamped one sits astride this very boundary, so a deeper brown would
+        // start swallowing it. Green is avoided for a different reason — it is the
+        // military category colour.
+        ctx.fillStyle = '#ded3c4';
+        ctx.fillRect(0, frame.yHorizon, frame.full.width, groundHeight);
+    }
 }
 
-// Constant-elevation small circles, sampled in azimuth and drawn as broken
-// polylines. Spacing is uneven on purpose: nearly all traffic sits below 30
-// degrees, so the grid is tighter low down where it is needed.
+// Strokes a polyline, lifting the pen at a null point and wherever two consecutive
+// points land on opposite sides of the view. The second case is the panorama seam:
+// a path crossing due north leaves one edge and re-enters at the other, and joining
+// those points would draw a line straight back across everything between them.
+function strokeSeamAware(points, seamJump) {
+    ctx.beginPath();
+    let penDown = false;
+    let previousX = 0;
+
+    for (const p of points) {
+        if (!p) {
+            penDown = false;
+            continue;
+        }
+        if (penDown && Math.abs(p.x - previousX) > seamJump) {
+            penDown = false;
+        }
+        if (penDown) {
+            ctx.lineTo(p.x, p.y);
+        } else {
+            ctx.moveTo(p.x, p.y);
+            penDown = true;
+        }
+        previousX = p.x;
+    }
+
+    ctx.stroke();
+}
+
+// Constant-elevation small circles, sampled in azimuth. Spacing is uneven on
+// purpose: nearly all traffic sits below 30 degrees, so the grid is tighter low
+// down where it is needed.
 function drawElevationGrid(frame) {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
     ctx.lineWidth = 1;
 
     for (const elevation of [10, 20, 30, 45, 60]) {
-        ctx.beginPath();
-        let penDown = false;
+        const points = [];
         for (let az = camera.heading - 180; az <= camera.heading + 180; az += 2) {
-            const p = project(wrap360(az), elevation, frame);
-            if (!p) {
-                penDown = false;
-                continue;
-            }
-            if (penDown) {
-                ctx.lineTo(p.x, p.y);
-            } else {
-                ctx.moveTo(p.x, p.y);
-                penDown = true;
-            }
+            points.push(project(wrap360(az), elevation, frame));
         }
-        ctx.stroke();
+        strokeSeamAware(points, frame.full.width / 2);
     }
 }
 
+// Three levels, so a glance finds a direction and a closer look reads a bearing:
+// a cardinal letter, a numeric bearing every 30 degrees, and a bare tick every 10.
+// A single uniform row of numbers gives the eye nothing to land on.
 function drawCompass(frame) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.font = LABEL_FONT;
+    ctx.textAlign = 'center';
 
     for (let az = 0; az < 360; az += 10) {
-        const p = project(az, frame.hz.depressionDeg, frame);
-        if (!p) continue;
-        const major = az % 30 === 0;
-        ctx.fillRect(p.x, frame.yHorizon, 1, major ? 7 : 4);
-        if (major) {
-            ctx.fillText(String(az).padStart(3, '0'), p.x - 9, frame.yHorizon + 16);
+        const x = projectAxisX(az, frame);
+        if (x === null) continue;
+
+        const cardinal = CARDINALS[az];
+        const labelled = az % 30 === 0;
+
+        ctx.fillStyle = cardinal ? 'rgba(0, 0, 0, 0.65)' : 'rgba(0, 0, 0, 0.28)';
+        ctx.fillRect(x, frame.compassY, cardinal ? 2 : 1, cardinal ? 11 : labelled ? 8 : 4);
+
+        if (cardinal) {
+            ctx.font = CARDINAL_FONT;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.fillText(cardinal, x, frame.compassY + 24);
+        } else if (labelled) {
+            ctx.font = LABEL_FONT;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.fillText(String(az).padStart(3, '0'), x, frame.compassY + 20);
         }
     }
+
+    ctx.textAlign = 'left';
+    ctx.font = LABEL_FONT;
 }
 
 function drawHorizon(frame) {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
     ctx.lineWidth = 1.25;
     ctx.beginPath();
-    ctx.moveTo(frame.safe.left, frame.yHorizon);
-    ctx.lineTo(frame.safe.right, frame.yHorizon);
+    ctx.moveTo(0, frame.yHorizon);
+    ctx.lineTo(frame.full.width, frame.yHorizon);
     ctx.stroke();
 }
 
@@ -423,22 +696,100 @@ function drawHorizon(frame) {
 // View's own maximum range, so clipping the ribbon to the view's range would
 // discard real coverage.
 function drawRibbon(frame) {
-    if (!outline || outline.length < 3) return;
+    // The tracker only emits an outline once enough bearing sectors are populated,
+    // so a short list means there is not yet a coverage shape worth showing.
+    if (outlinePolar.length < 3 || !(outlineScaleNm > 0)) return;
 
-    const maxNm = Math.max(...outline.map((o) => o.DistanceNm || 0));
-    if (!(maxNm > 0)) return;
+    // The plotted area sits inside the band, so a bar at full scale still leaves room
+    // for its label and nothing is drawn outside the strip.
+    const plotTop = frame.ribbonTop + RIBBON_PAD_TOP;
+    const plotBottom = frame.ribbonBottom - RIBBON_PAD_BOTTOM;
+    const height = plotBottom - plotTop;
 
-    const height = frame.ribbonBottom - frame.ribbonTop;
-    ctx.fillStyle = 'rgba(0, 97, 146, 0.25)';
+    // Its own backing. Pitched up the ground leaves the frame, and without this the
+    // bars would sit on bare sky looking like part of the scene rather than a scale
+    // along its foot.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillRect(0, frame.ribbonTop, frame.full.width, frame.ribbonBottom - frame.ribbonTop);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, frame.ribbonTop);
+    ctx.lineTo(frame.full.width, frame.ribbonTop);
+    ctx.stroke();
 
-    for (const o of outline) {
-        const bearing = o.Bearing
-            ?? bearingTo(receiver.lat, receiver.lon, o.Latitude, o.Longitude);
-        const p = project(bearing, frame.hz.depressionDeg, frame);
-        if (!p) continue;
-        const bar = height * clamp((o.DistanceNm || 0) / maxNm, 0, 1);
-        ctx.fillRect(p.x - 1, frame.ribbonBottom - bar, 2, bar);
+    // Gridlines at full width, which reads as a chart rather than as stray marks now
+    // that each one is labelled with its value.
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.beginPath();
+    for (const y of [plotTop, plotTop + height / 2]) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(frame.full.width, y);
     }
+    ctx.stroke();
+
+    // One path filled once, rather than a rectangle per sector. Filling the union
+    // keeps the tone even: overlapping translucent rectangles would darken where
+    // they meet, and abutting ones leave a hairline seam from antialiasing.
+    const spans = [];
+    ctx.beginPath();
+    for (const o of outlinePolar) {
+        const left = project(wrap360(o.sectorStart), frame.hz.depressionDeg, frame);
+        const right = project(wrap360(o.sectorEnd), frame.hz.depressionDeg, frame);
+        if (!left || !right) continue;
+
+        const x = Math.min(left.x, right.x);
+        const width = Math.abs(right.x - left.x);
+        // A sector straddling the panorama seam wraps to the far edge, and would
+        // otherwise be drawn as a block spanning most of the view.
+        if (!(width > 0) || width > frame.full.width / 4) continue;
+
+        // Scaled to the rounded reach, not to the view's maximum range: reception
+        // commonly extends beyond the range being drawn, and clipping to that would
+        // discard real measured coverage.
+        const bar = height * clamp(o.distanceNm / outlineScaleNm, 0, 1);
+        ctx.rect(x, plotBottom - bar, width, bar);
+        spans.push([x, x + width]);
+    }
+    ctx.fillStyle = 'rgba(0, 97, 146, 0.38)';
+    ctx.fill();
+
+    // Baseline, so the profile reads as sitting on zero rather than floating.
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(0, plotBottom);
+    ctx.lineTo(frame.full.width, plotBottom);
+    ctx.stroke();
+
+    drawRibbonAxis(plotTop, plotBottom);
+}
+
+// Without these the bars are self-evidently something, but nothing says what. Every
+// tick carries its unit: reading a bare "50" against a distance scale means working
+// out what it is measured in from the one label that happens to say.
+function drawRibbonAxis(plotTop, plotBottom) {
+    const half = plotTop + (plotBottom - plotTop) / 2;
+    const ticks = [
+        [plotTop, `${outlineScaleNm} nm`],
+        [half, `${Math.round(outlineScaleNm / 2)} nm`],
+        [plotBottom, '0 nm']
+    ];
+
+    ctx.font = LABEL_FONT;
+    ctx.textAlign = 'right';
+
+    for (const [y, text] of ticks) {
+        const width = ctx.measureText(text).width;
+        // A chip behind each, because a bar may reach any height here and plain text
+        // over one is unreadable. Centred on its gridline, which the band's padding
+        // guarantees room for.
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillRect(RIBBON_AXIS_X - width - 4, y - 6, width + 7, 12);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillText(text, RIBBON_AXIS_X, y + 3.5);
+    }
+
+    ctx.textAlign = 'left';
 }
 
 // Ties each airborne chip to its bearing on the compass and to the ribbon bar
@@ -458,35 +809,43 @@ function drawStems(frame) {
     ctx.stroke();
 }
 
+// The history records barometric altitude while a chip is placed on geometric
+// altitude, and the two differ by several hundred feet. Left alone the trail would
+// run parallel to the flight path but never meet the chip at its end. The aircraft
+// reports both right now, so its own difference lifts the whole series onto the
+// same datum the chip uses. Zero when it reports only one of the two, in which case
+// both are already on that one.
+function trailDatumOffsetM() {
+    const selected = selectedIcao ? aircraft.get(selectedIcao) : null;
+    const geometric = selected?.GeometricAltitude?.Meters;
+    const barometric = selected?.BarometricAltitude?.Meters;
+
+    if (geometric == null || barometric == null) return 0;
+    return geometric - barometric;
+}
+
 function drawTrail(frame) {
     if (!trail.length) return;
 
-    ctx.strokeStyle = trailColor;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    let penDown = false;
+    const datumOffsetM = trailDatumOffsetM();
 
+    const points = [];
     for (const entry of trail) {
-        // Altitude is nullable in the history, so break the path rather than
-        // interpolating across a gap and drawing a line that was never flown.
+        // An entry without a position or an altitude is a sample of something else
+        // — a speed-only update, say — not evidence that the aircraft left a gap in
+        // its path. Skipped entirely, so the line continues across it; lifting the
+        // pen here would put a break in the trail every time one arrived.
         if (!entry.position || entry.altitudeMeters == null) {
-            penDown = false;
             continue;
         }
-        const p = projectPoint(entry.position, entry.altitudeMeters, frame);
-        if (!p) {
-            penDown = false;
-            continue;
-        }
-        if (penDown) {
-            ctx.lineTo(p.x, p.y);
-        } else {
-            ctx.moveTo(p.x, p.y);
-            penDown = true;
-        }
+        // Leaving the frame is different: the path genuinely goes off-screen there,
+        // so a null is pushed and the segments stay broken rather than bridging.
+        points.push(projectPoint(entry.position, entry.altitudeMeters + datumOffsetM, frame));
     }
 
-    ctx.stroke();
+    ctx.strokeStyle = trailColor;
+    ctx.lineWidth = 1.5;
+    strokeSeamAware(points, frame.full.width / 2);
 }
 
 // Reuses the map's altitude ramp and category palettes so the two views cannot
@@ -522,8 +881,8 @@ function drawSubHorizonMark(d) {
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
     ctx.fillRect(d.x - w / 2, d.y - h / 2, w, h);
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.lineWidth = 0.75;
     ctx.strokeRect(d.x - w / 2, d.y - h / 2, w, h);
 }
 
@@ -536,8 +895,12 @@ function drawChip(d, frame) {
     ctx.arc(d.x, d.y, d.size / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.lineWidth = 0.75;
+    // A definite outline, so a chip is found by its edge rather than by its fill
+    // standing out from the sky. The low-altitude end of the ramp is pale blue on a
+    // pale blue sky — barely over 1.3:1 — and without this the background could
+    // never be given any colour without losing those aircraft.
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 1;
     ctx.stroke();
 
     drawVelocityTick(d, frame);
@@ -574,22 +937,23 @@ function layoutLabels(frame) {
 
     for (let i = frame.drawable.length - 1; i >= 0; i--) {
         const d = frame.drawable[i];
-        // Losing the label of the aircraft just clicked would be worse than an
-        // overlap, so selection and hover always win and skip the collision test.
-        const forced = d.icao === selectedIcao || d.icao === hoveredIcao;
 
-        if (!forced) {
-            if (mode === 'selection') continue;
-            // A busy airport would otherwise pile labels along the horizon.
-            if (d.sub) continue;
-        }
+        // The selected and hovered aircraft already have their callsign in a
+        // tooltip, so a label here would just duplicate it next to the chip.
+        if (d.icao === selectedIcao || d.icao === hoveredIcao) continue;
+        if (mode === 'selection') continue;
+        // A busy airport would otherwise pile labels along the horizon.
+        if (d.sub) continue;
 
         const text = d.aircraft.Callsign || d.icao;
-        const x = d.x + d.size;
-        const y = d.y - d.size;
-        const rect = { x, y: y - LABEL_LINE_H, w: ctx.measureText(text).width, h: LABEL_LINE_H };
+        // Centred above the chip: offset to one side reads as belonging to whatever
+        // sits that way, which is ambiguous once chips are close together.
+        const x = d.x;
+        const y = d.y - d.size - LABEL_GAP_PX;
+        const width = ctx.measureText(text).width;
+        const rect = { x: x - width / 2, y: y - LABEL_LINE_H, w: width, h: LABEL_LINE_H };
 
-        if (!forced && mode !== 'all' && occupied.some((o) => overlaps(o, rect))) continue;
+        if (mode !== 'all' && occupied.some((o) => overlaps(o, rect))) continue;
 
         occupied.push(rect);
         placed.push({ text, x, y });
@@ -601,37 +965,56 @@ function layoutLabels(frame) {
 function drawLabels(frame) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
     ctx.font = LABEL_FONT;
+    ctx.textAlign = 'center';
     for (const label of layoutLabels(frame)) {
         ctx.fillText(label.text, label.x, label.y);
     }
+    ctx.textAlign = 'left';
 }
 
 function drawHud(frame) {
-    const parts = [
-        `HDG ${String(Math.round(camera.heading)).padStart(3, '0')}°`,
-        settings.skyFlatten ? '360°' : `FOV ${Math.round(camera.fov)}°`,
-        `${frame.drawable.length}/${frame.inRange} in view`
-    ];
+    if (!hudNodes) return;
 
-    // Disclose what is not drawn as a normal chip, so the clamping and the
-    // exclusions are visible on screen rather than quietly applied.
-    if (frame.belowHorizon) parts.push(`${frame.belowHorizon} below horizon`);
-    if (frame.noAltitude) parts.push(`${frame.noAltitude} no altitude`);
+    setText(hudNodes.heading, `${String(Math.round(camera.heading)).padStart(3, '0')}°`);
+    setText(hudNodes.count, `${frame.drawable.length}/${frame.inRange}`);
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.font = LABEL_FONT;
-    ctx.fillText(parts.join(' · '), frame.safe.left + 10, frame.safe.top + 16);
+    // Field of view has no meaning once the whole sky is on screen at fixed scale.
+    if (settings.skyFlatten) {
+        hudNodes.fovItem.style.display = 'none';
+    } else {
+        hudNodes.fovItem.style.display = '';
+        setText(hudNodes.fov, `${Math.round(camera.fov)}°`);
+    }
+
+    // Disclose what is not drawn as an ordinary chip, so the clamping and the
+    // exclusions are visible rather than quietly applied.
+    const notes = [];
+    if (frame.belowHorizon) notes.push(`${frame.belowHorizon} below horizon`);
+    if (frame.noAltitude) notes.push(`${frame.noAltitude} no altitude`);
+    setText(hudNodes.note, notes.join(' · '));
+    hudNodes.note.style.display = notes.length ? '' : 'none';
+
+    // Matches the panels' own inset from the corner, so the readout lines up with
+    // them rather than sitting proud of the top edge.
+    hud.style.left = `${(insets.left || 0) + 16}px`;
+    hud.style.top = `${(insets.top || 0) + 16}px`;
 }
 
 // Shape matched to what the shared hover tooltip already reads. The true
 // elevation is reported even for a chip clamped to the horizon, which is what
 // keeps the clamping honest.
 function hoverPayload(d) {
+    const altitude = d.aircraft.GeometricAltitude ?? d.aircraft.BarometricAltitude;
+    const speed = d.aircraft.Speed ?? d.aircraft.SpeedOnGround;
+
     return {
         icao: d.icao,
         callsign: d.aircraft.Callsign,
-        altitude: d.aircraft.GeometricAltitude ?? d.aircraft.BarometricAltitude,
-        speed: d.aircraft.Speed ?? d.aircraft.SpeedOnGround,
+        // Plain numbers in knots and feet, matching what the map emits: the shared
+        // tooltip converts from those, and handing it the wrapper objects instead
+        // produces NaN rather than an error.
+        altitude: altitude ? altitude.Feet : null,
+        speed: speed ? speed.Knots : null,
         x: d.x,
         y: d.y,
         azimuthDeg: d.azimuth,
@@ -639,10 +1022,18 @@ function hoverPayload(d) {
     };
 }
 
+// Whether a chip is actually on screen. The frustum cull works against a cone that
+// circumscribes the canvas, so an aircraft just outside the frame survives it — its
+// chip is then harmlessly clipped, but a tooltip anchored to it would be pulled back
+// into view by the edge clamping and point at nothing.
+function isOnScreen(d, frame) {
+    return d.x >= 0 && d.x <= frame.full.width && d.y >= 0 && d.y <= frame.full.height;
+}
+
 function publishSelectedTooltip(frame) {
     if (!selectedTooltipCallback) return;
     const d = frame.drawable.find((x) => x.icao === selectedIcao);
-    selectedTooltipCallback(d ? hoverPayload(d) : null);
+    selectedTooltipCallback(d && isOnScreen(d, frame) ? hoverPayload(d) : null);
 }
 
 // ---------- interaction ----------
@@ -662,9 +1053,15 @@ function hitTest(clientX, clientY) {
 }
 
 function onPointerDown(e) {
+    const rect = canvas.getBoundingClientRect();
+    const safe = currentSafe();
     drag = {
         x: e.clientX,
         y: e.clientY,
+        // Offsets from the view centre, so the angle under the pointer can be
+        // compared between where the drag started and where it is now.
+        originX: rect.left + safe.centreX,
+        originY: rect.top + safe.centreY,
         moved: 0,
         heading: camera.heading,
         pitch: camera.pitch
@@ -675,7 +1072,9 @@ function onPointerDown(e) {
 function onPointerMove(e) {
     if (!drag) {
         const hit = hitTest(e.clientX, e.clientY);
+        const previous = hoveredIcao;
         hoveredIcao = hit ? hit.icao : null;
+
         if (hit) {
             if (markerHoverEnterCallback) {
                 const d = lastFrame && lastFrame.drawable.find((x) => x.icao === hit.icao);
@@ -684,17 +1083,36 @@ function onPointerMove(e) {
         } else if (markerHoverLeaveCallback) {
             markerHoverLeaveCallback();
         }
+
+        // Hovering hides the aircraft's sky label, since the tooltip now shows the
+        // callsign. The tooltip appears at once, so the label has to go at once too;
+        // waiting for the next marker update leaves both on screen for up to a
+        // second. Redrawn only when the hovered aircraft actually changes, so moving
+        // the pointer across empty sky costs nothing.
+        if (hoveredIcao !== previous) {
+            requestDraw();
+        }
         return;
     }
 
     // A deliberate drag overrides any camera animation still in flight.
     anim = null;
-    const dx = e.clientX - drag.x;
-    const dy = e.clientY - drag.y;
-    drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
-    camera.heading = wrap360(drag.heading - dx * DEG_PER_PX);
+    const safe = currentSafe();
+    drag.moved = Math.max(
+        drag.moved,
+        Math.hypot(e.clientX - drag.x, e.clientY - drag.y)
+    );
+
+    // The turn is the difference between the angle under the pointer now and the
+    // angle under it when the drag began, so whatever was grabbed stays grabbed.
+    const turn = viewAngleAt(e.clientX - drag.originX, safe)
+        - viewAngleAt(drag.x - drag.originX, safe);
+    camera.heading = wrap360(drag.heading - turn);
+
     if (!settings.skyFlatten) {
-        camera.pitch = clampPitch(drag.pitch + dy * DEG_PER_PX, camera.fov, currentSafe());
+        const tilt = viewAngleAt(e.clientY - drag.originY, safe)
+            - viewAngleAt(drag.y - drag.originY, safe);
+        camera.pitch = clampCameraPitch(drag.pitch + tilt, safe);
     }
     requestDraw();
 }
@@ -720,7 +1138,8 @@ function onWheel(e) {
     if (settings.skyFlatten) return;
 
     camera.fov = clamp(camera.fov * (e.deltaY > 0 ? 1.08 : 1 / 1.08), FOV_MIN, FOV_MAX);
-    camera.pitch = clampPitch(camera.pitch, camera.fov, currentSafe());
+    // Re-clamped after the change: a wider view moves where the horizon lands.
+    camera.pitch = clampCameraPitch(camera.pitch);
     requestDraw();
 }
 
@@ -731,7 +1150,7 @@ function resetCamera() {
     anim = null;
     camera.heading = 0;
     camera.fov = 75;
-    camera.pitch = clampPitch(15, 75, currentSafe());
+    camera.pitch = clampCameraPitch(0);
     requestDraw();
 }
 

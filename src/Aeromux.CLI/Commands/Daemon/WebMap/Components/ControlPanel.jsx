@@ -17,8 +17,9 @@
 import { h, Fragment } from 'preact';
 import { useState, useRef, useEffect, useCallback } from 'preact/hooks';
 import { searchAircraft } from '../Services/ApiClient.js';
-import { formatCellSizeLabel, distanceUnitLabel } from '../Services/UnitConversion.js';
+import { formatCellSizeLabel, distanceUnitLabel, convertNauticalMiles } from '../Services/UnitConversion.js';
 import { HeatmapLegend } from './HeatmapLegend.jsx';
+import { ViewToggle } from './ViewToggle.jsx';
 
 // Splits text around a case-insensitive query match and wraps the matched portion in a highlight span
 function highlightMatch(text, query) {
@@ -34,7 +35,7 @@ function highlightMatch(text, query) {
     );
 }
 
-export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation, heatmapCollectionEnabled, heatmapScale }) {
+export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation, heatmapCollectionEnabled, heatmapScale, viewMode, receiverPending, onViewModeChange }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -163,6 +164,12 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                     </svg>
                 </button>
             </div>
+            <ViewToggle
+                mode={viewMode}
+                hasReceiver={!!receiverLocation}
+                receiverPending={receiverPending}
+                onChange={onViewModeChange}
+            />
             {settingsOpen && (
                 <div class="settings-dropdown">
                     <div class="settings-category">Units</div>
@@ -181,25 +188,34 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                         <button class={`unit-btn${units.distance === 'mi' ? ' active' : ''}`} onClick={() => setUnit('distance', 'mi')}>mi</button>
                     </div>
                     <div class="settings-category">Interface</div>
-                    <div class="settings-toggle" onClick={() => toggleSetting('rangeRings')}>
-                        <div class={`toggle-track${settings.rangeRings ? ' active' : ''}`}>
-                            <div class="toggle-knob" />
-                        </div>
-                        Range rings
-                    </div>
-                    <div class={`settings-toggle${!receiverLocation ? ' disabled' : ''}`}
-                         onClick={() => receiverLocation && toggleSetting('rangeOutline')}>
-                        <div class={`toggle-track${receiverLocation && settings.rangeOutline ? ' active' : ''}`}>
-                            <div class="toggle-knob" />
-                        </div>
-                        Range outline
-                    </div>
+                    {/* Range rings, range outline and the heatmap describe the map.
+                        In sky mode they are replaced by the sky controls below
+                        rather than shown inert. */}
+                    {viewMode !== 'sky' && (
+                        <>
+                            <div class="settings-toggle" onClick={() => toggleSetting('rangeRings')}>
+                                <div class={`toggle-track${settings.rangeRings ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Range rings
+                            </div>
+                            <div class={`settings-toggle${!receiverLocation ? ' disabled' : ''}`}
+                                 onClick={() => receiverLocation && toggleSetting('rangeOutline')}>
+                                <div class={`toggle-track${receiverLocation && settings.rangeOutline ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Range outline
+                            </div>
+                        </>
+                    )}
                     <div class="settings-toggle" onClick={() => toggleSetting('aircraftPhotos')}>
                         <div class={`toggle-track${settings.aircraftPhotos ? ' active' : ''}`}>
                             <div class="toggle-knob" />
                         </div>
                         Aircraft photos
                     </div>
+                    {viewMode !== 'sky' && (
+                        <>
                     <div class="settings-category">Heatmap</div>
                     <div class={`settings-toggle${!heatmapCollectionEnabled ? ' disabled' : ''}`}
                          onClick={() => heatmapCollectionEnabled && toggleSetting('heatmap')}
@@ -228,6 +244,70 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                             {heatmapScale && (
                                 <HeatmapLegend scaleMax={heatmapScale.scaleMax} maxCount={heatmapScale.maxCount} />
                             )}
+                        </>
+                    )}
+                        </>
+                    )}
+
+                    {viewMode === 'sky' && (
+                        <>
+                            <div class="settings-category">Sky View</div>
+                            <div class="settings-field-label">
+                                Maximum range ({distanceUnitLabel(units.distance)})
+                            </div>
+                            <div class="unit-group">
+                                {[50, 100, 150, 250].map((nm) => (
+                                    <button class={`unit-btn${settings.skyMaxRangeNm === nm ? ' active' : ''}`}
+                                            onClick={() => onSettingsChange({ ...settings, skyMaxRangeNm: nm })}>
+                                        {convertNauticalMiles(nm, units.distance).value}
+                                    </button>
+                                ))}
+                            </div>
+                            <div class="settings-field-label">Field of view</div>
+                            <div class="unit-group">
+                                {[45, 60, 75, 100].map((deg) => (
+                                    <button class={`unit-btn${settings.skyFov === deg ? ' active' : ''}`}
+                                            disabled={settings.skyFlatten}
+                                            onClick={() => onSettingsChange({ ...settings, skyFov: deg })}>
+                                        {deg}&deg;
+                                    </button>
+                                ))}
+                            </div>
+                            <div class="settings-field-label">Labels</div>
+                            <div class="unit-group">
+                                {[['selection', 'Selected'], ['auto', 'Auto'], ['all', 'All']].map(([value, label]) => (
+                                    <button class={`unit-btn${settings.skyLabels === value ? ' active' : ''}`}
+                                            onClick={() => onSettingsChange({ ...settings, skyLabels: value })}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div class="settings-toggle" onClick={() => toggleSetting('skyFlatten')}>
+                                <div class={`toggle-track${settings.skyFlatten ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Flatten to 360&deg;
+                            </div>
+                            <div class="settings-toggle" onClick={() => toggleSetting('skyRibbon')}>
+                                <div class={`toggle-track${settings.skyRibbon ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Coverage ribbon
+                            </div>
+                            {settings.skyRibbon && (
+                                <div class="settings-hint">
+                                    The strip along the bottom shows how far you have received
+                                    in each 5&deg; of bearing over the last 24 hours, on the
+                                    scale marked at its left edge. Gaps are directions nothing
+                                    has been heard from.
+                                </div>
+                            )}
+                            <div class="settings-toggle" onClick={() => toggleSetting('skyTrail')}>
+                                <div class={`toggle-track${settings.skyTrail ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Selection trail
+                            </div>
                         </>
                     )}
                     <div class="settings-category">Legend</div>

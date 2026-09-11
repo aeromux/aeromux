@@ -29,6 +29,7 @@ function recordingContext() {
         arc: record('arc'),
         stroke: record('stroke'),
         fill: record('fill'),
+        rect: record('rect'),
         fillRect: record('fillRect'),
         strokeRect: record('strokeRect'),
         fillText: record('fillText'),
@@ -65,6 +66,19 @@ export function makeCanvas(width, height) {
     };
 }
 
+// A minimal element, enough for the renderer to build its readout.
+function makeElement(tag) {
+    const el = {
+        tagName: tag,
+        className: '',
+        style: {},
+        textContent: '',
+        children: [],
+        appendChild(child) { el.children.push(child); return child; }
+    };
+    return el;
+}
+
 export function installGlobals(canvas, container) {
     globalThis.window = {
         devicePixelRatio: 2,
@@ -76,7 +90,7 @@ export function installGlobals(canvas, container) {
     };
 
     globalThis.document = {
-        createElement: () => canvas,
+        createElement: (tag) => (tag === 'canvas' ? canvas : makeElement(tag)),
         getElementById: () => container
     };
 

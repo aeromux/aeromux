@@ -157,14 +157,20 @@ export function focalPx(fovDeg, safeWidth) {
     return (safeWidth / 2) / Math.tan((fovDeg * DEG) / 2);
 }
 
-// Cosine of the half-angle of the cone that circumscribes the frame. Anything
-// outside it cannot land on screen and must be rejected before the perspective
-// divide: a point close to the camera plane divided by a near-zero forward
-// component projects to coordinates in the tens of thousands instead of being
-// culled, which then poisons grid polylines and hit testing.
-export function frustumCosLimit(fovDeg, safe) {
+// Cosine of the half-angle of the cone that circumscribes the drawable area.
+// Anything outside it cannot land on screen and must be rejected before the
+// perspective divide: a point close to the camera plane divided by a near-zero
+// forward component projects to coordinates in the tens of thousands instead of
+// being culled, which then poisons grid polylines and hit testing.
+//
+// The focal length comes from the safe area, because that is what sets the scale
+// and the principal point. The cone, though, has to cover everywhere a point may
+// legitimately land. Pass `coverage` — the extent of the full canvas measured
+// about the principal point — whenever the two differ, or content that belongs in
+// the strip a panel does not actually reach gets culled and leaves it blank.
+export function frustumCosLimit(fovDeg, safe, coverage = safe) {
     const focal = focalPx(fovDeg, safe.width);
-    return Math.cos(Math.atan(Math.hypot(safe.width / 2, safe.height / 2) / focal));
+    return Math.cos(Math.atan(Math.hypot(coverage.width / 2, coverage.height / 2) / focal));
 }
 
 // ---------- projection ----------
@@ -318,6 +324,17 @@ export function destinationPoint(lat, lon, bearingDeg, distanceKm) {
     );
 
     return { Latitude: phi2 * RAD, Longitude: wrap180(lambda2 * RAD) };
+}
+
+// Round a measured reach up to the next step, giving the coverage ribbon a scale
+// that only changes in jumps. Normalising to the raw maximum instead would rescale
+// the whole profile every time a single distant contact arrived, so a block's height
+// would mean a different number of miles from one minute to the next.
+export const RIBBON_SCALE_STEP_NM = 50;
+
+export function ribbonScaleNm(maxNm, stepNm = RIBBON_SCALE_STEP_NM) {
+    if (!(maxNm > 0)) return 0;
+    return Math.ceil(maxNm / stepNm) * stepNm;
 }
 
 // ---------- subscription bounds ----------

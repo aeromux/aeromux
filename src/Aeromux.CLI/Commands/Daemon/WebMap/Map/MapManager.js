@@ -458,6 +458,29 @@ export function panTo(lat, lon, keepZoom = false) {
     }
 }
 
+// View-neutral "bring this location into view", so the caller does not need to
+// know which view is active. The sky renderer's counterpart swings its camera to
+// the bearing instead of panning.
+export function focusOn(lat, lon) {
+    panTo(lat, lon, true);
+}
+
+// Re-measures the container. Required after the map has been hidden with
+// display:none, because MapLibre caches the zero size it measured while hidden and
+// would otherwise render into nothing on the way back.
+export function resize() {
+    if (map) {
+        map.resize();
+    }
+}
+
+export function destroy() {
+    if (map) {
+        map.remove();
+        map = null;
+    }
+}
+
 export function updateTrail(positions) {
     if (!map) return;
     const source = map.getSource('trail-source');

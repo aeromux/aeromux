@@ -18,9 +18,11 @@ import { h } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { fetchStats, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
+import * as SkyViewManager from '../SkyView/SkyViewManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
-import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight, nmToKm } from '../Services/UnitConversion.js';
+import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight, nmToKm, resolveDeviceDefaults } from '../Services/UnitConversion.js';
 import { receiverBox } from '../Services/SkyViewGeometry.js';
+import { computeInsets } from '../Services/SafeInsets.js';
 import { clampSheetPx, pxToFraction } from '../Services/SheetHeight.js';
 import { HoverTooltip } from './HoverTooltip.jsx';
 import { AircraftList } from './AircraftList.jsx';
@@ -63,6 +65,12 @@ export function App() {
     // values rather than the ones captured when they were registered.
     const viewModeRef = useRef('map');
     const receiverRef = useRef(null);
+    // The renderer for the active mode. Held in a ref as well as in state because
+    // the mount-registered handlers and the buffered-update flush both run outside
+    // the render cycle.
+    const viewRef = useRef(MapManager);
+    const [viewMode, setViewMode] = useState('map');
+    const [receiverPending, setReceiverPending] = useState(true);
     const updateBuffer = useRef([]);
     const bufferTimer = useRef(null);
     const defaultSections = {
@@ -97,6 +105,23 @@ export function App() {
         return bounds;
     }, [activeBounds]);
 
+    // Some defaults depend on the device rather than being fixed. Resolved in one
+    // place so both first load and Reset-to-defaults go through it: leaving the
+    // sentinel in place means no option in the group matches, and the control
+    // renders with nothing selected.
+    const withDeviceDefaults = useCallback((stored) => resolveDeviceDefaults(
+        stored,
+        window.matchMedia('(max-width: 768px)').matches
+    ), []);
+
+    // Measured from the live layout rather than hard-coded, so a future panel
+    // resize cannot silently desynchronise the scene from what covers it.
+    const currentInsets = useCallback(() => computeInsets({
+        mobile: window.matchMedia('(max-width: 768px)').matches,
+        panelRect: panelRef.current ? panelRef.current.getBoundingClientRect() : null,
+        viewportHeight: window.innerHeight
+    }), []);
+
     // Flush buffered aircraft updates to state and map.
     // SignalR pushes individual aircraft updates rapidly — batching them into 50ms
     // windows avoids triggering a React re-render for every single update.
@@ -115,7 +140,7 @@ export function App() {
 
         aircraftMapRef.current = mapCopy;
         setAircraftMap(mapCopy);
-        MapManager.updateMarkers(mapCopy);
+        viewRef.current.updateMarkers(mapCopy);
     }, []);
 
     const bufferUpdate = useCallback((type, icao, data) => {
@@ -139,19 +164,19 @@ export function App() {
         setStateHistory(null);
         stateHistoryRef.current = null;
 
-        MapManager.highlightSelected(icao);
-        MapManager.updateMarkers(aircraftMapRef.current);
+        viewRef.current.highlightSelected(icao);
+        viewRef.current.updateMarkers(aircraftMapRef.current);
 
         const selectedAircraft = aircraftMapRef.current.get(icao);
         const category = selectedAircraft?.Military ? 'military'
             : (selectedAircraft?.Ladd || selectedAircraft?.Pia) ? 'privacy'
             : 'normal';
-        MapManager.setTrailColor(category);
+        viewRef.current.setTrailColor(category);
 
         if (shouldPan) {
             const coord = coordinate || aircraftMapRef.current.get(icao)?.Coordinate;
             if (coord) {
-                MapManager.panTo(coord.Latitude, coord.Longitude, true);
+                viewRef.current.focusOn(coord.Latitude, coord.Longitude);
             }
         }
 
@@ -175,6 +200,13 @@ export function App() {
                     enabled: stateData.State.Enabled,
                     entries: (stateData.State.Entries || []).map(e => ({
                         timestamp: new Date(e.Timestamp).getTime(),
+                        // Kept for the sky view's path through space. The state
+                        // history carries position and altitude in one record, so
+                        // this needs no extra request. The flight-profile chart
+                        // reads by field name and ignores it.
+                        position: e.Position
+                            ? { Latitude: e.Position.Latitude, Longitude: e.Position.Longitude }
+                            : null,
                         altitudeFeet: e.Altitude?.Feet ?? null,
                         altitudeMeters: e.Altitude?.Meters ?? null,
                         speedKnots: e.Speed?.Knots ?? null,
@@ -205,9 +237,9 @@ export function App() {
         setStateHistory(null);
         stateHistoryRef.current = null;
 
-        MapManager.clearSelection();
-        MapManager.clearTrail();
-        MapManager.updateMarkers(aircraftMapRef.current);
+        viewRef.current.clearSelection();
+        viewRef.current.clearTrail();
+        viewRef.current.updateMarkers(aircraftMapRef.current);
 
         SignalR.deselectAircraft();
     }, []);
@@ -286,7 +318,10 @@ export function App() {
         // Persist as a fraction and re-apply as dvh so rotation is handled by CSS.
         applySheetHeight(`${(fraction * 100).toFixed(2)}dvh`);
         saveSheetHeight(fraction);
-    }, [applySheetHeight]);
+        if (viewModeRef.current === 'sky') {
+            SkyViewManager.setSafeInsets(currentInsets());
+        }
+    }, [applySheetHeight, currentInsets]);
 
     const resetLayout = useCallback(() => {
         setSections({ ...defaultSections });
@@ -299,23 +334,122 @@ export function App() {
     const handleReset = useCallback(() => {
         resetAllSettings();
         setUnits(loadUnits());
-        setSettings(loadSettings());
+        const defaults = withDeviceDefaults(loadSettings());
+        saveSettings(defaults);
+        setSettings(defaults);
         setSort(loadSort());
         applySheetHeight(null);
-    }, [applySheetHeight]);
+        // Defaults put the view back to the map, so the refs and the renderer have
+        // to follow or the toggle and what is on screen would disagree.
+        if (viewModeRef.current !== 'map') {
+            viewModeRef.current = 'map';
+            viewRef.current = MapManager;
+            setViewMode('map');
+            MapManager.resize();
+            MapManager.updateMarkers(aircraftMapRef.current);
+            applyBounds();
+        }
+    }, [applySheetHeight, applyBounds, withDeviceDefaults]);
+
+    // Only the synchronous part of a switch lives here. Everything that depends on
+    // the container actually being visible has to wait for the DOM, so it runs in
+    // the effect below instead.
+    const handleViewModeChange = useCallback((mode) => {
+        if (mode === viewModeRef.current) return;
+        if (mode === 'sky' && !receiverRef.current) return;
+
+        viewModeRef.current = mode;
+        viewRef.current = mode === 'sky' ? SkyViewManager : MapManager;
+        setViewMode(mode);
+        saveSettings({ ...loadSettings(), viewMode: mode });
+        setSettings(s => ({ ...s, viewMode: mode }));
+
+        // Swap the server-side subscription to whatever the new view needs.
+        applyBounds();
+    }, [applyBounds]);
+
+    // Adopting a view has to happen after the DOM has been committed: until then
+    // the incoming container is still display:none, so it measures zero and the
+    // canvas would be sized 0x0 and draw nothing at all. Both renderers need this —
+    // MapLibre also caches the zero size it measured while hidden.
+    useEffect(() => {
+        SkyViewManager.setActive(viewMode === 'sky');
+
+        const view = viewMode === 'sky' ? SkyViewManager : MapManager;
+        const icao = selectedRef.current;
+
+        if (viewMode === 'sky') {
+            const r = receiverRef.current;
+            if (!r) return;
+            SkyViewManager.setReceiver(r.lat, r.lon, r.altM);
+            SkyViewManager.setRangeOutline(rangeOutlineRef.current);
+            SkyViewManager.setSafeInsets(currentInsets());
+        }
+        // Before updateMarkers: the safe area is derived from the canvas size, and a
+        // container that was display:none measures zero until it is resized.
+        view.resize();
+        view.updateMarkers(aircraftMapRef.current);
+
+        // Selection and trail are application state, but each renderer keeps its own
+        // copy and only the visible one is kept current. The incoming view is
+        // therefore synchronised in full — including the cleared case, which is what
+        // deselecting in one view and returning to the other depends on.
+        if (icao) {
+            const aircraft = aircraftMapRef.current.get(icao);
+            const category = aircraft?.Military ? 'military'
+                : (aircraft?.Ladd || aircraft?.Pia) ? 'privacy'
+                : 'normal';
+            view.setTrailColor(category);
+            view.highlightSelected(icao);
+            // Only the sky view needs bringing round: its camera points one way, so a
+            // selection can sit behind it. The map shows every bearing at once, and
+            // moving it would discard wherever the user had panned to.
+            if (viewMode === 'sky' && aircraft?.Coordinate) {
+                view.focusOn(aircraft.Coordinate.Latitude, aircraft.Coordinate.Longitude);
+            }
+        } else {
+            view.clearSelection();
+        }
+
+        // The two views take different trail data: the map draws the flat position
+        // history, the sky needs altitude with each point and so reads the state
+        // history instead.
+        const trailPoints = viewMode === 'sky'
+            ? (stateHistoryRef.current ? stateHistoryRef.current.entries : null)
+            : (trailRef.current.length ? trailRef.current : null);
+        if (icao && trailPoints && trailPoints.length) {
+            view.updateTrail(trailPoints);
+        } else {
+            view.clearTrail();
+        }
+    }, [viewMode, currentInsets]);
 
     // Initialize on mount
     useEffect(() => {
         const mapInstance = MapManager.init('map-container');
+        SkyViewManager.init('sky-container');
+        // Settings must reach the renderer before it can draw anything; without
+        // them its first frame returns early and the canvas stays blank.
+        SkyViewManager.setSettings(loadSettings());
 
-        // Set up map event handlers
-        MapManager.onMarkerClick((icao) => handleSelect(icao));
-        MapManager.onMapClick(() => handleBack());
-        MapManager.onMarkerHover(
-            (data) => setHover(data),
-            () => setHover(null)
-        );
-        MapManager.onSelectedTooltip((data) => setSelectedTooltip(data));
+        // Registered on both renderers once, rather than re-registered on every
+        // switch, so the switch itself stays stateless. Each callback is gated on
+        // its own view being the active one: a hidden renderer can still emit — the
+        // sky view republishes the pinned tooltip on every frame it draws — and two
+        // renderers writing the same tooltip state makes it flicker between their
+        // two positions.
+        for (const [mode, view] of [['map', MapManager], ['sky', SkyViewManager]]) {
+            const whenActive = (fn) => (...args) => {
+                if (viewModeRef.current === mode) fn(...args);
+            };
+            view.onMarkerClick(whenActive((icao) => handleSelect(icao)));
+            view.onMapClick(whenActive(() => handleBack()));
+            view.onMarkerHover(
+                whenActive((data) => setHover(data)),
+                whenActive(() => setHover(null))
+            );
+            view.onSelectedTooltip(whenActive((data) => setSelectedTooltip(data)));
+        }
         MapManager.onHeatmapHover((data) => setHeatmapHover(data));
 
         // Viewport changes → send to SignalR. Guarded by mode: map.resize() on the
@@ -343,8 +477,28 @@ export function App() {
                     };
                     receiverRef.current = loc;
                     setReceiverLocation(loc);
+                    SkyViewManager.setReceiver(loc.lat, loc.lon, loc.altM);
                     MapManager.setCenter(loc.lat, loc.lon, 8);
                     MapManager.updateRangeRings(loc.lat, loc.lon, loadSettings().rangeRings, loadUnits().distance);
+                }
+                setReceiverPending(false);
+
+                // The persisted mode is applied only now: a stored 'sky' must not
+                // strand the user on an empty view, nor be discarded from a receiver
+                // that simply had not loaded yet.
+                const stored = loadSettings();
+                const resolved = withDeviceDefaults(stored);
+                if (resolved !== stored) {
+                    saveSettings(resolved);
+                    setSettings(resolved);
+                }
+                if (stored.viewMode === 'sky') {
+                    if (receiverRef.current) {
+                        handleViewModeChange('sky');
+                    } else {
+                        saveSettings({ ...loadSettings(), viewMode: 'map' });
+                        setSettings(s => ({ ...s, viewMode: 'map' }));
+                    }
                 }
 
                 // Wait for map to settle, then fetch initial aircraft
@@ -358,7 +512,7 @@ export function App() {
                             aircraftMapRef.current = newMap;
                             setAircraftMap(newMap);
                             setTotalCount(data.Count);
-                            MapManager.updateMarkers(newMap);
+                            viewRef.current.updateMarkers(newMap);
 
                             // If no receiver location, fit to aircraft
                             if (!stats.Receiver || stats.Receiver.Latitude == null) {
@@ -379,6 +533,7 @@ export function App() {
                 }, 500);
             } catch (e) {
                 // Stats fetch failed — try aircraft without center
+                setReceiverPending(false);
                 setTimeout(() => {
                     connectSignalR();
                 }, 500);
@@ -419,8 +574,17 @@ export function App() {
                             const prev = stateHistoryRef.current;
                             if (prev && prev.enabled !== false) {
                                 const ts = data.Timestamp ? new Date(data.Timestamp).getTime() : Date.now();
-                                const altFeet = data.Position?.BarometricAltitude?.Feet ?? null;
-                                const altMeters = data.Position?.BarometricAltitude?.Meters ?? null;
+                                // Barometric first, geometric as the fallback — the same
+                                // order the state history itself records, so live points
+                                // extend that series on one datum. Preferring geometric
+                                // here instead puts a step of several hundred feet at the
+                                // join, which shows up as a kink in the sky trail. The
+                                // fallback still covers aircraft that report only GNSS
+                                // height, which would otherwise contribute no point at all.
+                                const altSource = data.Position?.BarometricAltitude
+                                    ?? data.Position?.GeometricAltitude;
+                                const altFeet = altSource?.Feet ?? null;
+                                const altMeters = altSource?.Meters ?? null;
                                 const spdKnots = data.VelocityAndDynamics?.Speed?.Knots ?? null;
                                 const spdKmh = data.VelocityAndDynamics?.Speed?.KilometersPerHour ?? null;
                                 const spdMph = data.VelocityAndDynamics?.Speed?.MilesPerHour ?? null;
@@ -430,6 +594,15 @@ export function App() {
                                     if (!lastEntry || ts > lastEntry.timestamp) {
                                         let entries = [...prev.entries, {
                                             timestamp: ts,
+                                            // Without this the sky trail freezes at
+                                            // whatever the initial fetch returned and
+                                            // then breaks on every later point.
+                                            position: data.Position?.Coordinate
+                                                ? {
+                                                    Latitude: data.Position.Coordinate.Latitude,
+                                                    Longitude: data.Position.Coordinate.Longitude
+                                                }
+                                                : null,
                                             altitudeFeet: altFeet,
                                             altitudeMeters: altMeters,
                                             speedKnots: spdKnots,
@@ -457,7 +630,9 @@ export function App() {
                     onHeatmapUpdated: (data) => {
                         // Drop frames that arrive after toggle-off — an in-flight push would
                         // otherwise repopulate the cleared overlay.
-                        if (!heatmapEnabledRef.current) return;
+                        // Sky mode renders no heatmap, and a frame in flight across
+                        // the switch would otherwise repopulate a cleared overlay.
+                        if (!heatmapEnabledRef.current || viewModeRef.current !== 'map') return;
                         MapManager.setHeatmap(data);
                         setHeatmapScale({ scaleMax: data.ScaleMax, maxCount: data.MaxCount });
                     },
@@ -473,7 +648,7 @@ export function App() {
                                 data.Aircraft.forEach(a => newMap.set(a.ICAO, a));
                                 aircraftMapRef.current = newMap;
                                 setAircraftMap(newMap);
-                                MapManager.updateMarkers(newMap);
+                                viewRef.current.updateMarkers(newMap);
                                 applyBounds();
                             } catch (e) {
                                 // Ignore
@@ -507,20 +682,82 @@ export function App() {
         if (fraction) applySheetHeight(`${(fraction * 100).toFixed(2)}dvh`);
     }, [applySheetHeight]);
 
-    // Update range rings when settings or distance unit changes
+    // Update range rings when settings or distance unit changes. Map-only: the sky
+    // scene is gridded by elevation angle, since at realistic antenna heights
+    // almost no ground is visible to draw rings on.
     useEffect(() => {
         if (receiverLocation) {
             MapManager.updateRangeRings(receiverLocation.lat, receiverLocation.lon, settings.rangeRings, units.distance);
         }
     }, [settings.rangeRings, units.distance, receiverLocation]);
 
-    // Update range outline when settings or outline data changes
+    // The range outline feeds both views: the map overlay and the sky view's
+    // coverage ribbon read the same pushed array.
     useEffect(() => {
         MapManager.updateRangeOutline(rangeOutline, settings.rangeOutline);
+        SkyViewManager.setRangeOutline(rangeOutline);
     }, [settings.rangeOutline, rangeOutline]);
+
+    // Settings reach the renderer here. Without this every sky setting — field of
+    // view, max range, flatten, ribbon, trail, labels — would appear to do nothing.
+    // Runs in both modes so the canvas is already correct the instant sky mode is
+    // entered rather than one render later.
+    useEffect(() => {
+        SkyViewManager.setSettings(settings);
+    }, [settings]);
+
+    // Maximum range changes the server-side subscription as well as the drawing.
+    useEffect(() => {
+        if (viewMode === 'sky') applyBounds();
+    }, [settings.skyMaxRangeNm, viewMode, applyBounds]);
+
+    // The sky trail needs position and altitude together, which only the state
+    // history carries; the flat map trail has no altitude and would draw nothing.
+    useEffect(() => {
+        if (stateHistory?.entries) {
+            SkyViewManager.updateTrail(stateHistory.entries);
+        } else {
+            SkyViewManager.clearTrail();
+        }
+    }, [stateHistory]);
+
+    // Recomputed on selection change too, because selecting is itself what grows
+    // the mobile sheet from list to detail and so moves the horizon.
+    useEffect(() => {
+        if (viewMode !== 'sky') return;
+        SkyViewManager.setSafeInsets(currentInsets());
+    }, [viewMode, selectedIcao, detail, currentInsets]);
+
+    useEffect(() => {
+        const onViewportResize = () => {
+            SkyViewManager.setSafeInsets(currentInsets());
+            SkyViewManager.resize();
+        };
+        window.addEventListener('resize', onViewportResize);
+        window.addEventListener('orientationchange', onViewportResize);
+        return () => {
+            window.removeEventListener('resize', onViewportResize);
+            window.removeEventListener('orientationchange', onViewportResize);
+        };
+    }, [currentInsets]);
+
+    // Sky mode renders no heatmap, and because both views share one server-side
+    // viewport slot, leaving it subscribed would make the server re-project the
+    // whole grid for the sky box and again on the way back.
+    useEffect(() => {
+        if (viewMode === 'sky') {
+            SignalR.updateHeatmap(false, settings.heatmapCellNm, settings.heatmapWindowHours * 60);
+            MapManager.clearHeatmap();
+            setHeatmapScale(null);
+            setHeatmapHover(null);
+        } else if (settings.heatmap) {
+            SignalR.updateHeatmap(true, settings.heatmapCellNm, settings.heatmapWindowHours * 60);
+        }
+    }, [viewMode]);
 
     // Sync heatmap overlay with settings (drives the toggle AND Reset-to-defaults).
     useEffect(() => {
+        if (viewModeRef.current !== 'map') return;
         if (settings.heatmap) {
             SignalR.updateHeatmap(true, settings.heatmapCellNm, settings.heatmapWindowHours * 60);
         } else {
@@ -535,7 +772,10 @@ export function App() {
 
     return (
         <div>
-            <div id="map-container" class="map-container"></div>
+            <div id="map-container" class={`map-container${viewMode === 'sky' ? ' hidden-view' : ''}`}></div>
+            {/* Both canvases stay mounted; only visibility changes, so neither
+                renderer is ever torn down and rebuilt on a switch. */}
+            <div id="sky-container" class={`sky-container${viewMode === 'sky' ? '' : ' hidden-view'}`}></div>
 
             {/* Pinned tooltip for the selected aircraft (always shown while
                 selected); rendered first so a transient hover paints on top. */}
@@ -614,6 +854,9 @@ export function App() {
                 receiverLocation={receiverLocation}
                 heatmapCollectionEnabled={heatmapCollectionEnabled}
                 heatmapScale={heatmapScale}
+                viewMode={viewMode}
+                receiverPending={receiverPending}
+                onViewModeChange={handleViewModeChange}
             />
         </div>
     );
