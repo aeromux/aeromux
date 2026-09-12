@@ -12,6 +12,13 @@
 
 export const calls = [];
 
+// Virtual clock, shared with the performance.now() installed below.
+let virtualNow = 0;
+
+export function advanceClock(ms) {
+    virtualNow += ms;
+}
+
 function recordingContext() {
     const record = (name) => (...args) => { calls.push({ name, args }); };
 
@@ -96,8 +103,10 @@ export function installGlobals(canvas, container) {
 
     // Synchronous frames on a virtual 16 ms clock. Without advancing the clock an
     // animation that polls performance.now() would never finish and would recurse
-    // until the stack blew.
-    let virtualNow = 0;
+    // until the stack blew. Also advanceable by hand, because gesture timing reads
+    // performance.now() and a clock that only moves per frame cannot express
+    // "too slow to be a double-tap".
+    virtualNow = 0;
     globalThis.performance = { now: () => virtualNow };
     globalThis.requestAnimationFrame = (fn) => { virtualNow += 16; fn(virtualNow); return 1; };
 }

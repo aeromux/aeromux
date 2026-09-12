@@ -10,7 +10,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeCanvas, installGlobals, calls, resetCalls } from './Support/DomStub.mjs';
+import { makeCanvas, installGlobals, calls, resetCalls, advanceClock } from './Support/DomStub.mjs';
 import { safeArea, pitchRange, clampPitch, wrap180 } from '../Services/SkyViewGeometry.js';
 
 const canvas = makeCanvas(1400, 900);
@@ -60,16 +60,43 @@ function addAircraft(map, icao, bearingDeg, distanceKm, altitudeFeet, extra = {}
     return map;
 }
 
+// --- gesture helpers -------------------------------------------------------
+
+let nextPointerId = 1;
+
+function tap(x, y) {
+    const pointerId = nextPointerId++;
+    canvas.dispatch('pointerdown', { clientX: x, clientY: y, pointerId });
+    canvas.dispatch('pointerup', { clientX: x, clientY: y, pointerId });
+}
+
+// Two fingers down, moved to a new separation, then both lifted.
+function pinch(fromGap, toGap, { lift = true } = {}) {
+    const cx = 700;
+    const cy = 450;
+    const a = nextPointerId++;
+    const b = nextPointerId++;
+    canvas.dispatch('pointerdown', { clientX: cx - fromGap / 2, clientY: cy, pointerId: a });
+    canvas.dispatch('pointerdown', { clientX: cx + fromGap / 2, clientY: cy, pointerId: b });
+    canvas.dispatch('pointermove', { clientX: cx - toGap / 2, clientY: cy, pointerId: a });
+    canvas.dispatch('pointermove', { clientX: cx + toGap / 2, clientY: cy, pointerId: b });
+    if (lift) {
+        canvas.dispatch('pointerup', { clientX: cx - toGap / 2, clientY: cy, pointerId: a });
+        canvas.dispatch('pointerup', { clientX: cx + toGap / 2, clientY: cy, pointerId: b });
+    }
+    return { a, b, cx, cy, toGap };
+}
+
 function reset(settings = BASE_SETTINGS) {
     Sky.clearSelection();
     Sky.clearTrail();
     Sky.__test.setHovered(null);
     Sky.setSafeInsets({});
     Sky.setReceiver(RECEIVER.lat, RECEIVER.lon, 0);
-    // Double-click is the camera reset, and it is the only way to restore heading
-    // between tests. Without it a preceding test's heading leaks in and everything
-    // at the fixture bearings is legitimately culled as off-axis.
-    canvas.dispatch('dblclick', {});
+    // Restores heading between tests; without it a preceding test's heading leaks in
+    // and everything at the fixture bearings is legitimately culled as off-axis. The
+    // gesture that does this for a user is a double-tap, tested separately.
+    Sky.__test.resetCamera();
     Sky.setSettings({ ...settings });
 }
 
@@ -699,7 +726,8 @@ test('double-click restores heading, pitch, and field of view together', () => {
     const moved = Sky.__test.state().camera;
     assert.ok(moved.heading !== 0 || moved.fov !== 75, 'the camera actually moved');
 
-    canvas.dispatch('dblclick', {});
+    tap(700, 450);
+    tap(700, 450);
     const after = Sky.__test.state().camera;
     assert.equal(after.heading, 0, 'heading restored');
     assert.equal(after.fov, 75, 'field of view restored');
@@ -805,6 +833,200 @@ test('dragging turns the camera in step with the pointer, in both projections', 
         `half the canvas turns about half the field of view (got ${acrossView.toFixed(0)}°)`
     );
 
+    reset();
+});
+
+// -------------------- pinch --------------------
+
+test('spreading the fingers narrows the field of view and pinching widens it', () => {
+    reset();
+    const start = Sky.__test.state().camera.fov;
+
+    pinch(100, 200);
+    const spread = Sky.__test.state().camera.fov;
+    assert.ok(spread < start, `spreading zooms in (${start}° → ${spread.toFixed(1)}°)`);
+    // Doubling the separation halves the field of view.
+    assert.ok(Math.abs(spread - start / 2) < 1, 'the ratio is taken from the separation');
+
+    reset();
+    pinch(200, 100);
+    const squeezed = Sky.__test.state().camera.fov;
+    assert.ok(squeezed > start, `pinching zooms out (${start}° → ${squeezed.toFixed(1)}°)`);
+    reset();
+});
+
+test('the pinch ratio is measured from the start, so it does not drift', () => {
+    reset();
+    const start = Sky.__test.state().camera.fov;
+    // Out and back within one gesture must land where it began.
+    const cx = 700;
+    const a = nextPointerId++;
+    const b = nextPointerId++;
+    canvas.dispatch('pointerdown', { clientX: cx - 60, clientY: 450, pointerId: a });
+    canvas.dispatch('pointerdown', { clientX: cx + 60, clientY: 450, pointerId: b });
+    // Out to a wide separation and back to the one it started at (120).
+    for (const gap of [90, 140, 200, 140, 120]) {
+        canvas.dispatch('pointermove', { clientX: cx - gap / 2, clientY: 450, pointerId: a });
+        canvas.dispatch('pointermove', { clientX: cx + gap / 2, clientY: 450, pointerId: b });
+    }
+    canvas.dispatch('pointerup', { clientX: cx - 60, clientY: 450, pointerId: a });
+    canvas.dispatch('pointerup', { clientX: cx + 60, clientY: 450, pointerId: b });
+
+    assert.ok(
+        Math.abs(Sky.__test.state().camera.fov - start) < 0.5,
+        `returning to the original separation restores the field of view (${Sky.__test.state().camera.fov.toFixed(1)}°)`
+    );
+    reset();
+});
+
+test('pinch clamps at both ends of the field-of-view range', () => {
+    reset();
+    pinch(400, 20);
+    assert.equal(Sky.__test.state().camera.fov, 120, 'clamped wide');
+    reset();
+    pinch(20, 400);
+    assert.equal(Sky.__test.state().camera.fov, 30, 'clamped narrow');
+    reset();
+});
+
+test('pinch is inert in the flattened panorama, where field of view has no meaning', () => {
+    reset({ ...BASE_SETTINGS, skyFlatten: true });
+    const before = Sky.__test.state().camera.fov;
+    pinch(100, 250);
+    assert.equal(Sky.__test.state().camera.fov, before, 'unchanged when flattened');
+    reset();
+});
+
+test('lifting one of two fingers resumes rotating without a jump', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'A', 0, 20, 35000);
+    Sky.updateMarkers(map);
+
+    const { a, b, cx, cy, toGap } = pinch(100, 160, { lift: false });
+    const headingDuringPinch = Sky.__test.state().camera.heading;
+
+    // Lift one finger; the other stays put.
+    canvas.dispatch('pointerup', { clientX: cx + toGap / 2, clientY: cy, pointerId: b });
+    assert.equal(
+        Sky.__test.state().camera.heading, headingDuringPinch,
+        'letting go of one finger does not itself turn the camera'
+    );
+
+    // Continuing to drag must turn from where the survivor is, not from where the
+    // first finger went down — otherwise the view snaps by the difference.
+    canvas.dispatch('pointermove', { clientX: cx - toGap / 2 - 40, clientY: cy, pointerId: a });
+    const turned = wrap180(Sky.__test.state().camera.heading - headingDuringPinch);
+    assert.ok(turned > 0.5 && turned < 20, `a small drag turns a small amount (${turned.toFixed(1)}°)`);
+
+    canvas.dispatch('pointerup', { clientX: cx - toGap / 2 - 40, clientY: cy, pointerId: a });
+    reset();
+});
+
+test('a pinch is never a tap', () => {
+    reset();
+    let clicked = null;
+    let deselected = false;
+    Sky.onMarkerClick((icao) => { clicked = icao; });
+    Sky.onMapClick(() => { deselected = true; });
+
+    pinch(100, 180);
+    assert.ok(clicked === null && !deselected, 'two fingers select nothing');
+
+    Sky.onMarkerClick(null);
+    Sky.onMapClick(null);
+    reset();
+});
+
+// -------------------- double-tap --------------------
+
+test('two quick taps in the same place reset the camera', () => {
+    reset();
+    canvas.dispatch('wheel', { deltaY: -120 });
+    canvas.dispatch('pointerdown', { clientX: 700, clientY: 450, pointerId: 900 });
+    canvas.dispatch('pointermove', { clientX: 500, clientY: 500, pointerId: 900 });
+    canvas.dispatch('pointerup', { clientX: 500, clientY: 500, pointerId: 900 });
+    const moved = Sky.__test.state().camera;
+    assert.ok(moved.heading !== 0 || moved.fov !== 75, 'the camera actually moved');
+
+    tap(700, 450);
+    advanceClock(80);
+    tap(702, 452);
+
+    const after = Sky.__test.state().camera;
+    assert.equal(after.heading, 0, 'heading restored');
+    assert.equal(after.fov, 75, 'field of view restored');
+    assert.equal(after.pitch, clampPitch(0, 75, safeArea(1400, 900, {})), 'pitch restored');
+    reset();
+});
+
+test('the second tap of a double-tap does not also select or deselect', () => {
+    reset();
+    let deselections = 0;
+    Sky.onMapClick(() => { deselections++; });
+
+    tap(300, 300);
+    assert.equal(deselections, 1, 'the first tap acts as an ordinary tap');
+    advanceClock(80);
+    tap(300, 300);
+    assert.equal(deselections, 1, 'the second is consumed by the reset');
+
+    Sky.onMapClick(null);
+    reset();
+});
+
+test('taps too far apart in time or space are two ordinary taps', () => {
+    reset();
+    let deselections = 0;
+    Sky.onMapClick(() => { deselections++; });
+
+    tap(300, 300);
+    advanceClock(400);            // beyond the double-tap window
+    tap(300, 300);
+    assert.equal(deselections, 2, 'a slow second tap acts on its own');
+
+    advanceClock(400);
+    tap(300, 300);
+    advanceClock(50);
+    tap(300, 400);                // same moment, well away
+    assert.equal(deselections, 4, 'a distant second tap acts on its own');
+
+    Sky.onMapClick(null);
+    reset();
+});
+
+// -------------------- pointer cancel --------------------
+
+test('a cancelled pointer ends the gesture instead of stranding it', () => {
+    reset();
+    const before = Sky.__test.state().camera.heading;
+
+    canvas.dispatch('pointerdown', { clientX: 700, clientY: 450, pointerId: 950 });
+    canvas.dispatch('pointermove', { clientX: 650, clientY: 450, pointerId: 950 });
+    const turned = Sky.__test.state().camera.heading;
+    assert.notEqual(turned, before, 'the drag was under way');
+
+    // The browser takes the pointer away — no pointerup ever arrives.
+    canvas.dispatch('pointercancel', { clientX: 650, clientY: 450, pointerId: 950 });
+    canvas.dispatch('pointermove', { clientX: 400, clientY: 450, pointerId: 950 });
+    assert.equal(
+        Sky.__test.state().camera.heading, turned,
+        'further movement no longer turns the camera'
+    );
+    reset();
+});
+
+test('a cancelled pointer is not a tap', () => {
+    reset();
+    let deselected = false;
+    Sky.onMapClick(() => { deselected = true; });
+
+    const pointerId = 951;
+    canvas.dispatch('pointerdown', { clientX: 300, clientY: 300, pointerId });
+    canvas.dispatch('pointercancel', { clientX: 300, clientY: 300, pointerId });
+    assert.ok(!deselected, 'a cancel does not click');
+
+    Sky.onMapClick(null);
     reset();
 });
 

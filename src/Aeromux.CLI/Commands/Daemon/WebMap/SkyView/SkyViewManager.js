@@ -97,6 +97,11 @@ function viewAngleAt(offsetPx, safe) {
     return (Math.atan(offsetPx / focalPx(camera.fov, safe.width)) * 180) / Math.PI;
 }
 const DRAG_THRESHOLD_PX = 4;
+// A second tap within this long, and this close, is a double-tap. Detected from
+// pointer events rather than the browser's dblclick, so mouse and touch take one
+// path — binding both would fire the reset twice.
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP_PX = 24;
 const SWING_MS = 400;
 const LABEL_FONT = '10px InterVariable, Inter, system-ui, sans-serif';
 const CARDINAL_FONT = '600 12px InterVariable, Inter, system-ui, sans-serif';
@@ -137,7 +142,11 @@ let active = true;
 let frameRequested = false;
 let anim = null;
 let animToken = 0;
+// The number of pointers down decides the gesture: one rotates, two pinch.
+const pointers = new Map();
 let drag = null;
+let pinch = null;
+let lastTap = null;
 let hitIndex = [];
 let lastFrame = null;
 let hud = null;
@@ -166,8 +175,10 @@ export function init(containerId) {
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
+    // A cancelled pointer never produces an up. Without this the gesture is never
+    // torn down, and the camera carries on turning with nothing on screen.
+    canvas.addEventListener('pointercancel', onPointerCancel);
     canvas.addEventListener('wheel', onWheel, { passive: false });
-    canvas.addEventListener('dblclick', resetCamera);
 
     resize();
     return canvas;
@@ -1054,24 +1065,78 @@ function hitTest(clientX, clientY) {
     return null;
 }
 
-function onPointerDown(e) {
+// Begins a rotate gesture from wherever the given pointer currently is. Called on
+// the first pointer down, and again when a pinch drops back to one finger — the
+// second case is why it takes a position rather than reading the event: continuing
+// against the position the *first* finger started at would jump the view.
+function beginDrag(x, y) {
     const rect = canvas.getBoundingClientRect();
     const safe = currentSafe();
     drag = {
-        x: e.clientX,
-        y: e.clientY,
+        x,
+        y,
         // Offsets from the view centre, so the angle under the pointer can be
-        // compared between where the drag started and where it is now.
+        // compared between where the drag began and where it is now.
         originX: rect.left + safe.centreX,
         originY: rect.top + safe.centreY,
         moved: 0,
         heading: camera.heading,
-        pitch: camera.pitch
+        pitch: camera.pitch,
+        // A gesture that became a pinch is never a tap, even after the second
+        // finger lifts and this reverts to a drag.
+        pinched: drag ? drag.pinched : false
     };
+}
+
+const pointerDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+function onPointerDown(e) {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     canvas.setPointerCapture(e.pointerId);
+
+    if (pointers.size === 1) {
+        drag = null;
+        beginDrag(e.clientX, e.clientY);
+        return;
+    }
+
+    if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        if (drag) drag.pinched = true;
+        pinch = { startDistance: pointerDistance(a, b), startFov: camera.fov };
+        drag = null;
+    }
 }
 
 function onPointerMove(e) {
+    if (pointers.has(e.pointerId)) {
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (pinch && pointers.size >= 2) {
+        anim = null;
+        // Field of view has no meaning in the flattened panorama, where the whole
+        // sky is already on screen at a fixed scale — the wheel is inert there too.
+        if (settings.skyFlatten) return;
+
+        const [a, b] = [...pointers.values()];
+        const spread = pointerDistance(a, b);
+        if (!(spread > 0) || !(pinch.startDistance > 0)) return;
+
+        // Measured from the start of the gesture rather than the previous move, so
+        // it cannot accumulate drift: spreading the fingers widens the separation
+        // and narrows the view, which is zooming in.
+        camera.fov = clamp(
+            pinch.startFov * (pinch.startDistance / spread),
+            FOV_MIN,
+            FOV_MAX
+        );
+        // Re-clamped after the change: a wider view moves where the horizon lands.
+        camera.pitch = clampCameraPitch(camera.pitch);
+        requestDraw();
+        return;
+    }
+
     if (!drag) {
         const hit = hitTest(e.clientX, e.clientY);
         const previous = hoveredIcao;
@@ -1119,12 +1184,48 @@ function onPointerMove(e) {
     requestDraw();
 }
 
-function onPointerUp(e) {
-    const wasDrag = drag && drag.moved > DRAG_THRESHOLD_PX;
-    drag = null;
+// Shared teardown. `wasTap` is false for a cancel: a pointer taken away by the
+// browser is not a click.
+function endPointer(e, wasTap) {
+    pointers.delete(e.pointerId);
     canvas.releasePointerCapture(e.pointerId);
 
-    if (wasDrag) return;
+    const moved = drag ? drag.moved : 0;
+    const pinched = pinch !== null || (drag && drag.pinched);
+
+    if (pointers.size >= 2) return;
+
+    if (pointers.size === 1) {
+        // Dropping from two fingers to one: resume rotating from where the
+        // surviving finger is now, not from where the first one started.
+        pinch = null;
+        const [remaining] = [...pointers.values()];
+        drag = null;
+        beginDrag(remaining.x, remaining.y);
+        if (pinched) drag.pinched = true;
+        return;
+    }
+
+    pinch = null;
+    drag = null;
+
+    if (!wasTap || pinched || moved > DRAG_THRESHOLD_PX) return;
+
+    const now = performance.now();
+    const isDouble = lastTap
+        && now - lastTap.time <= DOUBLE_TAP_MS
+        && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) <= DOUBLE_TAP_SLOP_PX;
+
+    if (isDouble) {
+        // Only this tap's selection is suppressed; the first has already acted.
+        // Holding every tap to see whether a second follows would put a visible
+        // delay on ordinary selection, which is the far more common action.
+        lastTap = null;
+        resetCamera();
+        return;
+    }
+
+    lastTap = { time: now, x: e.clientX, y: e.clientY };
 
     const hit = hitTest(e.clientX, e.clientY);
     if (hit) {
@@ -1132,6 +1233,14 @@ function onPointerUp(e) {
     } else if (mapClickCallback) {
         mapClickCallback();
     }
+}
+
+function onPointerUp(e) {
+    endPointer(e, true);
+}
+
+function onPointerCancel(e) {
+    endPointer(e, false);
 }
 
 function onWheel(e) {
@@ -1193,6 +1302,11 @@ function stepSwing(token) {
 // renderer. Not referenced by application code.
 export const __test = {
     state: () => ({ camera, hitIndex, lastFrame }),
+    // Test setup needs a deterministic way back to the default camera. The gesture
+    // that does this in the application is a double-tap, which is exercised by its
+    // own tests; driving it from every setUp would make unrelated tests depend on
+    // gesture timing and would fire a stray deselect on the first tap.
+    resetCamera: () => resetCamera(),
     labels: () => (lastFrame ? layoutLabels(lastFrame) : []),
     setHovered: (icao) => { hoveredIcao = icao; }
 };

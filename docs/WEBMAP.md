@@ -100,10 +100,10 @@ A `Map` / `Sky` control sits in the control panel at the top right, directly bel
 |--------|--------|
 | Drag left / right | Turn the camera. The scene follows your pointer one-to-one, so whatever you grab stays under it. |
 | Drag up / down | Tilt up towards the zenith. Tilting far enough carries the horizon out of the frame — which is what looking up means. |
-| Scroll | Field of view, 30°–120°. Also selectable in the settings panel. |
+| Scroll, or pinch | Field of view, 30°–120°. Pinch two fingers apart to zoom in, together to zoom out. Also selectable in the settings panel. In flattened mode there is no field of view to change, so pinch does nothing there. |
 | Click / tap an aircraft | Select it |
 | Click / tap empty sky | Deselect |
-| Double-click / double-tap | Reset heading, tilt, and field of view |
+| Double-click / double-tap | Reset heading, tilt, and field of view. On a double-tap the second tap only resets — it does not also select. |
 
 At rest the camera is level and the horizon sits low in the frame, so the sky gets most of the view and the ground — which has nothing drawn on it — gets little. Traffic is concentrated near the horizon: at 20 nm even an aircraft at FL350 is only about 16° above it, and it takes a pass within a few miles to climb past 40°. A level camera covers roughly 0–39° of elevation, which contains almost everything.
 
