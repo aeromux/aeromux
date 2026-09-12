@@ -24,6 +24,9 @@ import {
     aircraftAltitudeM,
     destinationPoint,
     wrap180,
+    bearingTickStep,
+    bearingLabelStep,
+    BEARING_STEPS,
     ribbonScaleNm,
     RIBBON_SCALE_STEP_NM,
     receiverBox
@@ -263,6 +266,47 @@ test('destinationPoint steps the right way and the right distance', () => {
     const east = destinationPoint(50, 8, 90, 100);
     assert.ok(east.Longitude > 8, 'moved east');
     near(haversineDistance(50, 8, east.Latitude, east.Longitude), 100, 0.5, 'distance east');
+});
+
+// -------------------- compass spacing --------------------
+
+test('every bearing step divides 90, so cardinals always land on a tick', () => {
+    for (const step of BEARING_STEPS) {
+        assert.equal(90 % step, 0, `${step} divides 90`);
+    }
+});
+
+test('the tick interval keeps ticks at least the target apart', () => {
+    // A degree covers plenty of pixels when zoomed in, so a fine interval fits.
+    assert.equal(bearingTickStep(0.022, 26), 1);
+    // The default camera view.
+    assert.equal(bearingTickStep(0.063, 26), 2);
+    // The flattened panorama on a desktop, and again on a phone where the same
+    // 360 degrees are squeezed into a quarter of the width.
+    assert.equal(bearingTickStep(0.257, 26), 10);
+    assert.equal(bearingTickStep(0.923, 26), 30);
+
+    for (const degPerPx of [0.02, 0.063, 0.14, 0.257, 0.6, 0.923]) {
+        const step = bearingTickStep(degPerPx, 26);
+        assert.ok(step / degPerPx >= 26, `${degPerPx}: ticks are not cramped`);
+    }
+});
+
+test('the label interval is a multiple of the tick interval', () => {
+    // Otherwise a number would land between two ticks rather than on one.
+    for (const degPerPx of [0.02, 0.063, 0.14, 0.257, 0.6, 0.923]) {
+        const tick = bearingTickStep(degPerPx, 26);
+        const label = bearingLabelStep(tick, degPerPx, 90);
+        assert.equal(label % tick, 0, `${degPerPx}: ${label} is a multiple of ${tick}`);
+        assert.ok(label >= tick, 'and never finer than the ticks');
+        assert.ok(label / degPerPx >= 90, 'numbers stay far enough apart to read');
+    }
+});
+
+test('an extreme scale falls back to the coarsest step rather than failing', () => {
+    // Nothing on the ladder is coarse enough; the answer must still be usable.
+    assert.equal(bearingTickStep(50, 26), 90);
+    assert.equal(bearingLabelStep(90, 50, 90), 90);
 });
 
 // -------------------- ribbon scale --------------------

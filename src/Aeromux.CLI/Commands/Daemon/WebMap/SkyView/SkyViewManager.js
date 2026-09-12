@@ -34,6 +34,8 @@ import {
     projectEquirect,
     frustumCosLimit,
     focalPx,
+    bearingTickStep,
+    bearingLabelStep,
     safeArea,
     chipSizePx,
     hazeAlpha,
@@ -106,6 +108,11 @@ const SWING_MS = 400;
 const LABEL_FONT = '10px InterVariable, Inter, system-ui, sans-serif';
 const CARDINAL_FONT = '600 12px InterVariable, Inter, system-ui, sans-serif';
 const CARDINALS = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+// Roughly how far apart the compass row wants its ticks and its numbers. The
+// interval is chosen from these rather than fixed in degrees, so the row keeps the
+// same density whatever the field of view or the mode does to the angular scale.
+const TICK_TARGET_PX = 26;
+const LABEL_TARGET_PX = 90;
 const LABEL_LINE_H = 11;
 const LABEL_GAP_PX = 4;
 // The range outline is recorded in 5-degree bearing sectors. Drawing each at its
@@ -669,12 +676,22 @@ function drawElevationGrid(frame) {
 function drawCompass(frame) {
     ctx.textAlign = 'center';
 
-    for (let az = 0; az < 360; az += 10) {
+    // Degrees covered by a pixel at the centre of the view. In the camera view this
+    // varies across the frame — a degree covers fewer pixels towards the edges — so
+    // the centre is the representative value and ticks crowd slightly at the sides,
+    // which is the perspective being honest.
+    const degreesPerPixel = settings.skyFlatten
+        ? 360 / Math.max(1, frame.full.width)
+        : 180 / Math.PI / focalPx(camera.fov, frame.safe.width);
+    const tickStep = bearingTickStep(degreesPerPixel, TICK_TARGET_PX);
+    const labelStep = bearingLabelStep(tickStep, degreesPerPixel, LABEL_TARGET_PX);
+
+    for (let az = 0; az < 360; az += tickStep) {
         const x = projectAxisX(az, frame);
         if (x === null) continue;
 
         const cardinal = CARDINALS[az];
-        const labelled = az % 30 === 0;
+        const labelled = az % labelStep === 0;
 
         ctx.fillStyle = cardinal ? 'rgba(0, 0, 0, 0.65)' : 'rgba(0, 0, 0, 0.28)';
         ctx.fillRect(x, frame.compassY, cardinal ? 2 : 1, cardinal ? 11 : labelled ? 8 : 4);

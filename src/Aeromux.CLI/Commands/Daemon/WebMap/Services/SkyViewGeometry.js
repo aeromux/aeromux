@@ -337,6 +337,34 @@ export function ribbonScaleNm(maxNm, stepNm = RIBBON_SCALE_STEP_NM) {
     return Math.ceil(maxNm / stepNm) * stepNm;
 }
 
+// ---------- compass spacing ----------
+
+// Bearing intervals worth marking. Every one divides 90, so the cardinal points
+// always fall on a tick whichever is chosen.
+export const BEARING_STEPS = [1, 2, 5, 10, 15, 30, 45, 90];
+
+// The finest interval from that ladder whose ticks would still be at least
+// `targetPx` apart. Spacing the compass by angle alone gives a row that is dense
+// in the flattened panorama, where the whole circle spans the view, and nearly
+// empty in the camera view, where only a fraction of it does — and that changes
+// again with the field of view. Choosing by pixels keeps the row looking the same
+// in both.
+export function bearingTickStep(degreesPerPixel, targetPx, ladder = BEARING_STEPS) {
+    // Rounds the interval up, so ticks are never closer together than the target.
+    // The ladder is coarse, so this can overshoot; the target is chosen with that
+    // in mind rather than being the spacing actually achieved.
+    const wanted = degreesPerPixel * targetPx;
+    return ladder.find((step) => step >= wanted) ?? ladder[ladder.length - 1];
+}
+
+// The interval to put numbers on: far enough apart not to collide, and a multiple
+// of the tick step so every label lands on a tick rather than between two.
+export function bearingLabelStep(tickStep, degreesPerPixel, targetPx, ladder = BEARING_STEPS) {
+    const wanted = degreesPerPixel * targetPx;
+    return ladder.find((step) => step % tickStep === 0 && step >= wanted)
+        ?? ladder[ladder.length - 1];
+}
+
 // ---------- subscription bounds ----------
 
 // Circumscribing latitude/longitude box around the receiver, used as the

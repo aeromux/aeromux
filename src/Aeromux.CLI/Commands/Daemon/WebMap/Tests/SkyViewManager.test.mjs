@@ -455,6 +455,38 @@ test('the compass distinguishes cardinals from bearings from bare ticks', () => 
     assert.ok(heights.size >= 2, `ticks vary in height (${[...heights].join(', ')})`);
     assert.ok(Math.max(...heights) > Math.min(...heights), 'majors stand above minors');
 
+    // Spacing is chosen in pixels rather than degrees, so the row stays about as
+    // dense whatever the field of view does to the angular scale.
+    const xs = ticks.map((c) => c.args[0]).sort((a, b) => a - b);
+    const gaps = xs.slice(1).map((x, i) => x - xs[i]).filter((g) => g > 0.5);
+    const median = gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
+    assert.ok(median > 15 && median < 90, `ticks sit about ${median.toFixed(0)}px apart`);
+});
+
+test('the compass keeps its density across fields of view and both modes', () => {
+    const medianGap = () => {
+        resetCalls();
+        Sky.updateMarkers(new Map());
+        const frame = Sky.__test.state().lastFrame;
+        const xs = calls
+            .filter((c) => c.name === 'fillRect' && Math.abs(c.args[1] - frame.compassY) < 0.5)
+            .map((c) => c.args[0])
+            .sort((a, b) => a - b);
+        const gaps = xs.slice(1).map((x, i) => x - xs[i]).filter((g) => g > 0.5);
+        return gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
+    };
+
+    for (const fov of [30, 75, 120]) {
+        reset({ ...BASE_SETTINGS, skyFov: fov });
+        const gap = medianGap();
+        assert.ok(gap > 15 && gap < 90, `camera at ${fov}°: ${gap.toFixed(0)}px between ticks`);
+    }
+
+    reset({ ...BASE_SETTINGS, skyFlatten: true });
+    const flat = medianGap();
+    assert.ok(flat > 15 && flat < 90, `flattened: ${flat.toFixed(0)}px between ticks`);
+    reset();
+
     reset();
 });
 
