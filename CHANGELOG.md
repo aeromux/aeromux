@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.8.0] — Unreleased
+## [0.8.0] — 2026-09-12
 
 ### Added
 
@@ -201,6 +201,7 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.8.0]: https://github.com/aeromux/aeromux/releases/tag/v0.8.0
 [0.7.7]: https://github.com/aeromux/aeromux/releases/tag/v0.7.7
 [0.7.6]: https://github.com/aeromux/aeromux/releases/tag/v0.7.6
 [0.7.5]: https://github.com/aeromux/aeromux/releases/tag/v0.7.5
