@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveDeviceDefaults } from '../Services/UnitConversion.js';
+import { resolveDeviceDefaults, loadSettings, saveSettings } from '../Services/UnitConversion.js';
 
 test('an unresolved label setting becomes auto on a desktop', () => {
     const resolved = resolveDeviceDefaults({ skyLabels: null }, false);
@@ -39,4 +39,44 @@ test('an already-resolved object is returned as-is, so callers can detect a chan
     const stored = { skyLabels: 'auto' };
     // Reset-to-defaults relies on this identity check to know whether to persist.
     assert.equal(resolveDeviceDefaults(stored, false), stored);
+});
+
+// A minimal localStorage, so the persistence round-trip can be exercised at all.
+function installStorage() {
+    const store = new Map();
+    globalThis.localStorage = {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => { store.set(k, String(v)); },
+        removeItem: (k) => { store.delete(k); }
+    };
+    return store;
+}
+
+test('every stored setting survives a save and load round-trip', () => {
+    // loadSettings rebuilds its result key by key, so a setting added to the
+    // defaults but forgotten there is silently dropped on the next load — the
+    // control then renders against a value the user never chose. This asserts the
+    // whole object rather than one key, so the next setting added is covered too.
+    installStorage();
+    const defaults = loadSettings();
+
+    // Flip everything away from its default, so a key that is not carried through
+    // reverts visibly rather than coincidentally matching.
+    const modified = {};
+    for (const [key, value] of Object.entries(defaults)) {
+        if (typeof value === 'boolean') modified[key] = !value;
+        else if (typeof value === 'number') modified[key] = value + 1;
+        else if (value === null) modified[key] = 'all';
+        else modified[key] = value === 'map' ? 'sky' : 'auto';
+    }
+
+    saveSettings(modified);
+    assert.deepEqual(loadSettings(), modified);
+});
+
+test('both halves of the sun and moon feature are on by default', () => {
+    installStorage();
+    const settings = loadSettings();
+    assert.equal(settings.skyCelestial, true, 'the markers');
+    assert.equal(settings.skyTwilight, true, 'and the sky tint');
 });

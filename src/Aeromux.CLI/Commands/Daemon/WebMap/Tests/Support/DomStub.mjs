@@ -34,6 +34,12 @@ function recordingContext() {
         moveTo: record('moveTo'),
         lineTo: record('lineTo'),
         arc: record('arc'),
+        // The moon's terminator is an ellipse drawn in a rotated, translated frame.
+        ellipse: record('ellipse'),
+        save: record('save'),
+        restore: record('restore'),
+        translate: record('translate'),
+        rotate: record('rotate'),
         stroke: record('stroke'),
         fill: record('fill'),
         rect: record('rect'),

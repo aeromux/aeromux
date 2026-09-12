@@ -69,6 +69,8 @@ const SETTINGS_DEFAULTS = {
     skyFlatten: false,       // 360-degree equirectangular panorama
     skyRibbon: true,         // coverage ribbon below the horizon
     skyTrail: true,          // 3D path for the selected aircraft
+    skyCelestial: true,      // sun and moon markers at their real positions
+    skyTwilight: true,       // sky colour follows the sun's height
     skyLabels: null          // 'selection' | 'auto' | 'all'; null = not yet
                              // resolved for this device, see App.jsx
 };
@@ -92,6 +94,8 @@ export function loadSettings() {
                 skyFlatten: parsed.skyFlatten !== undefined ? parsed.skyFlatten : SETTINGS_DEFAULTS.skyFlatten,
                 skyRibbon: parsed.skyRibbon !== undefined ? parsed.skyRibbon : SETTINGS_DEFAULTS.skyRibbon,
                 skyTrail: parsed.skyTrail !== undefined ? parsed.skyTrail : SETTINGS_DEFAULTS.skyTrail,
+                skyCelestial: parsed.skyCelestial !== undefined ? parsed.skyCelestial : SETTINGS_DEFAULTS.skyCelestial,
+                skyTwilight: parsed.skyTwilight !== undefined ? parsed.skyTwilight : SETTINGS_DEFAULTS.skyTwilight,
                 skyLabels: parsed.skyLabels !== undefined ? parsed.skyLabels : SETTINGS_DEFAULTS.skyLabels
             };
         }

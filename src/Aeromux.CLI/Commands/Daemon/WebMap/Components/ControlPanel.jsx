@@ -308,6 +308,31 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                                 </div>
                                 Selection trail
                             </div>
+                            <div class="settings-toggle" onClick={() => toggleSetting('skyCelestial')}>
+                                <div class={`toggle-track${settings.skyCelestial ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Sun and moon
+                            </div>
+                            {settings.skyCelestial && (
+                                <div class="settings-hint">
+                                    Marks where the sun and the moon are right now, with the
+                                    moon's current phase and its lit side facing the sun.
+                                </div>
+                            )}
+                            <div class="settings-toggle" onClick={() => toggleSetting('skyTwilight')}>
+                                <div class={`toggle-track${settings.skyTwilight ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Day and night sky
+                            </div>
+                            {settings.skyTwilight && (
+                                <div class="settings-hint">
+                                    Colours the sky by the sun's height, from daylight through
+                                    dusk to night. Aircraft outlines follow it, so traffic stays
+                                    visible after dark. Turn this off for a fixed daylight sky.
+                                </div>
+                            )}
                         </>
                     )}
                     <div class="settings-category">Legend</div>

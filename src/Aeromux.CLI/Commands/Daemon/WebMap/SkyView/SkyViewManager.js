@@ -47,6 +47,8 @@ import {
     clampPitch,
     ribbonScaleNm
 } from '../Services/SkyViewGeometry.js';
+import { sunPosition, moonPosition, moonPhase, isUp } from '../Services/Ephemeris.js';
+import { defaultPalette, skyPalette, css } from '../Services/SkyPalette.js';
 import { haversineDistance, nmToKm } from '../Services/UnitConversion.js';
 import { CATEGORIES, SELECTED_COLOR, interpolateColor } from '../Map/AircraftIcons.js';
 
@@ -119,6 +121,45 @@ const LABEL_GAP_PX = 4;
 // true width lets neighbours merge into one silhouette, and leaves a real notch
 // wherever nothing has been heard.
 const OUTLINE_SECTOR_DEG = 5;
+
+// The sun and moon are drawn as symbols at an exaggerated size, not at the half
+// degree they really subtend. This is the same admission `chipSizePx` makes for
+// aircraft, and for a sharper reason: the moon's phase is the point of drawing it,
+// and the terminator is a shape that needs room. Telling a gibbous moon from a full
+// one means resolving a dark sliver of about 2 px, which takes a disc near 20 px
+// across — where true size yields 8 px on a wide desktop and only 4 px in a
+// windowed browser with the aircraft list open.
+//
+// Do not "correct" this back to the true angle. It was written that way first, and
+// the result was a terminator nobody could see on a disc smaller than a speck of
+// traffic — the two most prominent objects in the sky rendering smaller than an
+// aircraft 100 nm away.
+//
+// Size still tracks the field of view, so zooming in still enlarges them, and the
+// moon still grows and shrinks by 12 per cent across its month.
+const CELESTIAL_SCALE = 3;
+const CELESTIAL_MIN_PX = 20;
+const CELESTIAL_MAX_PX = 48;
+// Below this illuminated fraction the lit sliver is thinner than a line, so the
+// moon is drawn as an outline instead of a hairline crescent that would vanish.
+const MOON_OUTLINE_FRACTION = 0.03;
+// Outermost halo ring, as a multiple of the disc radius.
+const SUN_HALO_SCALE = 2.6;
+// How far above its centre a body's label sits, again in disc radii. Shared by
+// both bodies so the two labels line up: sizing each to its own body put the sun's
+// label 20 px higher than the moon's, which read as two different treatments
+// rather than one.
+//
+// It clears the inner, denser halo ring rather than the outermost one. Clearing
+// 2.6 is what pushed the sun's label so far out; at 1.7 only the 10%-alpha wash
+// falls behind the text, which is invisible against the sky.
+const CELESTIAL_LABEL_REACH = 1.7;
+const SUN_CORE = '#fff8d8';
+const SUN_HALO = 'rgb(255, 214, 92)';
+const SUN_RIM = 'rgba(240, 176, 40, 0.85)';
+const MOON_LIT = '#f2efe6';
+const MOON_UNLIT = 'rgba(90, 96, 107, 0.45)';
+const MOON_RIM = 'rgba(70, 76, 88, 0.75)';
 const TRAIL_COLORS = {
     normal: 'rgb(0, 97, 146)',
     military: 'rgb(0, 110, 0)',
@@ -158,6 +199,10 @@ let hitIndex = [];
 let lastFrame = null;
 let hud = null;
 let hudNodes = null;
+// Wall time, read through one indirection so tests can pin it. The celestial
+// positions are the only thing here that depends on the date rather than on
+// elapsed time, and the test harness virtualises performance.now() but not Date.
+let clock = () => new Date();
 let markerClickCallback = null;
 let mapClickCallback = null;
 let markerHoverEnterCallback = null;
@@ -205,6 +250,13 @@ export function destroy() {
 // up with the panels instead of floating at an arbitrary offset. It is written to
 // imperatively — it changes on every frame of a drag, and routing that through the
 // component tree would re-render the aircraft list sixty times a second.
+// Bearing and elevation in the same three-digit bearing style as the heading
+// readout, so the two line up when read together.
+function formatAzEl(body) {
+    const azimuth = String(Math.round(wrap360(body.azimuthDeg))).padStart(3, '0');
+    return `${azimuth}° ${Math.round(body.elevationDeg)}°`;
+}
+
 function buildHud(container) {
     if (!container || !container.appendChild) return;
 
@@ -235,12 +287,16 @@ function buildHud(container) {
     const heading = item('HDG', false);
     const fov = item('FOV', false);
     const count = item('in view', true);
+    const sun = item('SUN', false);
+    const moon = item('MOON', false);
     const note = document.createElement('div');
     note.className = 'sky-hud-note';
 
     hud.appendChild(heading.wrap);
     hud.appendChild(fov.wrap);
     hud.appendChild(count.wrap);
+    hud.appendChild(sun.wrap);
+    hud.appendChild(moon.wrap);
     hud.appendChild(note);
     container.appendChild(hud);
 
@@ -249,6 +305,10 @@ function buildHud(container) {
         fov: fov.value,
         fovItem: fov.wrap,
         count: count.value,
+        sun: sun.value,
+        sunItem: sun.wrap,
+        moon: moon.value,
+        moonItem: moon.wrap,
         note
     };
 }
@@ -421,6 +481,77 @@ function projectAxisX(bearingDeg, frame) {
     return p.x >= 0 && p.x <= frame.full.width ? p.x : null;
 }
 
+// Projects without the frustum cull. The moon's terminator is oriented by the
+// on-screen direction to the sun, which stays meaningful when the sun itself is
+// far outside the frame — so the sun must still yield a position there. Points
+// behind the camera are still rejected.
+function projectUnculled(azimuthDeg, elevationDeg, frame) {
+    return settings.skyFlatten
+        ? projectEquirect(azimuthDeg, elevationDeg, camera.heading, frame.panorama, frame.yHorizon)
+        : projectRectilinear(
+            enuVector(azimuthDeg, elevationDeg), frame.basis, frame.proj, camera.fov, 0
+        );
+}
+
+// Pixel diameter of a body: the angle it really subtends, scaled up to something
+// legible and then clamped. The angle drives it, so the relationship to the field
+// of view and the moon's monthly variation both survive; the scale is what makes
+// the phase readable.
+function celestialSizePx(diameterDeg, frame) {
+    // The flattened panorama is anisotropic — degrees per pixel differ across and
+    // up — so a disc scaled from the true angle would be an ellipse. The horizontal
+    // scale is used and the body stays a circle; at this width the whole sky is on
+    // screen at once, so both bodies sit at the floor regardless.
+    const px = settings.skyFlatten
+        ? (diameterDeg / 360) * frame.panorama.width
+        : focalPx(camera.fov, frame.safe.width) * diameterDeg * Math.PI / 180;
+    return clamp(px * CELESTIAL_SCALE, CELESTIAL_MIN_PX, CELESTIAL_MAX_PX);
+}
+
+// Where the sun and moon are this instant, ready to draw.
+//
+// Computed once per frame for the whole frame: the readout needs the same values
+// the drawing does, and the sun's position is needed even when the sun is not
+// drawn, because it orients the moon. Recomputed every frame rather than on a
+// timer — the arithmetic is a few microseconds, while a 30-second interval would
+// step each body about 2 px at the default field of view, which is visible
+// stuttering bought for nothing.
+function computeCelestial(frame) {
+    // Computed for either half of the feature. The markers need both bodies; the
+    // sky tint needs the sun's elevation even when nothing is drawn for it, so the
+    // two settings cannot gate the arithmetic between them.
+    if (!settings.skyCelestial && !settings.skyTwilight) return null;
+
+    const now = clock();
+    const sun = sunPosition(now, receiver.lat, receiver.lon, receiver.altM);
+    const moon = moonPosition(now, receiver.lat, receiver.lon, receiver.altM);
+
+    return {
+        sun: {
+            ...sun,
+            // Unculled, so it can orient the moon from off-screen at night.
+            point: projectUnculled(sun.azimuthDeg, sun.elevationDeg, frame),
+            // A sun behind the camera projects to nothing at all, and the moon still
+            // has to be lit from the right side. Its antipode is in front of the
+            // camera exactly then, and in a pinhole projection a great circle maps to
+            // a straight line — so the moon, the sun and the antipode stay collinear
+            // on screen and the direction is simply reversed.
+            antipodePoint: projectUnculled(
+                wrap360(sun.azimuthDeg + 180), -sun.elevationDeg, frame
+            ),
+            up: isUp(sun, frame.hz.depressionDeg),
+            sizePx: celestialSizePx(sun.diameterDeg, frame)
+        },
+        moon: {
+            ...moon,
+            phase: moonPhase(now),
+            point: project(moon.azimuthDeg, moon.elevationDeg, frame),
+            up: isUp(moon, frame.hz.depressionDeg),
+            sizePx: celestialSizePx(moon.diameterDeg, frame)
+        }
+    };
+}
+
 function projectPoint(coord, altM, frame) {
     const groundKm = haversineDistance(receiver.lat, receiver.lon, coord.Latitude, coord.Longitude);
     const azimuth = bearingTo(receiver.lat, receiver.lon, coord.Latitude, coord.Longitude);
@@ -498,6 +629,14 @@ function computeFrame() {
     frame.ribbonBottom = safe.bottom;
     frame.ribbonTop = frame.ribbonBottom - RIBBON_BAND_PX;
     frame.compassY = Math.min(frame.yHorizon, frame.ribbonTop - COMPASS_BAND_PX);
+    // After the horizon baseline, which the flattened projection measures from.
+    frame.celestial = computeCelestial(frame);
+    // What the sky looks like this frame, and what everything drawn against it has
+    // to do in response. With the tint switched off the view keeps the fixed daylight
+    // sky it has always had, and the chip outlines stay dark to match it.
+    frame.palette = settings.skyTwilight && frame.celestial
+        ? skyPalette(frame.celestial.sun.elevationDeg)
+        : defaultPalette();
 
     const maxRangeKm = nmToKm(settings.skyMaxRangeNm);
     const drawable = [];
@@ -578,6 +717,8 @@ function draw() {
     drawElevationGrid(frame);
     drawCompass(frame);
     drawHorizon(frame);
+    // Behind every aircraft, so a chip crossing the sun stays readable.
+    drawCelestial(frame);
     if (settings.skyRibbon) drawRibbon(frame);
     drawStems(frame);
     if (settings.skyTrail) drawTrail(frame);
@@ -604,9 +745,9 @@ function drawSkyGradient(frame) {
         // above the horizon is where the traffic is and where the chips — themselves
         // blue — need the background to stay out of their way.
         const gradient = ctx.createLinearGradient(0, 0, 0, frame.yHorizon);
-        gradient.addColorStop(0, '#9dc4e4');
-        gradient.addColorStop(0.55, '#cfe3f3');
-        gradient.addColorStop(1, '#eff5fa');
+        gradient.addColorStop(0, css(frame.palette.zenith));
+        gradient.addColorStop(0.55, css(frame.palette.middle));
+        gradient.addColorStop(1, css(frame.palette.horizon));
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, frame.full.width, skyHeight);
     }
@@ -620,7 +761,8 @@ function drawSkyGradient(frame) {
         // and a clamped one sits astride this very boundary, so a deeper brown would
         // start swallowing it. Green is avoided for a different reason — it is the
         // military category colour.
-        ctx.fillStyle = '#ded3c4';
+        // Follows the sky, or a warm band sits glowing under a night horizon.
+        ctx.fillStyle = css(frame.palette.ground);
         ctx.fillRect(0, frame.yHorizon, frame.full.width, groundHeight);
     }
 }
@@ -658,7 +800,7 @@ function strokeSeamAware(points, seamJump) {
 // purpose: nearly all traffic sits below 30 degrees, so the grid is tighter low
 // down where it is needed.
 function drawElevationGrid(frame) {
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.strokeStyle = css(frame.palette.ink, 0.08);
     ctx.lineWidth = 1;
 
     for (const elevation of [10, 20, 30, 45, 60]) {
@@ -693,16 +835,18 @@ function drawCompass(frame) {
         const cardinal = CARDINALS[az];
         const labelled = az % labelStep === 0;
 
-        ctx.fillStyle = cardinal ? 'rgba(0, 0, 0, 0.65)' : 'rgba(0, 0, 0, 0.28)';
+        ctx.fillStyle = cardinal
+            ? css(frame.palette.ink, 0.65)
+            : css(frame.palette.ink, 0.28);
         ctx.fillRect(x, frame.compassY, cardinal ? 2 : 1, cardinal ? 11 : labelled ? 8 : 4);
 
         if (cardinal) {
             ctx.font = CARDINAL_FONT;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.fillStyle = css(frame.palette.ink, 0.75);
             ctx.fillText(cardinal, x, frame.compassY + 24);
         } else if (labelled) {
             ctx.font = LABEL_FONT;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.fillStyle = css(frame.palette.ink, 0.45);
             ctx.fillText(String(az).padStart(3, '0'), x, frame.compassY + 20);
         }
     }
@@ -712,12 +856,123 @@ function drawCompass(frame) {
 }
 
 function drawHorizon(frame) {
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.strokeStyle = css(frame.palette.ink, 0.45);
     ctx.lineWidth = 1.25;
     ctx.beginPath();
     ctx.moveTo(0, frame.yHorizon);
     ctx.lineTo(frame.full.width, frame.yHorizon);
     ctx.stroke();
+}
+
+// The sun and the moon where they actually are.
+//
+// Nothing is drawn for a body that is down. Aircraft the Earth hides are clamped
+// to the horizon in a distinct style so that surface traffic does not silently
+// vanish, but a sun that has set is genuinely not there and a marker for it would
+// be an invention.
+function drawCelestial(frame) {
+    const celestial = frame.celestial;
+    // The markers' own gate: the positions may have been computed purely to colour
+    // the sky, in which case there is nothing to draw.
+    if (!celestial || !settings.skyCelestial) return;
+
+    if (celestial.sun.up && celestial.sun.point) {
+        drawSun(celestial.sun);
+    }
+    if (celestial.moon.up && celestial.moon.point) {
+        drawMoon(celestial.moon, celestial.sun);
+    }
+}
+
+// A disc with a soft surround. The surround is two translucent rings rather than a
+// radial gradient: it reads the same at these sizes, and the warm rim is what
+// keeps it from being mistaken for an aircraft chip, which is cool blue and
+// hard-edged.
+function drawSun(sun) {
+    const { x, y } = sun.point;
+    const r = sun.sizePx / 2;
+
+    ctx.fillStyle = SUN_HALO;
+    for (const [scale, alpha] of [[SUN_HALO_SCALE, 0.10], [1.7, 0.18]]) {
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, r * scale, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = SUN_CORE;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = SUN_RIM;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
+// A disc with the unlit part shaded.
+//
+// The terminator is oriented by the on-screen direction from the moon to the sun.
+// The lit side faces the sun by definition, so taking the direction in screen
+// space is exactly right and sidesteps converting the astronomical position angle
+// of the bright limb through the parallactic angle. It holds at night too, because
+// the sun's position is computed whether or not it is drawn.
+function drawMoon(moon, sun) {
+    const { x, y } = moon.point;
+    const r = moon.sizePx / 2;
+    const lit = moon.phase.fraction;
+
+    let dx = -1;
+    let dy = 0;
+    if (sun.point) {
+        dx = sun.point.x - x;
+        dy = sun.point.y - y;
+    } else if (sun.antipodePoint) {
+        dx = x - sun.antipodePoint.x;
+        dy = y - sun.antipodePoint.y;
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+    // Local frame with the sun along positive x, so the lit limb is the right-hand
+    // side of the disc and the terminator is symmetric about the x axis.
+    ctx.rotate(Math.atan2(dy, dx));
+
+    if (lit < MOON_OUTLINE_FRACTION) {
+        // Too thin to fill: a hairline crescent would disappear, and an outline at
+        // least says where the moon is.
+        ctx.strokeStyle = MOON_RIM;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        return;
+    }
+
+    // The whole disc in the unlit tone, then the lit region painted over it.
+    ctx.fillStyle = MOON_UNLIT;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // The terminator is a half ellipse whose width follows the illuminated
+    // fraction: the full disc at new and full, a straight line at half, and it
+    // crosses to the far side as the moon becomes gibbous.
+    const waist = r * Math.abs(1 - 2 * lit);
+    ctx.fillStyle = MOON_LIT;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+    ctx.ellipse(0, 0, waist, r, 0, Math.PI / 2, -Math.PI / 2, lit < 0.5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = MOON_RIM;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
 }
 
 // Measured reception range per bearing, on its own distance scale taken from the
@@ -738,9 +993,9 @@ function drawRibbon(frame) {
     // Its own backing. Pitched up the ground leaves the frame, and without this the
     // bars would sit on bare sky looking like part of the scene rather than a scale
     // along its foot.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillStyle = css(frame.palette.panel, 0.55);
     ctx.fillRect(0, frame.ribbonTop, frame.full.width, frame.ribbonBottom - frame.ribbonTop);
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.10)';
+    ctx.strokeStyle = css(frame.palette.ink, 0.10);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, frame.ribbonTop);
@@ -749,7 +1004,7 @@ function drawRibbon(frame) {
 
     // Gridlines at full width, which reads as a chart rather than as stray marks now
     // that each one is labelled with its value.
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.strokeStyle = css(frame.palette.ink, 0.08);
     ctx.beginPath();
     for (const y of [plotTop, plotTop + height / 2]) {
         ctx.moveTo(0, y);
@@ -780,11 +1035,11 @@ function drawRibbon(frame) {
         ctx.rect(x, plotBottom - bar, width, bar);
         spans.push([x, x + width]);
     }
-    ctx.fillStyle = 'rgba(0, 97, 146, 0.38)';
+    ctx.fillStyle = css(frame.palette.ribbon, 0.38);
     ctx.fill();
 
     // Baseline, so the profile reads as sitting on zero rather than floating.
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.strokeStyle = css(frame.palette.ink, 0.25);
     ctx.beginPath();
     ctx.moveTo(0, plotBottom);
     ctx.lineTo(frame.full.width, plotBottom);
@@ -813,9 +1068,9 @@ function drawRibbonAxis(frame, plotTop, plotBottom) {
         // A chip behind each, because a bar may reach any height here and plain text
         // over one is unreadable. Centred on its gridline, which the band's padding
         // guarantees room for.
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillStyle = css(frame.palette.panel, 0.8);
         ctx.fillRect(right - width - 4, y - 6, width + 7, 12);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillStyle = css(frame.palette.ink, 0.6);
         ctx.fillText(text, right, y + 3.5);
     }
 
@@ -826,7 +1081,7 @@ function drawRibbonAxis(frame, plotTop, plotBottom) {
 // below it. Sub-horizon aircraft already sit on the horizon, so a stem would have
 // no length.
 function drawStems(frame) {
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+    ctx.strokeStyle = css(frame.palette.ink, 0.12);
     ctx.lineWidth = 1;
     ctx.beginPath();
 
@@ -893,7 +1148,7 @@ function drawChips(frame) {
     // Sub-horizon marks first, so a genuine low-elevation aircraft is never
     // occluded by a clamped one.
     for (const d of frame.drawable) {
-        if (d.sub) drawSubHorizonMark(d);
+        if (d.sub) drawSubHorizonMark(d, frame);
     }
     for (const d of frame.drawable) {
         if (!d.sub) drawChip(d, frame);
@@ -902,7 +1157,7 @@ function drawChips(frame) {
 
 // A flattened half-height mark sitting on the horizon. It must read as "at or
 // below your horizon", never as "in the sky at zero degrees".
-function drawSubHorizonMark(d) {
+function drawSubHorizonMark(d, frame) {
     const [r, g, b] = colorOf(d);
     const w = d.size;
     const h = Math.max(2, d.size * 0.35);
@@ -911,7 +1166,8 @@ function drawSubHorizonMark(d) {
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
     ctx.fillRect(d.x - w / 2, d.y - h / 2, w, h);
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    const outline = frame.palette.outline;
+    ctx.strokeStyle = css(outline.rgb, outline.alpha * 0.9);
     ctx.lineWidth = 0.75;
     ctx.strokeRect(d.x - w / 2, d.y - h / 2, w, h);
 }
@@ -929,7 +1185,12 @@ function drawChip(d, frame) {
     // standing out from the sky. The low-altitude end of the ramp is pale blue on a
     // pale blue sky — barely over 1.3:1 — and without this the background could
     // never be given any colour without losing those aircraft.
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    //
+    // The tone follows the sky rather than being fixed black: black is 1.12:1
+    // against a night sky, so a fixed outline would lose exactly the aircraft this
+    // outline exists to keep.
+    const outline = frame.palette.outline;
+    ctx.strokeStyle = css(outline.rgb, outline.alpha);
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -959,11 +1220,50 @@ function drawVelocityTick(d, frame) {
 // Greedy slot assignment, walked nearest-first so nearer aircraft win a contested
 // slot. A plain distance threshold would be worse than useless: it labels most
 // densely exactly where traffic is densest and labels therefore collide.
+// The sun and the moon, as label entries for the layout below.
+//
+// Deliberately independent of the label mode. There are only ever two of them and
+// they are landmarks rather than clutter, and the mode defaults to selection-only
+// on a phone — which would leave the two discs unnamed exactly where saying what
+// they are helps most. A near-new moon in particular draws as a bare outline that
+// reads as nothing at all without its label.
+function celestialLabels(frame) {
+    const celestial = frame.celestial;
+    if (!celestial || !settings.skyCelestial) return [];
+
+    // One offset for both, from the larger of the two discs, so the moon's 12 per
+    // cent monthly variation cannot reintroduce a mismatch. The offsets are then not
+    // merely similar but identical.
+    const radius = Math.max(celestial.sun.sizePx, celestial.moon.sizePx) / 2;
+    const reach = radius * CELESTIAL_LABEL_REACH + LABEL_GAP_PX;
+
+    const labels = [];
+    const add = (body, text) => {
+        if (!body.up || !body.point) return;
+        if (!isOnScreen(body.point, frame)) return;
+        labels.push({ text, x: body.point.x, y: body.point.y - reach });
+    };
+
+    add(celestial.sun, 'Sun');
+    add(celestial.moon, 'Moon');
+    return labels;
+}
+
 function layoutLabels(frame) {
     const mode = settings.skyLabels || 'auto';
     const occupied = [];
     const placed = [];
     ctx.font = LABEL_FONT;
+
+    // Placed before the traffic, so the two fixed points in the view keep their
+    // labels and the callsigns arrange themselves around them.
+    for (const label of celestialLabels(frame)) {
+        const width = ctx.measureText(label.text).width;
+        occupied.push({
+            x: label.x - width / 2, y: label.y - LABEL_LINE_H, w: width, h: LABEL_LINE_H
+        });
+        placed.push(label);
+    }
 
     for (let i = frame.drawable.length - 1; i >= 0; i--) {
         const d = frame.drawable[i];
@@ -993,7 +1293,7 @@ function layoutLabels(frame) {
 }
 
 function drawLabels(frame) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillStyle = css(frame.palette.ink, 0.75);
     ctx.font = LABEL_FONT;
     ctx.textAlign = 'center';
     for (const label of layoutLabels(frame)) {
@@ -1014,6 +1314,23 @@ function drawHud(frame) {
     } else {
         hudNodes.fovItem.style.display = '';
         setText(hudNodes.fov, `${Math.round(camera.fov)}°`);
+    }
+
+    // Each body is reported only while it is up, for the same reason neither is
+    // drawn when it is down: a bearing to a sun that has set is not information.
+    const celestial = settings.skyCelestial ? frame.celestial : null;
+    const sunUp = celestial && celestial.sun.up;
+    hudNodes.sunItem.style.display = sunUp ? '' : 'none';
+    if (sunUp) {
+        setText(hudNodes.sun, formatAzEl(celestial.sun));
+    }
+    const moonUp = celestial && celestial.moon.up;
+    hudNodes.moonItem.style.display = moonUp ? '' : 'none';
+    if (moonUp) {
+        // The illuminated fraction is the part worth reading off: it says which
+        // shape on screen is the right one.
+        const percent = Math.round(celestial.moon.phase.fraction * 100);
+        setText(hudNodes.moon, `${formatAzEl(celestial.moon)} · ${percent}%`);
     }
 
     // Disclose what is not drawn as an ordinary chip, so the clamping and the
@@ -1371,5 +1688,9 @@ export const __test = {
     // gesture timing and would fire a stray deselect on the first tap.
     resetCamera: () => resetCamera(),
     labels: () => (lastFrame ? layoutLabels(lastFrame) : []),
-    setHovered: (icao) => { hoveredIcao = icao; }
+    setHovered: (icao) => { hoveredIcao = icao; },
+    // Celestial positions depend on the date, and the test harness virtualises
+    // performance.now() but not Date. Passing null restores the wall clock.
+    setClock: (fn) => { clock = fn || (() => new Date()); },
+    hud: () => hudNodes
 };

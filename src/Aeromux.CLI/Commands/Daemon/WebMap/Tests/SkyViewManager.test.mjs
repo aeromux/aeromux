@@ -12,6 +12,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeCanvas, installGlobals, calls, resetCalls, advanceClock } from './Support/DomStub.mjs';
 import { safeArea, pitchRange, clampPitch, wrap180 } from '../Services/SkyViewGeometry.js';
+import { contrastRatio, relativeLuminance } from '../Services/SkyPalette.js';
+
+// Label line height, mirroring LABEL_LINE_H in the renderer.
+const LABEL_LINE_H = 11;
 
 const canvas = makeCanvas(1400, 900);
 installGlobals(canvas, { appendChild() {} });
@@ -1452,4 +1456,656 @@ test('labels are centred above the chip', () => {
     assert.equal(label.x, chip.x, 'horizontally centred on the chip');
     assert.ok(label.y < chip.y, 'and sits above it');
     reset();
+});
+
+// -------------------- the sun and the moon --------------------
+
+// A southern-hemisphere receiver, because the default camera looks north and at
+// these latitudes the midday sun is due north — straight down the camera axis.
+// At 50N the sun is never near north while it is up, so nothing would be on screen
+// to assert about.
+const SOUTHERN = { lat: -33.87, lon: 151.21 };
+
+// Local noon: the sun bears 359 degrees at 33 degrees elevation, and the moon is
+// close to it and close to new.
+const DAY = new Date('2026-06-15T02:00:00Z');
+// Local midnight at the same site: both bodies are far below the horizon.
+const NIGHT = new Date('2026-06-15T14:00:00Z');
+// Moon well up at a third lit — an unambiguous crescent — with the sun up too, so
+// the terminator has a real direction to follow.
+const CRESCENT = new Date('2026-06-10T00:00:00Z');
+// Moon up but only 2 per cent lit, below the threshold for filling a crescent.
+const NEW_MOON = new Date('2026-06-14T00:00:00Z');
+// Moon high and 43 per cent lit with the sun on the OTHER side of it, so the
+// terminator must point the opposite way from the crescent fixture above.
+const MIRRORED = new Date('2026-06-21T06:00:00Z');
+
+const CELESTIAL_SETTINGS = { ...BASE_SETTINGS, skyCelestial: true, skyTwilight: true };
+
+// The four corners of the aircraft palette, from Map/AircraftIcons.js.
+const PHASE_TEST_FILLS = {
+    'low altitude': [179, 217, 255],
+    cruise: [0, 97, 146],
+    military: [0, 110, 0],
+    selected: [230, 126, 34]
+};
+
+// The renderer reads the date through an injected clock, because the DOM stub
+// virtualises performance.now() but not Date.
+function atInstant(date, settings = CELESTIAL_SETTINGS, site = SOUTHERN) {
+    Sky.clearSelection();
+    Sky.clearTrail();
+    Sky.__test.setHovered(null);
+    Sky.setSafeInsets({});
+    Sky.__test.setClock(() => date);
+    Sky.setReceiver(site.lat, site.lon, 0);
+    Sky.__test.resetCamera();
+    Sky.setSettings({ ...settings });
+}
+
+// Restores the wall clock and the northern fixture receiver for any test that runs
+// afterwards, so this block cannot leak into the rest of the suite.
+function restoreClock() {
+    Sky.__test.setClock(null);
+    reset();
+}
+
+test('the sun and the moon are drawn when they are up', () => {
+    atInstant(DAY);
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const { sun, moon } = Sky.__test.state().lastFrame.celestial;
+    assert.equal(sun.up, true, 'sun should be up at local noon');
+    assert.equal(moon.up, true, 'moon should be up at this instant');
+    assert.ok(sun.point, 'sun projects into the frame looking north');
+    assert.ok(calls.some((c) => c.name === 'arc'), 'a disc was drawn');
+
+    restoreClock();
+});
+
+test('nothing is drawn for a body that is below the horizon', () => {
+    atInstant(NIGHT);
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const { sun, moon } = Sky.__test.state().lastFrame.celestial;
+    assert.equal(sun.up, false, 'sun should be down at local midnight');
+    assert.equal(moon.up, false, 'moon should be down at this instant');
+    // Unlike aircraft, which are clamped to the horizon so surface traffic does not
+    // vanish, a body that has set is simply not there.
+    assert.ok(!calls.some((c) => c.name === 'arc'), 'no disc was drawn');
+    assert.ok(!calls.some((c) => c.name === 'translate'), 'no moon was drawn');
+
+    restoreClock();
+});
+
+test('the marker setting hides both bodies', () => {
+    atInstant(DAY, { ...CELESTIAL_SETTINGS, skyCelestial: false });
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    // Whether the positions are still computed is an internal matter — they are,
+    // because the sky tint needs the sun. What the setting promises is that nothing
+    // is drawn for either body.
+    assert.ok(!calls.some((c) => c.name === 'arc'), 'no disc was drawn');
+    assert.ok(!calls.some((c) => c.name === 'translate'), 'no moon was drawn');
+
+    restoreClock();
+});
+
+test('size tracks the field of view between a floor and a ceiling', () => {
+    const sizeAtFov = (fov) => {
+        atInstant(DAY, { ...CELESTIAL_SETTINGS, skyFov: fov });
+        Sky.updateMarkers(new Map());
+        return Sky.__test.state().lastFrame.celestial.sun.sizePx;
+    };
+
+    const narrow = sizeAtFov(30);
+    const normal = sizeAtFov(75);
+    const wide = sizeAtFov(120);
+
+    // The glyph is a symbol at an exaggerated size, but the true angle still drives
+    // it, so zooming in enlarges it and widening the view shrinks it.
+    assert.ok(narrow > normal, `30 deg (${narrow}) should exceed 75 deg (${normal})`);
+
+    // Floored where a phase stops being readable: telling a gibbous moon from a
+    // full one needs a disc near 20 px.
+    assert.ok(wide >= 20, `wide field of view is floored (${wide})`);
+    assert.ok(normal > 20, `the default is above the floor on a wide canvas (${normal})`);
+
+    // And capped, so pinching right in does not fill the view with sun.
+    assert.ok(narrow <= 48, `zoomed in is capped (${narrow})`);
+    assert.equal(narrow, 48, 'a 30 degree field of view on this canvas reaches the cap');
+
+    restoreClock();
+});
+
+test('the moon is drawn larger at perigee than at apogee', () => {
+    // The 12 per cent monthly variation has to survive the scaling, or the size
+    // carries no information at all. Sampled where neither end is clamped.
+    let small = Infinity;
+    let large = 0;
+    for (let d = 0; d < 30; d += 0.5) {
+        const at = new Date(CRESCENT.getTime() + d * 86400000);
+        // A field of view that leaves the moon clear of both the floor and the cap,
+        // where clamping would hide the variation being asserted.
+        atInstant(at, { ...CELESTIAL_SETTINGS, skyFov: 60 });
+        Sky.updateMarkers(new Map());
+        const { sizePx } = Sky.__test.state().lastFrame.celestial.moon;
+        if (sizePx > 20 && sizePx < 48) {
+            small = Math.min(small, sizePx);
+            large = Math.max(large, sizePx);
+        }
+    }
+    assert.ok(large > small, 'the moon never changed size across a month');
+    assert.ok(large / small > 1.08, `only ${((large / small - 1) * 100).toFixed(1)}% variation`);
+
+    restoreClock();
+});
+
+test('the sun and the moon are drawn behind the aircraft', () => {
+    atInstant(DAY);
+    const map = new Map();
+    // Placed at the receiver's own bearing so it lands in the frame looking north.
+    map.set('CHIP', {
+        ICAO: 'CHIP',
+        Callsign: 'CHIP',
+        Coordinate: { Latitude: SOUTHERN.lat + 0.2, Longitude: SOUTHERN.lon },
+        GeometricAltitude: { Meters: 10000, Feet: 32808 },
+        BarometricAltitude: null,
+        IsOnGround: false,
+        Track: 0
+    });
+    resetCalls();
+    Sky.updateMarkers(map);
+
+    const frame = Sky.__test.state().lastFrame;
+    assert.equal(frame.drawable.length, 1, 'the chip is drawn');
+    // Only the moon translates the canvas, and only a chip draws an arc after it,
+    // so a chip crossing either body stays readable.
+    const moonAt = calls.findIndex((c) => c.name === 'translate');
+    const lastArc = calls.map((c) => c.name).lastIndexOf('arc');
+    assert.ok(moonAt >= 0, 'the moon was drawn');
+    assert.ok(moonAt < lastArc, 'the chip is drawn after both bodies');
+
+    restoreClock();
+});
+
+test('the lit side of the moon faces the sun on screen', () => {
+    // Flattened, so both bodies are on screen whatever their bearing: the moon and
+    // the sun are rarely near the same horizon at once.
+    atInstant(CRESCENT, { ...CELESTIAL_SETTINGS, skyFlatten: true });
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const { sun, moon } = Sky.__test.state().lastFrame.celestial;
+    assert.ok(sun.point && moon.point, 'both project in the flattened panorama');
+
+    const rotate = calls.find((c) => c.name === 'rotate');
+    assert.ok(rotate, 'the moon was drawn in a rotated frame');
+
+    // The lit side faces the sun by definition, so the terminator is oriented by
+    // the screen-space direction from the moon to the sun. Asserting that, rather
+    // than a fixed angle, is the point: a constant would pass a weaker test.
+    const expected = Math.atan2(sun.point.y - moon.point.y, sun.point.x - moon.point.x);
+    assert.ok(
+        Math.abs(wrap180((rotate.args[0] - expected) * 180 / Math.PI)) < 0.5,
+        `terminator angle ${rotate.args[0]} should point at the sun (${expected})`
+    );
+
+    // And it is genuinely derived rather than constant. At this second instant the
+    // sun is on the opposite side of the moon, so the lit limb has to swap sides:
+    // a fixed orientation would pass the check above and fail this one.
+    atInstant(MIRRORED, { ...CELESTIAL_SETTINGS, skyFlatten: true });
+    resetCalls();
+    Sky.updateMarkers(new Map());
+    const second = Sky.__test.state().lastFrame.celestial;
+    const other = calls.find((c) => c.name === 'rotate');
+    assert.ok(other, 'the moon was drawn at the second instant too');
+    assert.ok(
+        second.sun.point.x < second.moon.point.x,
+        'fixture has the sun left of the moon'
+    );
+    assert.ok(
+        sun.point.x > moon.point.x,
+        'and the first fixture had it on the right'
+    );
+    // Lit limb to the right in one and to the left in the other.
+    assert.ok(Math.cos(rotate.args[0]) > 0, 'first terminator faces right');
+    assert.ok(Math.cos(other.args[0]) < 0, 'second terminator faces left');
+
+    restoreClock();
+});
+
+test('a barely lit moon is drawn as an outline rather than a hairline', () => {
+    atInstant(NEW_MOON, { ...CELESTIAL_SETTINGS, skyFlatten: true });
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const { moon } = Sky.__test.state().lastFrame.celestial;
+    assert.ok(moon.phase.fraction < 0.03, `fixture is near new (${moon.phase.fraction})`);
+    // The crescent would be thinner than the line drawing it, so no terminator
+    // ellipse is drawn at all.
+    assert.ok(!calls.some((c) => c.name === 'ellipse'), 'no crescent was filled');
+    assert.ok(calls.some((c) => c.name === 'arc'), 'but the outline is there');
+
+    restoreClock();
+});
+
+test('a clearly lit moon draws a terminator whose waist follows the phase', () => {
+    atInstant(CRESCENT, { ...CELESTIAL_SETTINGS, skyFlatten: true });
+    resetCalls();
+    Sky.updateMarkers(new Map());
+
+    const { moon } = Sky.__test.state().lastFrame.celestial;
+    const ellipse = calls.find((c) => c.name === 'ellipse');
+    assert.ok(ellipse, 'a terminator was drawn');
+
+    // Half the disc at new or full, a straight line at half phase.
+    const radius = moon.sizePx / 2;
+    const expectedWaist = radius * Math.abs(1 - 2 * moon.phase.fraction);
+    assert.ok(
+        Math.abs(ellipse.args[2] - expectedWaist) < 0.01,
+        `waist ${ellipse.args[2]} should be ${expectedWaist} at ${moon.phase.fraction} lit`
+    );
+    // Crescent, so the terminator bulges towards the lit limb.
+    assert.equal(ellipse.args[7], true, 'a crescent sweeps towards the sun');
+
+    restoreClock();
+});
+
+test('the readout reports each body only while it is up', () => {
+    atInstant(DAY);
+    Sky.updateMarkers(new Map());
+    const hud = Sky.__test.hud();
+    assert.equal(hud.sunItem.style.display, '', 'sun is reported at noon');
+    assert.match(hud.sun.textContent, /^\d{3}° -?\d+°$/, `sun readout ${hud.sun.textContent}`);
+    assert.match(hud.moon.textContent, /%$/, 'moon readout carries its phase');
+
+    atInstant(NIGHT);
+    Sky.updateMarkers(new Map());
+    assert.equal(hud.sunItem.style.display, 'none', 'sun is not reported once it has set');
+    assert.equal(hud.moonItem.style.display, 'none', 'nor the moon');
+
+    restoreClock();
+});
+
+// -------------------- the twilight tint --------------------
+
+test('the sky follows the sun through a whole day', () => {
+    // Stepped through a day with the clock injected, rather than waiting for dusk.
+    const seen = new Map();
+    for (let hour = 0; hour < 24; hour += 0.5) {
+        const at = new Date(Date.UTC(2026, 5, 15, 0, 0) + hour * 3600000);
+        atInstant(at);
+        Sky.updateMarkers(new Map());
+        const frame = Sky.__test.state().lastFrame;
+        seen.set(frame.palette.phase, (seen.get(frame.palette.phase) || 0) + 1);
+    }
+
+    // A full day has to pass through daylight and night, and through the twilight
+    // between them — otherwise the tint is not actually being driven by the sun.
+    assert.ok(seen.get('day') > 0, 'never reached daylight');
+    assert.ok(seen.get('night') > 0, 'never reached night');
+    assert.ok(
+        (seen.get('golden') || 0) + (seen.get('civil') || 0) + (seen.get('nautical') || 0) > 0,
+        'never passed through twilight'
+    );
+
+    restoreClock();
+});
+
+test('the sky is brighter at noon than at midnight', () => {
+    atInstant(DAY);
+    Sky.updateMarkers(new Map());
+    const noon = Sky.__test.state().lastFrame.palette.luminance;
+
+    atInstant(NIGHT);
+    Sky.updateMarkers(new Map());
+    const midnight = Sky.__test.state().lastFrame.palette.luminance;
+
+    assert.ok(noon > midnight * 10, `noon ${noon} should far exceed midnight ${midnight}`);
+
+    restoreClock();
+});
+
+test('the outline and every other mark invert on a night sky', () => {
+    atInstant(NIGHT);
+    Sky.updateMarkers(new Map());
+    const night = Sky.__test.state().lastFrame.palette;
+    assert.equal(night.outline.light, true, 'a night sky needs a light outline');
+    assert.equal(night.dark, true);
+
+    atInstant(DAY);
+    Sky.updateMarkers(new Map());
+    const day = Sky.__test.state().lastFrame.palette;
+    assert.equal(day.outline.light, false, 'daylight keeps the dark outline');
+    // The ground band and the ribbon backing follow too, or they glow after dusk.
+    assert.ok(
+        relativeLuminance(day.ground) > relativeLuminance(night.ground),
+        'the ground band did not follow the sky'
+    );
+    assert.ok(
+        relativeLuminance(day.panel) > relativeLuminance(night.panel),
+        'the ribbon backing did not follow the sky'
+    );
+
+    restoreClock();
+});
+
+test('aircraft of every category stay findable at every hour', () => {
+    // The check that matters, and the reason the adaptive outline had to land before
+    // the tint. A sky that makes half the traffic disappear at dusk would be a worse
+    // view than one that is always pale.
+    for (let hour = 0; hour < 24; hour += 1) {
+        const at = new Date(Date.UTC(2026, 5, 15, 0, 0) + hour * 3600000);
+        atInstant(at);
+        Sky.updateMarkers(new Map());
+        const { palette } = Sky.__test.state().lastFrame;
+        const outlineRatio = contrastRatio(palette.outline.rgb, palette.middle);
+
+        for (const [category, fill] of Object.entries(PHASE_TEST_FILLS)) {
+            const fillRatio = contrastRatio(fill, palette.middle);
+            assert.ok(
+                Math.max(fillRatio, outlineRatio) >= 3,
+                `${category} at ${hour}h (${palette.phase}): fill ${fillRatio.toFixed(2)}, outline ${outlineRatio.toFixed(2)}`
+            );
+        }
+    }
+
+    restoreClock();
+});
+
+test('the sky keeps its daylight palette when the tint is off', () => {
+    // Turning the tint off restores exactly the view this had before it existed,
+    // night or not.
+    atInstant(NIGHT, { ...CELESTIAL_SETTINGS, skyTwilight: false });
+    Sky.updateMarkers(new Map());
+    const off = Sky.__test.state().lastFrame.palette;
+    assert.equal(off.outline.light, false, 'still the daylight outline');
+    assert.ok(off.luminance > 0.5, `still a pale sky (${off.luminance})`);
+
+    restoreClock();
+});
+
+// -------------------- the two settings are independent --------------------
+
+// The markers and the sky tint are separate settings because they are separate
+// sizes of change: two small discs against a recolouring of the whole view. These
+// four cases are the combinations that exist because of that, and the two mixed
+// ones could not be expressed when a single setting governed both.
+
+function paletteAndDraws(date, skyCelestial, skyTwilight, extra = {}) {
+    atInstant(date, { ...CELESTIAL_SETTINGS, skyCelestial, skyTwilight, ...extra });
+    resetCalls();
+    Sky.updateMarkers(new Map());
+    return {
+        palette: Sky.__test.state().lastFrame.palette,
+        celestial: Sky.__test.state().lastFrame.celestial,
+        drewBody: calls.some((c) => c.name === 'arc'),
+        drewMoon: calls.some((c) => c.name === 'translate')
+    };
+}
+
+test('markers and tint both on: bodies drawn and the sky follows the sun', () => {
+    const { drewBody, drewMoon, palette } = paletteAndDraws(NIGHT, true, true);
+    // At local midnight both bodies are down, so nothing is drawn for them — but the
+    // sky must still have gone dark.
+    assert.equal(drewBody, false, 'nothing is up to draw at midnight');
+    assert.equal(drewMoon, false);
+    assert.equal(palette.dark, true, 'the sky went dark');
+
+    const day = paletteAndDraws(DAY, true, true);
+    assert.equal(day.drewBody, true, 'the sun is drawn at noon');
+    assert.equal(day.palette.dark, false);
+
+    restoreClock();
+});
+
+test('markers on, tint off: bodies drawn on a fixed daylight sky at night', () => {
+    // The combination most likely to look wrong if the palette and the markers were
+    // still coupled. Flattened, because CRESCENT puts the moon at bearing 307 and the
+    // default camera looks north — a 75-degree frustum would legitimately cull it.
+    const { drewBody, drewMoon, palette } =
+        paletteAndDraws(CRESCENT, true, false, { skyFlatten: true });
+    assert.equal(drewBody, true, 'the bodies are still drawn');
+    assert.equal(drewMoon, true);
+    assert.equal(palette.dark, false, 'but the sky stays pale');
+    assert.equal(palette.outline.light, false, 'and the outlines stay dark to match it');
+
+    // Even at local midnight the sky is the daylight one.
+    const night = paletteAndDraws(NIGHT, true, false);
+    assert.ok(night.palette.luminance > 0.5, `still pale at midnight (${night.palette.luminance})`);
+
+    restoreClock();
+});
+
+test('markers off, tint on: the sky still follows a sun that is never drawn', () => {
+    // The case most likely to break, because the sun has to be computed while
+    // nothing about it is drawn.
+    const night = paletteAndDraws(NIGHT, false, true);
+    assert.equal(night.drewBody, false, 'no bodies are drawn');
+    assert.equal(night.drewMoon, false);
+    assert.ok(night.celestial, 'but the positions were still computed');
+    assert.equal(night.palette.dark, true, 'so the sky could go dark');
+    assert.equal(night.palette.outline.light, true, 'and the outlines inverted with it');
+
+    const day = paletteAndDraws(DAY, false, true);
+    assert.equal(day.drewBody, false, 'still nothing drawn at noon');
+    assert.equal(day.palette.dark, false, 'and the sky is light again');
+
+    restoreClock();
+});
+
+test('both off: exactly the view that predates the feature', () => {
+    const { drewBody, drewMoon, palette, celestial } = paletteAndDraws(NIGHT, false, false);
+    assert.equal(drewBody, false);
+    assert.equal(drewMoon, false);
+    assert.equal(celestial, null, 'nothing is computed at all');
+    assert.equal(palette.outline.light, false, 'the original dark outline');
+    assert.ok(palette.luminance > 0.5, 'on the original pale sky');
+
+    restoreClock();
+});
+
+test('the readout follows the marker setting, not the tint', () => {
+    atInstant(DAY, { ...CELESTIAL_SETTINGS, skyCelestial: true, skyTwilight: false });
+    Sky.updateMarkers(new Map());
+    const hud = Sky.__test.hud();
+    assert.equal(hud.sunItem.style.display, '', 'reported with the markers on');
+
+    atInstant(DAY, { ...CELESTIAL_SETTINGS, skyCelestial: false, skyTwilight: true });
+    Sky.updateMarkers(new Map());
+    // The sun is being computed to colour the sky, but it is not on screen, so
+    // reporting a bearing to it would describe something the user cannot see.
+    assert.equal(hud.sunItem.style.display, 'none', 'not reported with the markers off');
+    assert.equal(hud.moonItem.style.display, 'none');
+
+    restoreClock();
+});
+
+// -------------------- the sun and moon are labelled --------------------
+
+const labelTexts = () => Sky.__test.labels().map((l) => l.text);
+
+// coordinateAt() is fixed to the northern fixture receiver; these tests use the
+// southern one, so the same maths is needed from an arbitrary origin.
+function coordinateAtFrom(site, bearingDeg, distanceKm) {
+    const d = distanceKm / 6371;
+    const b = (bearingDeg * Math.PI) / 180;
+    const phi1 = (site.lat * Math.PI) / 180;
+    const lambda1 = (site.lon * Math.PI) / 180;
+    const phi2 = Math.asin(
+        Math.sin(phi1) * Math.cos(d) + Math.cos(phi1) * Math.sin(d) * Math.cos(b)
+    );
+    const lambda2 = lambda1 + Math.atan2(
+        Math.sin(b) * Math.sin(d) * Math.cos(phi1),
+        Math.cos(d) - Math.sin(phi1) * Math.sin(phi2)
+    );
+    return { Latitude: (phi2 * 180) / Math.PI, Longitude: (lambda2 * 180) / Math.PI };
+}
+
+test('both bodies are labelled while they are up', () => {
+    atInstant(DAY);
+    Sky.updateMarkers(new Map());
+
+    const texts = labelTexts();
+    assert.ok(texts.includes('Sun'), `expected a Sun label, got ${JSON.stringify(texts)}`);
+    assert.ok(texts.includes('Moon'), `expected a Moon label, got ${JSON.stringify(texts)}`);
+
+    restoreClock();
+});
+
+test('a body that has set carries no label', () => {
+    atInstant(NIGHT);
+    Sky.updateMarkers(new Map());
+
+    assert.deepEqual(labelTexts(), [], 'nothing is up, so nothing is named');
+
+    restoreClock();
+});
+
+test('the labels follow the marker setting, not a setting of their own', () => {
+    atInstant(DAY, { ...CELESTIAL_SETTINGS, skyCelestial: false });
+    Sky.updateMarkers(new Map());
+    assert.deepEqual(labelTexts(), [], 'no markers, no labels');
+
+    restoreClock();
+});
+
+test('the labels ignore the aircraft label mode', () => {
+    // The decision this encodes: there are only ever two of them, they are
+    // landmarks rather than clutter, and a phone defaults to selection-only — which
+    // would otherwise leave the two discs unnamed exactly where it helps most.
+    const map = new Map();
+    map.set('CHIP', {
+        ICAO: 'CHIP',
+        Callsign: 'CHIP',
+        Coordinate: { Latitude: SOUTHERN.lat + 0.2, Longitude: SOUTHERN.lon },
+        GeometricAltitude: { Meters: 10000, Feet: 32808 },
+        BarometricAltitude: null,
+        IsOnGround: false,
+        Track: 0
+    });
+
+    atInstant(DAY, { ...CELESTIAL_SETTINGS, skyLabels: 'selection' });
+    Sky.updateMarkers(map);
+
+    const texts = labelTexts();
+    assert.ok(texts.includes('Sun'), 'the sun is still named');
+    assert.ok(texts.includes('Moon'), 'and the moon');
+    assert.ok(!texts.includes('CHIP'), 'while the aircraft label is suppressed as asked');
+
+    restoreClock();
+});
+
+test('an aircraft label gives way to a celestial one, not the reverse', () => {
+    // Written first as "put an aircraft near the sun and check Sun survives", which
+    // passed without proving anything: the sun's label sits high to clear its halo,
+    // so a chip beside the sun never contends with it at all. This is the A/B that
+    // does prove it — the same traffic laid out with the markers off, to find which
+    // aircraft labels genuinely occupy the sun's space, then again with them on.
+    const rect = (l) => ({
+        x: l.x - (l.text.length * 6) / 2, y: l.y - LABEL_LINE_H,
+        w: l.text.length * 6, h: LABEL_LINE_H
+    });
+    const hits = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+    // A cluster spread across the sun's bearing and slightly above it, dense enough
+    // that some label must land where the sun's does.
+    // Swept across bearing and elevation rather than placed at one offset, so the
+    // cluster still contests the label if its distance from the disc is retuned.
+    const build = (azimuthDeg, elevationDeg) => {
+        const map = new Map();
+        let n = 0;
+        for (let db = -3; db <= 3; db += 1) {
+            for (const de of [0.4, 0.8, 1.2, 1.6]) {
+                const id = `A${n++}`;
+                const km = 40;
+                map.set(id, {
+                    ICAO: id,
+                    Callsign: id,
+                    Coordinate: coordinateAtFrom(SOUTHERN, azimuthDeg + db, km),
+                    GeometricAltitude: {
+                        Meters: km * 1000 * Math.tan((elevationDeg + de) * Math.PI / 180),
+                        Feet: 1
+                    },
+                    BarometricAltitude: null,
+                    IsOnGround: false,
+                    Track: 0
+                });
+            }
+        }
+        return map;
+    };
+
+    const layoutWith = (skyCelestial) => {
+        atInstant(DAY, { ...CELESTIAL_SETTINGS, skyCelestial, skyLabels: 'auto' });
+        Sky.updateMarkers(new Map());
+        const { sun } = Sky.__test.state().lastFrame.celestial;
+        Sky.updateMarkers(build(sun.azimuthDeg, sun.elevationDeg));
+        return Sky.__test.labels();
+    };
+
+    const withMarkers = layoutWith(true);
+    const withoutMarkers = layoutWith(false);
+
+    const sunLabel = withMarkers.find((l) => l.text === 'Sun');
+    assert.ok(sunLabel, 'the sun is labelled');
+
+    const contested = withoutMarkers
+        .filter((l) => hits(rect(l), rect(sunLabel)))
+        .map((l) => l.text);
+    assert.ok(contested.length > 0, 'the fixture must actually contest the sun label');
+
+    const kept = withMarkers.map((l) => l.text);
+    for (const text of contested) {
+        assert.ok(!kept.includes(text), `${text} should have given way to the sun`);
+    }
+
+    restoreClock();
+});
+
+test('both labels sit at exactly the same distance from their bodies', () => {
+    // Sized per body first, which put the sun's label 20px higher than the moon's
+    // because it cleared the halo and the moon cleared only its disc. Two discs of
+    // near-identical size in the same sky read as two different treatments.
+    const offsets = (date, extra = {}) => {
+        atInstant(date, { ...CELESTIAL_SETTINGS, ...extra });
+        Sky.updateMarkers(new Map());
+        const { sun, moon } = Sky.__test.state().lastFrame.celestial;
+        const labels = Sky.__test.labels();
+        const sunLabel = labels.find((l) => l.text === 'Sun');
+        const moonLabel = labels.find((l) => l.text === 'Moon');
+        assert.ok(sunLabel && moonLabel, `both bodies labelled at ${date.toISOString()}`);
+        return {
+            sun: sun.point.y - sunLabel.y,
+            moon: moon.point.y - moonLabel.y,
+            radius: Math.max(sun.sizePx, moon.sizePx) / 2
+        };
+    };
+
+    const now = offsets(DAY);
+    // Not bit-for-bit: the same offset subtracted at two different y values differs
+    // in the last bit or two. A pixel is the unit that matters here.
+    assert.ok(Math.abs(now.sun - now.moon) < 1e-6, `sun ${now.sun} vs moon ${now.moon}`);
+
+    // Still outside the dense halo ring, or the sun's label sits in its own glow.
+    assert.ok(
+        now.sun > now.radius * 1.7,
+        `label at ${now.sun}px is inside the halo (${now.radius * 1.7}px)`
+    );
+
+    // Held at another instant, where the moon is at a different distance and so a
+    // different size. Sampling one moment would not catch the offset going back to
+    // being derived per body. Flattened, because a fortnight on the two bodies are
+    // no longer both within a 75-degree frustum aimed north.
+    const later = offsets(new Date(DAY.getTime() + 27 * 86400000), { skyFlatten: true });
+    assert.ok(
+        Math.abs(later.sun - later.moon) < 1e-6,
+        `drifted apart at another instant: sun ${later.sun} vs moon ${later.moon}`
+    );
+
+    restoreClock();
 });
