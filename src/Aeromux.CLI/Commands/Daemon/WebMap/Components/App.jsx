@@ -29,6 +29,9 @@ import { AircraftList } from './AircraftList.jsx';
 import { AircraftDetail } from './AircraftDetail.jsx';
 import { ControlPanel } from './ControlPanel.jsx';
 
+// Fallback when the server does not report how many state snapshots it keeps.
+const DEFAULT_STATE_HISTORY_CAPACITY = 1000;
+
 export function App() {
     const [aircraftMap, setAircraftMap] = useState(new Map());
     const [selectedIcao, setSelectedIcao] = useState(null);
@@ -203,6 +206,10 @@ export function App() {
             if (stateData?.State) {
                 const sh = {
                     enabled: stateData.State.Enabled,
+                    // How many snapshots the server itself keeps. The live buffer is
+                    // trimmed to the same figure, so the client never discards a point
+                    // the server would still have given us.
+                    capacity: stateData.State.Capacity ?? DEFAULT_STATE_HISTORY_CAPACITY,
                     entries: (stateData.State.Entries || []).map(e => ({
                         timestamp: new Date(e.Timestamp).getTime(),
                         // Kept for the sky view's path through space. The state
@@ -627,8 +634,18 @@ export function App() {
                                             speedKmh: spdKmh,
                                             speedMph: spdMph,
                                         }];
-                                        // Hysteresis: trim to 500 when buffer exceeds 600 to avoid slicing every update
-                                        if (entries.length > 600) entries = entries.slice(-500);
+                                        // Trimmed to exactly what the server retains, one
+                                        // point per append, so the oldest end rolls off
+                                        // imperceptibly. The previous rule kept a hundred
+                                        // points of slack and then dropped them in one go,
+                                        // which visibly lopped the start off the sky view's
+                                        // trail every hundred seconds. Copying a
+                                        // thousand-element array once a second costs
+                                        // nothing next to that.
+                                        const cap = prev.capacity || DEFAULT_STATE_HISTORY_CAPACITY;
+                                        if (entries.length > cap) {
+                                            entries = entries.slice(-cap);
+                                        }
                                         const updated = { ...prev, entries };
                                         stateHistoryRef.current = updated;
                                         setStateHistory(updated);
