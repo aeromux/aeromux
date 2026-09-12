@@ -21,7 +21,7 @@ import * as MapManager from '../Map/MapManager.js';
 import * as SkyViewManager from '../SkyView/SkyViewManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
 import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight, nmToKm, resolveDeviceDefaults } from '../Services/UnitConversion.js';
-import { receiverBox } from '../Services/SkyViewGeometry.js';
+import { receiverBox, aircraftAltitudeM } from '../Services/SkyViewGeometry.js';
 import { computeInsets } from '../Services/SafeInsets.js';
 import { clampSheetPx, pxToFraction } from '../Services/SheetHeight.js';
 import { HoverTooltip } from './HoverTooltip.jsx';
@@ -176,7 +176,12 @@ export function App() {
         if (shouldPan) {
             const coord = coordinate || aircraftMapRef.current.get(icao)?.Coordinate;
             if (coord) {
-                viewRef.current.focusOn(coord.Latitude, coord.Longitude);
+                // Altitude too: the sky view has to look up as well as round, or an
+                // aircraft passing overhead ends up above the frame.
+                const altitude = aircraftAltitudeM(selectedAircraft || {});
+                viewRef.current.focusOn(
+                    coord.Latitude, coord.Longitude, altitude ? altitude.metres : 0
+                );
             }
         }
 
@@ -401,11 +406,17 @@ export function App() {
                 : 'normal';
             view.setTrailColor(category);
             view.highlightSelected(icao);
-            // Only the sky view needs bringing round: its camera points one way, so a
-            // selection can sit behind it. The map shows every bearing at once, and
-            // moving it would discard wherever the user had panned to.
-            if (viewMode === 'sky' && aircraft?.Coordinate) {
-                view.focusOn(aircraft.Coordinate.Latitude, aircraft.Coordinate.Longitude);
+            // Both views bring the selection into view on a switch. The sky view has
+            // to turn and look up to find it; the map centres on it, so that arriving
+            // from the sky with an aircraft selected does not drop the user wherever
+            // the map camera happened to be left.
+            if (aircraft?.Coordinate) {
+                const altitude = aircraftAltitudeM(aircraft);
+                view.focusOn(
+                    aircraft.Coordinate.Latitude,
+                    aircraft.Coordinate.Longitude,
+                    altitude ? altitude.metres : 0
+                );
             }
         } else {
             view.clearSelection();

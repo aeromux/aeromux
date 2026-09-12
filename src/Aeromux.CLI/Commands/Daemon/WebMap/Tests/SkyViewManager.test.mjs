@@ -1117,6 +1117,54 @@ test('the flattened panorama spans the canvas, ignoring panel insets', () => {
 
 // -------------------- camera swing --------------------
 
+test('focusOn looks up as well as round, so an overhead aircraft is in frame', () => {
+    // Turning to the right bearing is not enough on its own: a level camera covers
+    // roughly 0-39 degrees, so anything passing overhead sits above the frame and the
+    // view swings round to show empty sky.
+    for (const [distanceKm, altitudeFt, label] of [
+        [2, 38000, 'directly overhead'],
+        [3, 35000, 'nearly overhead'],
+        [20, 35000, 'high but in frame'],
+        [120, 35000, 'low and distant']
+    ]) {
+        reset();
+        const map = new Map();
+        addAircraft(map, 'T', 90, distanceKm, altitudeFt);
+        Sky.updateMarkers(map);
+
+        const coord = map.get('T').Coordinate;
+        Sky.focusOn(coord.Latitude, coord.Longitude, altitudeFt * 0.3048);
+        Sky.updateMarkers(map);
+
+        const frame = Sky.__test.state().lastFrame;
+        const chip = frame.drawable.find((d) => d.icao === 'T');
+        assert.ok(chip, `${label}: drawn`);
+        assert.ok(
+            chip.y >= 0 && chip.y <= frame.full.height,
+            `${label}: on screen at elevation ${chip.elevationDeg.toFixed(0)}° (y=${chip.y.toFixed(0)})`
+        );
+        assert.ok(Math.abs(wrap180(Sky.__test.state().camera.heading - 90)) < 1, `${label}: facing it`);
+    }
+    reset();
+});
+
+test('focusOn leaves pitch alone for an aircraft already comfortably in view', () => {
+    reset();
+    const map = new Map();
+    addAircraft(map, 'T', 90, 40, 30000);
+    Sky.updateMarkers(map);
+    const before = Sky.__test.state().camera.pitch;
+
+    const coord = map.get('T').Coordinate;
+    Sky.focusOn(coord.Latitude, coord.Longitude, 30000 * 0.3048);
+
+    assert.equal(
+        Sky.__test.state().camera.pitch, before,
+        'no tilt for something that was already on screen'
+    );
+    reset();
+});
+
 test('focusOn swings the camera to the aircraft bearing', () => {
     reset();
     const map = new Map();

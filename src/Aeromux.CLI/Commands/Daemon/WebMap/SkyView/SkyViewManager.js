@@ -1286,16 +1286,60 @@ function resetCamera() {
 // camera to its bearing. Because the projection's principal point is the centre of
 // the safe area, aiming the camera axis at the aircraft places it clear of the
 // panels automatically, with no offset arithmetic.
-export function focusOn(lat, lon) {
+// Where an aircraft being brought into view should end up vertically, as a
+// fraction of the view height. Not the principal point, which sits low at 82% —
+// an aircraft parked just above the horizon is technically in frame but reads as
+// an afterthought.
+const FOCUS_TARGET_HEIGHT = 0.45;
+
+// Turning to face an aircraft is not enough on its own: one passing overhead sits
+// far above a level camera's frame, so the view swings to the right bearing and
+// still shows empty sky. Pitch is therefore brought along, but only when the
+// aircraft would otherwise be off-frame — nudging the camera for something already
+// comfortably in view would be movement for its own sake.
+function focusPitchFor(elevationDeg, safe) {
+    const focal = focalPx(camera.fov, safe.width);
+    if (!(focal > 0)) return camera.pitch;
+
+    const axisY = safe.top + HORIZON_AT_REST * safe.height;
+    // Where it lands now, at the current pitch.
+    const currentY = axisY - focal * Math.tan((elevationDeg - camera.pitch) * Math.PI / 180);
+    const top = safe.top + 24;
+    const bottom = safe.top + safe.height * 0.9;
+    if (currentY >= top && currentY <= bottom) return camera.pitch;
+
+    // Otherwise tilt so it lands at the target height.
+    const targetY = safe.top + FOCUS_TARGET_HEIGHT * safe.height;
+    const above = (Math.atan((axisY - targetY) / focal) * 180) / Math.PI;
+    return clampCameraPitch(elevationDeg - above, safe);
+}
+
+export function focusOn(lat, lon, altitudeM = 0) {
     if (!receiver) return;
 
     const target = bearingTo(receiver.lat, receiver.lon, lat, lon);
-    const delta = shortestTurnDeg(camera.heading, target);
-    if (Math.abs(delta) < 0.5) return;
+    const headingDelta = shortestTurnDeg(camera.heading, target);
+
+    let pitchDelta = 0;
+    if (!settings || !settings.skyFlatten) {
+        const safe = currentSafe();
+        const groundKm = haversineDistance(receiver.lat, receiver.lon, lat, lon);
+        const { elevationDeg } = elevationAndRange(groundKm, altitudeM, receiver.altM);
+        pitchDelta = focusPitchFor(elevationDeg, safe) - camera.pitch;
+    }
+
+    if (Math.abs(headingDelta) < 0.5 && Math.abs(pitchDelta) < 0.5) return;
 
     // The token makes a second call supersede the first rather than leaving two
-    // animation chains fighting over the heading.
-    anim = { from: camera.heading, delta, t0: performance.now(), token: ++animToken };
+    // animation chains fighting over the camera.
+    anim = {
+        fromHeading: camera.heading,
+        headingDelta,
+        fromPitch: camera.pitch,
+        pitchDelta,
+        t0: performance.now(),
+        token: ++animToken
+    };
     stepSwing(anim.token);
 }
 
@@ -1303,7 +1347,9 @@ function stepSwing(token) {
     if (!anim || anim.token !== token) return;
 
     const t = Math.min(1, (performance.now() - anim.t0) / SWING_MS);
-    camera.heading = wrap360(anim.from + anim.delta * (1 - Math.pow(1 - t, 3)));
+    const eased = 1 - Math.pow(1 - t, 3);
+    camera.heading = wrap360(anim.fromHeading + anim.headingDelta * eased);
+    camera.pitch = anim.fromPitch + anim.pitchDelta * eased;
     requestDraw();
 
     if (t < 1) {
