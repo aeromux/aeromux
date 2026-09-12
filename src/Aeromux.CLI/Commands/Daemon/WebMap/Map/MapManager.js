@@ -50,6 +50,34 @@ let hoveredProps = null;
 let selectedCoords = null;
 let selectedProps = null;
 let selectedTooltipCallback = null;
+// Last hover payload actually emitted. The pointer produces a mousemove per frame
+// while it sits over an aircraft, and each emission re-renders the whole component
+// tree — including the aircraft list, which redraws every row for a change it does
+// not depend on. Emitting only when something the tooltip shows has actually moved
+// costs one comparison and removes that entirely.
+let lastHoverEmit = null;
+
+// A pixel of movement is below what the tooltip can show, so it is not worth a
+// render.
+const HOVER_EMIT_EPSILON_PX = 1;
+
+function emitHover(props, x, y) {
+    if (!markerHoverEnterCallback) return;
+
+    if (lastHoverEmit
+        && lastHoverEmit.icao === props.icao
+        && Math.abs(lastHoverEmit.x - x) < HOVER_EMIT_EPSILON_PX
+        && Math.abs(lastHoverEmit.y - y) < HOVER_EMIT_EPSILON_PX) {
+        return;
+    }
+
+    lastHoverEmit = { icao: props.icao, x, y };
+    markerHoverEnterCallback({ ...props, x, y });
+}
+
+function clearHoverEmit() {
+    lastHoverEmit = null;
+}
 
 // Trail colors per aircraft category — matches the CSS category dot colors (darkened for line contrast)
 const TRAIL_COLORS = {
@@ -165,7 +193,7 @@ export function init(containerId) {
                 speed: f.properties.speed
             };
             const pt = map.project(hoveredCoords);
-            markerHoverEnterCallback({ ...hoveredProps, x: pt.x, y: pt.y });
+            emitHover(hoveredProps, pt.x, pt.y);
         }
     });
 
@@ -174,6 +202,7 @@ export function init(containerId) {
         hoveredIcao = null;
         hoveredCoords = null;
         hoveredProps = null;
+        clearHoverEmit();
         if (markerHoverLeaveCallback) {
             markerHoverLeaveCallback();
         }
@@ -191,9 +220,9 @@ export function init(containerId) {
 
     // Re-project tooltip positions on map move/zoom
     map.on('move', () => {
-        if (hoveredIcao && hoveredCoords && hoveredProps && markerHoverEnterCallback) {
+        if (hoveredIcao && hoveredCoords && hoveredProps) {
             const pt = map.project(hoveredCoords);
-            markerHoverEnterCallback({ ...hoveredProps, x: pt.x, y: pt.y });
+            emitHover(hoveredProps, pt.x, pt.y);
         }
         if (selectedIcao && selectedCoords && selectedProps && selectedTooltipCallback) {
             const pt = map.project(selectedCoords);
@@ -401,14 +430,15 @@ export function updateMarkers(aircraftMap) {
                 altitude: hoveredFeature.properties.altitude,
                 speed: hoveredFeature.properties.speed
             };
-            if (markerHoverEnterCallback) {
+            {
                 const pt = map.project(hoveredCoords);
-                markerHoverEnterCallback({ ...hoveredProps, x: pt.x, y: pt.y });
+                emitHover(hoveredProps, pt.x, pt.y);
             }
         } else {
             hoveredIcao = null;
             hoveredCoords = null;
             hoveredProps = null;
+            clearHoverEmit();
             if (markerHoverLeaveCallback) {
                 markerHoverLeaveCallback();
             }

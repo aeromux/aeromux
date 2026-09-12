@@ -182,10 +182,23 @@ body:has(.webgl-error) {
     min-height: 0;
 }
 
+/* Fixed layout, because the list is virtualised: only the visible rows exist, so
+   an automatic layout would size the columns from those and resize them as a
+   longer callsign scrolled into view. Widths come from the header row below. */
 .aircraft-list-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
+}
+
+/* Spacers standing in for the rows outside the window. They must not inherit the
+   row border, or a stray rule appears at each end of the visible range. */
+.aircraft-list-spacer,
+.aircraft-list-table tbody tr.aircraft-list-spacer:hover {
+    border-bottom: none;
+    background: none;
+    cursor: default;
 }
 
 .aircraft-list-table thead th {
@@ -245,6 +258,18 @@ body:has(.webgl-error) {
     height: 8px;
     border-radius: 50%;
     border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+/* The callsign column takes whatever the fixed-width columns leave; the others are
+   sized for the longest value any unit can produce — "35,975 ft", "1,234 km/h",
+   "1234.5 nm" — with the ellipsis on the callsign absorbing the remainder. */
+.aircraft-list-table th.aircraft-list-col-altitude,
+.aircraft-list-table th.aircraft-list-col-speed {
+    width: 78px;
+}
+
+.aircraft-list-table th.aircraft-list-col-distance {
+    width: 82px;
 }
 
 .aircraft-list-callsign {

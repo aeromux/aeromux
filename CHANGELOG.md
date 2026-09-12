@@ -12,6 +12,7 @@ All notable changes to Aeromux will be documented in this file.
 
 ### Changed
 
+- **Web Map Aircraft List Performance** — The aircraft list now renders only the rows on screen, so the cost of displaying it follows the height of the panel rather than how many aircraft are in range: roughly 30 rows on a desktop panel whether 200 or 1 500 aircraft are being received, where previously every one became a row. The map also stops re-rendering the list on every pointer movement over an aircraft. Sorting, selection, and scrolling are unchanged.
 - **Web Map Viewport Subscription** — Which aircraft the server pushes is now explicit client-side state rather than being derived from the map camera, so the two views can request different regions over the same API. Map behaviour is unchanged.
 - **RtlSdrManager 0.8.0** — Upgraded the RtlSdrManager RTL-SDR access library from 0.7.1 to 0.8.0. Using a device after it has been closed is now a hard error inside the library rather than undefined behaviour; most importantly, starting a read on a closed device no longer terminates the process. Aeromux's sample callback now ends quietly when a device is closed mid-callback, so shutting down a device that did not stop within its timeout no longer logs a spurious processing error. The dropped-sample counter is now updated atomically.
 

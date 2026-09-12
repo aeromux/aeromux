@@ -15,7 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 import { h } from 'preact';
-import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'preact/hooks';
 import { fetchStats, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
 import * as SkyViewManager from '../SkyView/SkyViewManager.js';
@@ -230,6 +230,13 @@ export function App() {
         // Tell SignalR we want detail pushes
         SignalR.selectAircraft(icao);
     }, []);
+
+    // Selecting from the list always pans, and the identity has to be stable or the
+    // memoised list below would rebuild on every render anyway.
+    const handleSelectFromList = useCallback(
+        (icao) => handleSelect(icao, { panTo: true }),
+        [handleSelect]
+    );
 
     // Deselect handler
     const handleBack = useCallback(() => {
@@ -781,6 +788,27 @@ export function App() {
 
     const viewCount = aircraftMap.size;
 
+    // Held apart from the rest of the render so that state the list does not consume
+    // cannot rebuild it. Hover is the one that matters: it changes as fast as the
+    // pointer moves, and the list has hundreds of rows.
+    const aircraftListElement = useMemo(() => (
+        <AircraftList
+            aircraftMap={aircraftMap}
+            receiverLocation={receiverLocation}
+            selectedIcao={selectedIcao}
+            units={units}
+            sort={sort}
+            onSortChange={handleSortChange}
+            onSelect={handleSelectFromList}
+            onResetLayout={resetLayout}
+            viewCount={viewCount}
+            totalCount={totalCount}
+        />
+    ), [
+        aircraftMap, receiverLocation, selectedIcao, units, sort,
+        handleSortChange, handleSelectFromList, resetLayout, viewCount, totalCount
+    ]);
+
     return (
         <div>
             <div id="map-container" class={`map-container${viewMode === 'sky' ? ' hidden-view' : ''}`}></div>
@@ -839,20 +867,7 @@ export function App() {
                         onResetLayout={resetLayout}
                         onBack={handleBack}
                     />
-                ) : (
-                    <AircraftList
-                        aircraftMap={aircraftMap}
-                        receiverLocation={receiverLocation}
-                        selectedIcao={selectedIcao}
-                        units={units}
-                        sort={sort}
-                        onSortChange={handleSortChange}
-                        onSelect={(icao) => handleSelect(icao, { panTo: true })}
-                        onResetLayout={resetLayout}
-                        viewCount={viewCount}
-                        totalCount={totalCount}
-                    />
-                )}
+                ) : aircraftListElement}
             </div>
 
             <ControlPanel

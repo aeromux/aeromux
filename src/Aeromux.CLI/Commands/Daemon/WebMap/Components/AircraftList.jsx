@@ -15,7 +15,8 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 import { h } from 'preact';
-import { useMemo, useCallback } from 'preact/hooks';
+import { useMemo, useCallback, useRef, useState, useLayoutEffect } from 'preact/hooks';
+import { visibleWindow } from '../Services/ListWindow.js';
 import { formatAltitude, formatSpeed, haversineDistance, convertDistance } from '../Services/UnitConversion.js';
 
 function getCategoryClass(aircraft) {
@@ -91,9 +92,54 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
         return items;
     }, [aircraftMap, receiverLocation, sort]);
 
+    // Only the rows in view are rendered, so the element count follows the height of
+    // the panel rather than how many aircraft are in range.
+    const scrollRef = useRef(null);
+    const rowRef = useRef(null);
+    const [rowHeight, setRowHeight] = useState(0);
+    const [scrollTop, setScrollTop] = useState(0);
+    const [viewportHeight, setViewportHeight] = useState(0);
+
+    // Measured from a rendered row rather than hardcoded: the height is uniform in
+    // practice but is not declared in CSS, so a constant here would rot the moment
+    // the padding changed. Re-measured whenever units change, since a different unit
+    // can change a value's width but not its line count.
+    useLayoutEffect(() => {
+        const container = scrollRef.current;
+        if (container && container.clientHeight !== viewportHeight) {
+            setViewportHeight(container.clientHeight);
+        }
+        const measured = rowRef.current ? rowRef.current.offsetHeight : 0;
+        if (measured > 0 && measured !== rowHeight) {
+            setRowHeight(measured);
+        }
+    });
+
+    useLayoutEffect(() => {
+        const container = scrollRef.current;
+        if (!container || typeof ResizeObserver === 'undefined') return undefined;
+        // Follows the mobile bottom sheet, whose height the user drags.
+        const observer = new ResizeObserver(() => setViewportHeight(container.clientHeight));
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
+
+    const handleScroll = useCallback((e) => {
+        setScrollTop(e.currentTarget.scrollTop);
+    }, []);
+
+    // Fixed table layout takes its widths from the header cells, so each needs the
+    // class its width is declared on.
+    const columnClass = {
+        callsign: 'aircraft-list-col-callsign',
+        altitude: 'aircraft-list-col-altitude',
+        speed: 'aircraft-list-col-speed',
+        distance: 'aircraft-list-col-distance'
+    };
+
     const renderHeader = (column, label) => (
         <th
-            class={column === 'callsign' ? 'aircraft-list-callsign' : 'aircraft-list-value'}
+            class={`${column === 'callsign' ? 'aircraft-list-callsign' : 'aircraft-list-value'} ${columnClass[column]}`}
             onClick={() => handleHeaderClick(column)}
         >
             {label}
@@ -107,8 +153,16 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
         return <div class="aircraft-list-empty">No aircraft in view</div>;
     }
 
+    const window_ = visibleWindow({
+        total: sortedAircraft.length,
+        rowHeight,
+        viewportHeight,
+        scrollTop
+    });
+    const rows = sortedAircraft.slice(window_.start, window_.end);
+
     return (
-        <div class="aircraft-list">
+        <div class="aircraft-list" ref={scrollRef} onScroll={handleScroll}>
             <div class="aircraft-list-stats">
                 <span>Aircraft: <span class="stats-count">{viewCount}</span> in view / <span class="stats-count">{totalCount}</span> total</span>
                 <button class="reset-layout" onClick={onResetLayout}>Reset layout</button>
@@ -124,7 +178,10 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
                     </tr>
                 </thead>
                 <tbody>
-                    {sortedAircraft.map(({ icao, aircraft, distance }) => {
+                    {window_.padTop > 0 && (
+                        <tr class="aircraft-list-spacer" style={{ height: `${window_.padTop}px` }} />
+                    )}
+                    {rows.map(({ icao, aircraft, distance }, index) => {
                         const alt = formatAltitude(aircraft.BarometricAltitude, units.altitude);
                         const spd = formatSpeed(aircraft.Speed || aircraft.SpeedOnGround, units.speed);
                         const dist = distance != null
@@ -134,6 +191,8 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
                         return (
                             <tr
                                 key={icao}
+                                // The first rendered row is the one measured for height.
+                                ref={index === 0 ? rowRef : undefined}
                                 class={icao === selectedIcao ? 'selected' : ''}
                                 onClick={() => onSelect(icao)}
                             >
@@ -150,6 +209,9 @@ export function AircraftList({ aircraftMap, receiverLocation, selectedIcao, unit
                             </tr>
                         );
                     })}
+                    {window_.padBottom > 0 && (
+                        <tr class="aircraft-list-spacer" style={{ height: `${window_.padBottom}px` }} />
+                    )}
                 </tbody>
             </table>
         </div>
