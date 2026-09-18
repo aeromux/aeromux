@@ -30,6 +30,15 @@ import {
     loggedUnknownTypes,
 } from './AircraftIcons.js';
 import { RDYLGN_STOPS, payloadToFeatures } from '../Services/HeatmapScale.js';
+import { createHudItem, setText, formatBearing } from '../Services/HudDom.js';
+import {
+    distanceNm,
+    bearingDeg,
+    polygonAreaNm2,
+    boundsAreaNm2,
+    formatDistanceNm,
+    formatAreaNm2
+} from '../Services/ViewportMetrics.js';
 
 let map = null;
 let viewportCallback = null;
@@ -56,6 +65,21 @@ let selectedTooltipCallback = null;
 // not depend on. Emitting only when something the tooltip shows has actually moved
 // costs one comparison and removes that entirely.
 let lastHoverEmit = null;
+
+// Readout state. The row is written to imperatively for the reason the Sky View's
+// is: it changes on every frame of a pan, and routing that through the component
+// tree would re-render the aircraft list with it.
+let hud = null;
+let hudNodes = null;
+let hudFrame = 0;
+let active = true;
+let insets = {};
+let distanceUnit = 'nm';
+let inViewCount = 0;
+let totalCount = 0;
+let receiver = null;
+let outlineCoordinates = [];
+let outlineMaxNm = 0;
 
 // A pixel of movement is below what the tooltip can show, so it is not worth a
 // render.
@@ -218,8 +242,11 @@ export function init(containerId) {
     });
     map.on('mouseout', () => { if (heatmapHoverCallback) heatmapHoverCallback(null); });
 
+    buildHud(document.getElementById(containerId));
+
     // Re-project tooltip positions on map move/zoom
     map.on('move', () => {
+        requestHud();
         if (hoveredIcao && hoveredCoords && hoveredProps) {
             const pt = map.project(hoveredCoords);
             emitHover(hoveredProps, pt.x, pt.y);
@@ -501,6 +528,8 @@ export function focusOn(lat, lon) {
 export function resize() {
     if (map) {
         map.resize();
+        // The span is measured across the canvas, so a new canvas width is a new span.
+        requestHud();
     }
 }
 
@@ -509,6 +538,9 @@ export function destroy() {
         map.remove();
         map = null;
     }
+    hud = null;
+    hudNodes = null;
+    hudFrame = 0;
 }
 
 export function updateTrail(positions) {
@@ -553,6 +585,175 @@ export function getViewportBounds() {
     };
 }
 
+// Readout — how much ground is on screen, and where it is
+//
+// The row lives in the DOM rather than on the map canvas so it picks up the same
+// typography and panel treatment as the rest of the interface. Its chips come from
+// Services/HudDom.js and its arithmetic from Services/ViewportMetrics.js, both
+// shared with the Sky View's readout, so the two rows cannot drift apart.
+
+function buildHud(container) {
+    if (!container || !container.appendChild) return;
+
+    hud = document.createElement('div');
+    hud.className = 'panel view-hud map-hud';
+
+    const heading = createHudItem('HDG', false);
+    const span = createHudItem('SPAN', false);
+    const area = createHudItem('AREA', false);
+    const center = createHudItem('CTR', false);
+    const count = createHudItem('in view', true);
+    const range = createHudItem('RANGE', false);
+
+    // The two chips that describe how big the view is rather than where it is, which
+    // are the ones a phone-width row drops.
+    area.wrap.classList.add('view-hud-optional');
+    range.wrap.classList.add('view-hud-optional');
+
+    for (const chip of [heading, span, area, center, count, range]) {
+        hud.appendChild(chip.wrap);
+    }
+    container.appendChild(hud);
+
+    hudNodes = {
+        heading: heading.value,
+        headingItem: heading.wrap,
+        span: span.value,
+        area: area.value,
+        areaItem: area.wrap,
+        center: center.value,
+        centerItem: center.wrap,
+        count: count.value,
+        range: range.value,
+        rangeItem: range.wrap
+    };
+
+    requestHud();
+}
+
+// Coalesced to one write per frame: `move` fires far more often than that during a
+// drag, and every value in the row comes from the same camera.
+function requestHud() {
+    if (hudFrame || !hud) return;
+    hudFrame = requestAnimationFrame(drawHud);
+}
+
+// MapLibre hands back lng/lat; the metrics take lat/lon.
+function toCoordinate(lngLat) {
+    return { lat: lngLat.lat, lon: lngLat.lng };
+}
+
+function drawHud() {
+    hudFrame = 0;
+    if (!map || !hudNodes || !active) return;
+
+    // Both views stay mounted, so the inactive one is merely hidden. Measuring a
+    // canvas with no size would report a viewport that spans no ground at all.
+    const canvas = map.getCanvas();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height) return;
+
+    const bearing = map.getBearing();
+    const northUp = Math.round(Math.abs(bearing)) % 360 === 0;
+    hudNodes.headingItem.style.display = northUp ? 'none' : '';
+    if (!northUp) {
+        setText(hudNodes.heading, formatBearing(bearing));
+    }
+
+    // Midpoints of the vertical edges rather than corners: a corner can be above the
+    // horizon on a tilted map, where it stands for no ground position at all, while a
+    // point at half the height of the screen stays below it at any reachable pitch.
+    const span = distanceNm(
+        toCoordinate(map.unproject([0, height / 2])),
+        toCoordinate(map.unproject([width, height / 2]))
+    );
+    setText(hudNodes.span, formatDistanceNm(span, distanceUnit));
+
+    // Tilted, there is no honest answer: the top of the screen can be looking at the
+    // horizon, and the map's own bounds are derived from the same geometry. Reporting
+    // nothing is visibly different from reporting a number that is quietly wrong.
+    const level = map.getPitch() === 0;
+    hudNodes.areaItem.style.display = level ? '' : 'none';
+    if (level) {
+        // North-up the viewport is a latitude-longitude rectangle, which has a closed
+        // form. Rotated it is not, and the corners are what is actually on screen:
+        // the box around a rotated viewport is larger than the viewport itself.
+        const areaNm2 = northUp
+            ? boundsAreaNm2(getViewportBounds())
+            : polygonAreaNm2([[0, 0], [width, 0], [width, height], [0, height]]
+                .map((point) => toCoordinate(map.unproject(point))));
+        setText(hudNodes.area, formatAreaNm2(areaNm2, distanceUnit));
+    }
+
+    hudNodes.centerItem.style.display = receiver ? '' : 'none';
+    if (receiver) {
+        const center = toCoordinate(map.getCenter());
+        const away = distanceNm(receiver, center);
+        const distance = formatDistanceNm(away, distanceUnit);
+        // The map opens centered on the receiver, where the bearing is undefined and
+        // would otherwise swing through every value in the first pixel of a pan.
+        setText(hudNodes.center, away < 0.1
+            ? distance
+            : `${formatBearing(bearingDeg(receiver, center))} ${distance}`);
+    }
+
+    setText(hudNodes.count, `${inViewCount}/${totalCount}`);
+
+    hudNodes.rangeItem.style.display = outlineMaxNm > 0 ? '' : 'none';
+    if (outlineMaxNm > 0) {
+        setText(hudNodes.range, formatDistanceNm(outlineMaxNm, distanceUnit));
+    }
+
+    // Matches the panels' own inset from the corner, so the row lines up with them
+    // rather than sitting proud of the top edge.
+    hud.style.left = `${(insets.left || 0) + 16}px`;
+    hud.style.top = `${(insets.top || 0) + 16}px`;
+}
+
+// The farthest the receiver has heard, from the coverage outline. Derived here rather
+// than asked of the server for the same reason the Sky View derives it: the outline
+// is a list of positions, and how far away they are follows from the receiver.
+// Whichever of the two arrives second triggers the measurement.
+function rebuildOutlineMax() {
+    if (!receiver || !outlineCoordinates.length) {
+        outlineMaxNm = 0;
+        return;
+    }
+
+    outlineMaxNm = outlineCoordinates.reduce(
+        (max, point) => Math.max(max, distanceNm(receiver, { lat: point.Latitude, lon: point.Longitude })),
+        0
+    );
+}
+
+export function setActive(next) {
+    active = next;
+    if (active) requestHud();
+}
+
+export function setSafeInsets(next) {
+    insets = next || {};
+    requestHud();
+}
+
+export function setDistanceUnit(unit) {
+    distanceUnit = unit;
+    requestHud();
+}
+
+export function setCounts(inView, total) {
+    inViewCount = inView;
+    totalCount = total;
+    requestHud();
+}
+
+export function setReceiver(lat, lon) {
+    receiver = { lat, lon };
+    rebuildOutlineMax();
+    requestHud();
+}
+
 // Range outline — receiver coverage boundary polygon
 let rangeOutlineInitialized = false;
 
@@ -592,6 +793,13 @@ function ensureRangeOutlineSources() {
 }
 
 export function updateRangeOutline(coordinates, visible) {
+    // The readout reports how far the receiver has heard whether or not the outline
+    // itself is drawn: it is a fact about the receiver, not about the overlay. Taken
+    // before any of the drawing paths below can return early.
+    outlineCoordinates = coordinates || [];
+    rebuildOutlineMax();
+    requestHud();
+
     if (!map) return;
     ensureRangeOutlineSources();
 

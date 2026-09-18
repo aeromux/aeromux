@@ -48,6 +48,7 @@ import {
     ribbonScaleNm,
     ribbonStepNm
 } from '../Services/SkyViewGeometry.js';
+import { createHudItem, setText, formatBearing } from '../Services/HudDom.js';
 import { sunPosition, moonPosition, moonPhase, isUp } from '../Services/Ephemeris.js';
 import { defaultPalette, skyPalette, css } from '../Services/SkyPalette.js';
 import { haversineDistance, nmToKm, convertNauticalMiles } from '../Services/UnitConversion.js';
@@ -253,46 +254,29 @@ export function destroy() {
 // typography, panel treatment and spacing as the rest of the interface, and lines
 // up with the panels instead of floating at an arbitrary offset. It is written to
 // imperatively — it changes on every frame of a drag, and routing that through the
-// component tree would re-render the aircraft list sixty times a second.
+// component tree would re-render the aircraft list sixty times a second. Its chips
+// are built by Services/HudDom.js, which the Map View readout uses as well.
 // Bearing and elevation in the same three-digit bearing style as the heading
 // readout, so the two line up when read together.
 function formatAzEl(body) {
-    const azimuth = String(Math.round(wrap360(body.azimuthDeg))).padStart(3, '0');
-    return `${azimuth}° ${Math.round(body.elevationDeg)}°`;
+    return `${formatBearing(body.azimuthDeg)} ${Math.round(body.elevationDeg)}°`;
 }
 
 function buildHud(container) {
     if (!container || !container.appendChild) return;
 
-    const item = (labelText, leading) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'sky-hud-item';
-        const label = document.createElement('span');
-        label.className = 'sky-hud-label';
-        label.textContent = labelText;
-        const value = document.createElement('span');
-        value.className = 'sky-hud-value';
-        if (leading) {
-            wrap.appendChild(value);
-            wrap.appendChild(label);
-        } else {
-            wrap.appendChild(label);
-            wrap.appendChild(value);
-        }
-        return { wrap, value };
-    };
-
     hud = document.createElement('div');
     // Carries the shared panel class, so its background, blur, shadow and corner
     // radius are the ones every other floating panel uses rather than a private copy
-    // of the same values that can drift away from them.
-    hud.className = 'panel sky-hud';
+    // of the same values that can drift away from them, and the shared readout class
+    // for the layout and typography it holds in common with the Map View's row.
+    hud.className = 'panel view-hud sky-hud';
 
-    const heading = item('HDG', false);
-    const fov = item('FOV', false);
-    const count = item('in view', true);
-    const sun = item('SUN', false);
-    const moon = item('MOON', false);
+    const heading = createHudItem('HDG', false);
+    const fov = createHudItem('FOV', false);
+    const count = createHudItem('in view', true);
+    const sun = createHudItem('SUN', false);
+    const moon = createHudItem('MOON', false);
     const note = document.createElement('div');
     note.className = 'sky-hud-note';
 
@@ -315,12 +299,6 @@ function buildHud(container) {
         moonItem: moon.wrap,
         note
     };
-}
-
-function setText(node, text) {
-    if (node && node.textContent !== text) {
-        node.textContent = text;
-    }
 }
 
 export function resize() {
@@ -1323,7 +1301,7 @@ function drawLabels(frame) {
 function drawHud(frame) {
     if (!hudNodes) return;
 
-    setText(hudNodes.heading, `${String(Math.round(camera.heading)).padStart(3, '0')}°`);
+    setText(hudNodes.heading, formatBearing(camera.heading));
     setText(hudNodes.count, `${frame.drawable.length}/${frame.inRange}`);
 
     // Field of view has no meaning once the whole sky is on screen at fixed scale.

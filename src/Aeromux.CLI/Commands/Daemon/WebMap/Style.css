@@ -514,14 +514,13 @@ body:has(.webgl-error) {
     flex-shrink: 0;
 }
 
-/* Sky View readout. Positioned imperatively by the renderer, which knows how much
-   of the canvas the panels cover; the 16px it adds matches their own inset from the
-   corner, so the readout lines up with them. */
-/* Background, blur, shadow and radius come from .panel, which this element also
-   carries — only its layout and placement are set here. */
-.sky-hud {
-    top: 16px;
-    left: 16px;
+/* View readout, worn by both the Sky View's row and the Map View's. Positioned
+   imperatively by each renderer, which knows how much of the canvas the panels
+   cover; the 16px each adds matches their own inset from the corner, so the readout
+   lines up with them. */
+/* Background, blur, shadow and radius come from .panel, which these elements also
+   carry — only layout and typography are set here, and placement below. */
+.view-hud {
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
@@ -529,17 +528,23 @@ body:has(.webgl-error) {
     font-family: var(--font-family);
     line-height: 1;
     white-space: nowrap;
-    /* Never a target: it is a readout, and the scene behind it stays draggable. */
+    /* Never a target: it is a readout, and the view behind it stays draggable. */
     pointer-events: none;
 }
 
-.sky-hud-item {
+.sky-hud,
+.map-hud {
+    top: 16px;
+    left: 16px;
+}
+
+.view-hud-item {
     display: flex;
     align-items: baseline;
     gap: 5px;
 }
 
-.sky-hud-label {
+.view-hud-label {
     font-size: 10px;
     font-weight: 500;
     letter-spacing: 0.04em;
@@ -547,7 +552,7 @@ body:has(.webgl-error) {
     color: var(--color-text-secondary);
 }
 
-.sky-hud-value {
+.view-hud-value {
     font-size: 12px;
     font-weight: 600;
     color: var(--color-text-primary);
@@ -1115,6 +1120,12 @@ body:has(.webgl-error) {
         /* Flush to the top edge → round only the bottom corners, mirroring the
            bottom-anchored list/detail panel. */
         border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+    }
+
+    /* The Map View row does not fit a phone in full. What goes is what describes how
+       big the view is, keeping the chips that say where it is and what is in it. */
+    .map-hud .view-hud-optional {
+        display: none;
     }
 }
 

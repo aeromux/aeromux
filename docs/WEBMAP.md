@@ -68,6 +68,21 @@ The selected aircraft keeps a permanent (pinned) tooltip that follows it as it m
 
 When an aircraft is selected, a blue gradient trail is drawn along its recent flight path. The trail is fetched from the position history on selection and extended in real time as new positions arrive. The trail fades from transparent (oldest position) to opaque (newest position).
 
+### Readout
+
+A row of readings sits in the top-left corner of the map, clear of the panels, telling you the scale of what is on screen and where it sits relative to the receiver.
+
+| Reading | Meaning |
+|---------|---------|
+| `HDG` | The map's bearing, shown only while the map is rotated away from north. |
+| `SPAN` | Ground distance across the middle of the map. |
+| `AREA` | How much ground the map is showing. Absent while the map is tilted, where no honest figure exists: the top of the screen can be looking at the horizon. |
+| `CTR` | Bearing and distance from the receiver to the center of the map. Needs a configured receiver location. Very close to the receiver only the distance is shown, the bearing there being meaningless. |
+| `in view` | Aircraft on the map over aircraft being tracked, the same pair the aircraft list footer shows. |
+| `RANGE` | The farthest the receiver has heard, taken from the coverage outline. Shown whether or not the outline itself is drawn. |
+
+Distances follow the selected distance unit, and the area follows it into its square (nm², km², mi²). `SPAN` and `AREA` measure the whole map, including the part behind the left panel, which is also the area the aircraft count beside them covers. On a phone-width screen the row drops `AREA` and `RANGE` to fit.
+
 ### Aircraft Icon Resolution
 
 The icon shape for each aircraft is selected by a six-layer fall-through:

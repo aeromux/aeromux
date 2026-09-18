@@ -125,6 +125,13 @@ export function App() {
         viewportHeight: window.innerHeight
     }), []);
 
+    // Both views carry a readout positioned clear of the floating panels, so the
+    // insets go to whichever renderer is on screen rather than to a fixed one.
+    const pushInsets = useCallback(() => {
+        const view = viewModeRef.current === 'sky' ? SkyViewManager : MapManager;
+        view.setSafeInsets(currentInsets());
+    }, [currentInsets]);
+
     // Flush buffered aircraft updates to state and map.
     // SignalR pushes individual aircraft updates rapidly — batching them into 50ms
     // windows avoids triggering a React re-render for every single update.
@@ -337,10 +344,8 @@ export function App() {
         // Persist as a fraction and re-apply as dvh so rotation is handled by CSS.
         applySheetHeight(`${(fraction * 100).toFixed(2)}dvh`);
         saveSheetHeight(fraction);
-        if (viewModeRef.current === 'sky') {
-            SkyViewManager.setSafeInsets(currentInsets());
-        }
-    }, [applySheetHeight, currentInsets]);
+        pushInsets();
+    }, [applySheetHeight, pushInsets]);
 
     const resetLayout = useCallback(() => {
         setSections({ ...defaultSections });
@@ -393,16 +398,18 @@ export function App() {
     // MapLibre also caches the zero size it measured while hidden.
     useEffect(() => {
         SkyViewManager.setActive(viewMode === 'sky');
+        MapManager.setActive(viewMode === 'map');
 
         const view = viewMode === 'sky' ? SkyViewManager : MapManager;
         const icao = selectedRef.current;
+
+        view.setSafeInsets(currentInsets());
 
         if (viewMode === 'sky') {
             const r = receiverRef.current;
             if (!r) return;
             SkyViewManager.setReceiver(r.lat, r.lon, r.altM);
             SkyViewManager.setRangeOutline(rangeOutlineRef.current);
-            SkyViewManager.setSafeInsets(currentInsets());
         }
         // Before updateMarkers: the safe area is derived from the canvas size, and a
         // container that was display:none measures zero until it is resized.
@@ -503,6 +510,7 @@ export function App() {
                     receiverRef.current = loc;
                     setReceiverLocation(loc);
                     SkyViewManager.setReceiver(loc.lat, loc.lon, loc.altM);
+                    MapManager.setReceiver(loc.lat, loc.lon);
                     MapManager.setCenter(loc.lat, loc.lon, 8);
                     MapManager.updateRangeRings(loc.lat, loc.lon, loadSettings().rangeRings, loadUnits().distance);
                 }
@@ -728,10 +736,17 @@ export function App() {
 
     // The coverage ribbon carries the only distance scale in the sky view, and its
     // scale steps in the selected unit, so the unit has to reach that renderer just
-    // as it reaches the map's range rings.
+    // as it reaches the map's range rings. The map readout measures in the same unit.
     useEffect(() => {
         SkyViewManager.setDistanceUnit(units.distance);
+        MapManager.setDistanceUnit(units.distance);
     }, [units.distance]);
+
+    // What the map readout counts is what the aircraft list footer counts: aircraft
+    // on screen over aircraft tracked.
+    useEffect(() => {
+        MapManager.setCounts(aircraftMap.size, totalCount);
+    }, [aircraftMap, totalCount]);
 
     // The range outline feeds both views: the map overlay and the sky view's
     // coverage ribbon read the same pushed array.
@@ -764,15 +779,15 @@ export function App() {
     }, [stateHistory]);
 
     // Recomputed on selection change too, because selecting is itself what grows
-    // the mobile sheet from list to detail and so moves the horizon.
+    // the mobile sheet from list to detail, moving the sky view's horizon and the
+    // corner both readouts sit in.
     useEffect(() => {
-        if (viewMode !== 'sky') return;
-        SkyViewManager.setSafeInsets(currentInsets());
-    }, [viewMode, selectedIcao, detail, currentInsets]);
+        pushInsets();
+    }, [viewMode, selectedIcao, detail, pushInsets]);
 
     useEffect(() => {
         const onViewportResize = () => {
-            SkyViewManager.setSafeInsets(currentInsets());
+            pushInsets();
             SkyViewManager.resize();
         };
         window.addEventListener('resize', onViewportResize);
@@ -781,7 +796,7 @@ export function App() {
             window.removeEventListener('resize', onViewportResize);
             window.removeEventListener('orientationchange', onViewportResize);
         };
-    }, [currentInsets]);
+    }, [pushInsets]);
 
     // Sky mode renders no heatmap, and because both views share one server-side
     // viewport slot, leaving it subscribed would make the server re-project the
