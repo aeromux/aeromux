@@ -81,7 +81,9 @@ A row of readings sits in the top-left corner of the map, clear of the panels, t
 | `in view` | Aircraft on the map over aircraft being tracked, the same pair the aircraft list footer shows. |
 | `RANGE` | The farthest the receiver has heard, taken from the coverage outline. Shown whether or not the outline itself is drawn. |
 
-Distances follow the selected distance unit, and the area follows it into its square (nm², km², mi²). `SPAN` and `AREA` measure the whole map, including the part behind the left panel, which is also the area the aircraft count beside them covers. On a phone-width screen the row drops `AREA` and `RANGE` to fit.
+Distances follow the selected distance unit, and the area follows it into its square (nm², km², mi²). `SPAN` and `AREA` measure the whole map, including the part behind the left panel, which is also the area the aircraft count beside them covers.
+
+The row sits between the aircraft list and the control panel, and on a narrow screen there is less room there than the full row needs. When that happens readings are dropped until what remains fits, in this order: `RANGE`, `AREA`, `CTR`, `HDG`, the aircraft count. `SPAN` is the last to go, being the scale. If there is not even room for that, the row is not shown at all. A tablet held in portrait typically keeps `SPAN` and the count, a phone in landscape `SPAN` alone, and a phone in portrait `HDG`, `SPAN` and the count, having the full width to itself because there the panels are stacked above and below rather than to either side.
 
 ### Aircraft Icon Resolution
 
@@ -161,7 +163,7 @@ At rest the camera is level and the horizon sits low in the frame, so the sky ge
 | Sub-horizon marks | Flattened marks sitting **on** the horizon, for aircraft hidden by the curve of the Earth: surface traffic, and very low traffic far away. Their true (negative) elevation is still shown in the tooltip. |
 | Sun and moon | Both bodies at their real positions, the moon with its current phase and its lit side facing the sun, on a sky tinted by the sun's height. See [Sun and Moon](#sun-and-moon). |
 | Coverage ribbon | A strip along the foot of the view showing how far you actually receive in each direction. See below. |
-| Readout | Camera heading, field of view, how many aircraft are in view versus in range, and counts of any shown as sub-horizon marks or omitted for having no altitude. The sun and the moon are listed as well while they are up, each with its bearing and elevation, the moon also with its illuminated percentage. |
+| Readout | Camera heading, field of view, how many aircraft are in view versus in range, and counts of any shown as sub-horizon marks or omitted for having no altitude. The sun and the moon are listed as well while they are up, each with its bearing and elevation, the moon also with its illuminated percentage. On a screen too narrow for all of it, readings are dropped until the rest fit, as they are in [the Map view](#readout): first the exclusion counts, then the moon, the sun, and the field of view. |
 
 There are deliberately **no range rings and no ground plane**. At a realistic antenna height the visible ground is a sliver at the horizon (a 10 m rooftop antenna sees only about 6.6 nm of ground before the Earth curves away), so rings would be invisible rather than merely cluttered. Distance is carried by the tooltips and the coverage ribbon instead.
 

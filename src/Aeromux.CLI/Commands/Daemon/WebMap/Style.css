@@ -520,10 +520,15 @@ body:has(.webgl-error) {
    lines up with them. */
 /* Background, blur, shadow and radius come from .panel, which these elements also
    carry — only layout and typography are set here, and placement below. */
+/* The width is bounded by the renderer, which knows where the panels are, and chips
+   are dropped until the row fits it. Wrapping is the safety valve for the moment
+   between a value growing and the next measurement: a second line is better than
+   reaching under the control panel. */
 .view-hud {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm) var(--spacing-md);
     padding: var(--spacing-sm) var(--spacing-md);
     font-family: var(--font-family);
     line-height: 1;
@@ -1120,12 +1125,6 @@ body:has(.webgl-error) {
         /* Flush to the top edge → round only the bottom corners, mirroring the
            bottom-anchored list/detail panel. */
         border-radius: 0 0 var(--radius-panel) var(--radius-panel);
-    }
-
-    /* The Map View row does not fit a phone in full. What goes is what describes how
-       big the view is, keeping the chips that say where it is and what is in it. */
-    .map-hud .view-hud-optional {
-        display: none;
     }
 }
 

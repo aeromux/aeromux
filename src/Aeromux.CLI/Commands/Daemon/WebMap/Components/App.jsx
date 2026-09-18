@@ -49,6 +49,7 @@ export function App() {
     const [sort, setSort] = useState(loadSort);
     const aircraftMapRef = useRef(new Map());
     const panelRef = useRef(null);
+    const controlPanelRef = useRef(null);
     const sheetDrag = useRef(null);
     const selectedRef = useRef(null);
     const trailRef = useRef([]);
@@ -118,10 +119,14 @@ export function App() {
     ), []);
 
     // Measured from the live layout rather than hard-coded, so a future panel
-    // resize cannot silently desynchronise the scene from what covers it.
+    // resize cannot silently desynchronise the scene from what covers it. The control
+    // panel is measured too: the readouts sit between the two, and what is left
+    // between them is what decides how much of a readout there is room for.
     const currentInsets = useCallback(() => computeInsets({
         mobile: window.matchMedia('(max-width: 768px)').matches,
         panelRect: panelRef.current ? panelRef.current.getBoundingClientRect() : null,
+        controlRect: controlPanelRef.current ? controlPanelRef.current.getBoundingClientRect() : null,
+        viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight
     }), []);
 
@@ -910,6 +915,7 @@ export function App() {
             </div>
 
             <ControlPanel
+                rootRef={controlPanelRef}
                 units={units}
                 onUnitsChange={handleUnitsChange}
                 settings={settings}

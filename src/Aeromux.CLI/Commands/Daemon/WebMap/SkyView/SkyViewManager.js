@@ -48,7 +48,7 @@ import {
     ribbonScaleNm,
     ribbonStepNm
 } from '../Services/SkyViewGeometry.js';
-import { createHudItem, setText, formatBearing } from '../Services/HudDom.js';
+import { createHudItem, setText, formatBearing, createRowFitter } from '../Services/HudDom.js';
 import { sunPosition, moonPosition, moonPhase, isUp } from '../Services/Ephemeris.js';
 import { defaultPalette, skyPalette, css } from '../Services/SkyPalette.js';
 import { haversineDistance, nmToKm, convertNauticalMiles } from '../Services/UnitConversion.js';
@@ -204,6 +204,11 @@ let hitIndex = [];
 let lastFrame = null;
 let hud = null;
 let hudNodes = null;
+let hudChips = [];
+let hudRefit = null;
+// How wide the row may be: the space between the aircraft list and the control
+// panel. Unbounded until the panels have been measured.
+let hudBudget = Infinity;
 // Wall time, read through one indirection so tests can pin it. The celestial
 // positions are the only thing here that depends on the date rather than on
 // elapsed time, and the test harness virtualises performance.now() but not Date.
@@ -246,6 +251,8 @@ export function destroy() {
     ctx = null;
     hud = null;
     hudNodes = null;
+    hudChips = [];
+    hudRefit = null;
     lastFrame = null;
     hitIndex = [];
 }
@@ -287,6 +294,20 @@ function buildHud(container) {
     hud.appendChild(moon.wrap);
     hud.appendChild(note);
     container.appendChild(hud);
+
+    // Least valuable first, which is the order they are given up in when the space
+    // between the panels runs out. The count goes last: the heading is also readable
+    // off the compass along the horizon, but how much of the traffic is on screen is
+    // said nowhere else.
+    hudChips = [
+        { key: 'note', wrap: note, eligible: false },
+        { key: 'moon', wrap: moon.wrap, eligible: false },
+        { key: 'sun', wrap: sun.wrap, eligible: false },
+        { key: 'fov', wrap: fov.wrap, eligible: false },
+        { key: 'heading', wrap: heading.wrap, eligible: true },
+        { key: 'count', wrap: count.wrap, eligible: true }
+    ];
+    hudRefit = createRowFitter(hud, hudChips);
 
     hudNodes = {
         heading: heading.value,
@@ -369,6 +390,7 @@ export function setActive(next) {
 
 export function setSafeInsets(next) {
     insets = next || {};
+    hudBudget = Number.isFinite(insets.readoutMaxWidth) ? insets.readoutMaxWidth : Infinity;
     requestDraw();
 }
 
@@ -1304,11 +1326,13 @@ function drawHud(frame) {
     setText(hudNodes.heading, formatBearing(camera.heading));
     setText(hudNodes.count, `${frame.drawable.length}/${frame.inRange}`);
 
+    // Which chips have anything to say. What of that actually fits between the panels
+    // is settled at the end, by the pass over the row.
+    const eligible = { heading: true, count: true };
+
     // Field of view has no meaning once the whole sky is on screen at fixed scale.
-    if (settings.skyFlatten) {
-        hudNodes.fovItem.style.display = 'none';
-    } else {
-        hudNodes.fovItem.style.display = '';
+    eligible.fov = !settings.skyFlatten;
+    if (eligible.fov) {
         setText(hudNodes.fov, `${Math.round(camera.fov)}°`);
     }
 
@@ -1316,12 +1340,12 @@ function drawHud(frame) {
     // drawn when it is down: a bearing to a sun that has set is not information.
     const celestial = settings.skyCelestial ? frame.celestial : null;
     const sunUp = celestial && celestial.sun.up;
-    hudNodes.sunItem.style.display = sunUp ? '' : 'none';
+    eligible.sun = !!sunUp;
     if (sunUp) {
         setText(hudNodes.sun, formatAzEl(celestial.sun));
     }
     const moonUp = celestial && celestial.moon.up;
-    hudNodes.moonItem.style.display = moonUp ? '' : 'none';
+    eligible.moon = !!moonUp;
     if (moonUp) {
         // The illuminated fraction is the part worth reading off: it says which
         // shape on screen is the right one.
@@ -1335,12 +1359,20 @@ function drawHud(frame) {
     if (frame.belowHorizon) notes.push(`${frame.belowHorizon} below horizon`);
     if (frame.noAltitude) notes.push(`${frame.noAltitude} no altitude`);
     setText(hudNodes.note, notes.join(' · '));
-    hudNodes.note.style.display = notes.length ? '' : 'none';
+    eligible.note = notes.length > 0;
 
     // Matches the panels' own inset from the corner, so the readout lines up with
     // them rather than sitting proud of the top edge.
     hud.style.left = `${(insets.left || 0) + 16}px`;
     hud.style.top = `${(insets.top || 0) + 16}px`;
+    // A value can outgrow its chip between fit passes; the row wraps for a moment
+    // rather than reaching under the control panel again.
+    hud.style.maxWidth = Number.isFinite(hudBudget) ? `${hudBudget}px` : '';
+
+    for (const chip of hudChips) {
+        chip.eligible = !!eligible[chip.key];
+    }
+    if (hudRefit) hudRefit(hudBudget);
 }
 
 // Shape matched to what the shared hover tooltip already reads. The true

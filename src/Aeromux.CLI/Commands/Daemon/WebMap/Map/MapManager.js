@@ -30,7 +30,7 @@ import {
     loggedUnknownTypes,
 } from './AircraftIcons.js';
 import { RDYLGN_STOPS, payloadToFeatures } from '../Services/HeatmapScale.js';
-import { createHudItem, setText, formatBearing } from '../Services/HudDom.js';
+import { createHudItem, setText, formatBearing, createRowFitter } from '../Services/HudDom.js';
 import {
     distanceNm,
     bearingDeg,
@@ -71,7 +71,13 @@ let lastHoverEmit = null;
 // tree would re-render the aircraft list with it.
 let hud = null;
 let hudNodes = null;
+let hudChips = [];
+let hudRefit = null;
 let hudFrame = 0;
+// How wide the row may be: the space between the aircraft list and the control
+// panel. Unbounded until the panels have been measured, which is the behavior the
+// row had before it was bounded at all.
+let hudBudget = Infinity;
 let active = true;
 let insets = {};
 let distanceUnit = 'nm';
@@ -540,6 +546,8 @@ export function destroy() {
     }
     hud = null;
     hudNodes = null;
+    hudChips = [];
+    hudRefit = null;
     hudFrame = 0;
 }
 
@@ -605,11 +613,6 @@ function buildHud(container) {
     const count = createHudItem('in view', true);
     const range = createHudItem('RANGE', false);
 
-    // The two chips that describe how big the view is rather than where it is, which
-    // are the ones a phone-width row drops.
-    area.wrap.classList.add('view-hud-optional');
-    range.wrap.classList.add('view-hud-optional');
-
     for (const chip of [heading, span, area, center, count, range]) {
         hud.appendChild(chip.wrap);
     }
@@ -617,17 +620,26 @@ function buildHud(container) {
 
     hudNodes = {
         heading: heading.value,
-        headingItem: heading.wrap,
         span: span.value,
         area: area.value,
-        areaItem: area.wrap,
         center: center.value,
-        centerItem: center.wrap,
         count: count.value,
-        range: range.value,
-        rangeItem: range.wrap
+        range: range.value
     };
 
+    // Least valuable first, which is the order they are given up in when the space
+    // between the panels runs out. The span goes last because it is the scale, the
+    // one reading the map never had and the cheapest of them to keep.
+    hudChips = [
+        { key: 'range', wrap: range.wrap, eligible: false },
+        { key: 'area', wrap: area.wrap, eligible: false },
+        { key: 'center', wrap: center.wrap, eligible: false },
+        { key: 'heading', wrap: heading.wrap, eligible: false },
+        { key: 'count', wrap: count.wrap, eligible: true },
+        { key: 'span', wrap: span.wrap, eligible: true }
+    ];
+
+    hudRefit = createRowFitter(hud, hudChips);
     requestHud();
 }
 
@@ -654,9 +666,13 @@ function drawHud() {
     const height = canvas.clientHeight;
     if (!width || !height) return;
 
+    // Which chips have anything to say. What of that actually fits is settled at the
+    // end, by the pass over the row.
+    const eligible = {};
+
     const bearing = map.getBearing();
     const northUp = Math.round(Math.abs(bearing)) % 360 === 0;
-    hudNodes.headingItem.style.display = northUp ? 'none' : '';
+    eligible.heading = !northUp;
     if (!northUp) {
         setText(hudNodes.heading, formatBearing(bearing));
     }
@@ -669,12 +685,13 @@ function drawHud() {
         toCoordinate(map.unproject([width, height / 2]))
     );
     setText(hudNodes.span, formatDistanceNm(span, distanceUnit));
+    eligible.span = true;
 
     // Tilted, there is no honest answer: the top of the screen can be looking at the
     // horizon, and the map's own bounds are derived from the same geometry. Reporting
     // nothing is visibly different from reporting a number that is quietly wrong.
     const level = map.getPitch() === 0;
-    hudNodes.areaItem.style.display = level ? '' : 'none';
+    eligible.area = level;
     if (level) {
         // North-up the viewport is a latitude-longitude rectangle, which has a closed
         // form. Rotated it is not, and the corners are what is actually on screen:
@@ -686,7 +703,7 @@ function drawHud() {
         setText(hudNodes.area, formatAreaNm2(areaNm2, distanceUnit));
     }
 
-    hudNodes.centerItem.style.display = receiver ? '' : 'none';
+    eligible.center = !!receiver;
     if (receiver) {
         const center = toCoordinate(map.getCenter());
         const away = distanceNm(receiver, center);
@@ -699,9 +716,10 @@ function drawHud() {
     }
 
     setText(hudNodes.count, `${inViewCount}/${totalCount}`);
+    eligible.count = true;
 
-    hudNodes.rangeItem.style.display = outlineMaxNm > 0 ? '' : 'none';
-    if (outlineMaxNm > 0) {
+    eligible.range = outlineMaxNm > 0;
+    if (eligible.range) {
         setText(hudNodes.range, formatDistanceNm(outlineMaxNm, distanceUnit));
     }
 
@@ -709,6 +727,20 @@ function drawHud() {
     // rather than sitting proud of the top edge.
     hud.style.left = `${(insets.left || 0) + 16}px`;
     hud.style.top = `${(insets.top || 0) + 16}px`;
+    // A value can outgrow its chip between fit passes; the row wraps for a moment
+    // rather than reaching under the control panel again.
+    hud.style.maxWidth = Number.isFinite(hudBudget) ? `${hudBudget}px` : '';
+
+    refit(eligible);
+}
+
+// What fits is settled by the shared fitter, which measures only when the space, the
+// set of chips, or the width of the values has actually changed.
+function refit(eligible) {
+    for (const chip of hudChips) {
+        chip.eligible = !!eligible[chip.key];
+    }
+    if (hudRefit) hudRefit(hudBudget);
 }
 
 // The farthest the receiver has heard, from the coverage outline. Derived here rather
@@ -734,6 +766,7 @@ export function setActive(next) {
 
 export function setSafeInsets(next) {
     insets = next || {};
+    hudBudget = Number.isFinite(insets.readoutMaxWidth) ? insets.readoutMaxWidth : Infinity;
     requestHud();
 }
 

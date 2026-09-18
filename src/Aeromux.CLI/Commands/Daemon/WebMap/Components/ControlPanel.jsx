@@ -35,7 +35,7 @@ function highlightMatch(text, query) {
     );
 }
 
-export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation, heatmapCollectionEnabled, heatmapScale, viewMode, receiverPending, onViewModeChange }) {
+export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange, onSelect, onReset, receiverLocation, heatmapCollectionEnabled, heatmapScale, viewMode, receiverPending, onViewModeChange, rootRef }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -120,7 +120,16 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
     }, [settings, onSettingsChange]);
 
     return (
-        <div class="control-panel panel" ref={wrapperRef}>
+        <div
+            class="control-panel panel"
+            // Two holders of the same element: this component closes its dropdowns on
+            // an outside click, and the app measures where the panel's left edge is,
+            // which is what bounds the view readout's width.
+            ref={(el) => {
+                wrapperRef.current = el;
+                if (rootRef) rootRef.current = el;
+            }}
+        >
             <div class="control-panel-row">
                 <div class="search-input-wrapper">
                     <span class="search-icon">
