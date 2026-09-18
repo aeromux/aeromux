@@ -72,6 +72,24 @@ Dependency direction: CLI -> Infrastructure -> Core. CLI also references Core di
 
 Always present a plan before modifying code, even for small changes. Get user approval before editing files.
 
+## Writing Style
+
+Applies to all prose written for this project: documentation, code comments, XML
+docs, CHANGELOG entries, commit messages, and pull request descriptions.
+
+- **American English.** Use `color`, `gray`, `center`, `behavior`, `analyze`,
+  `meter`, `modeled`. Not `colour`, `grey`, `centre`, `behaviour`, `analyse`,
+  `metre`, `modelled`. Existing files still carry British spellings; convert a
+  file's wording as you edit it rather than in a separate sweep.
+- **No dash as a sentence separator.** Do not join clauses with an em dash. Use a
+  comma, a colon, parentheses, or two sentences instead. Dashes remain correct in
+  numeric ranges, in compound modifiers (`receiver-centric`), and as the fixed
+  separator in CHANGELOG headings (`## [0.8.0] — 2026-09-12`) and entry bullets
+  (`- **Feature** — description`).
+- **Dates in prose read `September 18, 2026`.** The exception is CHANGELOG release
+  headings, which stay ISO `YYYY-MM-DD` as required by Keep a Changelog and the
+  Versioning section below.
+
 ## Versioning
 
 The single source of truth for the version number is `<Version>` in `src/Directory.Build.props`; all projects inherit it. When bumping the version:
