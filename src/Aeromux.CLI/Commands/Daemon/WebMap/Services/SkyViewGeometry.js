@@ -17,6 +17,8 @@
 // Pure receiver-centric sky geometry. No DOM, no framework, so it is directly
 // testable under `node --test`.
 
+import { nmFromDisplayUnit } from './UnitConversion.js';
+
 // Mean Earth radius. The effective radius folds in standard optical refraction,
 // which bends light slightly around the curve and so raises the apparent
 // elevation of distant targets. The optical value suits "where would I point a
@@ -327,10 +329,24 @@ export function destinationPoint(lat, lon, bearingDeg, distanceKm) {
 }
 
 // Round a measured reach up to the next step, giving the coverage ribbon a scale
-// that only changes in jumps. Normalising to the raw maximum instead would rescale
+// that only changes in jumps. Normalizing to the raw maximum instead would rescale
 // the whole profile every time a single distant contact arrived, so a block's height
 // would mean a different number of miles from one minute to the next.
 export const RIBBON_SCALE_STEP_NM = 50;
+
+// The step is chosen in the unit the axis is labeled in, not in nautical miles and
+// converted afterwards: rounding a reach to 150 nm and then printing it in
+// kilometers gives ticks reading 278 and 139, which is a scale nobody can read at a
+// glance. Each step here halves into a round number as well, since the axis carries
+// a tick at half scale.
+export const RIBBON_SCALE_STEPS = { nm: 50, km: 100, mi: 50 };
+
+// That step expressed in nautical miles, which is what distances are measured in.
+// An unknown unit falls back to kilometers, matching convertNauticalMiles.
+export function ribbonStepNm(unit) {
+    const step = RIBBON_SCALE_STEPS[unit] ?? RIBBON_SCALE_STEPS.km;
+    return nmFromDisplayUnit(step, unit);
+}
 
 export function ribbonScaleNm(maxNm, stepNm = RIBBON_SCALE_STEP_NM) {
     if (!(maxNm > 0)) return 0;

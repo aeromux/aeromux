@@ -28,10 +28,11 @@ import {
     bearingLabelStep,
     BEARING_STEPS,
     ribbonScaleNm,
+    ribbonStepNm,
     RIBBON_SCALE_STEP_NM,
     receiverBox
 } from '../Services/SkyViewGeometry.js';
-import { nmToKm, haversineDistance } from '../Services/UnitConversion.js';
+import { nmToKm, haversineDistance, convertNauticalMiles } from '../Services/UnitConversion.js';
 
 // Shorthand for the tolerance-based comparisons the geometry needs; the pinned
 // figures below come from the documented worked examples, so a drift in the maths
@@ -332,6 +333,26 @@ test('the scale holds until a step boundary is crossed', () => {
 test('no coverage yields no scale, so nothing is drawn', () => {
     assert.equal(ribbonScaleNm(0), 0);
     assert.equal(ribbonScaleNm(-5), 0);
+});
+
+test('the scale steps in the unit it will be labeled in', () => {
+    // The point of stepping per unit: a reach of 122 nm has to land on a number the
+    // axis can print, whichever unit the user reads it in.
+    const reach = 122;
+    for (const [unit, expected] of [['nm', 150], ['km', 300], ['mi', 150]]) {
+        const scale = ribbonScaleNm(reach, ribbonStepNm(unit));
+        const label = convertNauticalMiles(scale, unit);
+        assert.equal(label.value, expected, `${unit} scale`);
+        assert.equal(label.label, unit);
+        assert.ok(scale >= reach, `${unit} scale covers the measured reach`);
+        // Halving it has to stay round too, since the axis carries a middle tick.
+        assert.equal(convertNauticalMiles(scale / 2, unit).value, expected / 2);
+    }
+});
+
+test('an unknown unit falls back to the kilometer step', () => {
+    assert.equal(ribbonStepNm(undefined), ribbonStepNm('km'));
+    assert.equal(ribbonStepNm('parsecs'), ribbonStepNm('km'));
 });
 
 // -------------------- receiverBox --------------------

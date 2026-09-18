@@ -614,6 +614,47 @@ test('the ribbon states its own scale, so the bars are readable without a key', 
     reset();
 });
 
+test('the ribbon scale follows the selected distance unit', () => {
+    reset();
+    const outline = [[340, 200], [350, 90], [0, 150], [10, 60]].map(([bearing, nm]) => {
+        const c = coordinateAt(bearing, nm * 1.852);
+        return { Latitude: c.Latitude, Longitude: c.Longitude };
+    });
+
+    resetCalls();
+    Sky.setRangeOutline(outline);
+    const tallestNm = Math.max(...calls.filter((c) => c.name === 'rect').map((c) => c.args[3]));
+
+    // Kilometers: 200 nm is 370 km, which rounds up to a 400 km scale. The axis has
+    // to read in kilometres throughout, not convert a nautical-mile scale into odd
+    // numbers, and the bars have to follow the new scale rather than only the words.
+    resetCalls();
+    Sky.setDistanceUnit('km');
+    let labels = calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    assert.ok(labels.includes('400 km'), `top tick in km (got ${labels.join(', ')})`);
+    assert.ok(labels.includes('200 km'), 'the halfway tick too');
+    assert.ok(labels.includes('0 km'), 'and the baseline');
+    assert.ok(!labels.some((l) => l.endsWith(' nm')), 'nothing is left labeled in nm');
+
+    const tallestKm = Math.max(...calls.filter((c) => c.name === 'rect').map((c) => c.args[3]));
+    assert.ok(
+        tallestKm < tallestNm,
+        'the profile is redrawn against the larger scale, not merely relabeled'
+    );
+
+    // Statute miles: 200 nm is 230 mi, so the scale steps to 250 mi.
+    resetCalls();
+    Sky.setDistanceUnit('mi');
+    labels = calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    assert.ok(labels.includes('250 mi'), `top tick in mi (got ${labels.join(', ')})`);
+    assert.ok(labels.includes('125 mi'), 'the halfway tick too');
+    assert.ok(labels.includes('0 mi'), 'and the baseline');
+
+    Sky.setDistanceUnit('nm');
+    Sky.setRangeOutline([]);
+    reset();
+});
+
 test('the halfway mark is confined to bearings that have coverage', () => {
     reset();
     // Coverage over a narrow arc only, so most of the view has no data at all.

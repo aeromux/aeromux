@@ -173,6 +173,21 @@ export function nmToKm(nm) {
     return nm * 1.852;
 }
 
+// Nautical miles from a value already in the display unit, the inverse of
+// convertNauticalMiles and deliberately unrounded: it is used to express a scale
+// step chosen in the display unit back in the nautical miles everything is measured
+// in, where rounding would put the step slightly off the round number it stands for.
+export function nmFromDisplayUnit(value, unit) {
+    switch (unit) {
+        case 'nm':
+            return value;
+        case 'mi':
+            return value / 1.15078;
+        default:
+            return value / 1.852;
+    }
+}
+
 export function convertNauticalMiles(nm, unit) {
     switch (unit) {
         case 'nm':

@@ -4,6 +4,10 @@ All notable changes to Aeromux will be documented in this file.
 
 ## [0.8.1] — Unreleased
 
+### Fixed
+
+- **Web Map: Sky View Coverage Ribbon Units** — The coverage ribbon's distance scale now follows the selected distance unit instead of always being labeled in nautical miles, so a reading taken in kilometers or statute miles is no longer short by the conversion factor. The scale also rounds in the selected unit (50 nm, 100 km, or 50 mi), so its ticks stay round numbers rather than becoming a converted nautical-mile step.
+
 ## [0.8.0] — 2026-09-12
 
 ### Added

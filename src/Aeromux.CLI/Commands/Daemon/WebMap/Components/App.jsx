@@ -726,6 +726,13 @@ export function App() {
         }
     }, [settings.rangeRings, units.distance, receiverLocation]);
 
+    // The coverage ribbon carries the only distance scale in the sky view, and its
+    // scale steps in the selected unit, so the unit has to reach that renderer just
+    // as it reaches the map's range rings.
+    useEffect(() => {
+        SkyViewManager.setDistanceUnit(units.distance);
+    }, [units.distance]);
+
     // The range outline feeds both views: the map overlay and the sky view's
     // coverage ribbon read the same pushed array.
     useEffect(() => {

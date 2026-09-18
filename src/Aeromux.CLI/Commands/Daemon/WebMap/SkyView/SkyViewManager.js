@@ -45,11 +45,12 @@ import {
     aircraftAltitudeM,
     destinationPoint,
     clampPitch,
-    ribbonScaleNm
+    ribbonScaleNm,
+    ribbonStepNm
 } from '../Services/SkyViewGeometry.js';
 import { sunPosition, moonPosition, moonPhase, isUp } from '../Services/Ephemeris.js';
 import { defaultPalette, skyPalette, css } from '../Services/SkyPalette.js';
-import { haversineDistance, nmToKm } from '../Services/UnitConversion.js';
+import { haversineDistance, nmToKm, convertNauticalMiles } from '../Services/UnitConversion.js';
 import { CATEGORIES, SELECTED_COLOR, interpolateColor } from '../Map/AircraftIcons.js';
 
 // The compass sits just under the horizon and travels with it. The ribbon instead
@@ -178,6 +179,9 @@ let outline = [];
 let outlinePolar = [];
 let outlineMaxNm = 0;
 let outlineScaleNm = 0;
+// The unit the coverage ribbon is labeled in. It comes from the units preference
+// rather than from the sky settings, so it arrives on its own channel.
+let distanceUnit = 'nm';
 let camera = { heading: 0, pitch: 0, fov: 75 };
 let aircraft = new Map();
 let selectedIcao = null;
@@ -361,7 +365,7 @@ function rebuildOutlinePolar() {
         const bearing = bearingTo(receiver.lat, receiver.lon, point.Latitude, point.Longitude);
         // Snapped to the sector it was recorded in. The coordinate is the farthest
         // aircraft seen in that sector, which may lie anywhere across its five
-        // degrees — drawing a block centred on it would make neighbouring sectors
+        // degrees — drawing a block centered on it would make neighboring sectors
         // overlap and leave slivers between others, instead of tiling.
         const sectorStart = Math.floor(bearing / OUTLINE_SECTOR_DEG) * OUTLINE_SECTOR_DEG;
         return {
@@ -374,7 +378,7 @@ function rebuildOutlinePolar() {
         };
     });
     outlineMaxNm = outlinePolar.reduce((max, o) => Math.max(max, o.distanceNm), 0);
-    outlineScaleNm = ribbonScaleNm(outlineMaxNm);
+    outlineScaleNm = ribbonScaleNm(outlineMaxNm, ribbonStepNm(distanceUnit));
 }
 
 // A hidden renderer must neither paint nor publish. Its canvas is not on screen, so
@@ -387,6 +391,16 @@ export function setActive(next) {
 
 export function setSafeInsets(next) {
     insets = next || {};
+    requestDraw();
+}
+
+// The ribbon's scale steps in the unit it is labeled in, so a unit change is a
+// change of scale and not only of wording: the whole profile is rebuilt.
+export function setDistanceUnit(unit) {
+    const next = unit || 'nm';
+    if (next === distanceUnit) return;
+    distanceUnit = next;
+    rebuildOutlinePolar();
     requestDraw();
 }
 
@@ -1003,7 +1017,7 @@ function drawRibbon(frame) {
     ctx.stroke();
 
     // Gridlines at full width, which reads as a chart rather than as stray marks now
-    // that each one is labelled with its value.
+    // that each one is labeled with its value.
     ctx.strokeStyle = css(frame.palette.ink, 0.08);
     ctx.beginPath();
     for (const y of [plotTop, plotTop + height / 2]) {
@@ -1053,10 +1067,14 @@ function drawRibbon(frame) {
 // out what it is measured in from the one label that happens to say.
 function drawRibbonAxis(frame, plotTop, plotBottom) {
     const half = plotTop + (plotBottom - plotTop) / 2;
+    // In the unit the user selected, which the scale was stepped in, so each of
+    // these is a round number rather than a converted one.
+    const full = convertNauticalMiles(outlineScaleNm, distanceUnit);
+    const mid = convertNauticalMiles(outlineScaleNm / 2, distanceUnit);
     const ticks = [
-        [plotTop, `${outlineScaleNm} nm`],
-        [half, `${Math.round(outlineScaleNm / 2)} nm`],
-        [plotBottom, '0 nm']
+        [plotTop, `${full.value} ${full.label}`],
+        [half, `${mid.value} ${mid.label}`],
+        [plotBottom, `0 ${full.label}`]
     ];
     const right = frame.safe.right - RIBBON_AXIS_MARGIN;
 
@@ -1066,7 +1084,7 @@ function drawRibbonAxis(frame, plotTop, plotBottom) {
     for (const [y, text] of ticks) {
         const width = ctx.measureText(text).width;
         // A chip behind each, because a bar may reach any height here and plain text
-        // over one is unreadable. Centred on its gridline, which the band's padding
+        // over one is unreadable. Centered on its gridline, which the band's padding
         // guarantees room for.
         ctx.fillStyle = css(frame.palette.panel, 0.8);
         ctx.fillRect(right - width - 4, y - 6, width + 7, 12);

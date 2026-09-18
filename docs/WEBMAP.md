@@ -154,7 +154,7 @@ There are deliberately **no range rings and no ground plane**. At a realistic an
 
 The strip along the bottom shows the farthest aircraft received in each 5° of bearing over the last 24 hours. These are the same measurements the map draws as a range outline, laid out against bearing instead of on a map. A notch is a direction nothing has been heard from, which over time traces out where buildings or terrain block the antenna.
 
-Its scale is marked down the left edge, each tick labeled in the current distance unit. The scale is the farthest bearing rounded up to the next 50 nm, so a given height means a fixed distance rather than rescaling every time a distant contact arrives. It is computed across all bearings, not just the ones on screen, which is why the visible profile often does not fill the band. That keeps heights comparable as you turn the camera.
+Its scale is marked down the left edge, each tick labeled in the current distance unit. The scale is the farthest bearing rounded up to the next step in that unit (50 nm, 100 km, or 50 mi), so a given height means a fixed distance rather than rescaling every time a distant contact arrives, and the ticks stay round numbers whichever unit you read them in. Changing the distance unit therefore changes the scale as well as the labels. It is computed across all bearings, not just the ones on screen, which is why the visible profile often does not fill the band. That keeps heights comparable as you turn the camera.
 
 The ribbon needs at least three bearings with contacts before it appears, so a freshly started daemon shows nothing until traffic has been seen in a few directions. It can be turned off in the settings panel.
 
