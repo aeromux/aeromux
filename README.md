@@ -51,16 +51,16 @@ See the [TUI Guide](docs/TUI.md) for full keyboard reference, sorting, search, a
 ### Web Map Preview
 
 <div align="center">
-  <img src="docs/images/webmap/overview.jpeg" alt="Web Map" width="800">
+  <img src="docs/images/webmap/map.jpeg" alt="Map View" width="800">
   <br>
-  <em>The web map showing aircraft list, map with range rings, and control panel</em>
+  <em>The Map view with the traffic heatmap, range rings, coverage outline, and an aircraft's detail panel</em>
 </div>
 <br>
 
 <div align="center">
-  <img src="docs/images/webmap/skyview.jpeg" alt="Sky View" width="800">
+  <img src="docs/images/webmap/sky.jpeg" alt="Sky View" width="800">
   <br>
-  <em>Sky View — the same aircraft seen from the receiver, by bearing and elevation, with measured coverage along the foot</em>
+  <em>Sky View: the same aircraft seen from the receiver, by bearing and elevation, with the sun at its real position and the measured coverage along the foot</em>
 </div>
 <br>
 
