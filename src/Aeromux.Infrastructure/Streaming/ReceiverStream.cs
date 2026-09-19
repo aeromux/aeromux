@@ -387,10 +387,20 @@ public sealed class ReceiverStream : IFrameStream
             return null;
         }
 
-        // Aggregate statistics from all workers (SDR devices + MLAT)
+        // Aggregate statistics from all workers (SDR devices + MLAT).
+        //
+        // The confidence tracker is NOT summed: every worker was handed the same
+        // instance (see StartAsync), so its counters are already receiver-wide and
+        // summing them multiplies the total by the device count. Doing so made
+        // ValidFrames exceed TotalFrames on any multi-device receiver, which in turn
+        // made the derived CRC error count negative and the frames-per-second figure
+        // too high by the same factor.
+        //
+        // The other three are per-worker objects constructed inside DeviceWorker, so
+        // they are summed.
         return new StreamStatistics(
             _workers.Sum(w => w.PreambleDetector.FramesExtracted),
-            _workers.Sum(w => w.ConfidenceTracker.ConfidentFrames),
+            _confidenceTracker?.ConfidentFrames ?? 0,
             _mlatWorker?.FramesReceived ?? 0,
             _workers.Sum(w => w.ValidatedFrameFactory.FramesCorrected),
             _workers.Sum(w => w.MessageParser.MessagesParsed),

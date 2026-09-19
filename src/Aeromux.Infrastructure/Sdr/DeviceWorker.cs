@@ -569,7 +569,11 @@ public sealed class DeviceWorker : IDisposable
                     crcInvalid);
 
                 // === Confidence Tracking Statistics ===
-                // Monitor noise filtering effectiveness: confident rate shows how well we reject random ICAOs
+                // Monitor noise filtering effectiveness: confident rate shows how well we reject random ICAOs.
+                // Receiver-wide rather than per-device: the tracker is shared across all
+                // workers so MLAT can mark ICAOs confident for every device at once, so
+                // these counters cover the whole receiver and each device logs the same
+                // figures. Labeled accordingly rather than presented as this device's.
                 long confTotal = _confidenceTracker.TotalFrames;
                 long confConfident = _confidenceTracker.ConfidentFrames;
                 double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
@@ -577,7 +581,7 @@ public sealed class DeviceWorker : IDisposable
                 int confConfirmed = _confidenceTracker.ConfirmedIcaos;
                 long confExpired = _confidenceTracker.ExpiredIcaos;
 
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) confidence: {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} active ICAOs, {Confirmed:N0} confirmed, {Expired:N0} expired total",
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) receiver-wide confidence (shared across devices): {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} active ICAOs, {Confirmed:N0} confirmed, {Expired:N0} expired total",
                     _config.Name,
                     _config.DeviceIndex,
                     confTotal,
