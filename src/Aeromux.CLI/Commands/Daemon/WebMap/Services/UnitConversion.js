@@ -63,6 +63,8 @@ const SETTINGS_DEFAULTS = {
     heatmapCellNm: 2,        // fixed-nm display cell size
     heatmapWindowHours: 24,  // rolling window
     viewMode: 'map',         // 'map' | 'sky' — which view is rendering
+    mapAltitude: true,       // aircraft drawn at their real height on a tilted map
+    mapAltitudeScale: 2,     // 1 | 2 | 5 — how much that height is exaggerated
     skyMaxRangeNm: 150,      // Sky View range from the receiver
     skyFov: 75,              // horizontal field of view, degrees
     skyPitch: 0,             // camera tilt above the horizon, degrees
@@ -88,6 +90,8 @@ export function loadSettings() {
                 heatmapCellNm: parsed.heatmapCellNm !== undefined ? parsed.heatmapCellNm : SETTINGS_DEFAULTS.heatmapCellNm,
                 heatmapWindowHours: parsed.heatmapWindowHours !== undefined ? parsed.heatmapWindowHours : SETTINGS_DEFAULTS.heatmapWindowHours,
                 viewMode: parsed.viewMode !== undefined ? parsed.viewMode : SETTINGS_DEFAULTS.viewMode,
+                mapAltitude: parsed.mapAltitude !== undefined ? parsed.mapAltitude : SETTINGS_DEFAULTS.mapAltitude,
+                mapAltitudeScale: parsed.mapAltitudeScale !== undefined ? parsed.mapAltitudeScale : SETTINGS_DEFAULTS.mapAltitudeScale,
                 skyMaxRangeNm: parsed.skyMaxRangeNm !== undefined ? parsed.skyMaxRangeNm : SETTINGS_DEFAULTS.skyMaxRangeNm,
                 skyFov: parsed.skyFov !== undefined ? parsed.skyFov : SETTINGS_DEFAULTS.skyFov,
                 skyPitch: parsed.skyPitch !== undefined ? parsed.skyPitch : SETTINGS_DEFAULTS.skyPitch,

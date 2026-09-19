@@ -29,6 +29,17 @@ import {
     setMap as setIconMap,
     loggedUnknownTypes,
 } from './AircraftIcons.js';
+import {
+    metersPerPixel,
+    mercatorXFromLongitude,
+    mercatorYFromLatitude,
+    mercatorZFromAltitude,
+    liftMeters,
+    cameraAltitudeMeters,
+    canPlace,
+    projectWorld
+} from '../Services/AltitudeProjection.js';
+import * as AltitudeLayer from './AltitudeLayer.js';
 import { RDYLGN_STOPS, payloadToFeatures } from '../Services/HeatmapScale.js';
 import { createHudItem, setText, formatBearing, createRowFitter } from '../Services/HudDom.js';
 import {
@@ -116,6 +127,69 @@ const TRAIL_COLORS = {
     privacy:  'rgb(160, 0, 0)',
 };
 
+// The same three for the 3D trail, which is drawn by a shader rather than by the
+// style and so needs components rather than CSS.
+const TRAIL_RGB = {
+    normal:   [0, 97, 146],
+    military: [0, 110, 0],
+    privacy:  [160, 0, 0],
+};
+
+// Aircraft at their real height
+//
+// Tilted, the map otherwise draws an aircraft at FL350 and the warehouse it is over
+// at the same point. Each aircraft is given the coordinate whose ground position
+// projects to where it actually is in the air, so the symbol layer keeps doing its
+// own work and hit testing, hover and rotation come along unchanged.
+
+// MapLibre's own default, stated here because raising it is not free: past about
+// 71.6 degrees the horizon enters the frame, and the canvas is cleared to
+// transparent above it, so the page behind would show through. MapLibre also calls
+// anything above 60 experimental.
+const MAX_PITCH = 45;
+
+// Below this there is nothing worth drawing: an aircraft on the ground, or one
+// reporting no altitude, would otherwise carry a ring with a stalk of no length.
+const MIN_LIFT_M = 30;
+
+// The mark an aircraft leaves on the ground it is over: its own silhouette, lying
+// flat, at the point the stalk lands on.
+//
+// Not a sun shadow. A real one at FL350 falls about 10 nm away with the sun 30
+// degrees up, and further as the sun drops, which reads as a second aircraft rather
+// than as this one. This is the convention instead: the object above, its mark
+// directly below, and the eye reads the gap between them as height.
+//
+// It lies in the ground plane, so unlike everything tried in the air it foreshortens
+// with the tilt, which is what makes it read as being on the ground rather than as
+// another copy of the aircraft.
+const SHADOW_COLOR = [40, 44, 50];
+const SHADOW_OPACITY = 0.35;
+// Slightly smaller than the aircraft, which is what distance to the ground does.
+const SHADOW_SCALE = 0.9;
+const SHADOW_FALLBACK = 'aircraft-unknown-shadow';
+const shadowImageName = (shapeName, selected) =>
+    `aircraft-${shapeName}-shadow${selected ? '-selected' : ''}`;
+// The selection's mark is its own shadow in the selection color, outlined in black
+// like every other icon on the map. One mark on the ground, carrying both what the
+// aircraft is and that it is the one being followed.
+let shadowVisible = null;
+
+
+
+let altitudeEnabled = true;
+let altitudeScale = 1;
+// The selected aircraft's path, kept because it is drawn twice: flat on the ground
+// while the map is level, climbing with the aircraft once it is tilted.
+let trailPoints = [];
+let flatTrailVisible = true;
+let wasLifting = false;
+
+// Aircraft as last built, each with its true ground position and its lift beside the
+// feature. Placement is recomputed from these as the camera moves, which costs no
+// icon resolution and no image registration.
+let aircraftRecords = [];
+
 export function init(containerId) {
     map = new maplibregl.Map({
         container: containerId,
@@ -132,7 +206,8 @@ export function init(containerId) {
             layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
         },
         center: [0, 0],
-        zoom: 2
+        zoom: 2,
+        maxPitch: MAX_PITCH
     });
 
     map.on('load', async () => {
@@ -253,6 +328,8 @@ export function init(containerId) {
     // Re-project tooltip positions on map move/zoom
     map.on('move', () => {
         requestHud();
+        // Before the tooltips below, which read the coordinates it rewrites.
+        refreshPlacement();
         if (hoveredIcao && hoveredCoords && hoveredProps) {
             const pt = map.project(hoveredCoords);
             emitHover(hoveredProps, pt.x, pt.y);
@@ -328,6 +405,11 @@ function addLayers() {
             'icon-size':   ['*', ICON_SIZE, ['get', 'iconScale']],
             'icon-rotate': ['get', 'iconRotate'],
             'icon-rotation-alignment': 'map',
+            // Icons lie in the ground plane, which is MapLibre's default for this
+            // rotation alignment and foreshortens them as the map tilts. Facing them
+            // at the camera instead was tried and looked wrong: a top-down silhouette
+            // standing upright reads as a cutout rather than as an aircraft seen from
+            // above, and the map is a plan view even when it is tilted.
             'icon-allow-overlap': true,
             'icon-ignore-placement': true
         },
@@ -335,6 +417,48 @@ function addLayers() {
             'icon-opacity': 1
         }
     });
+
+    // Ground shadows, below everything the aircraft themselves are drawn with, so a
+    // stalk rises out of its own mark.
+    map.addSource('aircraft-shadow-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+    });
+
+    ensureRegistered(SHADOW_FALLBACK, 'unknown', SHADOW_COLOR);
+
+    map.addLayer({
+        id: 'aircraft-shadow-layer',
+        type: 'symbol',
+        source: 'aircraft-shadow-source',
+        layout: {
+            visibility: 'none',
+            'icon-image': ['coalesce',
+                ['image', ['get', 'iconShadow']],
+                ['image', SHADOW_FALLBACK],
+            ],
+            'icon-size':   ['*', ICON_SIZE * SHADOW_SCALE, ['get', 'iconScale']],
+            'icon-rotate': ['get', 'iconRotate'],
+            // Both aligned to the map, so the mark lies in the ground plane and
+            // foreshortens with the tilt the way something lying on the ground does.
+            'icon-rotation-alignment': 'map',
+            'icon-pitch-alignment': 'map',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true
+        },
+        paint: {
+            // One opacity for every shadow, the selection included. Its color already
+            // tells it apart, and a second, harder orange mark was doing the job
+            // twice over. A constant also keeps this off the expression path, where a
+            // per-feature case that fails to evaluate falls back to fully opaque and
+            // looks like no opacity at all.
+            'icon-opacity': SHADOW_OPACITY
+        }
+    }, 'aircraft-layer');
+
+    // Stalks, rings and the 3D trail, below the aircraft so a stalk passes under
+    // traffic rather than over it.
+    AltitudeLayer.addTo(map, 'aircraft-layer');
 }
 
 export function setCenter(lat, lon, zoom) {
@@ -353,12 +477,16 @@ export function fitToAircraft(positions) {
 export function updateMarkers(aircraftMap) {
     if (!map) return;
 
-    const features = [];
-    let selectedFeature = null;
+    const records = [];
     aircraftMap.forEach((aircraft, icao) => {
         if (!aircraft.Coordinate) return;
 
-        const altitude = aircraft.BarometricAltitude ? aircraft.BarometricAltitude.Feet : 0;
+        // Barometric first, geometric as the fallback, which is the order the state
+        // history records (AircraftStateTracker) and the order the live trail append
+        // already follows. An icon placed by a different rule than its own trail
+        // would sit several hundred feet off the end of it.
+        const altitudeSource = aircraft.BarometricAltitude ?? aircraft.GeometricAltitude;
+        const altitude = altitudeSource ? altitudeSource.Feet : 0;
         const heading  = aircraft.Track || aircraft.TrackOnGround || 0;
         const selected = icao === selectedIcao;
         const category = aircraft.Military ? 'military'
@@ -414,6 +542,13 @@ export function updateMarkers(aircraftMap) {
         // Fire-and-forget; updateMarkers ticks aren't awaited.
         // ensureRegistered dedupes per imageName.
         ensureRegistered(imageName, shapeName, fillColor);
+        // One shadow per shape rather than per altitude bucket: a mark on the ground
+        // takes no palette. The selection gets a second variant, the same shape
+        // outlined in the selection color.
+        ensureRegistered(shadowImageName(shapeName, false), shapeName, SHADOW_COLOR);
+        if (selected) {
+            ensureRegistered(shadowImageName(shapeName, true), shapeName, SELECTED_COLOR);
+        }
 
         const feature = {
             type: 'Feature',
@@ -432,6 +567,7 @@ export function updateMarkers(aircraftMap) {
 
                 iconImage:    imageName,
                 iconFallback: fallback,
+                iconShadow:   shadowImageName(shapeName, selected),
                 iconScale:    scale,
                 // Per-feature rotation; balloon (the only noRotate
                 // shape currently) renders north-up regardless of
@@ -441,32 +577,173 @@ export function updateMarkers(aircraftMap) {
                 resolvedVia,
             }
         };
-        features.push(feature);
-        // Capture the selected feature in-loop so the pinned tooltip can be
-        // re-projected without a second O(n) scan over the feature list.
-        if (selected) selectedFeature = feature;
+        records.push({
+            feature,
+            lon: aircraft.Coordinate.Longitude,
+            lat: aircraft.Coordinate.Latitude,
+            lift: liftMeters(altitude, altitudeScale),
+            selected
+        });
     });
 
-    const source = map.getSource('aircraft-source');
-    if (source) {
-        source.setData({ type: 'FeatureCollection', features });
+    aircraftRecords = records;
+    rebuildMarks();
+    emitPlacement();
+}
+
+// Aircraft at their real height
+// --------------------------------------------------------------------------
+
+// Nothing is lifted on a level map: the lift would be zero, and paying for the
+// arithmetic to compute a zero would be paying for nothing on the common case.
+function liftingActive() {
+    return altitudeEnabled && !!map && map.getPitch() > 0;
+}
+
+// Stalks, rings and the trail, which change only when the aircraft or the scale do.
+// Camera movement leaves them alone: a stalk's top is a height above a fixed point on
+// the ground, which is the same place whatever the camera is doing.
+function rebuildMarks() {
+    const lifted = aircraftRecords.filter(record => record.lift >= MIN_LIFT_M);
+
+    AltitudeLayer.setMarks(lifted.map(record => ({
+        lon: record.lon,
+        lat: record.lat,
+        lift: record.lift,
+        selected: record.selected
+    })));
+
+    // Shadows sit at the true ground position, which no camera movement changes, so
+    // they are rebuilt with the data rather than with the view.
+    const source = map && map.getSource('aircraft-shadow-source');
+    if (!source) return;
+    source.setData({
+        type: 'FeatureCollection',
+        features: lifted.map(record => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [record.lon, record.lat] },
+            properties: {
+                iconShadow: record.feature.properties.iconShadow,
+                iconScale:  record.feature.properties.iconScale,
+                iconRotate: record.feature.properties.iconRotate
+            }
+        }))
+    });
+}
+
+// Where each aircraft goes on screen, given where the camera is now.
+//
+// Every aircraft is given the coordinate whose GROUND position projects to where the
+// aircraft actually is in the air. MapLibre never learns about altitude, so hit
+// testing, hover, the pinned tooltip and icon rotation keep working unchanged.
+function emitPlacement() {
+    const source = map && map.getSource('aircraft-source');
+    if (!source) return;
+
+    const lifting = liftingActive();
+    AltitudeLayer.setVisible(lifting);
+
+    if (lifting !== shadowVisible && map.getLayer('aircraft-shadow-layer')) {
+        shadowVisible = lifting;
+        map.setLayoutProperty('aircraft-shadow-layer', 'visibility', lifting ? 'visible' : 'none');
     }
 
-    // Update hovered aircraft coordinates and properties (aircraft may have moved)
+    // Two trails for one aircraft would be two lines saying the same thing, so the
+    // flat one stands down while the climbing one is drawn. Only while it actually is:
+    // a trail whose points carry no altitude produces no climbing line, and hiding the
+    // flat one then would leave the aircraft with no trail at all.
+    const flatWanted = !(lifting && AltitudeLayer.hasTrail());
+    if (flatWanted !== flatTrailVisible && map.getLayer('trail-layer')) {
+        flatTrailVisible = flatWanted;
+        map.setLayoutProperty('trail-layer', 'visibility', flatWanted ? 'visible' : 'none');
+    }
+
+    const frame = AltitudeLayer.cameraFrame();
+    const canvas = map.getCanvas();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+
+    // No matrix until the first frame has been drawn, and no lift on a level map.
+    // Both fall back to the ground position, which is exactly what this map did
+    // before any of this existed.
+    const placing = lifting && frame.matrix && width > 0 && height > 0;
+
+    let ceiling = 0;
+    if (placing) {
+        const center = map.getCenter();
+        const mpp = metersPerPixel(center.lat, map.getZoom());
+        ceiling = cameraAltitudeMeters(frame.fov, height, map.getPitch(), mpp);
+    }
+
+    const features = [];
+    const placed = new Set();
+
+    for (const record of aircraftRecords) {
+        const feature = record.feature;
+
+        if (!placing || record.lift < MIN_LIFT_M) {
+            feature.geometry.coordinates = [record.lon, record.lat];
+            features.push(feature);
+            placed.add(record);
+            continue;
+        }
+
+        // Above the camera's own altitude the aircraft is above the horizon, where no
+        // ground point projects to it. It is left out rather than dropped onto the
+        // ground: it has legitimately risen off the top of the screen, and the ground
+        // is not where it is. Its stalk and ring still stand, so it reads as a mark
+        // with a line leaving the frame.
+        if (!canPlace(record.lift, ceiling)) continue;
+
+        const screen = projectWorld(
+            frame.matrix,
+            [
+                mercatorXFromLongitude(record.lon),
+                mercatorYFromLatitude(record.lat),
+                mercatorZFromAltitude(record.lift, record.lat)
+            ],
+            width,
+            height
+        );
+        if (!screen) continue;
+
+        const lngLat = map.unproject([screen.x, screen.y]);
+        // Unprojecting a pixel above the horizon does not fail, it answers with a
+        // point derived from behind the camera. Nothing outside the projection can be
+        // a real coordinate, so it is the last thing checked before the map is told.
+        if (!lngLat || !Number.isFinite(lngLat.lat) || !Number.isFinite(lngLat.lng)) continue;
+        if (Math.abs(lngLat.lat) > 85.05) continue;
+
+        feature.geometry.coordinates = [lngLat.lng, lngLat.lat];
+        features.push(feature);
+        placed.add(record);
+    }
+
+    source.setData({ type: 'FeatureCollection', features });
+    // The drawing layer renders with the matrix these features were placed from, so a
+    // stalk and its icon can never disagree.
+    AltitudeLayer.setPlacementMatrix(placing ? frame.matrix : null);
+
+    syncTooltips(placed);
+}
+
+// The hover and selection tooltips are pinned to coordinates that now move with the
+// camera, so they are refreshed with the source rather than independently. An
+// aircraft that could not be placed is treated exactly as one that has gone: it is
+// not on screen, and a tooltip pointing at where it would have been says nothing.
+function syncTooltips(placed) {
     if (hoveredIcao) {
-        const hoveredFeature = features.find(f => f.properties.icao === hoveredIcao);
-        if (hoveredFeature) {
-            hoveredCoords = hoveredFeature.geometry.coordinates;
+        const record = aircraftRecords.find(r => r.feature.properties.icao === hoveredIcao);
+        if (record && placed.has(record)) {
+            hoveredCoords = record.feature.geometry.coordinates;
             hoveredProps = {
-                icao: hoveredFeature.properties.icao,
-                callsign: hoveredFeature.properties.callsign,
-                altitude: hoveredFeature.properties.altitude,
-                speed: hoveredFeature.properties.speed
+                icao: record.feature.properties.icao,
+                callsign: record.feature.properties.callsign,
+                altitude: record.feature.properties.altitude,
+                speed: record.feature.properties.speed
             };
-            {
-                const pt = map.project(hoveredCoords);
-                emitHover(hoveredProps, pt.x, pt.y);
-            }
+            const pt = map.project(hoveredCoords);
+            emitHover(hoveredProps, pt.x, pt.y);
         } else {
             hoveredIcao = null;
             hoveredCoords = null;
@@ -478,17 +755,15 @@ export function updateMarkers(aircraftMap) {
         }
     }
 
-    // Update the pinned tooltip for the selected aircraft (it may have moved,
-    // just been selected, or expired). Clears when the selection has no
-    // on-map feature (no position yet, or removed).
     if (selectedIcao && selectedTooltipCallback) {
-        if (selectedFeature) {
-            selectedCoords = selectedFeature.geometry.coordinates;
+        const record = aircraftRecords.find(r => r.feature.properties.icao === selectedIcao);
+        if (record && placed.has(record)) {
+            selectedCoords = record.feature.geometry.coordinates;
             selectedProps = {
-                icao: selectedFeature.properties.icao,
-                callsign: selectedFeature.properties.callsign,
-                altitude: selectedFeature.properties.altitude,
-                speed: selectedFeature.properties.speed
+                icao: record.feature.properties.icao,
+                callsign: record.feature.properties.callsign,
+                altitude: record.feature.properties.altitude,
+                speed: record.feature.properties.speed
             };
             const pt = map.project(selectedCoords);
             selectedTooltipCallback({ ...selectedProps, x: pt.x, y: pt.y });
@@ -498,6 +773,40 @@ export function updateMarkers(aircraftMap) {
             selectedTooltipCallback(null);
         }
     }
+}
+
+// Called on every frame of a camera movement. No icon resolution, no image
+// registration, no geometry rebuild: only where the aircraft already on screen now
+// belong.
+function refreshPlacement() {
+    if (!map || !active) return;
+    // A level map does no work here at all, which is the common case and was the
+    // whole cost of this feature before it existed. The one frame after a tilt
+    // returns to level still runs, to put the aircraft back on their ground
+    // positions.
+    const lifting = liftingActive();
+    if (!lifting && !wasLifting) return;
+    wasLifting = lifting;
+    emitPlacement();
+}
+
+// Whether aircraft are drawn at their height, and by how much the height is
+// exaggerated. The scale changes how tall every stalk is, so the geometry is rebuilt
+// with it.
+export function setAltitudeMode(enabled, scale) {
+    const scaleChanged = scale !== altitudeScale;
+    altitudeEnabled = enabled !== false;
+    altitudeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+
+    if (scaleChanged) {
+        for (const record of aircraftRecords) {
+            record.lift = liftMeters(record.feature.properties.altitude, altitudeScale);
+        }
+        rebuildMarks();
+        rebuildTrail();
+    }
+    emitPlacement();
+    requestHud();
 }
 
 export function highlightSelected(icao) {
@@ -544,6 +853,10 @@ export function destroy() {
         map.remove();
         map = null;
     }
+    aircraftRecords = [];
+    trailPoints = [];
+    flatTrailVisible = true;
+    AltitudeLayer.clear();
     hud = null;
     hudNodes = null;
     hudChips = [];
@@ -551,29 +864,50 @@ export function destroy() {
     hudFrame = 0;
 }
 
-export function updateTrail(positions) {
+// The selected aircraft's path.
+//
+// Takes state-history entries, the same shape the Sky View's trail takes, so the two
+// views cannot draw different paths for the same aircraft. Position-history entries
+// are accepted as well and drawn flat, which is the fallback where state history is
+// switched off in the tracking configuration and no altitude exists to climb with.
+export function updateTrail(entries) {
     if (!map) return;
     const source = map.getSource('trail-source');
     if (!source) return;
 
-    if (positions.length < 2) {
-        source.setData({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [] },
-            properties: {}
-        });
-        return;
-    }
+    trailPoints = (entries || []).map(entry => {
+        const position = entry.position ?? entry;
+        if (!position || position.Latitude == null || position.Longitude == null) return null;
+        return {
+            lon: position.Longitude,
+            lat: position.Latitude,
+            altitudeFeet: entry.altitudeFeet ?? null
+        };
+    }).filter(Boolean);
 
-    const coordinates = positions.map(p => [p.Longitude, p.Latitude]);
+    const coordinates = trailPoints.length >= 2 ? trailPoints.map(p => [p.lon, p.lat]) : [];
     source.setData({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates },
         properties: {}
     });
+    rebuildTrail();
+}
+
+// The climbing trail, in the units the layer draws in. A point with no altitude
+// leaves a gap rather than a dive to sea level.
+function rebuildTrail() {
+    AltitudeLayer.setTrail(trailPoints.map(point => ({
+        lon: point.lon,
+        lat: point.lat,
+        lift: point.altitudeFeet == null ? null : liftMeters(point.altitudeFeet, altitudeScale)
+    })));
+    // The flat trail's visibility depends on whether that produced anything.
+    emitPlacement();
 }
 
 export function setTrailColor(category) {
+    AltitudeLayer.setTrailColor(TRAIL_RGB[category] || TRAIL_RGB.normal);
     if (!map || !map.getLayer('trail-layer')) return;
     map.setPaintProperty('trail-layer', 'line-color', TRAIL_COLORS[category] || TRAIL_COLORS.normal);
 }
@@ -612,8 +946,9 @@ function buildHud(container) {
     const center = createHudItem('CTR', false);
     const count = createHudItem('in view', true);
     const range = createHudItem('RANGE', false);
+    const alt = createHudItem('ALT', false);
 
-    for (const chip of [heading, span, area, center, count, range]) {
+    for (const chip of [heading, span, area, center, count, range, alt]) {
         hud.appendChild(chip.wrap);
     }
     container.appendChild(hud);
@@ -624,7 +959,8 @@ function buildHud(container) {
         area: area.value,
         center: center.value,
         count: count.value,
-        range: range.value
+        range: range.value,
+        alt: alt.value
     };
 
     // Least valuable first, which is the order they are given up in when the space
@@ -636,7 +972,11 @@ function buildHud(container) {
         { key: 'center', wrap: center.wrap, eligible: false },
         { key: 'heading', wrap: heading.wrap, eligible: false },
         { key: 'count', wrap: count.wrap, eligible: true },
-        { key: 'span', wrap: span.wrap, eligible: true }
+        { key: 'span', wrap: span.wrap, eligible: true },
+        // Last, and so the last to be given up. Every other chip is a reading, and
+        // losing one costs a number. This one is a disclaimer: an exaggerated map
+        // with nothing on it saying so is a map presenting itself as true.
+        { key: 'alt', wrap: alt.wrap, eligible: false }
     ];
 
     hudRefit = createRowFitter(hud, hudChips);
@@ -691,6 +1031,14 @@ function drawHud() {
     // horizon, and the map's own bounds are derived from the same geometry. Reporting
     // nothing is visibly different from reporting a number that is quietly wrong.
     const level = map.getPitch() === 0;
+
+    // Only while the map is both tilted and exaggerating, which is the only state in
+    // which it is drawing aircraft higher than they are.
+    eligible.alt = !level && altitudeEnabled && altitudeScale !== 1;
+    if (eligible.alt) {
+        setText(hudNodes.alt, `×${altitudeScale}`);
+    }
+
     eligible.area = level;
     if (level) {
         // North-up the viewport is a latitude-longitude rectangle, which has a closed

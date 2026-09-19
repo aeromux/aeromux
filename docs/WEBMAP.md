@@ -66,7 +66,7 @@ Aircraft are displayed as top-down silhouettes specific to each aircraft type (A
 
 The selected aircraft keeps a permanent (pinned) tooltip that follows it as it moves and as the map is panned or zoomed. The pinned tooltip is distinguished by an accent border, and a second transient tooltip is shown simultaneously when hovering a different aircraft. The pinned tooltip clears when the aircraft is deselected or expires.
 
-When an aircraft is selected, a blue gradient trail is drawn along its recent flight path. The trail is fetched from the position history on selection and extended in real time as new positions arrive. The trail fades from transparent (oldest position) to opaque (newest position).
+When an aircraft is selected, a blue gradient trail is drawn along its recent flight path. The trail is fetched on selection and extended in real time as new positions arrive. The trail fades from transparent (oldest position) to opaque (newest position). Tilt the map and the trail climbs and descends with the aircraft, since each of its points carries the altitude recorded with it. Where `tracking.enableStateHistory` is off in the configuration, the trail is drawn flat, from position history alone.
 
 ### Readout
 
@@ -80,10 +80,28 @@ A row of readings sits in the top-left corner of the map, clear of the panels, t
 | `CTR` | Bearing and distance from the receiver to the center of the map. Needs a configured receiver location. Very close to the receiver only the distance is shown, the bearing there being meaningless. |
 | `in view` | Aircraft on the map over aircraft being tracked, the same pair the aircraft list footer shows. |
 | `RANGE` | The farthest the receiver has heard, taken from the coverage outline. Shown whether or not the outline itself is drawn. |
+| `ALT` | The height scale, shown only while the map is tilted and the scale is above `×1`, so an exaggerated map always says so. |
 
 Distances follow the selected distance unit, and the area follows it into its square (nm², km², mi²). `SPAN` and `AREA` measure the whole map, including the part behind the left panel, which is also the area the aircraft count beside them covers.
 
-The row sits between the aircraft list and the control panel, and on a narrow screen there is less room there than the full row needs. When that happens readings are dropped until what remains fits, in this order: `RANGE`, `AREA`, `CTR`, `HDG`, the aircraft count. `SPAN` is the last to go, being the scale. If there is not even room for that, the row is not shown at all. A tablet held in portrait typically keeps `SPAN` and the count, a phone in landscape `SPAN` alone, and a phone in portrait `HDG`, `SPAN` and the count, having the full width to itself because there the panels are stacked above and below rather than to either side.
+The row sits between the aircraft list and the control panel, and on a narrow screen there is less room there than the full row needs. When that happens readings are dropped until what remains fits, in this order: `RANGE`, `AREA`, `CTR`, `HDG`, the aircraft count, then `SPAN`. `ALT` is the last to go: every other reading is a measurement, and losing one costs you a number, while losing that one would leave an exaggerated map with nothing on it saying so. If there is not even room for that, the row is not shown at all. A tablet held in portrait typically keeps `SPAN` and the count, a phone in landscape `SPAN` alone, and a phone in portrait `HDG`, `SPAN` and the count, having the full width to itself because there the panels are stacked above and below rather than to either side.
+
+### Aircraft Altitude
+
+Drag with the right mouse button, or with two fingers, to tilt the map. Tilted, each aircraft is drawn at its real height above the ground rather than flat on its position, with a thin line down to its own silhouette lying flat on the ground it is over. The selected aircraft's trail climbs and descends with it. Level, the map is exactly as it was: there is no height to show when you are looking straight down.
+
+The shadow is what tells you where the aircraft actually is on the map, and the line is what ties it back there. Without them a lifted aircraft would float with nothing connecting it to the ground, the range rings, or its own trail. The shadow is not a sun shadow: it sits directly below the aircraft, which is a way of showing height rather than a claim about the light. The selected aircraft's shadow is drawn in the selection color.
+
+
+The selected aircraft's trail becomes a ribbon: the flight path as a line at altitude, with a translucent curtain hanging from it down to the ground track. The height of the curtain at any point is the altitude there, so a climb or a descent can be read straight off the map. Where a trail's points carry no altitude, the flat ground trail is drawn instead.
+
+How much lift you see depends on the zoom, because lift is measured in the same pixels as the ground. At true scale and a zoom showing the whole coverage area, an airliner at FL350 rises about 37 pixels; zoomed in to an approach it is several hundred. The `Height scale` setting exists for the wide view, where a true height is only a few pixels, and it defaults to `×2`.
+
+Aircraft higher than the camera itself cannot be drawn in the air, because they are above the horizon. That happens zoomed in with high traffic overhead, sooner with the height scale raised. Those aircraft keep their shadow and their line, which runs up out of the frame, and the aircraft returns as you zoom out or reduce the tilt. Nothing is drawn back down onto the ground, which would put it somewhere it is not.
+
+Heights are barometric (pressure) altitude where the aircraft reports it, which is height above sea level rather than above the ground below, and can be a few hundred feet out near the surface. Geometric (GNSS) height is used where that is all an aircraft sends. This is the same figure the trail, the detail panel and the Sky View use.
+
+Maximum tilt is 45°.
 
 ### Aircraft Icon Resolution
 
@@ -292,7 +310,7 @@ The middle of the panel follows the active view, so the map overlays and the Sky
 <div align="center">
   <img src="images/webmap/settings-map.png" alt="Settings in Map Mode" width="350">
   <br>
-  <em>Settings in Map mode, with the heatmap controls and color scale shown</em>
+  <em>Settings in Map mode, with the aircraft altitude controls and the heatmap controls and color scale shown</em>
 </div>
 
 #### Units
@@ -315,6 +333,8 @@ Range rings and the range outline describe the map, so they appear in Map mode o
 |------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | Range rings      | Show or hide the range rings on the map (Map mode)                                                                                                                 | On       |
 | Range outline    | Show or hide the receiver coverage outline, requires receiver location (Map mode)                                                                                  | On       |
+| Aircraft altitude | Draw aircraft at their real height when the map is tilted, with a line down to the ground (Map mode). See [Aircraft Altitude](#aircraft-altitude). | On       |
+| Height scale     | `×1`, `×2` or `×5`. Above `×1` the map draws aircraft higher than they are, and the readout shows `ALT ×2` or `ALT ×5` while it does. The default doubles the height, which reads well across the zoom levels the map is normally used at; `×1` is true scale, and `×5` suits a wide view at the cost of pushing high traffic off the top of a zoomed-in one. | ×2       |
 | Aircraft photos  | Show or hide the Aircraft Photo section in the detail panel. When off, the section is removed entirely (not just collapsed) so it can't be accidentally re-opened. | On       |
 
 #### Heatmap

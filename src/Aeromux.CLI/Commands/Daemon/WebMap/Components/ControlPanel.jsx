@@ -215,6 +215,37 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                                 </div>
                                 Range outline
                             </div>
+                            <div class="settings-toggle" onClick={() => toggleSetting('mapAltitude')}>
+                                <div class={`toggle-track${settings.mapAltitude ? ' active' : ''}`}>
+                                    <div class="toggle-knob" />
+                                </div>
+                                Aircraft altitude
+                            </div>
+                            {settings.mapAltitude && (
+                                <>
+                                    <div class="settings-hint">
+                                        Tilt the map to see it. Each aircraft is drawn at its
+                                        height above the ground, on a line down to the point it
+                                        is over. Heights are pressure altitude above sea level,
+                                        not height above the ground below.
+                                    </div>
+                                    <div class="settings-field-label">Height scale</div>
+                                    <div class="unit-group">
+                                        {[1, 2, 5].map((n) => (
+                                            <button class={`unit-btn${settings.mapAltitudeScale === n ? ' active' : ''}`}
+                                                    onClick={() => onSettingsChange({ ...settings, mapAltitudeScale: n })}>&times;{n}</button>
+                                        ))}
+                                    </div>
+                                    {settings.mapAltitudeScale !== 1 && (
+                                        <div class="settings-hint">
+                                            Above &times;1 the map draws aircraft higher than they are,
+                                            and says so in the readout while it does. Useful on a wide
+                                            view, where a true height is only a few pixels; zoomed in it
+                                            can push high traffic off the top of the screen.
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </>
                     )}
                     <div class="settings-toggle" onClick={() => toggleSetting('aircraftPhotos')}>

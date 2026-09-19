@@ -210,10 +210,13 @@ export function App() {
         if (selectedRef.current === icao) {
             if (detailData) setDetail(detailData);
             if (historyData?.Position?.Entries) {
+                // Kept as the fallback trail for the map, for receivers with state
+                // history switched off in their tracking configuration. Where it is
+                // on, both views take the state history instead, which carries the
+                // altitude the map now needs as well as the sky view.
                 const positions = historyData.Position.Entries.map(e => e.Position);
                 trailRef.current = positions;
                 setTrail(positions);
-                MapManager.updateTrail(positions);
             }
             if (stateData?.State) {
                 const sh = {
@@ -224,7 +227,7 @@ export function App() {
                     capacity: stateData.State.Capacity ?? DEFAULT_STATE_HISTORY_CAPACITY,
                     entries: (stateData.State.Entries || []).map(e => ({
                         timestamp: new Date(e.Timestamp).getTime(),
-                        // Kept for the sky view's path through space. The state
+                        // Kept for both views' paths through space. The state
                         // history carries position and altitude in one record, so
                         // this needs no extra request. The flight-profile chart
                         // reads by field name and ignores it.
@@ -448,12 +451,14 @@ export function App() {
             view.clearSelection();
         }
 
-        // The two views take different trail data: the map draws the flat position
-        // history, the sky needs altitude with each point and so reads the state
-        // history instead.
-        const trailPoints = viewMode === 'sky'
-            ? (stateHistoryRef.current ? stateHistoryRef.current.entries : null)
-            : (trailRef.current.length ? trailRef.current : null);
+        // Both views take the state history, which carries position and altitude
+        // together. Only the map has anything to fall back on without it, and what it
+        // falls back to is the flat path it used to draw.
+        const stateEntries = stateHistoryRef.current?.entries?.length
+            ? stateHistoryRef.current.entries
+            : null;
+        const trailPoints = stateEntries
+            ?? (viewMode === 'sky' ? null : (trailRef.current.length ? trailRef.current : null));
         if (icao && trailPoints && trailPoints.length) {
             view.updateTrail(trailPoints);
         } else {
@@ -592,7 +597,6 @@ export function App() {
                                 lastTrail.Longitude !== data.Coordinate.Longitude) {
                                 trailRef.current = [...trailRef.current, data.Coordinate];
                                 setTrail(trailRef.current);
-                                MapManager.updateTrail(trailRef.current);
                             }
                         }
                     },
@@ -747,6 +751,12 @@ export function App() {
         MapManager.setDistanceUnit(units.distance);
     }, [units.distance]);
 
+    // Aircraft drawn at their real height, and by how much that height is
+    // exaggerated. Both only do anything once the map is tilted.
+    useEffect(() => {
+        MapManager.setAltitudeMode(settings.mapAltitude, settings.mapAltitudeScale);
+    }, [settings.mapAltitude, settings.mapAltitudeScale]);
+
     // What the map readout counts is what the aircraft list footer counts: aircraft
     // on screen over aircraft tracked.
     useEffect(() => {
@@ -773,15 +783,27 @@ export function App() {
         if (viewMode === 'sky') applyBounds();
     }, [settings.skyMaxRangeNm, viewMode, applyBounds]);
 
-    // The sky trail needs position and altitude together, which only the state
-    // history carries; the flat map trail has no altitude and would draw nothing.
+    // One trail, both views. The state history carries position and altitude in one
+    // record, so it draws the sky view's path through space and the map's climbing
+    // trail from the same points, and the two cannot disagree about where an aircraft
+    // has been. Where state history is switched off in the tracking configuration the
+    // map falls back to the flat position history, which has no altitude to climb
+    // with, and the sky view has nothing it can draw at all.
     useEffect(() => {
-        if (stateHistory?.entries) {
-            SkyViewManager.updateTrail(stateHistory.entries);
+        const stateEntries = stateHistory?.entries?.length ? stateHistory.entries : null;
+
+        if (stateEntries) {
+            SkyViewManager.updateTrail(stateEntries);
+            MapManager.updateTrail(stateEntries);
         } else {
             SkyViewManager.clearTrail();
+            if (trail.length >= 2) {
+                MapManager.updateTrail(trail);
+            } else {
+                MapManager.clearTrail();
+            }
         }
-    }, [stateHistory]);
+    }, [stateHistory, trail]);
 
     // Recomputed on selection change too, because selecting is itself what grows
     // the mobile sheet from list to detail, moving the sky view's horizon and the
