@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.8.1] — Unreleased
+## [0.8.1] — 2026-09-19
 
 ### Added
 
@@ -14,6 +14,10 @@ All notable changes to Aeromux will be documented in this file.
 - **Statistics: Negative CRC Error Count on Multi-Device Receivers** — `/api/v1/stats` reported a negative `CrcErrors` figure and a frames-per-second rate too high by the number of attached devices. The confidence tracker is deliberately shared across all SDR devices, so that MLAT can mark an ICAO confident for every device at once, but its frame counters were being summed once per device. That made `ValidFrames` exceed `TotalFrames`, and the CRC error count is derived from the difference between them. Single-device receivers were unaffected, which is why it went unnoticed. The per-device debug log carried the same confusion, printing receiver-wide confidence counters under each device's name, and now says which they are.
 - **Web Map: Readout Clipped by the Control Panel** — The Sky View's readout ran underneath the search and settings panel on any screen narrower than about 1200 pixels, taking its sun, moon and exclusion counts with it, and the new Map View readout did the same. Both rows are now bounded by the space actually available between the aircraft list and the control panel, and drop readings one at a time until what remains fits, keeping the most useful ones: the aircraft count and camera heading in the Sky View, the visible span in the Map view. Where not even one reading fits, the row is hidden rather than drawn where it cannot be read.
 - **Web Map: Sky View Coverage Ribbon Units** — The coverage ribbon's distance scale now follows the selected distance unit instead of always being labeled in nautical miles, so a reading taken in kilometers or statute miles is no longer short by the conversion factor. The scale also rounds in the selected unit (50 nm, 100 km, or 50 mi), so its ticks stay round numbers rather than becoming a converted nautical-mile step.
+
+### Documentation
+
+- Rewrote the [Web Map Guide](docs/WEBMAP.md) around the two views, covering the configuration a map needs, every control in the settings panel, and a troubleshooting section for a map that stays empty or will not start. The screenshots were retaken, with separate ones for the Map and Sky settings.
 
 ## [0.8.0] — 2026-09-12
 
@@ -214,6 +218,7 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.8.1]: https://github.com/aeromux/aeromux/releases/tag/v0.8.1
 [0.8.0]: https://github.com/aeromux/aeromux/releases/tag/v0.8.0
 [0.7.7]: https://github.com/aeromux/aeromux/releases/tag/v0.7.7
 [0.7.6]: https://github.com/aeromux/aeromux/releases/tag/v0.7.6
