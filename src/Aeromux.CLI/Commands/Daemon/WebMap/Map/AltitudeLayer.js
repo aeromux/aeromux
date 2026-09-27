@@ -31,8 +31,10 @@
 import {
     mercatorXFromLongitude,
     mercatorYFromLatitude,
-    mercatorZFromAltitude
+    mercatorZFromAltitude,
+    TRANSFORM_TILE_SIZE
 } from '../Services/AltitudeProjection.js';
+import * as Atlas from './AircraftAtlas.js';
 
 export const PROBE_LAYER_ID = 'altitude-probe';
 export const DRAW_LAYER_ID = 'altitude-marks';
@@ -69,18 +71,21 @@ let camera = { matrix: null, fov: 0 };
 // frame rather than once per batch.
 const matrix32 = new Float32Array(16);
 
-// The matrix the aircraft currently on screen were placed with. The drawing layer
-// renders with this rather than with the live one, so a stalk and its icon can never
-// disagree: both are then a frame behind the base map during a drag, which is far
-// less visible than a line that misses its aircraft.
-let placementMatrix = null;
-
 let map = null;
 let gl = null;
 let lineProgram = null;
 let fillProgram = null;
+let iconProgram = null;
 let failed = false;
 let visible = true;
+
+// Aircraft icons. The GPU projects each from its true position every frame.
+const icons = { data: null, buffer: null, count: 0 };
+let iconMarks = [];
+let iconTexture = null;
+let iconTextureVersion = -1;
+// The screen center in mercator, which the perspective compensation measures against.
+let centerWorld = null;
 
 // One batch per color, since color is a uniform rather than a vertex attribute.
 const batches = {
@@ -174,6 +179,69 @@ void main() {
 }
 `;
 
+// Icons lie in the ground plane, so the corner offset is applied in mercator and
+// foreshortens with the tilt.
+//
+// `perspective` is MapLibre's own compensation for that foreshortening. For a quad
+// pitched with the map, the ratio is the anchor's camera distance over the center's.
+const ICON_VERTEX = `
+attribute vec3 a_pos;
+attribute vec2 a_offset;
+attribute vec2 a_uv;
+attribute float a_rotation;
+attribute vec3 a_fill;
+
+uniform mat4 u_matrix;
+uniform float u_centerW;
+uniform float u_worldSize;
+
+varying vec2 v_uv;
+varying vec3 v_fill;
+
+void main() {
+    vec4 anchor = u_matrix * vec4(a_pos, 1.0);
+    if (anchor.w <= 0.0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
+    float perspective = clamp(0.5 + 0.5 * (anchor.w / u_centerW), 0.0, 4.0);
+
+    float s = sin(a_rotation);
+    float c = cos(a_rotation);
+    vec2 rotated = vec2(a_offset.x * c - a_offset.y * s,
+                        a_offset.x * s + a_offset.y * c);
+
+    // CSS pixels to mercator. The map draws one mercator unit across u_worldSize
+    // pixels, uniformly at every latitude.
+    vec2 ground = rotated * (perspective / u_worldSize);
+
+    vec4 clip = u_matrix * vec4(a_pos.x + ground.x, a_pos.y + ground.y, a_pos.z, 1.0);
+    // Flat in depth, like the rest of this layer. Overlap order comes from the
+    // back-to-front sort in writeIcons.
+    clip.z = 0.0;
+    gl_Position = clip;
+
+    v_uv = a_uv;
+    v_fill = a_fill;
+}
+`;
+
+// The atlas holds a mask per shape: white body, black stroke, transparent outside.
+// Multiplying by the fill colors the body and leaves the stroke black.
+const ICON_FRAGMENT = `
+precision mediump float;
+uniform sampler2D u_atlas;
+varying vec2 v_uv;
+varying vec3 v_fill;
+void main() {
+    vec4 mask = texture2D(u_atlas, v_uv);
+    float alpha = mask.a;
+    vec3 color = v_fill * mask.r;
+    gl_FragColor = vec4(color * alpha, alpha);
+}
+`;
+
 function compile(type, source) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
@@ -186,10 +254,10 @@ function compile(type, source) {
     return shader;
 }
 
-function link(vertexSource, attributes, uniforms) {
+function link(vertexSource, attributes, uniforms, fragmentSource = FRAGMENT) {
     const program = gl.createProgram();
     const vertex = compile(gl.VERTEX_SHADER, vertexSource);
-    const fragment = compile(gl.FRAGMENT_SHADER, FRAGMENT);
+    const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
     gl.linkProgram(program);
@@ -216,6 +284,10 @@ const CORNERS = [[0, -1], [0, 1], [1, -1], [1, -1], [0, 1], [1, 1]];
 
 const LINE_FLOATS_PER_VERTEX = 9;   // from(3) to(3) corner(2) alpha(1)
 const FILL_FLOATS_PER_VERTEX = 3;   // pos(3)
+const ICON_FLOATS_PER_VERTEX = 11;  // pos(3) offset(2) uv(2) rotation(1) fill(3)
+
+// Two triangles. Corners in [-1, 1], y negative up-screen, matching the mercator axes.
+const ICON_CORNERS = [[-1, -1], [1, -1], [-1, 1], [-1, 1], [1, -1], [1, 1]];
 
 // Two triangles per segment, spanning ground track to flight path.
 function buildRibbon(segments) {
@@ -291,6 +363,64 @@ export function setMarks(marks) {
     if (map) map.triggerRepaint();
 }
 
+// The aircraft to draw, as { lon, lat, lift, shapeName, sizeW, sizeH, rotationDeg, fill }.
+// Held as marks; writeIcons turns them into vertices each frame.
+export function setIcons(marks) {
+    iconMarks = [];
+    for (const mark of marks) {
+        const rect = Atlas.rectFor(mark.shapeName) || Atlas.rectFor('unknown');
+        if (!rect) continue;
+        iconMarks.push({
+            x: mercatorXFromLongitude(mark.lon),
+            y: mercatorYFromLatitude(mark.lat),
+            z: mark.lift > 0 ? mercatorZFromAltitude(mark.lift, mark.lat) : 0,
+            halfW: mark.sizeW / 2,
+            halfH: mark.sizeH / 2,
+            rotation: mark.rotationDeg * Math.PI / 180,
+            r: mark.fill[0] / 255,
+            g: mark.fill[1] / 255,
+            b: mark.fill[2] / 255,
+            rect,
+            depth: 0
+        });
+    }
+    // Sized here, filled per frame by writeIcons.
+    icons.data = new Float32Array(iconMarks.length * 6 * ICON_FLOATS_PER_VERTEX);
+    icons.count = iconMarks.length * 6;
+    if (map) map.triggerRepaint();
+}
+
+// Writes the marks into the vertex buffer, farthest first, so a nearer aircraft draws
+// over a farther one. Runs every frame, because the order depends on the camera: one
+// distance per mark, a sort, and about 26 KB written.
+function writeIcons(matrix) {
+    for (const mark of iconMarks) {
+        mark.depth = matrix[3] * mark.x + matrix[7] * mark.y + matrix[11] * mark.z + matrix[15];
+    }
+    iconMarks.sort((a, b) => b.depth - a.depth);
+
+    const data = icons.data;
+    let at = 0;
+    for (const mark of iconMarks) {
+        const { rect } = mark;
+        for (const [cx, cy] of ICON_CORNERS) {
+            data[at++] = mark.x; data[at++] = mark.y; data[at++] = mark.z;
+            data[at++] = cx * mark.halfW; data[at++] = cy * mark.halfH;
+            // v runs down the atlas the way y runs down the screen, so the corner that
+            // is up on screen takes the top of the bitmap.
+            data[at++] = cx < 0 ? rect.u0 : rect.u1;
+            data[at++] = cy < 0 ? rect.v0 : rect.v1;
+            data[at++] = mark.rotation;
+            data[at++] = mark.r; data[at++] = mark.g; data[at++] = mark.b;
+        }
+    }
+}
+
+// The screen center in mercator, which the perspective compensation measures against.
+export function setCenterWorld(world) {
+    centerWorld = world;
+}
+
 // The selected aircraft's path, as { lon, lat, lift } in order. A point without a
 // height breaks the line rather than dropping it to sea level, so a gap in reporting
 // reads as a gap.
@@ -330,11 +460,6 @@ export function setVisible(next) {
     if (map) map.triggerRepaint();
 }
 
-// The matrix the aircraft on screen were placed with. See placementMatrix above.
-export function setPlacementMatrix(matrix) {
-    placementMatrix = matrix;
-}
-
 // The camera as the probe last saw it, for the placement arithmetic in MapManager.
 // Null matrix until the first frame has been drawn.
 export function cameraFrame() {
@@ -343,6 +468,9 @@ export function cameraFrame() {
 
 export function clear() {
     for (const key of Object.keys(batches)) setBatch(batches[key], null, LINE_FLOATS_PER_VERTEX);
+    icons.data = null;
+    icons.count = 0;
+    iconMarks = [];
     if (map) map.triggerRepaint();
 }
 
@@ -373,6 +501,10 @@ export const drawLayer = {
             lineProgram = link(LINE_VERTEX, ['a_from', 'a_to', 'a_corner', 'a_alpha'],
                 ['u_matrix', 'u_viewport', 'u_width', 'u_color']);
             fillProgram = link(FILL_VERTEX, ['a_pos'], ['u_matrix', 'u_color']);
+            iconProgram = link(ICON_VERTEX,
+                ['a_pos', 'a_offset', 'a_uv', 'a_rotation', 'a_fill'],
+                ['u_matrix', 'u_centerW', 'u_worldSize', 'u_atlas'],
+                ICON_FRAGMENT);
         } catch (error) {
             // The map is still correct without this: aircraft are placed from the
             // probe's matrix, which does not depend on any of it.
@@ -383,6 +515,14 @@ export const drawLayer = {
             batch.buffer = null;
             batch.dirty = true;
         }
+        icons.buffer = null;
+        iconTexture = null;
+        iconTextureVersion = -1;
+
+        // Decoding 82 silhouettes is asynchronous; the repaint draws them once ready.
+        Atlas.build().then(() => {
+            if (map) map.triggerRepaint();
+        });
     },
 
     onRemove(_removedMap, context) {
@@ -390,21 +530,27 @@ export const drawLayer = {
             if (batch.buffer) context.deleteBuffer(batch.buffer);
             batch.buffer = null;
         }
+        if (icons.buffer) context.deleteBuffer(icons.buffer);
+        icons.buffer = null;
+        if (iconTexture) context.deleteTexture(iconTexture);
+        iconTexture = null;
+        iconTextureVersion = -1;
         if (lineProgram) context.deleteProgram(lineProgram.program);
         if (fillProgram) context.deleteProgram(fillProgram.program);
+        if (iconProgram) context.deleteProgram(iconProgram.program);
         lineProgram = null;
         fillProgram = null;
+        iconProgram = null;
         map = null;
         gl = null;
     },
 
     render(context, args) {
-        if (failed || !visible || !lineProgram || !fillProgram) return;
+        if (failed || !lineProgram || !fillProgram) return;
 
         gl = context;
-        const matrix = placementMatrix || args.defaultProjectionData.mainMatrix;
+        const matrix = args.defaultProjectionData.mainMatrix;
         if (!matrix) return;
-        matrix32.set(matrix);
 
         const canvas = map.getCanvas();
         const viewport = [gl.drawingBufferWidth, gl.drawingBufferHeight];
@@ -414,44 +560,125 @@ export const drawLayer = {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-        for (const batch of Object.values(batches)) {
-            upload(batch);
-            if (!batch.count) continue;
-
-            const handle = batch.fill ? fillProgram : lineProgram;
-            gl.useProgram(handle.program);
-            gl.bindBuffer(gl.ARRAY_BUFFER, batch.buffer);
-
-            if (batch.fill) {
-                bind(handle.attributes.a_pos, 3, FILL_FLOATS_PER_VERTEX * 4, 0);
-            } else {
-                const stride = LINE_FLOATS_PER_VERTEX * 4;
-                bind(handle.attributes.a_from, 3, stride, 0);
-                bind(handle.attributes.a_to, 3, stride, 3 * 4);
-                bind(handle.attributes.a_corner, 2, stride, 6 * 4);
-                bind(handle.attributes.a_alpha, 1, stride, 8 * 4);
-            }
-
-            gl.uniformMatrix4fv(handle.uniforms.u_matrix, false, matrix32);
-            if (!batch.fill) {
-                gl.uniform2f(handle.uniforms.u_viewport, viewport[0], viewport[1]);
-                gl.uniform1f(handle.uniforms.u_width, batch.width * pixelRatio);
-            }
-            gl.uniform4f(handle.uniforms.u_color,
-                batch.color[0] / 255, batch.color[1] / 255, batch.color[2] / 255, batch.alpha);
-
-            gl.drawArrays(gl.TRIANGLES, 0, batch.count);
-
-            // Attribute arrays are global state, and MapLibre draws its own layers
-            // either side of this one.
-            for (const location of Object.values(handle.attributes)) {
-                if (location >= 0) gl.disableVertexAttribArray(location);
-            }
+        // `visible` gates the stalks and the trail, which apply only to a tilted map.
+        // Icons draw at every pitch.
+        if (visible) {
+            matrix32.set(matrix);
+            drawMarks(viewport, pixelRatio);
         }
+
+        // Last, so an aircraft sits on top of its own stalk.
+        drawIcons(args);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
     }
 };
+
+function drawMarks(viewport, pixelRatio) {
+    for (const batch of Object.values(batches)) {
+        upload(batch);
+        if (!batch.count) continue;
+
+        const handle = batch.fill ? fillProgram : lineProgram;
+        gl.useProgram(handle.program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, batch.buffer);
+
+        if (batch.fill) {
+            bind(handle.attributes.a_pos, 3, FILL_FLOATS_PER_VERTEX * 4, 0);
+        } else {
+            const stride = LINE_FLOATS_PER_VERTEX * 4;
+            bind(handle.attributes.a_from, 3, stride, 0);
+            bind(handle.attributes.a_to, 3, stride, 3 * 4);
+            bind(handle.attributes.a_corner, 2, stride, 6 * 4);
+            bind(handle.attributes.a_alpha, 1, stride, 8 * 4);
+        }
+
+        gl.uniformMatrix4fv(handle.uniforms.u_matrix, false, matrix32);
+        if (!batch.fill) {
+            gl.uniform2f(handle.uniforms.u_viewport, viewport[0], viewport[1]);
+            gl.uniform1f(handle.uniforms.u_width, batch.width * pixelRatio);
+        }
+        gl.uniform4f(handle.uniforms.u_color,
+            batch.color[0] / 255, batch.color[1] / 255, batch.color[2] / 255, batch.alpha);
+
+        gl.drawArrays(gl.TRIANGLES, 0, batch.count);
+
+        // Attribute arrays are global state, and MapLibre draws its own layers
+        // either side of this one.
+        for (const location of Object.values(handle.attributes)) {
+            if (location >= 0) gl.disableVertexAttribArray(location);
+        }
+}
+}
+
+// Uploads the atlas when its version changes. 2048 square RGBA, 16 MB on the GPU.
+function syncTexture() {
+    const source = Atlas.atlasCanvas();
+    if (!source) return false;
+    if (iconTexture && iconTextureVersion === Atlas.atlasVersion()) return true;
+
+    if (!iconTexture) iconTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, iconTexture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    // Linear and no mipmaps: icons draw at close to their stored size.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    iconTextureVersion = Atlas.atlasVersion();
+    return true;
+}
+
+// Draws the icon batch with the live matrix.
+function drawIcons(args) {
+    if (!iconProgram || !icons.count || !centerWorld) return;
+    if (!syncTexture()) return;
+
+    const liveMatrix = args.defaultProjectionData.mainMatrix;
+    if (!liveMatrix) return;
+    matrix32.set(liveMatrix);
+
+    // The screen center's camera distance, from the same matrix the icons use.
+    const centerW = liveMatrix[3] * centerWorld[0]
+                  + liveMatrix[7] * centerWorld[1]
+                  + liveMatrix[11] * 0
+                  + liveMatrix[15];
+    if (!(centerW > 0)) return;
+
+    writeIcons(liveMatrix);
+    if (!icons.buffer) icons.buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, icons.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, icons.data, gl.DYNAMIC_DRAW);
+
+    gl.useProgram(iconProgram.program);
+    gl.bindBuffer(gl.ARRAY_BUFFER, icons.buffer);
+
+    const stride = ICON_FLOATS_PER_VERTEX * 4;
+    bind(iconProgram.attributes.a_pos, 3, stride, 0);
+    bind(iconProgram.attributes.a_offset, 2, stride, 3 * 4);
+    bind(iconProgram.attributes.a_uv, 2, stride, 5 * 4);
+    bind(iconProgram.attributes.a_rotation, 1, stride, 7 * 4);
+    bind(iconProgram.attributes.a_fill, 3, stride, 8 * 4);
+
+    gl.uniformMatrix4fv(iconProgram.uniforms.u_matrix, false, matrix32);
+    gl.uniform1f(iconProgram.uniforms.u_centerW, centerW);
+    // Pixels the map draws one mercator unit across. MapLibre's transform holds 512
+    // whatever tile size a source declares, so the constant is shared with the altitude
+    // arithmetic.
+    gl.uniform1f(iconProgram.uniforms.u_worldSize,
+        TRANSFORM_TILE_SIZE * Math.pow(2, map.getZoom()));
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, iconTexture);
+    gl.uniform1i(iconProgram.uniforms.u_atlas, 0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, icons.count);
+
+    for (const location of Object.values(iconProgram.attributes)) {
+        if (location >= 0) gl.disableVertexAttribArray(location);
+    }
+}
 
 function bind(location, size, stride, offset) {
     if (location < 0) return;

@@ -177,6 +177,9 @@ let shadowVisible = null;
 
 
 
+// Whether the icon batch currently carries lift, so a pitch crossing rebuilds it once.
+let iconsLifted = false;
+
 let altitudeEnabled = true;
 let altitudeScale = 1;
 // The selected aircraft's path, kept because it is drawn twice: flat on the ground
@@ -263,7 +266,11 @@ export function init(containerId) {
             }
         }, 200);
     };
-    map.on('moveend', fireViewport);
+    // Brings the hit-test layer up to date at the end of a gesture.
+    map.on('moveend', () => {
+        refreshPlacement();
+        fireViewport();
+    });
     map.on('zoomend', fireViewport);
 
     // Marker click
@@ -297,7 +304,7 @@ export function init(containerId) {
                 altitude: f.properties.altitude,
                 speed: f.properties.speed
             };
-            const pt = map.project(hoveredCoords);
+            const pt = aircraftScreenPosition(hoveredIcao) || map.project(hoveredCoords);
             emitHover(hoveredProps, pt.x, pt.y);
         }
     });
@@ -328,15 +335,17 @@ export function init(containerId) {
     // Re-project tooltip positions on map move/zoom
     map.on('move', () => {
         requestHud();
-        // Before the tooltips below, which read the coordinates it rewrites.
-        refreshPlacement();
-        if (hoveredIcao && hoveredCoords && hoveredProps) {
-            const pt = map.project(hoveredCoords);
-            emitHover(hoveredProps, pt.x, pt.y);
+        // Per-frame camera work: the screen center the icon shader needs, and the
+        // stalk and shadow visibility that follows the tilt.
+        syncCenterWorld();
+        syncLiftState();
+        if (hoveredIcao && hoveredProps) {
+            const pt = aircraftScreenPosition(hoveredIcao);
+            if (pt) emitHover(hoveredProps, pt.x, pt.y);
         }
-        if (selectedIcao && selectedCoords && selectedProps && selectedTooltipCallback) {
-            const pt = map.project(selectedCoords);
-            selectedTooltipCallback({ ...selectedProps, x: pt.x, y: pt.y });
+        if (selectedIcao && selectedProps && selectedTooltipCallback) {
+            const pt = aircraftScreenPosition(selectedIcao);
+            if (pt) selectedTooltipCallback({ ...selectedProps, x: pt.x, y: pt.y });
         }
     });
 
@@ -414,7 +423,11 @@ function addLayers() {
             'icon-ignore-placement': true
         },
         paint: {
-            'icon-opacity': 1
+            // Hit testing only; AltitudeLayer draws the visible icons. An opacity of
+            // zero keeps the layer queryable, because queryRenderedFeatures consults
+            // the collision index and never paint opacity. Only `visibility: none`
+            // would remove it.
+            'icon-opacity': 0
         }
     });
 
@@ -456,9 +469,12 @@ function addLayers() {
         }
     }, 'aircraft-layer');
 
-    // Stalks, rings and the 3D trail, below the aircraft so a stalk passes under
-    // traffic rather than over it.
+    // Stalks, rings, the 3D trail and the icons themselves.
     AltitudeLayer.addTo(map, 'aircraft-layer');
+
+    // Before the first frame: the icon shader needs a screen center to measure
+    // perspective against.
+    syncCenterWorld();
 }
 
 export function setCenter(lat, lon, zoom) {
@@ -582,11 +598,18 @@ export function updateMarkers(aircraftMap) {
             lon: aircraft.Coordinate.Longitude,
             lat: aircraft.Coordinate.Latitude,
             lift: liftMeters(altitude, altitudeScale),
-            selected
+            selected,
+            // The GPU batch takes a shape and a color, where the symbol layer takes the
+            // name of a pre-colored bitmap.
+            shapeName,
+            iconScale: scale,
+            fillColor,
+            rotationDeg: SHAPES[shapeName].noRotate ? 0 : heading
         });
     });
 
     aircraftRecords = records;
+    rebuildIcons();
     rebuildMarks();
     emitPlacement();
 }
@@ -598,6 +621,103 @@ export function updateMarkers(aircraftMap) {
 // arithmetic to compute a zero would be paying for nothing on the common case.
 function liftingActive() {
     return altitudeEnabled && !!map && map.getPitch() > 0;
+}
+
+// The icons, handed to the layer that draws them. Each aircraft carries its true
+// position, so the batch changes with the data and not with the camera.
+//
+// Drawn size follows the symbol layer's arithmetic: bitmaps are registered
+// over-resolved at PIXEL_RATIO, making the layout size the shape's nominal w by h,
+// which `icon-size` then scales by ICON_SIZE and the per-type scale.
+function rebuildIcons() {
+    // Tracked here rather than at the call sites, so the flag always says what the
+    // batch actually holds.
+    iconsLifted = liftingActive();
+    AltitudeLayer.setIcons(aircraftRecords.map((record) => {
+        const shape = SHAPES[record.shapeName] || SHAPES.unknown;
+        const size = ICON_SIZE * record.iconScale;
+        return {
+            lon: record.lon,
+            lat: record.lat,
+            lift: iconsLifted ? record.lift : 0,
+            shapeName: record.shapeName,
+            sizeW: shape.w * size,
+            sizeH: shape.h * size,
+            rotationDeg: record.rotationDeg,
+            fill: record.fillColor
+        };
+    }));
+}
+
+// Everything that follows from whether the map is tilted: the stalks, the ground
+// shadows, which of the two trails is up, and how high the icons sit.
+//
+// Runs on every frame of a gesture, so the stalks appear as the map tilts. Each branch
+// is guarded on a change, leaving a pitch comparison in the steady state.
+function syncLiftState() {
+    const lifting = liftingActive();
+    AltitudeLayer.setVisible(lifting);
+
+    if (lifting !== shadowVisible && map.getLayer('aircraft-shadow-layer')) {
+        shadowVisible = lifting;
+        map.setLayoutProperty('aircraft-shadow-layer', 'visibility', lifting ? 'visible' : 'none');
+    }
+
+    // Two trails for one aircraft would be two lines saying the same thing, so the
+    // flat one stands down while the climbing one is drawn. Only while it actually is:
+    // a trail whose points carry no altitude produces no climbing line, and hiding the
+    // flat one then would leave the aircraft with no trail at all.
+    const flatWanted = !(lifting && AltitudeLayer.hasTrail());
+    if (flatWanted !== flatTrailVisible && map.getLayer('trail-layer')) {
+        flatTrailVisible = flatWanted;
+        map.setLayoutProperty('trail-layer', 'visibility', flatWanted ? 'visible' : 'none');
+    }
+
+    // The icons carry their lift, so crossing into or out of a tilt rebuilds them.
+    if (lifting !== iconsLifted) {
+        iconsLifted = lifting;
+        rebuildIcons();
+    }
+
+    return lifting;
+}
+
+// Where an aircraft is drawn on screen, by ICAO.
+//
+// The same projection the icon shader performs, so a tooltip stays on its aircraft
+// through a gesture. The ground coordinate in the hit-test source is not usable for
+// this: it is only refreshed at the end of a gesture, and projecting it mid-gesture
+// puts the tooltip where the aircraft was when the gesture started.
+function aircraftScreenPosition(icao) {
+    const record = aircraftRecords.find(r => r.feature.properties.icao === icao);
+    if (!record) return null;
+
+    const frame = AltitudeLayer.cameraFrame();
+    const canvas = map.getCanvas();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+
+    if (liftingActive() && frame.matrix && width > 0 && height > 0 && record.lift >= MIN_LIFT_M) {
+        const screen = projectWorld(frame.matrix, [
+            mercatorXFromLongitude(record.lon),
+            mercatorYFromLatitude(record.lat),
+            mercatorZFromAltitude(record.lift, record.lat)
+        ], width, height);
+        if (screen) return screen;
+    }
+
+    return map.project([record.lon, record.lat]);
+}
+
+// The screen center, which the icon shader's perspective compensation measures
+// against. Two multiplies, so it runs on every frame of a gesture.
+function syncCenterWorld() {
+    if (!map) return;
+    const center = map.getCenter();
+    AltitudeLayer.setCenterWorld([
+        mercatorXFromLongitude(center.lng),
+        mercatorYFromLatitude(center.lat)
+    ]);
 }
 
 // Stalks, rings and the trail, which change only when the aircraft or the scale do.
@@ -640,23 +760,7 @@ function emitPlacement() {
     const source = map && map.getSource('aircraft-source');
     if (!source) return;
 
-    const lifting = liftingActive();
-    AltitudeLayer.setVisible(lifting);
-
-    if (lifting !== shadowVisible && map.getLayer('aircraft-shadow-layer')) {
-        shadowVisible = lifting;
-        map.setLayoutProperty('aircraft-shadow-layer', 'visibility', lifting ? 'visible' : 'none');
-    }
-
-    // Two trails for one aircraft would be two lines saying the same thing, so the
-    // flat one stands down while the climbing one is drawn. Only while it actually is:
-    // a trail whose points carry no altitude produces no climbing line, and hiding the
-    // flat one then would leave the aircraft with no trail at all.
-    const flatWanted = !(lifting && AltitudeLayer.hasTrail());
-    if (flatWanted !== flatTrailVisible && map.getLayer('trail-layer')) {
-        flatTrailVisible = flatWanted;
-        map.setLayoutProperty('trail-layer', 'visibility', flatWanted ? 'visible' : 'none');
-    }
+    const lifting = syncLiftState();
 
     const frame = AltitudeLayer.cameraFrame();
     const canvas = map.getCanvas();
@@ -720,9 +824,6 @@ function emitPlacement() {
     }
 
     source.setData({ type: 'FeatureCollection', features });
-    // The drawing layer renders with the matrix these features were placed from, so a
-    // stalk and its icon can never disagree.
-    AltitudeLayer.setPlacementMatrix(placing ? frame.matrix : null);
 
     syncTooltips(placed);
 }
@@ -742,7 +843,7 @@ function syncTooltips(placed) {
                 altitude: record.feature.properties.altitude,
                 speed: record.feature.properties.speed
             };
-            const pt = map.project(hoveredCoords);
+            const pt = aircraftScreenPosition(hoveredIcao) || map.project(hoveredCoords);
             emitHover(hoveredProps, pt.x, pt.y);
         } else {
             hoveredIcao = null;
@@ -765,7 +866,7 @@ function syncTooltips(placed) {
                 altitude: record.feature.properties.altitude,
                 speed: record.feature.properties.speed
             };
-            const pt = map.project(selectedCoords);
+            const pt = aircraftScreenPosition(selectedIcao) || map.project(selectedCoords);
             selectedTooltipCallback({ ...selectedProps, x: pt.x, y: pt.y });
         } else {
             selectedCoords = null;
@@ -805,6 +906,8 @@ export function setAltitudeMode(enabled, scale) {
         rebuildMarks();
         rebuildTrail();
     }
+    // Lift enters the icon batch, so both the scale and the switch change it.
+    rebuildIcons();
     emitPlacement();
     requestHud();
 }

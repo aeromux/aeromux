@@ -2,6 +2,12 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.8.2] — 2026-09-27
+
+### Changed
+
+- **Web Map: Aircraft Drawn on the GPU** — Tilting and rotating the map are now smooth, most noticeably on phones, where they were slow and the aircraft moved in visible steps. Aircraft are drawn by the map's own WebGL layer instead of being repositioned on every frame. Nothing about the map looks different.
+
 ## [0.8.1] — 2026-09-19
 
 ### Added
@@ -218,6 +224,7 @@ Initial public release.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+[0.8.2]: https://github.com/aeromux/aeromux/releases/tag/v0.8.2
 [0.8.1]: https://github.com/aeromux/aeromux/releases/tag/v0.8.1
 [0.8.0]: https://github.com/aeromux/aeromux/releases/tag/v0.8.0
 [0.7.7]: https://github.com/aeromux/aeromux/releases/tag/v0.7.7

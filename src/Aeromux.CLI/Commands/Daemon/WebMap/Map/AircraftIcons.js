@@ -126,7 +126,9 @@ let map = null;
 // as a base64 data URI. Uses `paint-order="stroke"` with stroke-width
 // 2× the desired width so the fill cleanly overpaints the inside half
 // of the stroke and the outside edge stays crisp.
-function buildSvgDataUri(shapeName, fillRGB, strokeRGB = '#000') {
+// Also used by the WebGL atlas, which passes a white fill to get a mask. One source
+// for both pipelines, so a shape's silhouette is identical in each.
+export function buildSvgDataUri(shapeName, fillRGB, strokeRGB = '#000') {
     const shape  = SHAPES[shapeName];
     if (!shape) {
         throw new Error(`buildSvgDataUri: missing shape '${shapeName}'`);
