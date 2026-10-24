@@ -757,6 +757,33 @@ public static class RealFrames
     public const string TargetStateStatus_39CEAD = "8D39CEADEA4E3867033C08A2593D";
 
     /// <summary>
+    /// Target State and Status (TC 29, Version 2): ICAO 80073B, Target Alt 40000 ft, Heading 287°
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090)
+    /// ICAO: 80073B
+    /// Subtype: 1 (Version 2)
+    /// Target Altitude: MCP, 40000 ft
+    /// Altimeter Setting: 1012.8 millibars
+    /// Target Heading: 287° (dump1090 prints it truncated as 286)
+    /// Active Modes: Autopilot, VNAV, LNAV (approach and altitude hold off)
+    /// dump1090 prints the active modes as "autopilot VNAV"; this build leaves out LNAV,
+    /// although ME bit 54 is set
+    /// ACAS: Operational
+    /// NACp: 9 (horizontal accuracy &lt; 30 m)
+    /// NICbaro: 1 (barometric altitude cross-checked)
+    /// SIL: 3 (per sample)
+    /// Air/Ground: Airborne
+    /// DF: 17
+    /// TC: 29
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -17.5 dBFS
+    /// Pairs with CommB_Altitude_80073B, a BDS 4,0 reply from the same aircraft carrying the
+    /// same selected altitude and VNAV mode
+    /// </remarks>
+    public const string TargetStateStatus_80073B = "8D80073BEA4E385F313F8C1E22CE";
+
+    /// <summary>
     /// Target State and Status (TC 29, Version 2): ICAO 71C011, Target Alt 31008 ft, Heading 120°
     /// </summary>
     /// <remarks>
@@ -1056,8 +1083,13 @@ public static class RealFrames
     /// Utility Message (UM): 0
     /// Altitude Code (AC): 6551 (Gillham coded)
     /// Message, Comm-B (MB): CE200030A40180
+    /// Comm-B format: BDS 4,0 (Selected vertical intention)
+    /// MCP Selected Altitude: 40000 ft
+    /// QNH: 1013.0 millibars
+    /// Navigation Modes: status valid (bit 48), VNAV only (bit 49 set, bits 50-51 clear)
     /// DF: 20
     /// RSSI: -5.8 dBFS
+    /// Pairs with TargetStateStatus_80073B, which reports VNAV engaged and approach off
     /// </remarks>
     public const string CommB_Altitude_80073B = "A0001997CE200030A40180DD14CF";
 

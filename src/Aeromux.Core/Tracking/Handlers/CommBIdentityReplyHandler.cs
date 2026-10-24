@@ -155,11 +155,13 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
 
     /// <summary>
     /// Handles BDS 4,0 (Selected Vertical Intention) - updates TrackedAutopilot.
-    /// Provides: MCP/FMS selected altitude and barometric pressure setting.
+    /// Provides: MCP/FMS selected altitude, barometric pressure setting, altitude source,
+    /// and the VNAV, altitude hold and approach mode flags.
     /// </summary>
     /// <remarks>
-    /// Field-level merging: Only updates altitude/pressure fields from BDS 4,0,
-    /// preserves other autopilot fields from TC 29 (heading, modes, TCAS).
+    /// Field-level merging: Updates the fields above from BDS 4,0 (the mode flags only when
+    /// the mode status bit is set), preserves the other autopilot fields from TC 29
+    /// (selected heading, vertical/horizontal mode, autopilot engaged, LNAV).
     /// </remarks>
     private static Aircraft HandleBds40(
         Aircraft aircraft,
@@ -207,28 +209,17 @@ public sealed class CommBIdentityReplyHandler : ITrackingHandler
         }
 
         // Extract navigation mode flags from BDS 4,0
-        // IMPORTANT: Only set to true when flag is present, leave as null when absent
-        // This prevents overwriting TC 29 values when BDS 4,0 doesn't have the flag set
+        // With the mode status bit set, each flag is a definite on or off, as in TC 29.
+        // With it clear, NavigationModes is null and the existing values (usually from TC 29) are kept.
         bool? vnavMode = null;
         bool? altitudeHoldMode = null;
         bool? approachMode = null;
         if (data.NavigationModes.HasValue)
         {
             Bds40NavigationMode modes = data.NavigationModes.Value;
-            if (modes.HasFlag(Bds40NavigationMode.Vnav))
-            {
-                vnavMode = true;
-            }
-
-            if (modes.HasFlag(Bds40NavigationMode.AltitudeHold))
-            {
-                altitudeHoldMode = true;
-            }
-
-            if (modes.HasFlag(Bds40NavigationMode.Approach))
-            {
-                approachMode = true;
-            }
+            vnavMode = modes.HasFlag(Bds40NavigationMode.Vnav);
+            altitudeHoldMode = modes.HasFlag(Bds40NavigationMode.AltitudeHold);
+            approachMode = modes.HasFlag(Bds40NavigationMode.Approach);
         }
 
         // Create new autopilot state with field-level merging:

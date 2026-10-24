@@ -22,8 +22,10 @@ namespace Aeromux.Core.ModeS.Enums;
 /// Multiple modes can be active simultaneously.
 /// </summary>
 /// <remarks>
-/// Transmitted as 3-bit field (bits 49-51) in BDS 4,0 messages.
-/// Each bit represents a different mode that can be independently active.
+/// Transmitted as a 3-bit field (MB bits 49-51) in BDS 4,0 messages, valid only when the
+/// mode status bit (MB bit 48) is set. Each bit is an independent flag.
+/// Values follow the wire layout: MB bit 49 is the most significant bit of the field, so
+/// the value read with ExtractBits(mb, 49, 3) casts directly to this enum.
 /// </remarks>
 [Flags]
 public enum Bds40NavigationMode
@@ -34,20 +36,20 @@ public enum Bds40NavigationMode
     None = 0,
 
     /// <summary>
-    /// VNAV (Vertical Navigation) mode active (bit 0, value 1).
+    /// VNAV (Vertical Navigation) mode active (MB bit 49, value 4).
     /// Aircraft is following FMS vertical profile.
     /// </summary>
-    Vnav = 1,
+    Vnav = 4,
 
     /// <summary>
-    /// Altitude Hold mode active (bit 1, value 2).
+    /// Altitude Hold mode active (MB bit 50, value 2).
     /// Aircraft is maintaining selected altitude.
     /// </summary>
     AltitudeHold = 2,
 
     /// <summary>
-    /// Approach mode active (bit 2, value 4).
+    /// Approach mode active (MB bit 51, value 1).
     /// Aircraft is in approach mode for landing.
     /// </summary>
-    Approach = 4
+    Approach = 1
 }

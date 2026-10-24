@@ -210,4 +210,84 @@ public class Bds40SelectedVerticalIntentionTests
         bds40.McpSelectedAltitude.Should().Be(12000, "MCP selected altitude from real capture");
         bds40.BarometricPressureSetting.Should().BeApproximately(1013.2, 0.5, "QNH from real capture");
     }
+
+    // ========================================
+    // Navigation Mode Tests (MB bits 48-51)
+    // ========================================
+
+    [Fact]
+    public void ParseMessage_DF20_Bds40_RealCapture_80073B_VnavOnly()
+    {
+        // Arrange
+        // Mode status valid (bit 48), only bit 49 set. TC 29 from the same aircraft reports
+        // VNAV engaged and approach off.
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.CommB_Altitude_80073B)
+            .WithIcaoAddress("80073B")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        message.Should().NotBeNull();
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        reply.BdsCode.Should().Be(BdsCode.Bds40, "message structure and validation rules match BDS 4,0");
+
+        Bds40SelectedVerticalIntention? bds40 = reply.BdsData.Should().BeOfType<Bds40SelectedVerticalIntention>().Subject;
+        bds40.McpSelectedAltitude.Should().Be(40000, "MCP selected altitude matches the TC 29 target altitude");
+        bds40.NavigationModes.Should().Be(Bds40NavigationMode.Vnav, "MB bit 49 is the VNAV flag");
+    }
+
+    /// <summary>
+    /// Each mode flag decodes from its own MB bit.
+    /// </summary>
+    /// <remarks>
+    /// No capture holds a real frame with bit 50 or 51 set, so these are
+    /// <see cref="RealFrames.CommB_Altitude_80073B"/> with only the last MB byte changed
+    /// (bits 49-56). The parity is not recomputed, which does not matter here because the
+    /// frame builder takes the ICAO address directly.
+    /// </remarks>
+    [Theory]
+    [InlineData("A0001997CE200030A40140DD14CF", Bds40NavigationMode.AltitudeHold)]
+    [InlineData("A0001997CE200030A40120DD14CF", Bds40NavigationMode.Approach)]
+    [InlineData("A0001997CE200030A401E0DD14CF",
+        Bds40NavigationMode.Vnav | Bds40NavigationMode.AltitudeHold | Bds40NavigationMode.Approach)]
+    public void ParseMessage_DF20_Bds40_ModeBits_DecodeToMatchingFlags(string hex, Bds40NavigationMode expected)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hex)
+            .WithIcaoAddress("80073B")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        CommBAltitudeReply? reply = message.Should().BeOfType<CommBAltitudeReply>().Subject;
+        Bds40SelectedVerticalIntention? bds40 = reply.BdsData.Should().BeOfType<Bds40SelectedVerticalIntention>().Subject;
+        bds40.NavigationModes.Should().Be(expected,
+            "bit 49 is VNAV, bit 50 is altitude hold and bit 51 is approach");
+    }
+
+    [Fact]
+    public void ParseMessage_DF21_Bds40_ModeStatusValidNoModes_DecodesNone()
+    {
+        // Arrange
+        // Mode status valid (bit 48), bits 49-51 clear: a definite "no mode active",
+        // which differs from mode status not valid (null)
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(BdsFrames.Bds40_VerticalIntention_8001EB)
+            .WithIcaoAddress("8001EB")
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        CommBIdentityReply? reply = message.Should().BeOfType<CommBIdentityReply>().Subject;
+        Bds40SelectedVerticalIntention? bds40 = reply.BdsData.Should().BeOfType<Bds40SelectedVerticalIntention>().Subject;
+        bds40.NavigationModes.Should().Be(Bds40NavigationMode.None, "mode status is valid with no mode bit set");
+    }
 }

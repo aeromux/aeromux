@@ -484,10 +484,10 @@ public sealed partial class MessageParser
         // - Bit 14: FMS selected altitude status
         // - Bits 15-26: FMS selected altitude (12 bits, range: 0-65,520 ft, resolution: 16 ft)
         // - Bit 27: Barometric pressure setting status
-        // - Bits 28-39: Barometric pressure (12 bits, range: 0-204.775 inHg or 0-6931 mb, resolution: 0.05 inHg or 0.8 mb)
+        // - Bits 28-39: Barometric pressure (12 bits, resolution: 0.1 mb, offset: 800 mb, range: 800-1209.5 mb)
         // - Bits 40-47: Reserved (should be 0)
         // - Bit 48: Mode status
-        // - Bits 49-51: Mode (3 bits, values: 0=Unknown, 1=VNAV, 2=ALT HOLD, 3=APPROACH, 4=Reserved)
+        // - Bits 49-51: Mode flags, each independent (bit 49: VNAV, bit 50: ALT HOLD, bit 51: APPROACH)
         // - Bits 52-53: Reserved (should be 0)
         // - Bit 54: Source status
         // - Bits 55-56: Source (2 bits, values: 0=Unknown, 1=Aircraft, 2=MCP/FCU, 3=FMS)
@@ -548,7 +548,7 @@ public sealed partial class MessageParser
         double? baro = null;
         if (baroStatus == 1 && baroRaw != 0)
         {
-            // 0.1 mbar resolution, offset 800 mbar, range 800-1209.4 mbar
+            // 0.1 mbar resolution, offset 800 mbar, range 800-1209.5 mbar
             baro = 800.0 + (baroRaw * 0.1);
             if (baro is < 800 or > 1200)
             {

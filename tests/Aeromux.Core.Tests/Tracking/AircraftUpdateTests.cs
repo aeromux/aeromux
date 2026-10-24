@@ -168,4 +168,64 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
         aircraft.Should().NotBeNull();
         aircraft!.Identification.Callsign.Should().Be("ASL16F");
     }
+
+    [Fact]
+    public void Update_TC29ThenBds40WithVnav_KeepsVnavOnAndApproachOff()
+    {
+        // Arrange - TC 29 and BDS 4,0 from the same aircraft (80073B), both reporting VNAV
+        // engaged and approach off
+        Tracker = CreateTracker();
+        ProcessedFrame targetState = CreateFrame(RealFrames.TargetStateStatus_80073B, "80073B");
+        ProcessedFrame bds40 = CreateFrame(RealFrames.CommB_Altitude_80073B, "80073B");
+
+        // Act
+        Tracker.Update(targetState);
+        Tracker.Update(bds40);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        aircraft!.Autopilot.Should().NotBeNull();
+        aircraft.Autopilot!.VNAVMode.Should().BeTrue("both messages report VNAV engaged");
+        aircraft.Autopilot.ApproachMode.Should().BeFalse("neither message reports approach mode");
+        aircraft.Autopilot.AltitudeHoldMode.Should().BeFalse("neither message reports altitude hold");
+    }
+
+    [Fact]
+    public void Update_Bds40ModeStatusValidNoModes_SetsAllModesOff()
+    {
+        // Arrange - BDS 4,0 with mode status valid and no mode bit set (8001EB)
+        Tracker = CreateTracker();
+        ProcessedFrame frame = CreateFrame(BdsFrames.Bds40_VerticalIntention_8001EB, "8001EB");
+
+        // Act
+        Tracker.Update(frame);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("8001EB");
+        aircraft.Should().NotBeNull();
+        aircraft!.Autopilot.Should().NotBeNull();
+        aircraft.Autopilot!.VNAVMode.Should().BeFalse("valid mode bits with VNAV clear mean VNAV is off");
+        aircraft.Autopilot.AltitudeHoldMode.Should().BeFalse("valid mode bits with altitude hold clear mean it is off");
+        aircraft.Autopilot.ApproachMode.Should().BeFalse("valid mode bits with approach clear mean it is off");
+    }
+
+    [Fact]
+    public void Update_Bds40ModeStatusNotValid_LeavesModesUnknown()
+    {
+        // Arrange - BDS 4,0 with the mode status bit clear (49D421)
+        Tracker = CreateTracker();
+        ProcessedFrame frame = CreateFrame(RealFrames.CommB_Altitude_49D421_BDS40, "49D421");
+
+        // Act
+        Tracker.Update(frame);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("49D421");
+        aircraft.Should().NotBeNull();
+        aircraft!.Autopilot.Should().NotBeNull("the frame carries selected altitudes");
+        aircraft.Autopilot!.VNAVMode.Should().BeNull("mode bits are not valid");
+        aircraft.Autopilot.AltitudeHoldMode.Should().BeNull("mode bits are not valid");
+        aircraft.Autopilot.ApproachMode.Should().BeNull("mode bits are not valid");
+    }
 }
