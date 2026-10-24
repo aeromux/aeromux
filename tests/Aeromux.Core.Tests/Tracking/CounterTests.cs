@@ -88,29 +88,4 @@ public class CounterTests : AircraftStateTrackerTestsBase
         aircraft!.Status.SeenSeconds.Should().Be(2.0);
         aircraft.Status.FirstSeen.Should().Be(firstSeenTime);
     }
-
-    [Fact]
-    public void Update_PositionMessage_ResetsSeenPosSeconds()
-    {
-        // Arrange - a manual clock, so the 2 seconds pass without waiting for them
-        var clock = new ManualClock();
-        Tracker = CreateTrackerWithClock(timeoutSeconds: 60, clock);
-        ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B");
-
-        // Act
-        Tracker.Update(posFrame);
-        Aircraft? after1 = Tracker.GetAircraft("80073B");
-
-        clock.Advance(TimeSpan.FromSeconds(2));
-        Tracker.Update(posFrame);
-        Aircraft? after2 = Tracker.GetAircraft("80073B");
-
-        // Assert
-        after1.Should().NotBeNull();
-        after1!.Status.SeenPosSeconds.Should().Be(0);
-
-        after2.Should().NotBeNull();
-        // After 2 seconds, another position message resets SeenPosSeconds to exactly 0
-        after2!.Status.SeenPosSeconds.Should().Be(0);
-    }
 }

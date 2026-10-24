@@ -64,7 +64,6 @@ public class AircraftCreationTests : AircraftStateTrackerTestsBase
         aircraft.Position.BarometricAltitude!.Feet.Should().BeInRange(39950, 40000);
         aircraft.Status.TotalMessages.Should().Be(1);
         aircraft.Status.PositionMessages.Should().Be(1);
-        aircraft.Status.SeenPosSeconds.Should().Be(0);
     }
 
     [Fact]

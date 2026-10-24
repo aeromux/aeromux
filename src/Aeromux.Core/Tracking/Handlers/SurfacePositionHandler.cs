@@ -33,7 +33,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <item>Position.Coordinate: Geographic position decoded from surface CPR</item>
 /// <item>Position.IsOnGround: Always set to true for surface messages</item>
 /// <item>Position.MovementCategory: Surface movement speed category for taxi operations</item>
-/// <item>Position.LastUpdate: Timestamp when position was updated</item>
+/// <item>Position.LastUpdate: Time a position was last decoded; unchanged by a message that decoded none</item>
 /// <item>Velocity.GroundSpeed: Surface movement speed (0-199 knots with non-linear quantization)</item>
 /// <item>Velocity.GroundTrack: Surface movement direction (0-360° with 2.8125° resolution)</item>
 /// <item>Velocity.LastUpdate: Timestamp when velocity was updated</item>
@@ -66,7 +66,7 @@ public sealed class SurfacePositionHandler : ITrackingHandler
             Coordinate = msg.Position ?? aircraft.Position.Coordinate,
             IsOnGround = true,
             MovementCategory = msg.Movement,
-            LastUpdate = timestamp,
+            LastUpdate = msg.Position is not null ? timestamp : aircraft.Position.LastUpdate,
             PositionSource = frame.Source,
             HadMlatPosition = aircraft.Position.HadMlatPosition || frame.Source == FrameSource.Mlat
         };

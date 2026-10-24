@@ -42,7 +42,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <item>Position.BarometricAltitude: Pressure altitude from TC 9-18 (if present)</item>
 /// <item>Position.GeometricAltitude: GNSS altitude from TC 20-22 (if present)</item>
 /// <item>Position.IsOnGround: Set to false (airborne)</item>
-/// <item>Position.LastUpdate: Timestamp when position was updated</item>
+/// <item>Position.LastUpdate: Time a position was last accepted, whether or not it moved; unchanged when no coordinate was decoded or the position was rejected</item>
 /// <item>Position.ImplausibleCount: Speed/distance plausibility counter (reset on good position, incremented on bad)</item>
 /// </list>
 /// </remarks>
@@ -55,8 +55,9 @@ public sealed class AirbornePositionHandler : ITrackingHandler
     private const int DefaultAirborneSpeedKnots = 900;
 
     /// <summary>
-    /// Number of consecutive implausible positions required before accepting a new position anyway.
-    /// Prevents a stale good position from permanently blocking updates when the aircraft has legitimately moved.
+    /// Number of consecutive implausible positions after which the current position is invalidated,
+    /// so the next one is accepted as a first fix. Prevents a stale good position from permanently
+    /// blocking updates when the aircraft has legitimately moved.
     /// </summary>
     private const int PositionPersistenceThreshold = 4;
 
@@ -151,27 +152,30 @@ public sealed class AirbornePositionHandler : ITrackingHandler
         // wildly incorrect positions that appear as long straight lines on the map
         GeographicCoordinate? newCoordinate = position.Coordinate;
         int implausibleCount = position.ImplausibleCount;
+        bool accepted = false;
 
         if (msg.Position != null)
         {
             if (position.Coordinate == null || position.LastUpdate == null)
             {
-                // First position — accept unconditionally
+                // First position: accept unconditionally
                 newCoordinate = msg.Position;
                 implausibleCount = 0;
+                accepted = true;
             }
             else
             {
                 double elapsed = (timestamp - position.LastUpdate.Value).TotalSeconds;
                 if (IsPositionPlausible(position.Coordinate, msg.Position, elapsed, aircraft.Velocity.Speed?.Knots))
                 {
-                    // Plausible — accept
+                    // Plausible: accept
                     newCoordinate = msg.Position;
                     implausibleCount = 0;
+                    accepted = true;
                 }
                 else if (implausibleCount >= PositionPersistenceThreshold)
                 {
-                    // Too many consecutive implausible positions — invalidate current position
+                    // Too many consecutive implausible positions: invalidate current position
                     // rather than accepting the potentially bad new one. The next position
                     // (good or bad) will be accepted as "first position" via the null check above.
                     // This breaks the feedback loop where persistence alternately accepts
@@ -181,7 +185,7 @@ public sealed class AirbornePositionHandler : ITrackingHandler
                 }
                 else
                 {
-                    // Implausible — keep old coordinate, increment counter
+                    // Implausible: keep old coordinate, increment counter
                     implausibleCount++;
                 }
             }
@@ -200,7 +204,10 @@ public sealed class AirbornePositionHandler : ITrackingHandler
             GeometricBarometricDelta = geometricBarometricDelta,
             Antenna = msg.Antenna ?? position.Antenna,
             IsOnGround = false,
-            LastUpdate = newCoordinate != position.Coordinate ? timestamp : position.LastUpdate,
+            // The time of the last accepted position, even an unchanged one: an aircraft sending
+            // positions while stationary is still being heard, and the speed check above measures
+            // from this. Rejected, invalidated and undecoded positions leave it at the last fix.
+            LastUpdate = accepted ? timestamp : position.LastUpdate,
             PositionSource = frame.Source,
             HadMlatPosition = position.HadMlatPosition || frame.Source == FrameSource.Mlat,
             ImplausibleCount = implausibleCount
@@ -215,7 +222,7 @@ public sealed class AirbornePositionHandler : ITrackingHandler
     /// </summary>
     /// <param name="previous">The aircraft's current known position.</param>
     /// <param name="candidate">The newly decoded position to validate.</param>
-    /// <param name="elapsedSeconds">Seconds since the last position update.</param>
+    /// <param name="elapsedSeconds">Seconds since the last accepted position.</param>
     /// <param name="speedKnots">Aircraft's known speed in knots, or null if unavailable.</param>
     /// <returns>True if the position change is plausible given the aircraft's speed and elapsed time.</returns>
     private bool IsPositionPlausible(
@@ -224,7 +231,7 @@ public sealed class AirbornePositionHandler : ITrackingHandler
         double elapsedSeconds,
         int? speedKnots)
     {
-        // Stale position — skip speed check, accept unconditionally
+        // Stale position: skip speed check, accept unconditionally
         if (elapsedSeconds > _speedCheckBypassSeconds)
         {
             return true;

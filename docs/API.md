@@ -255,6 +255,8 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,Velocity
 }
 ```
 
+In the Position section, `LastUpdate` is when a position was last received and accepted, whether or not the aircraft moved. A position message that decoded no coordinate, or whose coordinate was rejected as implausible, leaves it unchanged, and so does an altitude update.
+
 ### Example: DatabaseRecord
 
 The DatabaseRecord section provides static aircraft metadata from the [aeromux-db](https://github.com/aeromux/aeromux-db) database, including registration, aircraft type, manufacturer, and operator information. This data is looked up by ICAO address when the aircraft is first detected.
@@ -632,7 +634,7 @@ curl -s "http://localhost:8080/api/v1/stats"
 
 ```json
 {
-  "Version": "0.8.3",
+  "Version": "0.8.4",
   "Timestamp": "2026-03-13T14:30:00Z",
   "Uptime": 3600,
   "AircraftCount": 42,

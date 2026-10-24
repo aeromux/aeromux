@@ -566,48 +566,6 @@ public class AircraftStateTests : AircraftStateTrackerTestsBase
         lastSeen2.Should().BeOnOrAfter(lastSeen1); // LastSeen updates
     }
 
-    [Fact]
-    public void StatusSeenPosSecondsTracking_ResetsAfterPositionUpdate()
-    {
-        // Arrange
-        Tracker = CreateTracker();
-        var parser = new MessageParser();
-        ProcessedFrame evenFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B", parser);
-        ProcessedFrame oddFrame = CreateFrame(RealFrames.AirbornePos_80073B_Odd, "80073B", parser);
-
-        // Act
-        Tracker.Update(evenFrame);
-        Aircraft? after1 = Tracker.GetAircraft("80073B");
-
-        Tracker.Update(oddFrame);
-        Aircraft? after2 = Tracker.GetAircraft("80073B");
-
-        // Assert
-        after1.Should().NotBeNull();
-        after1!.Status.SeenPosSeconds.Should().NotBeNull();
-        after1.Status.SeenPosSeconds.Should().BeLessThan(1.0); // Recent position
-
-        after2.Should().NotBeNull();
-        after2!.Status.SeenPosSeconds.Should().NotBeNull();
-        after2.Status.SeenPosSeconds.Should().BeLessThan(1.0); // Reset after second position
-    }
-
-    [Fact]
-    public void StatusSeenPosSecondsNull_WhenNoPositionReceived()
-    {
-        // Arrange
-        Tracker = CreateTracker();
-        ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
-
-        // Act
-        Tracker.Update(frame);
-        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
-
-        // Assert - No position messages, so SeenPosSeconds should be null
-        aircraft.Should().NotBeNull();
-        aircraft!.Status.SeenPosSeconds.Should().BeNull();
-    }
-
     #endregion
 
     #region 5. History Group Tests (3 tests)

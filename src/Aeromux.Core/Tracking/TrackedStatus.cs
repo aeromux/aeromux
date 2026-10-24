@@ -96,13 +96,6 @@ public sealed record TrackedStatus
     public double SeenSeconds { get; init; }
 
     /// <summary>
-    /// Seconds since last position update (last time Coordinate or altitude changed).
-    /// Null if no position data ever received.
-    /// Used for determining position data staleness.
-    /// </summary>
-    public double? SeenPosSeconds { get; init; }
-
-    /// <summary>
     /// Rate limiting timestamp for JSON broadcast output.
     /// Next time this aircraft can be broadcasted in JSON format.
     /// Prevents flooding network with too-frequent updates.

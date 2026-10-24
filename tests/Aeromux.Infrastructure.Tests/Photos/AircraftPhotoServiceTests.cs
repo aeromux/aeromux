@@ -214,7 +214,7 @@ public class AircraftPhotoServiceTests
         await Task.WhenAll(getTask, expireTask);
         PhotoResult getResult = await getTask;
 
-        // Final state: cache must be empty — the eviction ran *after* the
+        // Final state: cache must be empty, because the eviction ran *after* the
         // insert and removed the entry it just inserted.
         cache.TryGet(0xCCC001, out _).Should().BeFalse();
         getResult.Outcome.Should().Be(PhotoOutcome.HasPhoto, "the GetAsync itself succeeded — only the cache was evicted afterwards");
@@ -233,7 +233,7 @@ public class AircraftPhotoServiceTests
 
         sut.Dispose();
 
-        // After Dispose, firing the event must not invoke the handler — so the
+        // After Dispose, firing the event must not invoke the handler, so the
         // entry we manually inserted should still be there.
         tracker.FireExpired("DDD001");
 
@@ -260,7 +260,7 @@ public class AircraftPhotoServiceTests
     // ─── Helper test doubles ───────────────────────────────────────────────────
 
     /// <summary>
-    /// Hand-rolled <see cref="IPlanespottersApiClient"/> fake — records call counts,
+    /// Hand-rolled <see cref="IPlanespottersApiClient"/> fake: records call counts,
     /// returns whatever <see cref="HexResult"/> / <see cref="RegResult"/> the test set.
     /// <c>null</c> means transient failure, matching the real client's contract.
     /// </summary>
@@ -329,7 +329,6 @@ public class AircraftPhotoServiceTests
                     FirstSeen = DateTime.UtcNow,
                     LastSeen = DateTime.UtcNow,
                     SeenSeconds = 0,
-                    SeenPosSeconds = null,
                     NextJsonOutput = DateTime.UtcNow,
                 },
                 DatabaseEnabled = Registration is not null,
@@ -355,7 +354,7 @@ public class AircraftPhotoServiceTests
         public event EventHandler<AircraftEventArgs>? OnAircraftAdded;
         public event EventHandler<AircraftEventArgs>? OnAircraftExpired;
 
-        // Suppress "unused event" warnings — these are part of the interface contract.
+        // Suppress "unused event" warnings: these are part of the interface contract.
         private void _suppressWarnings()
         {
             OnAircraftUpdated?.Invoke(default!, default!);

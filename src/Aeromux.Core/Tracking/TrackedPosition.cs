@@ -127,9 +127,10 @@ public sealed record TrackedPosition
     public SourceIntegrityLevel? SIL { get; init; }
 
     /// <summary>
-    /// Timestamp of last position update (when Coordinate or altitude was last set).
-    /// Null if no position data received yet.
-    /// Used for calculating "seen_pos" (seconds since last position update).
+    /// Time a position was last received and accepted, whether or not the aircraft moved.
+    /// Unchanged by a position message that decoded no coordinate, or whose coordinate was
+    /// rejected as implausible. Altitude updates do not affect it.
+    /// Null if no position has been accepted yet. Shown as the position's "Last Update".
     /// </summary>
     public DateTime? LastUpdate { get; init; }
 
@@ -156,8 +157,9 @@ public sealed record TrackedPosition
 
     /// <summary>
     /// Counts consecutive position updates that failed the speed/distance plausibility check.
-    /// When this counter reaches the persistence threshold (4), the new position is accepted
-    /// and the counter resets — preventing a stale good position from permanently blocking updates.
+    /// When this counter reaches the persistence threshold (4), the current position is
+    /// invalidated and the counter resets, so the next position is accepted as a first fix.
+    /// This prevents a stale good position from permanently blocking updates.
     /// Reset to 0 on every plausible position update.
     /// </summary>
     public int ImplausibleCount { get; init; }

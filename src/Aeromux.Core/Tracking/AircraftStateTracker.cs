@@ -268,7 +268,6 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
                 FirstSeen = now,
                 LastSeen = now,
                 SeenSeconds = 0,
-                SeenPosSeconds = null,
                 NextJsonOutput = now
             },
             History = CreateHistory()
@@ -358,8 +357,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         {
             PositionMessages = isFirstMessage ? positionCount : aircraft.Status.PositionMessages + positionCount,
             VelocityMessages = isFirstMessage ? velocityCount : aircraft.Status.VelocityMessages + velocityCount,
-            IdentificationMessages = isFirstMessage ? identCount : aircraft.Status.IdentificationMessages + identCount,
-            SeenPosSeconds = positionCount > 0 ? 0 : aircraft.Status.SeenPosSeconds
+            IdentificationMessages = isFirstMessage ? identCount : aircraft.Status.IdentificationMessages + identCount
         };
 
         return aircraft with { Status = status };
@@ -367,7 +365,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
 
     /// <summary>
     /// Updates common status fields that apply to all messages.
-    /// Includes signal strength, total message count, timestamps, and seen calculations.
+    /// Includes signal strength, total message count, timestamps, and time since first seen.
     /// </summary>
     private static Aircraft UpdateCommonStatus(Aircraft aircraft, ProcessedFrame frame, DateTime now)
     {
@@ -380,10 +378,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
             SignalStrength = frame.Frame.SignalStrength,
             TotalMessages = aircraft.Status.TotalMessages + 1,
             LastSeen = now,
-            SeenSeconds = (now - aircraft.Status.FirstSeen).TotalSeconds,
-            SeenPosSeconds = aircraft.Position.LastUpdate.HasValue
-                ? (now - aircraft.Position.LastUpdate.Value).TotalSeconds
-                : aircraft.Status.SeenPosSeconds
+            SeenSeconds = (now - aircraft.Status.FirstSeen).TotalSeconds
         };
 
         return aircraft with { Status = status };
