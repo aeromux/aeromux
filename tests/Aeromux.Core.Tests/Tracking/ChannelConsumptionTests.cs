@@ -23,8 +23,15 @@ namespace Aeromux.Core.Tests.Tracking;
 /// <summary>
 /// Tests for StartConsuming with ChannelReader.
 /// </summary>
+/// <remarks>
+/// The consumer runs in the background, so these tests wait for what they need to have happened
+/// (a frame processed, the consumer stopped) rather than for a length of time. The bound on each
+/// wait only turns a hang into a failure; it is never what makes a test pass.
+/// </remarks>
 public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
 {
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+
     [Fact]
     public async Task StartConsuming_ReadsFromChannel_TracksAllAircraft()
     {
@@ -40,11 +47,9 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
         await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_80073B, "80073B"), cts.Token);
         channel.Writer.Complete();
 
-        // Act
+        // Act - the writer is complete, so the consumer stops once it has drained the channel
         Tracker.StartConsuming(channel.Reader, cts.Token);
-
-        // Wait for consumption to complete
-        await Task.Delay(500, cts.Token);
+        await Tracker.ConsumerCompletion.WaitAsync(Bound);
 
         // Assert
         Tracker.Count.Should().Be(3);
@@ -80,31 +85,29 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
+        using var processed = new SemaphoreSlim(0);
+        Tracker.OnAircraftAdded += (_, _) => processed.Release();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
         Disposables.Add(cts);
 
-        // Write initial frames
         await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
-
-        // Act
         Tracker.StartConsuming(channel.Reader, cts.Token);
-        await Task.Delay(100, cts.Token);
+        (await processed.WaitAsync(Bound)).Should().BeTrue("the first frame should be consumed");
 
-        // Cancel
+        // Act - cancel and wait until the consumer has actually stopped
         await cts.CancelAsync();
-        await Task.Delay(100, CancellationToken.None);
+        await Tracker.ConsumerCompletion.WaitAsync(Bound).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        Tracker.ConsumerCompletion.IsCanceled.Should().BeTrue("cancellation should end the consumer");
 
-        // Write more frames after cancellation (use CancellationToken.None since we expect this to work after cancellation)
+        // A frame written now has no consumer left to read it
         await channel.Writer.WriteAsync(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"), CancellationToken.None);
-        await Task.Delay(100, CancellationToken.None);
+        channel.Writer.Complete();
 
         // Assert - Only first frame should be processed
         Tracker.Count.Should().Be(1);
         Tracker.GetAircraft("471DBC").Should().NotBeNull();
         Tracker.GetAircraft("4D2407").Should().BeNull("frame written after cancellation");
-
-        channel.Writer.Complete();
     }
 
     [Fact]
@@ -112,22 +115,24 @@ public class ChannelConsumptionTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
+        using var processed = new SemaphoreSlim(0);
+        Tracker.OnAircraftAdded += (_, _) => processed.Release();
+        Tracker.OnAircraftUpdated += (_, _) => processed.Release();
         var channel = Channel.CreateUnbounded<ProcessedFrame>();
         var cts = new CancellationTokenSource();
         Disposables.Add(cts);
 
-        // Act - Start consuming
+        // Act - write frames one at a time, each only after the previous one was processed, so
+        // the consumer goes back to waiting for data between every frame
         Tracker.StartConsuming(channel.Reader, cts.Token);
-
-        // Write frames gradually
         for (int i = 0; i < 100; i++)
         {
             await channel.Writer.WriteAsync(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"), cts.Token);
-            await Task.Delay(1, cts.Token);
+            (await processed.WaitAsync(Bound)).Should().BeTrue($"frame {i + 1} should be consumed");
         }
 
         channel.Writer.Complete();
-        await Task.Delay(500, cts.Token); // Wait for all frames to be consumed
+        await Tracker.ConsumerCompletion.WaitAsync(Bound);
 
         // Assert
         Aircraft? aircraft = Tracker.GetAircraft("471DBC");

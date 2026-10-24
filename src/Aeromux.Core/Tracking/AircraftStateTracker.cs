@@ -155,6 +155,13 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     }
 
     /// <summary>
+    /// Completes when the consumer started by <see cref="StartConsuming"/> stops: when its channel
+    /// is completed and drained, or when it is cancelled. Already complete if consumption was never
+    /// started. Lets tests wait for exactly that instead of sleeping.
+    /// </summary>
+    internal Task ConsumerCompletion => _consumerTask ?? Task.CompletedTask;
+
+    /// <summary>
     /// Updates aircraft state with data from a processed frame.
     /// Creates new aircraft entry if ICAO address not seen before.
     /// Updates existing aircraft state if already tracked.
@@ -514,14 +521,15 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         DateTime now = UtcNow;
         var expired = _aircraft
             .Where(kvp => kvp.Value.IsExpired(AircraftTimeout, now))
-            .Select(kvp => kvp.Key)
             .ToList();
 
-        foreach (uint icao in expired)
+        foreach (KeyValuePair<uint, Aircraft> entry in expired)
         {
-            if (_aircraft.TryRemove(icao, out Aircraft? aircraft))
+            // Remove only the state judged expired. A frame can refresh the aircraft between
+            // listing and removal; removing by key alone would then discard a live track.
+            if (_aircraft.TryRemove(entry))
             {
-                OnAircraftExpired?.Invoke(this, new AircraftEventArgs { Aircraft = aircraft });
+                OnAircraftExpired?.Invoke(this, new AircraftEventArgs { Aircraft = entry.Value });
             }
         }
     }

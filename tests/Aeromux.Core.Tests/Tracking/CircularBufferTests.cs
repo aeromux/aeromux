@@ -597,88 +597,33 @@ public class CircularBufferTests
         result.Should().HaveCount(threadCount * addsPerThread);
     }
 
+    // The tests below run fixed work on dedicated threads (see Concurrently) rather than for a
+    // length of time, so they check exact outcomes. Writer w (numbered from 1) adds
+    // w * WriterStride + k for k = 0, 1, 2, ..., so every snapshot must show each writer's values
+    // in increasing order; FillBuffer's 1..n read as writer 0's, already in order.
+
+    private const int WriterStride = 1_000_000;
+
     [Fact]
     public async Task ThreadSafety_ConcurrentGetAllDuringAdd_NoCrashes()
     {
         // Arrange
         var buffer = new CircularBuffer<int>(100);
-        bool readerException = false;
-        bool writerException = false;
-
-        // Pre-fill buffer
         FillBuffer(buffer, 50);
 
-        using (var cts = new CancellationTokenSource())
-        {
-            CancellationToken token = cts.Token;
-
-            // Act - 20 readers, 5 writers, run for 2 seconds
-            var readerTasks = new Task[20];
-            for (int i = 0; i < 20; i++)
+        // Act - 5 writers adding 1,000 values each while 20 readers take snapshots
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            Writers(buffer, writerCount: 5, addsPerWriter: 1_000),
+            Readers(20, _ => () =>
             {
-                readerTasks[i] = Task.Run(() =>
-                {
-                    try
-                    {
-                        while (!token.IsCancellationRequested)
-                        {
-                            int[] data = buffer.GetAll();
-                            data.Should().NotBeNull();
-                        }
-                    }
-                    catch
-                    {
-                        readerException = true;
-                    }
-                }, token);
-            }
-
-            var writerTasks = new Task[5];
-            for (int i = 0; i < 5; i++)
-            {
-                int threadId = i;
-                writerTasks[i] = Task.Run(() =>
-                {
-                    try
-                    {
-                        while (!token.IsCancellationRequested)
-                        {
-                            buffer.Add(threadId);
-                            Thread.Sleep(10);
-                        }
-                    }
-                    catch
-                    {
-                        writerException = true;
-                    }
-                }, token);
-            }
-
-            // Run for 2 seconds
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected if cancellation happens during delay
-            }
-
-            await cts.CancelAsync();
-
-            try
-            {
-                await Task.WhenAll(readerTasks.Concat(writerTasks));
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected since tasks were created with cancellation token
-            }
-        }
+                int[] data = buffer.GetAll();
+                Require(data.Length is >= 50 and <= 100, $"GetAll returned {data.Length} items");
+                RequireEachWriterInOrder(data);
+            }));
 
         // Assert
-        readerException.Should().BeFalse("readers should not throw exceptions");
-        writerException.Should().BeFalse("writers should not throw exceptions");
+        errors.Should().BeEmpty();
+        RequireContiguousHistory(buffer, totalAdds: 50 + (5 * 1_000));
     }
 
     [Fact]
@@ -686,86 +631,26 @@ public class CircularBufferTests
     {
         // Arrange
         var buffer = new CircularBuffer<int>(100);
-        bool readerException = false;
-        bool writerException = false;
-
-        // Pre-fill buffer
         FillBuffer(buffer, 50);
 
-        using (var cts = new CancellationTokenSource())
-        {
-            CancellationToken token = cts.Token;
-
-            // Act - 20 readers calling GetRecent, 5 writers
-            var readerTasks = new Task[20];
-            for (int i = 0; i < 20; i++)
+        // Act - the buffer never holds fewer than 50, so asking for 1..50 always gets that many
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            Writers(buffer, writerCount: 5, addsPerWriter: 1_000),
+            Readers(20, readerId =>
             {
-                int threadId = i;
-                readerTasks[i] = Task.Run(() =>
+                var random = new Random(readerId);
+                return () =>
                 {
-                    try
-                    {
-                        var random = new Random(threadId);
-                        while (!token.IsCancellationRequested)
-                        {
-                            int count = random.Next(1, 50);
-                            int[] data = buffer.GetRecent(count);
-                            data.Should().NotBeNull();
-                        }
-                    }
-                    catch
-                    {
-                        readerException = true;
-                    }
-                }, token);
-            }
-
-            var writerTasks = new Task[5];
-            for (int i = 0; i < 5; i++)
-            {
-                int threadId = i;
-                writerTasks[i] = Task.Run(() =>
-                {
-                    try
-                    {
-                        while (!token.IsCancellationRequested)
-                        {
-                            buffer.Add(threadId);
-                            Thread.Sleep(10);
-                        }
-                    }
-                    catch
-                    {
-                        writerException = true;
-                    }
-                }, token);
-            }
-
-            // Run for 2 seconds
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected if cancellation happens during delay
-            }
-
-            await cts.CancelAsync();
-
-            try
-            {
-                await Task.WhenAll(readerTasks.Concat(writerTasks));
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected since tasks were created with cancellation token
-            }
-        }
+                    int count = random.Next(1, 51);
+                    int[] data = buffer.GetRecent(count);
+                    Require(data.Length == count, $"GetRecent({count}) returned {data.Length} items");
+                    RequireEachWriterInOrder(data);
+                };
+            }));
 
         // Assert
-        readerException.Should().BeFalse("readers should not throw exceptions");
-        writerException.Should().BeFalse("writers should not throw exceptions");
+        errors.Should().BeEmpty();
+        RequireContiguousHistory(buffer, totalAdds: 50 + (5 * 1_000));
     }
 
     [Fact]
@@ -773,88 +658,26 @@ public class CircularBufferTests
     {
         // Arrange
         var buffer = new CircularBuffer<int>(100);
-        bool readerException = false;
-        bool writerException = false;
-        bool invalidCount = false;
-
-        // Pre-fill buffer
         FillBuffer(buffer, 50);
 
-        using (var cts = new CancellationTokenSource())
-        {
-            CancellationToken token = cts.Token;
-
-            // Act - 20 threads reading Count, 5 threads adding
-            var readerTasks = new Task[20];
-            for (int i = 0; i < 20; i++)
+        // Act - nothing removes items, so each reader must see Count in range and never falling
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            Writers(buffer, writerCount: 5, addsPerWriter: 1_000),
+            Readers(20, _ =>
             {
-                readerTasks[i] = Task.Run(() =>
+                int last = 0;
+                return () =>
                 {
-                    try
-                    {
-                        while (!token.IsCancellationRequested)
-                        {
-                            int count = buffer.Count;
-                            if (count < 0 || count > buffer.Capacity)
-                            {
-                                invalidCount = true;
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        readerException = true;
-                    }
-                }, token);
-            }
-
-            var writerTasks = new Task[5];
-            for (int i = 0; i < 5; i++)
-            {
-                int threadId = i;
-                writerTasks[i] = Task.Run(() =>
-                {
-                    try
-                    {
-                        while (!token.IsCancellationRequested)
-                        {
-                            buffer.Add(threadId);
-                            Thread.Sleep(10);
-                        }
-                    }
-                    catch
-                    {
-                        writerException = true;
-                    }
-                }, token);
-            }
-
-            // Run for 2 seconds
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected if cancellation happens during delay
-            }
-
-            await cts.CancelAsync();
-
-            try
-            {
-                await Task.WhenAll(readerTasks.Concat(writerTasks));
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected since tasks were created with cancellation token
-            }
-        }
+                    int count = buffer.Count;
+                    Require(count is >= 50 and <= 100, $"Count was {count}");
+                    Require(count >= last, $"Count fell from {last} to {count}");
+                    last = count;
+                };
+            }));
 
         // Assert
-        readerException.Should().BeFalse("readers should not throw exceptions");
-        writerException.Should().BeFalse("writers should not throw exceptions");
-        invalidCount.Should().BeFalse("count should always be valid (0 to Capacity)");
+        errors.Should().BeEmpty();
+        buffer.Count.Should().Be(100);
     }
 
     [Fact]
@@ -862,85 +685,16 @@ public class CircularBufferTests
     {
         // Arrange
         var buffer = new CircularBuffer<int>(100);
-        bool exception = false;
-
-        // Pre-fill buffer
         FillBuffer(buffer, 50);
+        int adds = 0;
 
-        using (var cts = new CancellationTokenSource())
-        {
-            CancellationToken token = cts.Token;
-
-            // Act - 50 threads performing random operations for 2 seconds
-            var tasks = new Task[50];
-            for (int i = 0; i < 50; i++)
-            {
-                int threadId = i;
-                tasks[i] = Task.Run(() =>
-                {
-                    try
-                    {
-                        var random = new Random(threadId);
-                        while (!token.IsCancellationRequested)
-                        {
-                            int operation = random.Next(4);
-                            switch (operation)
-                            {
-                                case 0: // Add (40%)
-                                    buffer.Add(threadId);
-                                    break;
-                                case 1: // GetAll (30%)
-                                    int[] all = buffer.GetAll();
-                                    all.Should().NotBeNull();
-                                    break;
-                                case 2: // GetRecent (20%)
-                                    int[] recent = buffer.GetRecent(random.Next(1, 20));
-                                    recent.Should().NotBeNull();
-                                    break;
-                                case 3: // Count (10%)
-                                    int count = buffer.Count;
-                                    count.Should().BeGreaterOrEqualTo(0).And.BeLessOrEqualTo(buffer.Capacity);
-                                    break;
-                            }
-
-                            Thread.Sleep(random.Next(5));
-                        }
-                    }
-                    catch
-                    {
-                        exception = true;
-                    }
-                }, token);
-            }
-
-            // Run for 2 seconds
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected if cancellation happens during delay
-            }
-
-            await cts.CancelAsync();
-
-            try
-            {
-                await Task.WhenAll(tasks);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected since tasks were created with cancellation token
-            }
-        }
+        // Act - 50 workers, 200 random operations each
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            Workers(buffer, workerCount: 50, operationsPerWorker: 200, () => Interlocked.Increment(ref adds)));
 
         // Assert
-        exception.Should().BeFalse("mixed operations should not throw exceptions");
-
-        // Verify final state is consistent
-        int[] finalData = buffer.GetAll();
-        finalData.Should().HaveCount(buffer.Count);
+        errors.Should().BeEmpty();
+        RequireContiguousHistory(buffer, totalAdds: 50 + adds);
     }
 
     [Fact]
@@ -948,80 +702,123 @@ public class CircularBufferTests
     {
         // Arrange
         var buffer = new CircularBuffer<int>(200);
-        bool exception = false;
+        int adds = 0;
 
-        using (var cts = new CancellationTokenSource())
-        {
-            CancellationToken token = cts.Token;
+        // Act - 50 workers, 2,000 random operations each
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            Workers(buffer, workerCount: 50, operationsPerWorker: 2_000, () => Interlocked.Increment(ref adds)));
 
-            // Act - 50 threads for 10 seconds
-            var tasks = new Task[50];
-            for (int i = 0; i < 50; i++)
+        // Assert - exact, because the work is fixed: every add is accounted for
+        errors.Should().BeEmpty();
+        adds.Should().BeGreaterThan(0);
+        RequireContiguousHistory(buffer, totalAdds: adds);
+    }
+
+    /// <summary>Writers 1..n, each adding its own increasing values.</summary>
+    private static Action[] Writers(CircularBuffer<int> buffer, int writerCount, int addsPerWriter) =>
+        Enumerable.Range(1, writerCount)
+            .Select(writer => (Action)(() =>
             {
-                int threadId = i;
-                tasks[i] = Task.Run(() =>
+                for (int k = 0; k < addsPerWriter; k++)
                 {
-                    try
+                    buffer.Add((writer * WriterStride) + k);
+                }
+            }))
+            .ToArray();
+
+    /// <summary>Readers built per reader index, so each can keep its own state.</summary>
+    private static Action[] Readers(int readerCount, Func<int, Action> create) =>
+        Enumerable.Range(0, readerCount).Select(create).ToArray();
+
+    /// <summary>
+    /// Workers performing a fixed number of random operations, adds included, checking every
+    /// read against the buffer's invariants as they go.
+    /// </summary>
+    private static Action[] Workers(CircularBuffer<int> buffer, int workerCount, int operationsPerWorker, Action onAdd) =>
+        Enumerable.Range(1, workerCount)
+            .Select(worker => (Action)(() =>
+            {
+                var random = new Random(worker);
+                int next = 0;
+                for (int i = 0; i < operationsPerWorker; i++)
+                {
+                    switch (random.Next(5))
                     {
-                        var random = new Random(threadId);
-                        while (!token.IsCancellationRequested)
-                        {
-                            int operation = random.Next(4);
-                            switch (operation)
-                            {
-                                case 0:
-                                    buffer.Add((threadId * 1000) + random.Next(1000));
-                                    break;
-                                case 1:
-                                    buffer.GetAll();
-                                    break;
-                                case 2:
-                                    buffer.GetRecent(random.Next(1, 50));
-                                    break;
-                                case 3:
-                                    int count = buffer.Count;
-                                    break;
-                            }
-
-                            Thread.Sleep(random.Next(5));
-                        }
+                        case 0:
+                            buffer.Add((worker * WriterStride) + next++);
+                            onAdd();
+                            break;
+                        case 1:
+                            int[] all = buffer.GetAll();
+                            Require(all.Length <= buffer.Capacity, $"GetAll returned {all.Length} items");
+                            RequireEachWriterInOrder(all);
+                            break;
+                        case 2:
+                            int[] recent = buffer.GetRecent(random.Next(1, 51));
+                            RequireEachWriterInOrder(recent);
+                            break;
+                        case 3:
+                            int count = buffer.Count;
+                            Require(count >= 0 && count <= buffer.Capacity, $"Count was {count}");
+                            break;
+                        case 4:
+                            BufferSnapshot<int> snapshot = buffer.GetSnapshot();
+                            Require(snapshot.Entries.Count == snapshot.Count,
+                                $"snapshot holds {snapshot.Entries.Count} entries but reports {snapshot.Count}");
+                            RequireConsecutive(snapshot);
+                            break;
                     }
-                    catch
-                    {
-                        exception = true;
-                    }
-                }, token);
-            }
+                }
+            }))
+            .ToArray();
 
-            // Run for 10 seconds
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(10), token);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected if cancellation happens during delay
-            }
+    /// <summary>
+    /// After all adds: the buffer holds the newest min(total, capacity) entries, and their sequence
+    /// IDs are exactly the run ending at the total, so no add was lost or counted twice.
+    /// </summary>
+    private static void RequireContiguousHistory(CircularBuffer<int> buffer, int totalAdds)
+    {
+        BufferSnapshot<int> snapshot = buffer.GetSnapshot();
+        int expectedCount = Math.Min(totalAdds, buffer.Capacity);
 
-            await cts.CancelAsync();
+        snapshot.Count.Should().Be(expectedCount);
+        snapshot.Entries.Should().HaveCount(expectedCount);
+        snapshot.MaxSequenceId.Should().Be(totalAdds);
+        snapshot.MinSequenceId.Should().Be(totalAdds - expectedCount + 1);
+        RequireConsecutive(snapshot);
+        RequireEachWriterInOrder(snapshot.Entries.Select(e => e.Item).ToArray());
+        buffer.GetAll().Should().HaveCount(expectedCount);
+    }
 
-            try
-            {
-                await Task.WhenAll(tasks);
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected since tasks were created with cancellation token
-            }
+    private static void RequireConsecutive(BufferSnapshot<int> snapshot)
+    {
+        for (int i = 1; i < snapshot.Entries.Count; i++)
+        {
+            Require(snapshot.Entries[i].SequenceId == snapshot.Entries[i - 1].SequenceId + 1,
+                $"sequence IDs jump from {snapshot.Entries[i - 1].SequenceId} to {snapshot.Entries[i].SequenceId}");
         }
+    }
 
-        // Assert
-        exception.Should().BeFalse("stress test should not throw exceptions");
+    private static void RequireEachWriterInOrder(int[] values)
+    {
+        var last = new Dictionary<int, int>();
+        foreach (int value in values)
+        {
+            int writer = value / WriterStride;
+            int k = value % WriterStride;
+            Require(!last.TryGetValue(writer, out int previous) || k > previous,
+                $"writer {writer}: {k} appears after {previous}");
+            last[writer] = k;
+        }
+    }
 
-        // Verify final state is consistent
-        int[] finalData = buffer.GetAll();
-        finalData.Should().HaveCount(buffer.Count);
-        buffer.Count.Should().BeGreaterThan(0).And.BeLessOrEqualTo(buffer.Capacity);
+    // Plain checks rather than assertions inside workers: they run millions of times.
+    private static void Require(bool condition, string message)
+    {
+        if (!condition)
+        {
+            throw new InvalidOperationException(message);
+        }
     }
 
     #endregion

@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Collections.Concurrent;
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
 
@@ -106,273 +107,177 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     [Fact]
     public async Task ThreadSafety_ConcurrentReadsDuringUpdates_NoExceptions()
     {
-        // Arrange
+        // Arrange - two seeded aircraft, which nothing can expire during the test
         Tracker = CreateTracker();
-        bool readersException = false;
-        bool updatersException = false;
-        var cts = new CancellationTokenSource();
-        Disposables.Add(cts);
-
-        // Seed with some aircraft
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
         Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+        AircraftStateTracker tracker = Tracker;
 
-        // Act - 5 reader threads, 5 updater threads, run for 2 seconds
-        var readerTasks = new Task[5];
-        for (int i = 0; i < 5; i++)
-        {
-            readerTasks[i] = Task.Run(() =>
+        // Act - 5 updaters (3 on 471DBC, 2 on 4D2407) with 200 updates each, 5 readers meanwhile
+        Action[] updaters = Enumerable.Range(0, 5)
+            .Select(index => (Action)(() =>
             {
-                try
+                ProcessedFrame frame = index % 2 == 0
+                    ? CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")
+                    : CreateFrame(RealFrames.AllCall_4D2407, "4D2407");
+                for (int i = 0; i < 200; i++)
                 {
-                    while (!cts.Token.IsCancellationRequested)
-                    {
-                        IReadOnlyList<Aircraft> aircraft = Tracker.GetAllAircraft();
-                        int count = Tracker.Count;
-                    }
+                    tracker.Update(frame);
                 }
-                catch
-                {
-                    readersException = true;
-                }
-            }, cts.Token);
-        }
-
-        var updaterTasks = new Task[5];
-        for (int i = 0; i < 5; i++)
-        {
-            int index = i;
-            updaterTasks[i] = Task.Run(() =>
+            }))
+            .ToArray();
+        Action[] readers = Enumerable.Range(0, 5)
+            .Select(_ => (Action)(() =>
             {
-                try
-                {
-                    ProcessedFrame frame = index % 2 == 0
-                        ? CreateFrame(RealFrames.AircraftId_471DBC, "471DBC")
-                        : CreateFrame(RealFrames.AllCall_4D2407, "4D2407");
+                IReadOnlyList<Aircraft> aircraft = tracker.GetAllAircraft();
+                Require(aircraft.Count == 2, $"GetAllAircraft returned {aircraft.Count} aircraft");
+                Require(aircraft.All(a => a.Status.TotalMessages >= 1), "an aircraft had no messages");
+                Require(tracker.Count == 2, $"Count was {tracker.Count}");
+            }))
+            .ToArray();
 
-                    while (!cts.Token.IsCancellationRequested)
-                    {
-                        Tracker.Update(frame);
-                        Thread.Sleep(10);
-                    }
-                }
-                catch
-                {
-                    updatersException = true;
-                }
-            }, cts.Token);
-        }
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(updaters, readers);
 
-        // Run for 2 seconds
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected if cancellation happens during delay
-        }
-
-        await cts.CancelAsync();
-
-        try
-        {
-            await Task.WhenAll(readerTasks.Concat(updaterTasks));
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected since tasks were created with cancellation token
-        }
-
-        // Assert
-        readersException.Should().BeFalse("readers should not throw exceptions");
-        updatersException.Should().BeFalse("updaters should not throw exceptions");
+        // Assert - every update counted
+        errors.Should().BeEmpty();
+        Tracker.GetAircraft("471DBC")!.Status.TotalMessages.Should().Be(1 + (3 * 200));
+        Tracker.GetAircraft("4D2407")!.Status.TotalMessages.Should().Be(1 + (2 * 200));
     }
 
     [Fact]
     public async Task ThreadSafety_ConcurrentGetAircraftLookups_NoExceptions()
     {
-        // Arrange
+        // Arrange - three seeded aircraft, which nothing can expire during the test
         Tracker = CreateTracker();
-
-        // Seed with aircraft
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
         Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
         Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        AircraftStateTracker tracker = Tracker;
+        string[] known = ["471DBC", "4D2407", "80073B"];
+        string[] unknown = ["ABCDEF", "UNKNOWN"];
 
-        bool lookupException = false;
-        bool updateException = false;
-        var cts = new CancellationTokenSource();
-        Disposables.Add(cts);
-
-        // Act - 20 lookup threads, 5 update threads
-        var lookupTasks = new Task[20];
-        string[] icaos = ["471DBC", "4D2407", "80073B", "ABCDEF", "UNKNOWN"];
-
-        for (int i = 0; i < 20; i++)
-        {
-            int index = i;
-            lookupTasks[i] = Task.Run(() =>
+        // Act - 5 updaters (200 updates each, spread over the three) and 20 lookup threads
+        Action[] updaters = Enumerable.Range(0, 5)
+            .Select(index => (Action)(() =>
             {
-                try
+                ProcessedFrame[] frames =
+                [
+                    CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"),
+                    CreateFrame(RealFrames.AllCall_4D2407, "4D2407"),
+                    CreateFrame(RealFrames.AllCall_80073B, "80073B")
+                ];
+                for (int i = 0; i < 200; i++)
                 {
-                    var random = new Random(index);
-                    while (!cts.Token.IsCancellationRequested)
-                    {
-                        string icao = icaos[random.Next(icaos.Length)];
-                        Aircraft? aircraft = Tracker.GetAircraft(icao);
-                    }
+                    tracker.Update(frames[index % frames.Length]);
                 }
-                catch
-                {
-                    lookupException = true;
-                }
-            }, cts.Token);
-        }
-
-        var updateTasks = new Task[5];
-        for (int i = 0; i < 5; i++)
-        {
-            int index = i;
-            updateTasks[i] = Task.Run(() =>
+            }))
+            .ToArray();
+        Action[] lookups = Enumerable.Range(0, 20)
+            .Select(index =>
             {
-                try
+                var random = new Random(index);
+                return (Action)(() =>
                 {
-                    ProcessedFrame[] frames =
-                    [
-                        CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"),
-                        CreateFrame(RealFrames.AllCall_4D2407, "4D2407"),
-                        CreateFrame(RealFrames.AllCall_80073B, "80073B")
-                    ];
+                    string icao = known[random.Next(known.Length)];
+                    Require(tracker.GetAircraft(icao) is { } found && found.Identification.ICAO == icao,
+                        $"{icao} went missing during updates");
+                    string absent = unknown[random.Next(unknown.Length)];
+                    Require(tracker.GetAircraft(absent) is null, $"{absent} was found");
+                });
+            })
+            .ToArray();
 
-                    while (!cts.Token.IsCancellationRequested)
-                    {
-                        Tracker.Update(frames[index % frames.Length]);
-                        Thread.Sleep(10);
-                    }
-                }
-                catch
-                {
-                    updateException = true;
-                }
-            }, cts.Token);
-        }
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(updaters, lookups);
 
-        // Run for 1 second
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1), cts.Token);
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected if cancellation happens during delay
-        }
-
-        await cts.CancelAsync();
-
-        try
-        {
-            await Task.WhenAll(lookupTasks.Concat(updateTasks));
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected since tasks were created with cancellation token
-        }
-
-        // Assert
-        lookupException.Should().BeFalse("lookups should not throw exceptions");
-        updateException.Should().BeFalse("updates should not throw exceptions");
+        // Assert - updaters 0 and 3 hit 471DBC, 1 and 4 hit 4D2407, 2 hits 80073B
+        errors.Should().BeEmpty();
+        Tracker.GetAircraft("471DBC")!.Status.TotalMessages.Should().Be(1 + 400);
+        Tracker.GetAircraft("4D2407")!.Status.TotalMessages.Should().Be(1 + 400);
+        Tracker.GetAircraft("80073B")!.Status.TotalMessages.Should().Be(1 + 200);
     }
 
     [Fact]
     public async Task ThreadSafety_DuringExpirationCleanup_NoDeadlocks()
     {
-        // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 1);
-        bool updateException = false;
-
-        // Create initial aircraft
+        // Arrange - on a manual clock, 471DBC is already past its timeout before the race starts
+        var clock = new ManualClock();
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 1, clock);
+        AircraftStateTracker tracker = Tracker;
+        var expired = new ConcurrentQueue<string>();
+        Tracker.OnAircraftExpired += (_, args) => expired.Enqueue(args.Aircraft.Identification.ICAO);
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        clock.Advance(TimeSpan.FromSeconds(2));
+        ProcessedFrame live = CreateFrame(RealFrames.AllCall_4D2407, "4D2407");
 
-        var cts = new CancellationTokenSource();
-        Disposables.Add(cts);
-
-        // Act - Continuous updates while cleanup runs
-        var updateTask = Task.Run(() =>
-        {
-            try
+        // Act - 500 updates of a live aircraft and 500 cleanups at once; a deadlock would hit
+        // the run's bound and fail the test
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            () =>
             {
-                while (!cts.Token.IsCancellationRequested)
+                for (int i = 0; i < 500; i++)
                 {
-                    Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-                    Thread.Sleep(50);
+                    tracker.Update(live);
                 }
-            }
-            catch
+            },
+            () =>
             {
-                updateException = true;
-            }
-        }, cts.Token);
+                for (int i = 0; i < 500; i++)
+                {
+                    tracker.CleanupExpiredAircraft();
+                }
+            });
 
-        // Run for 3 seconds (multiple cleanup cycles)
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected if cancellation happens during delay
-        }
-
-        await cts.CancelAsync();
-
-        try
-        {
-            await updateTask;
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected since task was created with cancellation token
-        }
-
-        // Assert
-        updateException.Should().BeFalse("updates should not deadlock with cleanup");
+        // Assert - the stale aircraft is expired exactly once, the live one keeps every message
+        errors.Should().BeEmpty();
+        expired.Should().Equal("471DBC");
+        Tracker.GetAircraft("471DBC").Should().BeNull();
+        Tracker.GetAircraft("4D2407")!.Status.TotalMessages.Should().Be(500);
     }
 
     [Fact]
     public async Task ThreadSafety_RaceConditionBetweenUpdateAndExpiration_NoCorruption()
     {
-        // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 1);
+        // Arrange - on a manual clock, the aircraft is past its timeout but not yet cleaned up
+        var clock = new ManualClock();
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 1, clock);
+        AircraftStateTracker tracker = Tracker;
+        var expired = new ConcurrentQueue<string>();
+        Tracker.OnAircraftExpired += (_, args) => expired.Enqueue(args.Aircraft.Identification.ICAO);
+        ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
+        Tracker.Update(frame);
+        clock.Advance(TimeSpan.FromSeconds(2));
 
-        // Create aircraft close to expiration
-        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-
-        // Wait almost to expiration
-        await Task.Delay(TimeSpan.FromMilliseconds(900));
-
-        // Act - Try to update while expiration might be happening
-        var updateTask = Task.Run(() =>
-        {
-            for (int i = 0; i < 10; i++)
+        // Act - 200 updates race 200 cleanups
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(
+            () =>
             {
-                Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-                Thread.Sleep(50);
-            }
-        });
+                for (int i = 0; i < 200; i++)
+                {
+                    tracker.Update(frame);
+                }
+            },
+            () =>
+            {
+                for (int i = 0; i < 200; i++)
+                {
+                    tracker.CleanupExpiredAircraft();
+                }
+            });
 
-        await updateTask;
-
-        // Assert - Aircraft should either be alive (if update won race) or cleanly expired
+        // Assert - the first update makes the aircraft current again, so only two outcomes are
+        // legal: cleanup won before it (expired once, then rebuilt by all 200 updates), or it
+        // never removed it (all 200 updates continue the original track)
+        errors.Should().BeEmpty();
         Aircraft? aircraft = Tracker.GetAircraft("471DBC");
-        // No assertion on null/not-null since race outcome is non-deterministic
-        // Key is no exceptions or corrupted state
-
-        // If aircraft exists, it should be valid
-        if (aircraft != null)
+        aircraft.Should().NotBeNull("the last thing to happen to it was an update");
+        if (expired.IsEmpty)
         {
-            aircraft.Identification.ICAO.Should().Be("471DBC");
-            aircraft.Status.TotalMessages.Should().BeGreaterThan(0);
+            aircraft!.Status.TotalMessages.Should().Be(1 + 200);
+        }
+        else
+        {
+            expired.Should().ContainSingle();
+            aircraft!.Status.TotalMessages.Should().Be(200, "removed only before its first refresh");
         }
     }
 
@@ -450,90 +355,73 @@ public class ThreadSafetyTests : AircraftStateTrackerTestsBase
     {
         // Arrange
         Tracker = CreateTracker();
-        bool exception = false;
-        var cts = new CancellationTokenSource();
-        Disposables.Add(cts);
+        AircraftStateTracker tracker = Tracker;
+        string[] icaos = ["471DBC", "4D2407", "80073B", "8965F3", "8964A0"];
+        string[] hex = [RealFrames.AircraftId_471DBC, RealFrames.AllCall_4D2407, RealFrames.AllCall_80073B,
+            RealFrames.AircraftId_8965F3, RealFrames.AircraftId_8964A0];
+        var updates = new int[icaos.Length];
 
-        // Act - 50 threads performing mixed operations for 10 seconds
-        var tasks = new Task[50];
-        for (int i = 0; i < 50; i++)
-        {
-            int threadIndex = i;
-            tasks[i] = Task.Run(() =>
+        // Act - 50 workers, 2,000 random operations each
+        Action[] workers = Enumerable.Range(0, 50)
+            .Select(index => (Action)(() =>
             {
-                try
+                var random = new Random(index);
+                ProcessedFrame[] frames = icaos.Select((icao, i) => CreateFrame(hex[i], icao)).ToArray();
+                for (int op = 0; op < 2_000; op++)
                 {
-                    var random = new Random(threadIndex);
-                    ProcessedFrame[] frames =
-                    [
-                        CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"),
-                        CreateFrame(RealFrames.AllCall_4D2407, "4D2407"),
-                        CreateFrame(RealFrames.AllCall_80073B, "80073B"),
-                        CreateFrame(RealFrames.AircraftId_8965F3, "8965F3"),
-                        CreateFrame(RealFrames.AircraftId_8964A0, "8964A0")
-                    ];
-
-                    while (!cts.Token.IsCancellationRequested)
+                    int target = random.Next(icaos.Length);
+                    switch (random.Next(4))
                     {
-                        int operation = random.Next(4);
-                        switch (operation)
-                        {
-                            case 0: // Update
-                                Tracker.Update(frames[random.Next(frames.Length)]);
-                                break;
-                            case 1: // GetAircraft
-                                Tracker.GetAircraft(frames[random.Next(frames.Length)].Frame.IcaoAddress);
-                                break;
-                            case 2: // GetAllAircraft
-                                Tracker.GetAllAircraft();
-                                break;
-                            case 3: // Count
-                                int count = Tracker.Count;
-                                break;
-                        }
-
-                        Thread.Sleep(random.Next(5));
+                        case 0:
+                            tracker.Update(frames[target]);
+                            Interlocked.Increment(ref updates[target]);
+                            break;
+                        case 1:
+                            Aircraft? found = tracker.GetAircraft(icaos[target]);
+                            Require(found is null || found.Identification.ICAO == icaos[target],
+                                $"lookup of {icaos[target]} returned {found?.Identification.ICAO}");
+                            break;
+                        case 2:
+                            IReadOnlyList<Aircraft> all = tracker.GetAllAircraft();
+                            Require(all.Count <= icaos.Length, $"GetAllAircraft returned {all.Count} aircraft");
+                            Require(all.Select(a => a.Identification.ICAO).Distinct().Count() == all.Count,
+                                "GetAllAircraft returned an aircraft twice");
+                            break;
+                        case 3:
+                            int count = tracker.Count;
+                            Require(count is >= 0 and <= 5, $"Count was {count}");
+                            break;
                     }
                 }
-                catch
-                {
-                    exception = true;
-                }
-            }, cts.Token);
+            }))
+            .ToArray();
+
+        IReadOnlyList<Exception> errors = await Concurrently.RunAsync(workers);
+
+        // Assert - each aircraft's message count is exactly the updates it received
+        errors.Should().BeEmpty();
+        for (int i = 0; i < icaos.Length; i++)
+        {
+            Aircraft? aircraft = Tracker.GetAircraft(icaos[i]);
+            if (updates[i] == 0)
+            {
+                aircraft.Should().BeNull();
+            }
+            else
+            {
+                aircraft!.Status.TotalMessages.Should().Be(updates[i], $"{icaos[i]} received {updates[i]} updates");
+            }
         }
 
-        // Run for 10 seconds
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(10), cts.Token);
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected if cancellation happens during delay
-        }
+        Tracker.GetAllAircraft().Should().HaveCount(Tracker.Count);
+    }
 
-        await cts.CancelAsync();
-
-        try
+    // Plain checks rather than assertions inside workers: they run many thousands of times.
+    private static void Require(bool condition, string message)
+    {
+        if (!condition)
         {
-            await Task.WhenAll(tasks);
-        }
-        catch (TaskCanceledException)
-        {
-            // Expected since tasks were created with cancellation token
-        }
-
-        // Assert
-        exception.Should().BeFalse("stress test should not throw exceptions");
-
-        // Verify final state is consistent
-        IReadOnlyList<Aircraft> allAircraft = Tracker.GetAllAircraft();
-        allAircraft.Should().HaveCount(Tracker.Count);
-
-        foreach (Aircraft aircraft in allAircraft)
-        {
-            aircraft.Identification.ICAO.Should().NotBeNullOrEmpty();
-            aircraft.Status.TotalMessages.Should().BeGreaterThan(0);
+            throw new InvalidOperationException(message);
         }
     }
 }

@@ -198,6 +198,47 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
     }
 
     [Fact]
+    public void Expiration_CleanupKeepsAnAircraftRefreshedWhileCleanupRuns()
+    {
+        // Arrange - two expired aircraft. Cleanup lists both, then removes them one by one;
+        // the expiry handler for whichever goes first refreshes the other with a new frame,
+        // which is what a frame arriving mid-cleanup does.
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
+        var frames = new Dictionary<string, ProcessedFrame>
+        {
+            ["471DBC"] = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"),
+            ["4D2407"] = CreateFrame(RealFrames.AllCall_4D2407, "4D2407")
+        };
+        foreach (ProcessedFrame frame in frames.Values)
+        {
+            Tracker.Update(frame);
+        }
+
+        var expiredIcaos = new List<string>();
+        string? refreshed = null;
+        Tracker.OnAircraftExpired += (sender, args) =>
+        {
+            expiredIcaos.Add(args.Aircraft.Identification.ICAO);
+            if (refreshed is null)
+            {
+                refreshed = frames.Keys.Single(icao => icao != args.Aircraft.Identification.ICAO);
+                Tracker.Update(frames[refreshed]);
+            }
+        };
+
+        _clock.Advance(TimeSpan.FromSeconds(3));
+
+        // Act
+        Tracker.CleanupExpiredAircraft();
+
+        // Assert - the refreshed aircraft keeps its track: it was not expired and was not reset
+        expiredIcaos.Should().ContainSingle();
+        Aircraft? survivor = Tracker.GetAircraft(refreshed!);
+        survivor.Should().NotBeNull("a frame arrived for it before cleanup reached it");
+        survivor!.Status.TotalMessages.Should().Be(2, "its state should continue, not start again");
+    }
+
+    [Fact]
     public void Expiration_CleanupTimer_RemovesExpiredAircraft()
     {
         // Arrange - the clock is already past the timeout, so the only thing left to wait for is
