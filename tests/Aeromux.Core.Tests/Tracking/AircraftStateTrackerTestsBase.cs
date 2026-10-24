@@ -72,6 +72,35 @@ public class AircraftStateTrackerTestsBase : IDisposable
     }
 
     /// <summary>
+    /// Creates a tracker on a manual clock, with its cleanup timer switched off. Time moves only
+    /// when the test advances <paramref name="clock"/>, and expired aircraft are removed only when
+    /// the test calls <see cref="AircraftStateTracker.CleanupExpiredAircraft"/>, so nothing
+    /// depends on wall-clock sleeps or on when the thread pool gets to a timer callback.
+    /// </summary>
+    protected AircraftStateTracker CreateTrackerWithClock(int timeoutSeconds, ManualClock clock)
+    {
+        var tracker = new AircraftStateTracker(CreateTestConfig(), timeProvider: clock)
+        {
+            AircraftTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+            CleanupInterval = Timeout.InfiniteTimeSpan
+        };
+        Disposables.Add(tracker);
+        return tracker;
+    }
+
+    /// <summary>
+    /// A clock that only moves when told to.
+    /// </summary>
+    protected sealed class ManualClock : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
+    /// <summary>
     /// Helper method to create a standard tracker and track it for disposal.
     /// </summary>
     protected AircraftStateTracker CreateTracker()

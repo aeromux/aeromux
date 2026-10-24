@@ -39,6 +39,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     private readonly TrackingConfig _trackingConfig;
     private readonly TrackingHandlerRegistry _handlerRegistry;
     private readonly IAircraftDatabaseLookup? _databaseLookup;
+    private readonly TimeProvider _timeProvider;
     private Task? _consumerTask;
     private bool _disposed;
 
@@ -48,11 +49,17 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// </summary>
     /// <param name="trackingConfig">Tracking configuration (history buffer sizes, enable flags)</param>
     /// <param name="databaseLookup">Optional database lookup service for aircraft enrichment. Null if database is not available.</param>
-    public AircraftStateTracker(TrackingConfig trackingConfig, IAircraftDatabaseLookup? databaseLookup = null)
+    /// <param name="timeProvider">Clock for last-seen times and expiry. Defaults to <see cref="TimeProvider.System"/>;
+    /// tests pass their own to control time instead of sleeping.</param>
+    public AircraftStateTracker(
+        TrackingConfig trackingConfig,
+        IAircraftDatabaseLookup? databaseLookup = null,
+        TimeProvider? timeProvider = null)
     {
         _trackingConfig = trackingConfig ?? throw new ArgumentNullException(nameof(trackingConfig));
         _handlerRegistry = new TrackingHandlerRegistry(trackingConfig);
         _databaseLookup = databaseLookup;
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         // Initialize timeout from config (convert seconds to TimeSpan)
         AircraftTimeout = TimeSpan.FromSeconds(trackingConfig.AircraftTimeoutSeconds);
@@ -176,8 +183,9 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <returns>Read-only list of all non-expired tracked aircraft, sorted by ICAO</returns>
     public IReadOnlyList<Aircraft> GetAllAircraft()
     {
+        DateTime now = UtcNow;
         return _aircraft.Values
-            .Where(a => !a.IsExpired(AircraftTimeout))
+            .Where(a => !a.IsExpired(AircraftTimeout, now))
             .OrderBy(a => a.Identification.ICAO)
             .ToList();
     }
@@ -192,7 +200,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     {
         if (uint.TryParse(icao, NumberStyles.HexNumber, null, out uint icaoRaw) &&
             _aircraft.TryGetValue(icaoRaw, out Aircraft? aircraft) &&
-            !aircraft.IsExpired(AircraftTimeout))
+            !aircraft.IsExpired(AircraftTimeout, UtcNow))
         {
             return aircraft;
         }
@@ -203,7 +211,19 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// Gets the count of currently tracked aircraft (excludes expired).
     /// Note: This is a computed property that filters expired aircraft on each access.
     /// </summary>
-    public int Count => _aircraft.Values.Count(a => !a.IsExpired(AircraftTimeout));
+    public int Count
+    {
+        get
+        {
+            DateTime now = UtcNow;
+            return _aircraft.Values.Count(a => !a.IsExpired(AircraftTimeout, now));
+        }
+    }
+
+    /// <summary>
+    /// The current UTC time from the tracker's clock.
+    /// </summary>
+    private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     /// <summary>
     /// Creates a new aircraft record from the first frame received for an ICAO address.
@@ -214,7 +234,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <returns>Newly created Aircraft record</returns>
     private Aircraft CreateNew(ProcessedFrame frame)
     {
-        DateTime now = DateTime.UtcNow;
+        DateTime now = UtcNow;
         string icao = frame.Frame.IcaoAddress;
 
         // Initialize aircraft with minimal state
@@ -289,7 +309,7 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     /// <returns>New Aircraft record with updated state</returns>
     private Aircraft ApplyUpdate(Aircraft existing, ProcessedFrame frame)
     {
-        DateTime now = DateTime.UtcNow;
+        DateTime now = UtcNow;
         Aircraft updated = existing;
 
         // Apply message-specific updates via handler
@@ -484,14 +504,16 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
     }
 
     /// <summary>
-    /// Removes expired aircraft from tracking (runs periodically on background timer).
+    /// Removes expired aircraft from tracking (runs periodically on background timer, and
+    /// directly from tests that control the clock).
     /// Scans all aircraft, removes those not seen within AircraftTimeout period.
     /// Fires OnAircraftExpired event for each removed aircraft.
     /// </summary>
-    private void CleanupExpiredAircraft()
+    internal void CleanupExpiredAircraft()
     {
+        DateTime now = UtcNow;
         var expired = _aircraft
-            .Where(kvp => kvp.Value.IsExpired(AircraftTimeout))
+            .Where(kvp => kvp.Value.IsExpired(AircraftTimeout, now))
             .Select(kvp => kvp.Key)
             .ToList();
 

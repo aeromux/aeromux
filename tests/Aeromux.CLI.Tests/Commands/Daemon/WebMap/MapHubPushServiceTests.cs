@@ -223,6 +223,12 @@ public class MapHubPushServiceTests
         client.Sent("AircraftRemoved").Should().ContainSingle().Which[0].Should().Be("AAA001");
         state.SelectedIcao.Should().BeNull();
         state.LastPushedDetailHash.Should().Be(0);
+        state.LastPushedAircraft.Should().BeEmpty();
+
+        // Once deselected, the next tick must not remove it a second time.
+        client.Clear();
+        await TickAsync(service);
+        client.Sent("AircraftRemoved").Should().BeEmpty();
     }
 
     // --- Overlays ---

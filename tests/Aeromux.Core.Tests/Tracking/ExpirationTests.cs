@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Collections.Concurrent;
 using Aeromux.Core.Tests.TestData;
 using Aeromux.Core.Tracking;
 
@@ -22,23 +23,29 @@ namespace Aeromux.Core.Tests.Tracking;
 /// <summary>
 /// Tests for aircraft timeout and expiration cleanup.
 /// </summary>
+/// <remarks>
+/// The tracker runs on a manual clock with its cleanup timer off, so every test is exact and
+/// instant. An aircraft is expired only once it is older than the timeout, never at exactly
+/// the timeout. Only <see cref="Expiration_CleanupTimer_RemovesExpiredAircraft"/> uses the real
+/// timer, to cover its wiring.
+/// </remarks>
 public class ExpirationTests : AircraftStateTrackerTestsBase
 {
+    private readonly ManualClock _clock = new();
+
     [Fact]
     public void Expiration_AircraftExpiresAfterTimeout()
     {
         // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 3);
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 3, _clock);
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
-        Aircraft? beforeExpiry = Tracker.GetAircraft("471DBC");
-        beforeExpiry.Should().NotBeNull();
+        // Act & Assert - still tracked at exactly the timeout, gone just after it
+        _clock.Advance(TimeSpan.FromSeconds(3));
+        Tracker.GetAircraft("471DBC").Should().NotBeNull("an aircraft is expired only once older than the timeout");
 
-        // Act & Assert - Wait for GetAircraft to return null (IsExpired check is synchronous)
-        WaitForCondition(
-            () => Tracker.GetAircraft("471DBC") == null,
-            TimeSpan.FromSeconds(5),
-            "aircraft should expire after timeout");
+        _clock.Advance(TimeSpan.FromMilliseconds(1));
+        Tracker.GetAircraft("471DBC").Should().BeNull("aircraft should expire after timeout");
         Tracker.Count.Should().Be(0, "expired aircraft should not be counted");
     }
 
@@ -46,57 +53,75 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
     public void Expiration_CleanupRemovesMultipleExpiredAircraft()
     {
         // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 2);
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
         var expiredIcaos = new List<string>();
         Tracker.OnAircraftExpired += (sender, args) => expiredIcaos.Add(args.Aircraft.Identification.ICAO);
 
-        // Create 5 aircraft at different times
-        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        Thread.Sleep(TimeSpan.FromMilliseconds(200));
-
-        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
-        Thread.Sleep(TimeSpan.FromMilliseconds(200));
-
-        Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
-        Thread.Sleep(TimeSpan.FromMilliseconds(200));
-
-        Tracker.Update(CreateFrame(RealFrames.AircraftId_8965F3, "8965F3"));
-        Thread.Sleep(TimeSpan.FromMilliseconds(200));
-
-        Tracker.Update(CreateFrame(RealFrames.AircraftId_8964A0, "8964A0"));
+        // Create 5 aircraft 200 ms apart
+        string[] icaos = ["471DBC", "4D2407", "80073B", "8965F3", "8964A0"];
+        string[] frames = [RealFrames.AircraftId_471DBC, RealFrames.AllCall_4D2407, RealFrames.AllCall_80073B,
+            RealFrames.AircraftId_8965F3, RealFrames.AircraftId_8964A0];
+        for (int i = 0; i < icaos.Length; i++)
+        {
+            if (i > 0)
+            {
+                _clock.Advance(TimeSpan.FromMilliseconds(200));
+            }
+            Tracker.Update(CreateFrame(frames[i], icaos[i]));
+        }
 
         Tracker.Count.Should().Be(5);
 
-        // Act & Assert - Wait for cleanup timer to fire and remove all expired aircraft
-        WaitForCondition(
-            () => expiredIcaos.Count == 5,
-            TimeSpan.FromSeconds(5),
-            "all 5 aircraft should have been expired by cleanup timer");
+        // Act - past the timeout of the newest aircraft, then clean up
+        _clock.Advance(TimeSpan.FromSeconds(2) + TimeSpan.FromMilliseconds(1));
+        Tracker.CleanupExpiredAircraft();
+
+        // Assert
+        expiredIcaos.Should().BeEquivalentTo(icaos);
         Tracker.Count.Should().Be(0);
         Tracker.GetAllAircraft().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Expiration_CleanupRemovesOnlyExpiredAircraft()
+    {
+        // Arrange
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
+        var expiredIcaos = new List<string>();
+        Tracker.OnAircraftExpired += (sender, args) => expiredIcaos.Add(args.Aircraft.Identification.ICAO);
+
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
+
+        // Act - the first is 2.5 s old, the second 1.5 s
+        _clock.Advance(TimeSpan.FromMilliseconds(1500));
+        Tracker.CleanupExpiredAircraft();
+
+        // Assert - a second cleanup with nothing new to expire raises no further events
+        Tracker.CleanupExpiredAircraft();
+        expiredIcaos.Should().Equal("471DBC");
+        Tracker.GetAircraft("4D2407").Should().NotBeNull();
     }
 
     [Fact]
     public void Expiration_RecentAircraftNotExpired()
     {
         // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 5);
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 5, _clock);
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
-        // Act - Wait 1 second, send update, wait another 1 second
-        Thread.Sleep(TimeSpan.FromSeconds(1));
+        // Act - 1 second, update, another 1 second
+        _clock.Advance(TimeSpan.FromSeconds(1));
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
-        Thread.Sleep(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
 
         // Assert - Should still be tracked (last update was 1 second ago, timeout is 5)
         Aircraft? aircraft = Tracker.GetAircraft("471DBC");
         aircraft.Should().NotBeNull("aircraft should still be active after recent update");
 
-        // SeenSeconds is calculated at update time, not read time
-        // After the update at T+1, SeenSeconds should be ~1 second (from T0 to T1)
-        aircraft!.Status.SeenSeconds.Should().BeGreaterOrEqualTo(1.0);
-
-        // Verify aircraft is not expired (timeout is 5 seconds, last update was 1 second ago)
+        // SeenSeconds is calculated at update time (from first seen), not read time
+        aircraft!.Status.SeenSeconds.Should().Be(1.0);
         Tracker.Count.Should().Be(1, "aircraft should not have been cleaned up yet");
     }
 
@@ -104,31 +129,22 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
     public void Expiration_MixedExpiredAndActiveAircraft()
     {
         // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 2);
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
 
         // Create aircraft A (will expire)
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
-        // Wait 1 second
-        Thread.Sleep(TimeSpan.FromSeconds(1));
-
-        // Create aircraft B (will be kept alive)
+        // 1 second later, create aircraft B (will be kept alive)
+        _clock.Advance(TimeSpan.FromSeconds(1));
         Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
 
-        // Wait another 1.5 seconds (A expires, B does not)
-        Thread.Sleep(TimeSpan.FromMilliseconds(1500));
-
-        // Keep B alive
+        // Another 1.5 seconds: A is 2.5 s old and expired, B is 1.5 s old; keep B alive
+        _clock.Advance(TimeSpan.FromMilliseconds(1500));
         Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
 
-        // Assert - Wait for A to expire (IsExpired check is synchronous in GetAircraft)
-        WaitForCondition(
-            () => Tracker.GetAircraft("471DBC") == null,
-            TimeSpan.FromSeconds(5),
-            "Aircraft A should have expired");
-
-        Aircraft? aircraftB = Tracker.GetAircraft("4D2407");
-        aircraftB.Should().NotBeNull("Aircraft B should still be active");
+        // Assert
+        Tracker.GetAircraft("471DBC").Should().BeNull("Aircraft A should have expired");
+        Tracker.GetAircraft("4D2407").Should().NotBeNull("Aircraft B should still be active");
         Tracker.Count.Should().Be(1);
     }
 
@@ -136,7 +152,7 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
     public void Expiration_GetAllAircraftFiltersExpired()
     {
         // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 2);
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
 
         // Create 3 aircraft
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
@@ -145,21 +161,17 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
 
         Tracker.Count.Should().Be(3);
 
-        // Wait for first aircraft to expire, then keep the other two alive
-        WaitForCondition(
-            () => Tracker.GetAircraft("471DBC") == null,
-            TimeSpan.FromSeconds(5),
-            "first aircraft should have expired");
-
-        // Keep other two alive
+        // Keep two alive a second later, then let the first pass its timeout
+        _clock.Advance(TimeSpan.FromSeconds(1));
         Tracker.Update(CreateFrame(RealFrames.AllCall_4D2407, "4D2407"));
         Tracker.Update(CreateFrame(RealFrames.AllCall_80073B, "80073B"));
+        _clock.Advance(TimeSpan.FromMilliseconds(1500));
 
-        // Act
+        // Act - no cleanup has run, so the expired aircraft is still stored but filtered out
         IReadOnlyList<Aircraft> allAircraft = Tracker.GetAllAircraft();
 
         // Assert
-        allAircraft.Should().HaveCount(2, "one aircraft expired");
+        allAircraft.Select(a => a.Identification.ICAO).Should().BeEquivalentTo("4D2407", "80073B");
         Tracker.Count.Should().Be(2);
     }
 
@@ -167,23 +179,45 @@ public class ExpirationTests : AircraftStateTrackerTestsBase
     public void Expiration_EdgeCaseJustBeforeExpiry()
     {
         // Arrange
-        Tracker = CreateTrackerWithTimeout(timeoutSeconds: 2);
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
-        // Wait almost to expiration
-        Thread.Sleep(TimeSpan.FromMilliseconds(1800));
-
-        // Update just before expiry
+        // Almost to expiration, then an update just before expiry
+        _clock.Advance(TimeSpan.FromMilliseconds(1800));
         Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
 
         // Assert - Should NOT be expired (LastSeen updated)
-        Aircraft? aircraft = Tracker.GetAircraft("471DBC");
-        aircraft.Should().NotBeNull("aircraft updated just before expiry");
+        Tracker.GetAircraft("471DBC").Should().NotBeNull("aircraft updated just before expiry");
 
-        // Assert - Wait for full timeout from last update
+        // The full timeout now counts from the last update
+        _clock.Advance(TimeSpan.FromSeconds(2));
+        Tracker.GetAircraft("471DBC").Should().NotBeNull("exactly at the timeout from the last update");
+
+        _clock.Advance(TimeSpan.FromMilliseconds(1));
+        Tracker.GetAircraft("471DBC").Should().BeNull("aircraft should expire after full timeout from last update");
+    }
+
+    [Fact]
+    public void Expiration_CleanupTimer_RemovesExpiredAircraft()
+    {
+        // Arrange - the clock is already past the timeout, so the only thing left to wait for is
+        // the real timer reaching its first callback. Events go into a concurrent collection
+        // because delayed timer callbacks may run on more than one thread at once.
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 2, _clock);
+        var expiredIcaos = new ConcurrentQueue<string>();
+        Tracker.OnAircraftExpired += (sender, args) => expiredIcaos.Enqueue(args.Aircraft.Identification.ICAO);
+        Tracker.Update(CreateFrame(RealFrames.AircraftId_471DBC, "471DBC"));
+        _clock.Advance(TimeSpan.FromSeconds(3));
+
+        // Act - switch the timer on
+        Tracker.CleanupInterval = TimeSpan.FromMilliseconds(100);
+
+        // Assert - normally done within one interval; the bound only matters when the
+        // thread pool is starved by a parallel test run
         WaitForCondition(
-            () => Tracker.GetAircraft("471DBC") == null,
-            TimeSpan.FromSeconds(5),
-            "aircraft should expire after full timeout from last update");
+            () => expiredIcaos.Contains("471DBC"),
+            TimeSpan.FromSeconds(30),
+            "the cleanup timer should remove the expired aircraft");
+        expiredIcaos.Should().ContainSingle();
     }
 }

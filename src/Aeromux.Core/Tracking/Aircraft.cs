@@ -169,9 +169,17 @@ public sealed record Aircraft
     /// }
     /// </code>
     /// </example>
-    public bool IsExpired(TimeSpan timeout)
+    public bool IsExpired(TimeSpan timeout) => IsExpired(timeout, DateTime.UtcNow);
+
+    /// <summary>
+    /// Checks if this aircraft has expired as of a given time, for callers that keep their own clock.
+    /// </summary>
+    /// <param name="timeout">Expiration timeout duration.</param>
+    /// <param name="nowUtc">The current UTC time to measure the age against.</param>
+    /// <returns>True if time since LastSeen exceeds the timeout period</returns>
+    public bool IsExpired(TimeSpan timeout, DateTime nowUtc)
     {
-        TimeSpan age = DateTime.UtcNow - Status.LastSeen;
+        TimeSpan age = nowUtc - Status.LastSeen;
         return age > timeout;
     }
 }

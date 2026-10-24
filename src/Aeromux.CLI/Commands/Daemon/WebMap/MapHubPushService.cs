@@ -268,8 +268,10 @@ public sealed class MapHubPushService : BackgroundService
             }
             else
             {
-                // Aircraft expired: notify client
+                // Aircraft expired: notify client, and forget it as pushed so the next tick's
+                // diff does not send the same removal again once it is no longer selected
                 await client.SendAsync("AircraftRemoved", state.SelectedIcao, cancellationToken);
+                state.LastPushedAircraft.Remove(state.SelectedIcao);
                 state.SelectedIcao = null;
                 state.LastPushedDetailHash = 0;
             }
