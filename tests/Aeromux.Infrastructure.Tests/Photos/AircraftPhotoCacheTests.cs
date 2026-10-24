@@ -109,7 +109,7 @@ public class AircraftPhotoCacheTests
         // Re-read A so it becomes the most recently accessed.
         cache.TryGet(0xAAA001, out _).Should().BeTrue();
 
-        // Insert a 5th entry — A must survive (recently read), and the oldest
+        // Insert a 5th entry: A must survive (recently read), and the oldest
         // *unread* entry (B) must be evicted.
         cache.Insert(0xAAA005, SamplePositive("E"));
 
@@ -194,5 +194,108 @@ public class AircraftPhotoCacheTests
         Action act = () => _ = new AircraftPhotoCache(capacity);
 
         act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    // ─── 11. Time to live ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void TimeToLive_DefaultsToTwelveHours()
+    {
+        new AircraftPhotoCache().TimeToLive.Should().Be(TimeSpan.FromHours(12));
+    }
+
+    [Fact]
+    public void TryGet_BeforeTimeToLive_ReturnsTheEntry()
+    {
+        var clock = new ManualTimeProvider();
+        var cache = new AircraftPhotoCache(timeToLive: TimeSpan.FromHours(12), timeProvider: clock);
+        cache.Insert(0x4CA87C, SamplePositive());
+
+        clock.Advance(TimeSpan.FromHours(12) - TimeSpan.FromSeconds(1));
+
+        cache.TryGet(0x4CA87C, out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public void TryGet_AfterTimeToLive_MissesAndRemovesTheEntry()
+    {
+        var clock = new ManualTimeProvider();
+        var cache = new AircraftPhotoCache(timeToLive: TimeSpan.FromHours(12), timeProvider: clock);
+        cache.Insert(0x4CA87C, SamplePositive());
+
+        clock.Advance(TimeSpan.FromHours(12));
+
+        cache.TryGet(0x4CA87C, out _).Should().BeFalse();
+        cache.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void TryGet_ReadingAnEntry_DoesNotExtendItsLifetime()
+    {
+        var clock = new ManualTimeProvider();
+        var cache = new AircraftPhotoCache(timeToLive: TimeSpan.FromHours(12), timeProvider: clock);
+        cache.Insert(0x4CA87C, SamplePositive());
+
+        clock.Advance(TimeSpan.FromHours(11));
+        cache.TryGet(0x4CA87C, out _).Should().BeTrue();
+        clock.Advance(TimeSpan.FromHours(1));
+
+        cache.TryGet(0x4CA87C, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Insert_SweepsExpiredEntries()
+    {
+        var clock = new ManualTimeProvider();
+        var cache = new AircraftPhotoCache(timeToLive: TimeSpan.FromHours(12), timeProvider: clock);
+        cache.Insert(0x000001, SamplePositive("A"));
+        cache.Insert(0x000002, PhotoMetadata.Negative());
+
+        clock.Advance(TimeSpan.FromHours(13));
+        cache.Insert(0x000003, SamplePositive("C"));
+
+        cache.Count.Should().Be(1);
+        cache.TryGet(0x000003, out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Insert_AfterExpiry_StartsAFreshLifetime()
+    {
+        var clock = new ManualTimeProvider();
+        var cache = new AircraftPhotoCache(timeToLive: TimeSpan.FromHours(12), timeProvider: clock);
+        cache.Insert(0x4CA87C, SamplePositive("old"));
+        clock.Advance(TimeSpan.FromHours(12));
+        cache.TryGet(0x4CA87C, out _).Should().BeFalse();
+
+        PhotoMetadata fresh = SamplePositive("new");
+        cache.Insert(0x4CA87C, fresh);
+        clock.Advance(TimeSpan.FromHours(6));
+
+        cache.TryGet(0x4CA87C, out PhotoMetadata fetched).Should().BeTrue();
+        fetched.Should().BeSameAs(fresh);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Constructor_NonPositiveTimeToLive_Throws(int seconds)
+    {
+        Action act = () => _ = new AircraftPhotoCache(timeToLive: TimeSpan.FromSeconds(seconds));
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    /// <summary>
+    /// A clock that only moves when told to, so expiry can be tested without waiting.
+    /// </summary>
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private long _timestamp = 1_000_000;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => _timestamp;
+
+        public void Advance(TimeSpan by) => _timestamp += by.Ticks;
     }
 }

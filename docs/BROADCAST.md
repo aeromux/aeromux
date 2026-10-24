@@ -187,8 +187,8 @@ Each output line is a self-contained JSON object terminated by a newline charact
   },
   "Position": {
     "Coordinate": { "Latitude": 47.4502, "Longitude": 19.2619 },
-    "BarometricAltitude": { "Type": "Barometric", "Feet": 36000, "Meters": 10972, "FlightLevel": 360 },
-    "GeometricAltitude": { "Type": "Geometric", "Feet": 35750, "Meters": 10896, "FlightLevel": null },
+    "BarometricAltitude": { "Type": "Barometric", "Feet": 36000, "Meters": 10973, "FlightLevel": 360 },
+    "GeometricAltitude": { "Type": "Geometric", "Feet": 35750, "Meters": 10897, "FlightLevel": 357 },
     "GeometricBarometricDelta": -250,
     "IsOnGround": false,
     "MovementCategory": null,
@@ -197,7 +197,7 @@ Each output line is a self-contained JSON object terminated by a newline charact
     "LastUpdate": "2026-03-13T14:30:00Z"
   },
   "VelocityAndDynamics": {
-    "Speed": { "Type": "GroundSpeed", "Knots": 450, "KilometersPerHour": 833, "MilesPerHour": 518, "MetersPerSecond": 231.48 },
+    "Speed": { "Type": "GroundSpeed", "Knots": 450, "KilometersPerHour": 833, "MilesPerHour": 518, "MetersPerSecond": 231.4998 },
     "IndicatedAirspeed": null,
     "TrueAirspeed": null,
     "GroundSpeed": null,
@@ -253,8 +253,8 @@ The JSON broadcast uses the same serialization conventions as the REST API, ensu
 - **Field names** use PascalCase, matching the C# property names in the underlying data model.
 - **Enums** are serialized as human-readable strings rather than numeric values. For example, emergency state appears as `"No Emergency"` rather than `0`, and ADS-B version appears as `"DO-260B"` rather than `2`.
 - **Null handling** follows an explicit inclusion policy: every field defined in the schema is always present in the output. Fields that have no data are set to `null` rather than being omitted, which allows clients to discover the full schema from any single message.
-- **Altitude** is represented as a rich value object containing the altitude in multiple units: `{ "Type": "Barometric", "Feet": 36000, "Meters": 10972, "FlightLevel": 360 }`.
-- **Speed** is similarly represented with multiple units: `{ "Type": "GroundSpeed", "Knots": 450, "KilometersPerHour": 833, "MilesPerHour": 518, "MetersPerSecond": 231.48 }`.
+- **Altitude** is represented as a rich value object containing the altitude in multiple units: `{ "Type": "Barometric", "Feet": 36000, "Meters": 10973, "FlightLevel": 360 }`.
+- **Speed** is similarly represented with multiple units: `{ "Type": "GroundSpeed", "Knots": 450, "KilometersPerHour": 833, "MilesPerHour": 518, "MetersPerSecond": 231.4998 }`.
 - **Timestamps** use ISO 8601 format in UTC (e.g., `"2026-03-13T14:30:00Z"`).
 
 ### Rate Limiting

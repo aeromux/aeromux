@@ -16,6 +16,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using Aeromux.Core.ModeS.ValueObjects;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Aeromux.CLI.Commands.Daemon.WebMap;
@@ -50,17 +51,19 @@ public sealed partial class MapHub : Hub
 
     /// <summary>
     /// Updates the client's viewport bounds. The server only pushes aircraft within these bounds.
+    /// A west edge east of the east edge describes a viewport across the 180° meridian.
+    /// Invalid bounds are ignored and the previous viewport stays in effect.
     /// </summary>
     public void UpdateViewport(double south, double west, double north, double east)
     {
-        if (south >= north || south < -90 || north > 90 || west < -180 || east > 180)
+        if (!GeographicBounds.TryCreate(south, west, north, east, out GeographicBounds bounds, out _))
         {
             return;
         }
 
         if (ClientStates.TryGetValue(Context.ConnectionId, out MapHubClientState? state))
         {
-            state.ViewportBounds = (south, west, north, east);
+            state.ViewportBounds = bounds;
         }
     }
 
@@ -126,7 +129,7 @@ public sealed partial class MapHub : Hub
             state.HeatmapWindow = TimeSpan.FromMinutes(windowMinutes);
             if (changed || enabling)
             {
-                // Params changed, or the overlay was just re-enabled — re-derive the colour
+                // Params changed, or the overlay was just re-enabled: re-derive the color
                 // scale cleanly and force a re-push so the client renders without delay.
                 state.HeatmapLastScaleMax = 0;
                 state.LastPushedHeatmapHash = 0;

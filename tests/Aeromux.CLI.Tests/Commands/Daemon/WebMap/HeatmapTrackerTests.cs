@@ -22,13 +22,13 @@ namespace Aeromux.CLI.Tests.Commands.Daemon.WebMap;
 
 /// <summary>
 /// Unit tests for <see cref="HeatmapTracker"/>: grid indexing, distinct counting,
-/// window filtering, base→display re-binning, colour-anchor maths, viewport filtering,
+/// window filtering, base→display re-binning, color-anchor maths, viewport filtering,
 /// and pruning. Exercised through the public/internal API (geometry helpers are private).
 /// </summary>
 public class HeatmapTrackerTests
 {
     // Whole-world viewport used by most tests.
-    private static readonly (double, double, double, double) World = (-90, -180, 90, 180);
+    private static readonly GeographicBounds World = new(-90, -180, 90, 180);
     private static readonly TimeSpan Day = TimeSpan.FromHours(24);
 
     private static GeographicCoordinate At(double lat, double lon) => new(lat, lon);
@@ -67,7 +67,7 @@ public class HeatmapTrackerTests
     public void ColumnsAlignAcrossRows()
     {
         // With a single reference latitude, every row shares one column width, so cells in
-        // different rows at the same longitude have identical west/east bounds — a clean
+        // different rows at the same longitude have identical west/east bounds: a clean
         // lattice rather than a staggered grid.
         var t = new HeatmapTracker();
         t.RecordPosition("AAAAAA", At(47.0, 19.0));
@@ -193,12 +193,28 @@ public class HeatmapTrackerTests
             t.RecordPosition($"FAR{i:000}", At(-40.0, -100.0)); // out of viewport, count 10
         }
 
-        var viewport = (46.0, 18.0, 48.0, 20.0);
+        var viewport = new GeographicBounds(46.0, 18.0, 48.0, 20.0);
         HeatmapResult r = t.GetCells(5, Day, viewport, 0);
 
         r.Cells.Should().ContainSingle();
         r.Cells[0].Count.Should().Be(1);
         r.MaxCount.Should().Be(10); // whole-grid maximum, including the off-screen cell
+    }
+
+    [Fact]
+    public void ViewportAcrossAntimeridian_ReturnsCellsOnBothSides()
+    {
+        var t = new HeatmapTracker();
+        t.RecordPosition("EAST01", At(-40.0, 178.0));  // just west of the meridian
+        t.RecordPosition("WEST01", At(-40.0, -178.0)); // just east of the meridian
+        t.RecordPosition("AWAY01", At(-40.0, 0.0));    // far outside the view
+
+        // West edge east of the east edge: the view runs from 170° E across 180° to 170° W.
+        var viewport = new GeographicBounds(-45.0, 170.0, -35.0, -170.0);
+        HeatmapResult r = t.GetCells(5, Day, viewport, 0);
+
+        r.Cells.Should().HaveCount(2);
+        r.Cells.Should().OnlyContain(c => Math.Abs(c.West) > 170);
     }
 
     [Fact]
@@ -264,8 +280,8 @@ public class HeatmapTrackerTests
 
         // One shared build, projected to two different viewports.
         HeatmapSnapshot snapshot = t.BuildSnapshot(5, Day);
-        HeatmapResult a = t.Project(snapshot, (46.0, 18.0, 48.0, 20.0), 0);
-        HeatmapResult b = t.Project(snapshot, (-41.0, -101.0, -39.0, -99.0), 0);
+        HeatmapResult a = t.Project(snapshot, new GeographicBounds(46.0, 18.0, 48.0, 20.0), 0);
+        HeatmapResult b = t.Project(snapshot, new GeographicBounds(-41.0, -101.0, -39.0, -99.0), 0);
 
         a.Cells.Should().ContainSingle();
         a.Cells[0].Count.Should().Be(1);

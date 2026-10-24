@@ -187,13 +187,7 @@ public sealed class CircularBuffer<T>
         {
             lock (_lock)
             {
-                if (_count == 0)
-                {
-                    return null;
-                }
-
-                int start = (_count < _capacity) ? 0 : _head;
-                return _sequenceIds[start];
+                return MinSequenceIdUnlocked();
             }
         }
     }
@@ -208,13 +202,7 @@ public sealed class CircularBuffer<T>
         {
             lock (_lock)
             {
-                if (_count == 0)
-                {
-                    return null;
-                }
-
-                int newest = (_head - 1 + _capacity) % _capacity;
-                return _sequenceIds[newest];
+                return MaxSequenceIdUnlocked();
             }
         }
     }
@@ -247,20 +235,7 @@ public sealed class CircularBuffer<T>
     {
         lock (_lock)
         {
-            if (_count == 0)
-            {
-                return Array.Empty<(T, long)>();
-            }
-
-            var result = new (T, long)[_count];
-            int start = (_count < _capacity) ? 0 : _head;
-            for (int i = 0; i < _count; i++)
-            {
-                int idx = (start + i) % _capacity;
-                result[i] = (_buffer[idx], _sequenceIds[idx]);
-            }
-
-            return result;
+            return CopyAllUnlocked();
         }
     }
 
@@ -275,21 +250,7 @@ public sealed class CircularBuffer<T>
     {
         lock (_lock)
         {
-            int actualCount = Math.Min(count, _count);
-            if (actualCount == 0)
-            {
-                return Array.Empty<(T, long)>();
-            }
-
-            var result = new (T, long)[actualCount];
-            int start = (_head - actualCount + _capacity) % _capacity;
-            for (int i = 0; i < actualCount; i++)
-            {
-                int idx = (start + i) % _capacity;
-                result[i] = (_buffer[idx], _sequenceIds[idx]);
-            }
-
-            return result;
+            return CopyRecentUnlocked(count);
         }
     }
 
@@ -305,41 +266,168 @@ public sealed class CircularBuffer<T>
     {
         lock (_lock)
         {
-            if (_count == 0)
-            {
-                return [];
-            }
-
-            int start = (_count < _capacity) ? 0 : _head;
-
-            // Sequence IDs are monotonically increasing and the buffer is in chronological
-            // order, so once we find the first qualifying entry, all subsequent entries
-            // also qualify.
-            int firstMatch = -1;
-            for (int i = 0; i < _count; i++)
-            {
-                int idx = (start + i) % _capacity;
-                if (_sequenceIds[idx] > afterSequenceId)
-                {
-                    firstMatch = i;
-                    break;
-                }
-            }
-
-            if (firstMatch < 0)
-            {
-                return [];
-            }
-
-            int resultCount = _count - firstMatch;
-            var result = new (T, long)[resultCount];
-            for (int i = 0; i < resultCount; i++)
-            {
-                int idx = (start + firstMatch + i) % _capacity;
-                result[i] = (_buffer[idx], _sequenceIds[idx]);
-            }
-
-            return result;
+            return CopyAfterUnlocked(afterSequenceId);
         }
     }
+
+    /// <summary>
+    /// Gets all entries together with the buffer metadata, read under a single lock so the
+    /// count and sequence ID range describe exactly the entries returned.
+    /// </summary>
+    /// <returns>A consistent snapshot of the whole buffer.</returns>
+    public BufferSnapshot<T> GetSnapshot()
+    {
+        lock (_lock)
+        {
+            return SnapshotUnlocked(CopyAllUnlocked());
+        }
+    }
+
+    /// <summary>
+    /// Gets the most recent N entries together with the buffer metadata, read under a single lock.
+    /// </summary>
+    /// <param name="count">Number of recent entries to include.</param>
+    /// <returns>A consistent snapshot whose entries are the newest <paramref name="count"/> or fewer.</returns>
+    public BufferSnapshot<T> GetRecentSnapshot(int count)
+    {
+        lock (_lock)
+        {
+            return SnapshotUnlocked(CopyRecentUnlocked(count));
+        }
+    }
+
+    /// <summary>
+    /// Gets the entries with sequence ID greater than <paramref name="afterSequenceId"/> together
+    /// with the buffer metadata, read under a single lock. Without the single lock, an entry added
+    /// between reading the metadata and reading the entries could appear in the entries while
+    /// being newer than the reported maximum, and a client using that maximum as its cursor would
+    /// then receive the entry twice.
+    /// </summary>
+    /// <param name="afterSequenceId">Include only entries with sequence ID greater than this value.</param>
+    /// <returns>A consistent snapshot holding the qualifying entries.</returns>
+    public BufferSnapshot<T> GetSnapshotAfter(long afterSequenceId)
+    {
+        lock (_lock)
+        {
+            return SnapshotUnlocked(CopyAfterUnlocked(afterSequenceId));
+        }
+    }
+
+    // === Unlocked helpers: callers must hold _lock ===
+
+    private BufferSnapshot<T> SnapshotUnlocked((T Item, long SequenceId)[] entries) =>
+        new(_count, MinSequenceIdUnlocked(), MaxSequenceIdUnlocked(), entries);
+
+    private long? MinSequenceIdUnlocked()
+    {
+        if (_count == 0)
+        {
+            return null;
+        }
+
+        int start = (_count < _capacity) ? 0 : _head;
+        return _sequenceIds[start];
+    }
+
+    private long? MaxSequenceIdUnlocked()
+    {
+        if (_count == 0)
+        {
+            return null;
+        }
+
+        int newest = (_head - 1 + _capacity) % _capacity;
+        return _sequenceIds[newest];
+    }
+
+    private (T Item, long SequenceId)[] CopyAllUnlocked()
+    {
+        if (_count == 0)
+        {
+            return Array.Empty<(T, long)>();
+        }
+
+        var result = new (T, long)[_count];
+        int start = (_count < _capacity) ? 0 : _head;
+        for (int i = 0; i < _count; i++)
+        {
+            int idx = (start + i) % _capacity;
+            result[i] = (_buffer[idx], _sequenceIds[idx]);
+        }
+
+        return result;
+    }
+
+    private (T Item, long SequenceId)[] CopyRecentUnlocked(int count)
+    {
+        int actualCount = Math.Min(count, _count);
+        if (actualCount <= 0)
+        {
+            return Array.Empty<(T, long)>();
+        }
+
+        var result = new (T, long)[actualCount];
+        int start = (_head - actualCount + _capacity) % _capacity;
+        for (int i = 0; i < actualCount; i++)
+        {
+            int idx = (start + i) % _capacity;
+            result[i] = (_buffer[idx], _sequenceIds[idx]);
+        }
+
+        return result;
+    }
+
+    private (T Item, long SequenceId)[] CopyAfterUnlocked(long afterSequenceId)
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        int start = (_count < _capacity) ? 0 : _head;
+
+        // Sequence IDs are monotonically increasing and the buffer is in chronological
+        // order, so once we find the first qualifying entry, all subsequent entries
+        // also qualify.
+        int firstMatch = -1;
+        for (int i = 0; i < _count; i++)
+        {
+            int idx = (start + i) % _capacity;
+            if (_sequenceIds[idx] > afterSequenceId)
+            {
+                firstMatch = i;
+                break;
+            }
+        }
+
+        if (firstMatch < 0)
+        {
+            return [];
+        }
+
+        int resultCount = _count - firstMatch;
+        var result = new (T, long)[resultCount];
+        for (int i = 0; i < resultCount; i++)
+        {
+            int idx = (start + firstMatch + i) % _capacity;
+            result[i] = (_buffer[idx], _sequenceIds[idx]);
+        }
+
+        return result;
+    }
 }
+
+/// <summary>
+/// A copy of some or all of a <see cref="CircularBuffer{T}"/>'s entries together with the
+/// buffer metadata at the same instant.
+/// </summary>
+/// <typeparam name="T">The buffered item type.</typeparam>
+/// <param name="Count">Total number of entries in the buffer, not the number in <paramref name="Entries"/>.</param>
+/// <param name="MinSequenceId">Sequence ID of the oldest entry in the buffer, or null when empty.</param>
+/// <param name="MaxSequenceId">Sequence ID of the newest entry in the buffer, or null when empty.</param>
+/// <param name="Entries">The selected entries with their sequence IDs, oldest first.</param>
+public sealed record BufferSnapshot<T>(
+    int Count,
+    long? MinSequenceId,
+    long? MaxSequenceId,
+    IReadOnlyList<(T Item, long SequenceId)> Entries);

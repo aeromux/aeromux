@@ -216,7 +216,7 @@ public sealed class MapHubPushService : BackgroundService
         }
 
         // Compute diffs: remove aircraft that left the viewport or expired.
-        // The selected aircraft is excluded — its lifecycle is managed by the detail push block below.
+        // The selected aircraft is excluded; its lifecycle is managed by the detail push block below.
         List<string> toRemove = new();
         foreach (string icao in state.LastPushedAircraft.Keys)
         {
@@ -249,7 +249,7 @@ public sealed class MapHubPushService : BackgroundService
             }
             else
             {
-                // Aircraft expired — notify client
+                // Aircraft expired: notify client
                 await client.SendAsync("AircraftRemoved", state.SelectedIcao, cancellationToken);
                 state.SelectedIcao = null;
                 state.LastPushedDetailHash = 0;
@@ -270,9 +270,10 @@ public sealed class MapHubPushService : BackgroundService
 
         // Push heatmap for this client if enabled (and collection is running). Project from the
         // shared snapshot only when it has been rebuilt since this client last projected, or the
-        // client has panned — an idle, unchanged view does no work here.
+        // client has panned. An idle, unchanged view does no work here.
         if (_heatmapTracker is not null && state.HeatmapEnabled &&
-            _heatmapSnapshots.TryGetValue((state.HeatmapCellSizeNm, state.HeatmapWindow.Ticks), out var entry))
+            _heatmapSnapshots.TryGetValue((state.HeatmapCellSizeNm, state.HeatmapWindow.Ticks),
+                out (HeatmapSnapshot Snapshot, DateTime BuiltUtc) entry))
         {
             bool viewportChanged = state.ViewportBounds != state.HeatmapLastViewport;
             bool snapshotAdvanced = entry.BuiltUtc != state.HeatmapLastSnapshotUtc;
@@ -286,9 +287,9 @@ public sealed class MapHubPushService : BackgroundService
                 {
                     CellSizeNm = state.HeatmapCellSizeNm,
                     WindowMinutes = (int)state.HeatmapWindow.TotalMinutes,
-                    ScaleMax = result.ScaleMax,
-                    MaxCount = result.MaxCount,
-                    Cells = result.Cells
+                    result.ScaleMax,
+                    result.MaxCount,
+                    result.Cells
                 };
                 int heatmapHash = ComputeHeatmapHash(
                     state.HeatmapCellSizeNm, (int)state.HeatmapWindow.TotalMinutes,
@@ -385,9 +386,9 @@ public sealed class MapHubPushService : BackgroundService
     /// </summary>
     /// <param name="cellSizeNm">Display cell size in nautical miles.</param>
     /// <param name="windowMinutes">Rolling window in minutes.</param>
-    /// <param name="scaleMax">Smoothed colour anchor.</param>
+    /// <param name="scaleMax">Smoothed color anchor.</param>
     /// <param name="maxCount">Busiest-cell count.</param>
-    /// <param name="cells">The coloured cells within the client's viewport.</param>
+    /// <param name="cells">The colored cells within the client's viewport.</param>
     /// <returns>An order-independent hash over the payload's render-affecting fields.</returns>
     private static int ComputeHeatmapHash(int cellSizeNm, int windowMinutes, int scaleMax, int maxCount, IReadOnlyList<HeatmapCell> cells)
     {
@@ -444,7 +445,6 @@ public sealed class MapHubPushService : BackgroundService
             return false;
         }
 
-        (double south, double west, double north, double east) = state.ViewportBounds.Value;
-        return lat >= south && lat <= north && lon >= west && lon <= east;
+        return state.ViewportBounds.Value.Contains(lat, lon);
     }
 }

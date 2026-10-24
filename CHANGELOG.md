@@ -2,6 +2,18 @@
 
 All notable changes to Aeromux will be documented in this file.
 
+## [0.8.3] — Unreleased
+
+### Fixed
+
+- **Web Map: Aircraft Missing Across the 180° Meridian** — A map view that crossed the 180° meridian, or one zoomed out far enough to show the world more than once, could come up empty or stop following the view. MapLibre reports such views with longitudes past ±180 (an eastern edge of 188°, for example), which the server rejected: the initial load and the refetch after a reconnect got an error instead of aircraft, and live updates kept going to the previous view. A wide screen at zoom 2 centered on Europe was already enough to trigger it. The Web Map now folds its view into range before sending it, and the server, the live updates and the heatmap all understand a box whose western edge is east of its eastern edge as one that crosses the meridian. The Sky View uses the same rule, so a receiver near the meridian now subscribes to its own range instead of the whole world.
+- **Aircraft Photos: Tracked Aircraft Only, Cached for at Most 12 Hours** — `/api/v1/aircraft/{icao}/photo` looked up any ICAO address it was given, so anyone who could reach the daemon could use it as a general Planespotters lookup, at one upstream request per address and with memory that grew with every new one. It now answers 404 for an aircraft that is not being tracked, without contacting Planespotters. Cached photo metadata also had no age limit, so an aircraft tracked continuously for more than a day, such as one parked within range of the receiver, kept metadata past the 24 hours Planespotters allows. Entries now expire after 12 hours and are fetched afresh.
+- **REST API: Stricter Validation and Consistent Errors** — Bounding boxes with a longitude outside ±180 on either edge, or with a value of `NaN`, were accepted and silently returned nothing; they now return 400 with the reason. A repeated query parameter, such as `type=Position&type=State`, is now an error rather than reduced to its first value, and `sections=,` returns every section like an empty `sections=` instead of none. Unknown `/api` routes and methods other than GET now answer with the same `{"Error": "..."}` body as every other error instead of an empty one, and error messages no longer format numbers in the server's locale (`48,5` on a Hungarian system). History responses now read their sequence ID range and their entries at the same instant, so a client using `MaxSequenceId` as its polling cursor can no longer receive an entry twice.
+
+### Documentation
+
+- **REST API Reference Corrected** — `docs/API.md` described several things the API does not do. The health endpoint never returns 503, a disabled history type has its fields set to `null` rather than omitted, `FramesPerSecond` is the average since the receiver started rather than the current rate, `FlightLevel` is never `null`, and `apiEnabled: false` also turns off the Web Map. It also gave wrong unit values in its examples. These are corrected, the 500 and 502 status codes and the 10,000 cap on `limit` are documented, and the polling example now uses the last received entry as its cursor. The JSON broadcast examples in `docs/BROADCAST.md` had the same altitude and speed errors and are corrected too.
+
 ## [0.8.2] — 2026-09-27
 
 ### Changed

@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Net;
+using System.Text.Json;
 using Aeromux.Core.Tracking;
 using FluentAssertions;
 using Moq;
@@ -134,10 +135,61 @@ public class RoutingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UnknownApiRoute_HasJsonErrorBody()
+    {
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/unknown");
+
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+        (await ReadErrorAsync(response)).Should().Be("Not found: /api/v1/unknown");
+    }
+
+    [Fact]
     public async Task PostAircraftList_Returns405()
     {
         HttpResponseMessage response = await _fixture.Client.PostAsync("/api/v1/aircraft", null);
         response.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed);
+    }
+
+    [Fact]
+    public async Task PostAircraftList_HasJsonErrorBody()
+    {
+        HttpResponseMessage response = await _fixture.Client.PostAsync("/api/v1/aircraft", null);
+
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+        (await ReadErrorAsync(response)).Should().Be("Method not allowed: POST");
+    }
+
+    [Fact]
+    public async Task HeadAircraftList_Returns405()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Head, "/api/v1/aircraft");
+        HttpResponseMessage response = await _fixture.Client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed);
+    }
+
+    [Fact]
+    public async Task UnknownNonApiPath_KeepsEmptyBody()
+    {
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/no-such-file.html");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await response.Content.ReadAsStringAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AircraftNotFound_KeepsItsOwnErrorMessage()
+    {
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/aircraft/AAAAAA");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadErrorAsync(response)).Should().Be("Aircraft not found: AAAAAA");
+    }
+
+    private static async Task<string?> ReadErrorAsync(HttpResponseMessage response)
+    {
+        using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("Error").GetString();
     }
 
     [Fact]

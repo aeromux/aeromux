@@ -23,7 +23,7 @@ namespace Aeromux.CLI.Commands.Daemon.Api;
 
 /// <summary>
 /// Maps internal Aircraft records to consumer-friendly API response models.
-/// This is NOT a direct serialization — fields are renamed, regrouped, and combined
+/// This is NOT a direct serialization: fields are renamed, regrouped, and combined
 /// from multiple tracked classes to match the API specification.
 /// </summary>
 public static class DaemonApiMapper
@@ -353,332 +353,56 @@ public static class DaemonApiMapper
             LastUpdate: dq?.LastUpdate ?? caps?.LastUpdate ?? opMode?.LastUpdate);
     }
 
-    // === Position History ===
+    // === History ===
 
     /// <summary>
     /// Maps position history entries.
     /// </summary>
     /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="query">Which entries to include.</param>
     /// <returns>Position history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft)
+    public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft, HistoryQuery query)
     {
         ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<PositionSnapshot>? buffer = aircraft.History.PositionHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<PositionHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<PositionHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAllWithSequenceIds()
-                .Select(s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp))
-                .ToArray()
-        };
+        return MapHistory(aircraft.History.PositionHistory, query,
+            s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp));
     }
-
-    /// <summary>
-    /// Maps position history entries with a limit.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="limit">Maximum number of recent entries to return.</param>
-    /// <returns>Position history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft, int limit)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<PositionSnapshot>? buffer = aircraft.History.PositionHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<PositionHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<PositionHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetRecentWithSequenceIds(limit)
-                .Select(s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp))
-                .ToArray()
-        };
-    }
-
-    /// <summary>
-    /// Maps position history entries with after-based filtering.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
-    /// <returns>Position history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<PositionHistoryEntry> ToPositionHistory(Aircraft aircraft, long afterSequenceId)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<PositionSnapshot>? buffer = aircraft.History.PositionHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<PositionHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<PositionHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAfter(afterSequenceId)
-                .Select(s => new PositionHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Position, s.Item.NACp))
-                .ToArray()
-        };
-    }
-
-    // === Altitude History ===
 
     /// <summary>
     /// Maps altitude history entries.
     /// </summary>
     /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="query">Which entries to include.</param>
     /// <returns>Altitude history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft)
+    public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft, HistoryQuery query)
     {
         ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<AltitudeSnapshot>? buffer = aircraft.History.AltitudeHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<AltitudeHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<AltitudeHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAllWithSequenceIds()
-                .Select(s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude))
-                .ToArray()
-        };
+        return MapHistory(aircraft.History.AltitudeHistory, query,
+            s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude));
     }
-
-    /// <summary>
-    /// Maps altitude history entries with a limit.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="limit">Maximum number of recent entries to return.</param>
-    /// <returns>Altitude history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft, int limit)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<AltitudeSnapshot>? buffer = aircraft.History.AltitudeHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<AltitudeHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<AltitudeHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetRecentWithSequenceIds(limit)
-                .Select(s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude))
-                .ToArray()
-        };
-    }
-
-    /// <summary>
-    /// Maps altitude history entries with after-based filtering.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
-    /// <returns>Altitude history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<AltitudeHistoryEntry> ToAltitudeHistory(Aircraft aircraft, long afterSequenceId)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<AltitudeSnapshot>? buffer = aircraft.History.AltitudeHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<AltitudeHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<AltitudeHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAfter(afterSequenceId)
-                .Select(s => new AltitudeHistoryEntry(s.SequenceId, s.Item.Timestamp, s.Item.Altitude))
-                .ToArray()
-        };
-    }
-
-    // === Velocity History ===
 
     /// <summary>
     /// Maps velocity history entries.
     /// </summary>
     /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="query">Which entries to include.</param>
     /// <returns>Velocity history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft)
+    public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft, HistoryQuery query)
     {
         ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<VelocitySnapshot>? buffer = aircraft.History.VelocityHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<VelocityHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<VelocityHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAllWithSequenceIds().Select(MapVelocitySnapshot).ToArray()
-        };
+        return MapHistory(aircraft.History.VelocityHistory, query, MapVelocitySnapshot);
     }
-
-    /// <summary>
-    /// Maps velocity history entries with a limit.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="limit">Maximum number of recent entries to return.</param>
-    /// <returns>Velocity history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft, int limit)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<VelocitySnapshot>? buffer = aircraft.History.VelocityHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<VelocityHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<VelocityHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetRecentWithSequenceIds(limit).Select(MapVelocitySnapshot).ToArray()
-        };
-    }
-
-    /// <summary>
-    /// Maps velocity history entries with after-based filtering.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
-    /// <returns>Velocity history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<VelocityHistoryEntry> ToVelocityHistory(Aircraft aircraft, long afterSequenceId)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<VelocitySnapshot>? buffer = aircraft.History.VelocityHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<VelocityHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<VelocityHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAfter(afterSequenceId).Select(MapVelocitySnapshot).ToArray()
-        };
-    }
-
-    // === State History ===
 
     /// <summary>
     /// Maps state history entries.
     /// </summary>
     /// <param name="aircraft">The aircraft to map.</param>
+    /// <param name="query">Which entries to include.</param>
     /// <returns>State history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft)
+    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft, HistoryQuery query)
     {
         ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<StateSnapshot>? buffer = aircraft.History.StateHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<StateHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<StateHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAllWithSequenceIds().Select(MapStateSnapshot).ToArray()
-        };
-    }
-
-    /// <summary>
-    /// Maps state history entries with a limit.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="limit">Maximum number of recent entries to return.</param>
-    /// <returns>State history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft, int limit)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<StateSnapshot>? buffer = aircraft.History.StateHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<StateHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<StateHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetRecentWithSequenceIds(limit).Select(MapStateSnapshot).ToArray()
-        };
-    }
-
-    /// <summary>
-    /// Maps state history entries with after-based filtering.
-    /// </summary>
-    /// <param name="aircraft">The aircraft to map.</param>
-    /// <param name="afterSequenceId">Return only entries with sequence ID greater than this value.</param>
-    /// <returns>State history with buffer metadata, or disabled wrapper if history is off.</returns>
-    public static HistoryTypeWrapper<StateHistoryEntry> ToStateHistory(Aircraft aircraft, long afterSequenceId)
-    {
-        ArgumentNullException.ThrowIfNull(aircraft);
-        CircularBuffer<StateSnapshot>? buffer = aircraft.History.StateHistory;
-        if (buffer == null)
-        {
-            return new HistoryTypeWrapper<StateHistoryEntry> { Enabled = false };
-        }
-
-        return new HistoryTypeWrapper<StateHistoryEntry>
-        {
-            Enabled = true,
-            Capacity = buffer.Capacity,
-            Count = buffer.Count,
-            MinSequenceId = buffer.MinSequenceId,
-            MaxSequenceId = buffer.MaxSequenceId,
-            Entries = buffer.GetAfter(afterSequenceId).Select(MapStateSnapshot).ToArray()
-        };
+        return MapHistory(aircraft.History.StateHistory, query, MapStateSnapshot);
     }
 
     // === Stats ===
@@ -745,6 +469,39 @@ public static class DaemonApiMapper
     }
 
     // === Private Helpers ===
+
+    /// <summary>
+    /// Reads one history buffer and maps its entries. The entries and the metadata come from a
+    /// single snapshot, so <c>MaxSequenceId</c> is never older than the newest entry returned.
+    /// <c>After</c> takes precedence over <c>Limit</c>.
+    /// </summary>
+    private static HistoryTypeWrapper<TEntry> MapHistory<TSnapshot, TEntry>(
+        CircularBuffer<TSnapshot>? buffer,
+        HistoryQuery query,
+        Func<(TSnapshot Item, long SequenceId), TEntry> map)
+    {
+        if (buffer == null)
+        {
+            return new HistoryTypeWrapper<TEntry> { Enabled = false };
+        }
+
+        BufferSnapshot<TSnapshot> snapshot = query switch
+        {
+            { After: long after } => buffer.GetSnapshotAfter(after),
+            { Limit: int limit } => buffer.GetRecentSnapshot(limit),
+            _ => buffer.GetSnapshot()
+        };
+
+        return new HistoryTypeWrapper<TEntry>
+        {
+            Enabled = true,
+            Capacity = buffer.Capacity,
+            Count = snapshot.Count,
+            MinSequenceId = snapshot.MinSequenceId,
+            MaxSequenceId = snapshot.MaxSequenceId,
+            Entries = snapshot.Entries.Select(map).ToArray()
+        };
+    }
 
     /// <summary>
     /// Maps a VelocitySnapshot tuple to a VelocityHistoryEntry.

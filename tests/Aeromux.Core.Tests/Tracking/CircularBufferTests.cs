@@ -1589,4 +1589,108 @@ public class CircularBufferTests
     }
 
     #endregion
+
+    #region Snapshot Tests
+
+    [Fact]
+    public void GetSnapshot_EmptyBuffer_HasNullSequenceRange()
+    {
+        var buffer = new CircularBuffer<int>(5);
+
+        BufferSnapshot<int> snapshot = buffer.GetSnapshot();
+
+        snapshot.Count.Should().Be(0);
+        snapshot.MinSequenceId.Should().BeNull();
+        snapshot.MaxSequenceId.Should().BeNull();
+        snapshot.Entries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetSnapshot_AfterWrap_MetadataMatchesEntries()
+    {
+        var buffer = new CircularBuffer<int>(3);
+        for (int i = 1; i <= 5; i++)
+        {
+            buffer.Add(i * 10);
+        }
+
+        BufferSnapshot<int> snapshot = buffer.GetSnapshot();
+
+        snapshot.Count.Should().Be(3);
+        snapshot.MinSequenceId.Should().Be(3);
+        snapshot.MaxSequenceId.Should().Be(5);
+        snapshot.Entries.Should().Equal((30, 3L), (40, 4L), (50, 5L));
+    }
+
+    [Fact]
+    public void GetRecentSnapshot_ReturnsNewestEntriesWithWholeBufferMetadata()
+    {
+        var buffer = new CircularBuffer<int>(10);
+        for (int i = 1; i <= 6; i++)
+        {
+            buffer.Add(i);
+        }
+
+        BufferSnapshot<int> snapshot = buffer.GetRecentSnapshot(2);
+
+        snapshot.Count.Should().Be(6);
+        snapshot.MinSequenceId.Should().Be(1);
+        snapshot.MaxSequenceId.Should().Be(6);
+        snapshot.Entries.Should().Equal((5, 5L), (6, 6L));
+    }
+
+    [Theory]
+    [InlineData(0L, new long[] { 3, 4, 5 })]  // below the minimum: everything left in the buffer
+    [InlineData(3L, new long[] { 4, 5 })]
+    [InlineData(5L, new long[0])]              // at the maximum: nothing new
+    public void GetSnapshotAfter_AfterWrap_ReturnsEntriesPastTheCursor(long after, long[] expectedIds)
+    {
+        var buffer = new CircularBuffer<int>(3);
+        for (int i = 1; i <= 5; i++)
+        {
+            buffer.Add(i);
+        }
+
+        BufferSnapshot<int> snapshot = buffer.GetSnapshotAfter(after);
+
+        snapshot.Count.Should().Be(3);
+        snapshot.MinSequenceId.Should().Be(3);
+        snapshot.MaxSequenceId.Should().Be(5);
+        snapshot.Entries.Select(e => e.SequenceId).Should().Equal(expectedIds);
+    }
+
+    [Fact]
+    public async Task GetSnapshot_UnderConcurrentAdds_NeverReportsAnOlderMaximumThanItsEntries()
+    {
+        var buffer = new CircularBuffer<int>(50);
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+
+        Task writer = Task.Run(() =>
+        {
+            int i = 0;
+            while (!cts.IsCancellationRequested)
+            {
+                buffer.Add(i++);
+            }
+        });
+
+        bool consistent = true;
+        while (!cts.IsCancellationRequested)
+        {
+            BufferSnapshot<int> snapshot = buffer.GetSnapshotAfter(0);
+            if (snapshot.Entries.Count > 0 &&
+                (snapshot.Entries[^1].SequenceId != snapshot.MaxSequenceId ||
+                 snapshot.Entries[0].SequenceId != snapshot.MinSequenceId ||
+                 snapshot.Entries.Count != snapshot.Count))
+            {
+                consistent = false;
+                break;
+            }
+        }
+
+        await writer;
+        consistent.Should().BeTrue();
+    }
+
+    #endregion
 }

@@ -14,14 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Photos;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Primitives;
 
 namespace Aeromux.CLI.Commands.Daemon.Api;
 
@@ -58,6 +61,7 @@ public static partial class DaemonApiRoutes
     /// </summary>
     /// <param name="app">The web application to register routes on.</param>
     /// <param name="tracker">Aircraft state tracker for data queries.</param>
+    /// <param name="photoService">Aircraft photo service backing the <c>/api/v1/aircraft/{icao}/photo</c> endpoint.</param>
     /// <param name="getStatistics">Function to get current stream statistics.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
     /// <param name="config">Validated daemon configuration for receiver and device metadata.</param>
@@ -71,11 +75,14 @@ public static partial class DaemonApiRoutes
         DaemonValidatedConfig config,
         JsonSerializerOptions jsonOptions)
     {
-        // GET /api/v1/aircraft — Aircraft list (with optional bounds/search filtering)
+        // GET /api/v1/aircraft: aircraft list (with optional bounds/search filtering)
         app.MapGet("/api/v1/aircraft", (HttpContext httpContext) =>
         {
-            string? boundsParam = httpContext.Request.Query["bounds"].FirstOrDefault();
-            string? searchParam = httpContext.Request.Query["search"].FirstOrDefault();
+            if (!TryGetSingleQueryValue(httpContext, "bounds", out string? boundsParam, out IResult? error) ||
+                !TryGetSingleQueryValue(httpContext, "search", out string? searchParam, out error))
+            {
+                return error;
+            }
 
             // Mutual exclusivity check
             if (!string.IsNullOrEmpty(boundsParam) && !string.IsNullOrEmpty(searchParam))
@@ -88,51 +95,14 @@ public static partial class DaemonApiRoutes
 
             if (!string.IsNullOrEmpty(boundsParam))
             {
-                // Parse bounds=south,west,north,east
-                string[] parts = boundsParam.Split(',');
-                if (parts.Length != 4)
+                // Parse bounds=south,west,north,east (west > east crosses the 180° meridian)
+                if (!TryParseBounds(boundsParam, out GeographicBounds bounds, out string? boundsError))
                 {
-                    return Results.BadRequest(new ErrorResponse(
-                        $"Invalid bounds format: expected 4 comma-separated values (south,west,north,east), got {parts.Length}"));
-                }
-
-                if (!double.TryParse(parts[0], NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out double south) ||
-                    !double.TryParse(parts[1], NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out double west) ||
-                    !double.TryParse(parts[2], NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out double north) ||
-                    !double.TryParse(parts[3], NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out double east))
-                {
-                    return Results.BadRequest(new ErrorResponse(
-                        $"Invalid bounds values: all values must be valid numbers"));
-                }
-
-                if (south >= north)
-                {
-                    return Results.BadRequest(new ErrorResponse(
-                        $"Invalid bounds: south ({south}) must be less than north ({north})"));
-                }
-
-                if (south < -90 || north > 90)
-                {
-                    return Results.BadRequest(new ErrorResponse(
-                        $"Invalid bounds: latitude must be between -90 and 90"));
-                }
-
-                if (west < -180 || east > 180)
-                {
-                    return Results.BadRequest(new ErrorResponse(
-                        $"Invalid bounds: longitude must be between -180 and 180"));
+                    return Results.BadRequest(new ErrorResponse(boundsError));
                 }
 
                 filtered = allAircraft.Where(a =>
-                    a.Position.Coordinate is not null &&
-                    a.Position.Coordinate.Latitude >= south &&
-                    a.Position.Coordinate.Latitude <= north &&
-                    a.Position.Coordinate.Longitude >= west &&
-                    a.Position.Coordinate.Longitude <= east);
+                    a.Position.Coordinate is not null && bounds.Contains(a.Position.Coordinate));
             }
             else if (!string.IsNullOrEmpty(searchParam))
             {
@@ -157,7 +127,7 @@ public static partial class DaemonApiRoutes
                 Aircraft: items));
         });
 
-        // GET /api/v1/aircraft/{icao} — Aircraft detail
+        // GET /api/v1/aircraft/{icao}: aircraft detail
         app.MapGet("/api/v1/aircraft/{icao}", (string icao, HttpContext httpContext) =>
         {
             if (!IcaoPattern().IsMatch(icao))
@@ -168,7 +138,11 @@ public static partial class DaemonApiRoutes
             string normalizedIcao = icao.ToUpperInvariant();
 
             // Parse sections parameter
-            string? sectionsParam = httpContext.Request.Query["sections"].FirstOrDefault();
+            if (!TryGetSingleQueryValue(httpContext, "sections", out string? sectionsParam, out IResult? error))
+            {
+                return error;
+            }
+
             HashSet<string>? requestedSections = null;
 
             if (!string.IsNullOrEmpty(sectionsParam))
@@ -187,6 +161,13 @@ public static partial class DaemonApiRoutes
                     }
 
                     requestedSections.Add(section);
+                }
+
+                // A list with nothing in it after splitting (e.g. "sections=,") means all
+                // sections, the same as an empty parameter.
+                if (requestedSections.Count == 0)
+                {
+                    requestedSections = null;
                 }
             }
 
@@ -257,12 +238,21 @@ public static partial class DaemonApiRoutes
             return Results.Json(response, jsonOptions);
         });
 
-        // GET /api/v1/aircraft/{icao}/photo — Aircraft photo metadata (Planespotters.net)
+        // GET /api/v1/aircraft/{icao}/photo: aircraft photo metadata (Planespotters.net)
         app.MapGet("/api/v1/aircraft/{icao}/photo", async (string icao, HttpContext httpContext) =>
         {
             if (!IcaoPattern().IsMatch(icao))
             {
                 return Results.BadRequest(new ErrorResponse($"Invalid ICAO address: {icao}"));
+            }
+
+            // Only tracked aircraft are looked up. Anything else would turn the daemon into a
+            // general Planespotters lookup service for whoever can reach it, with an upstream
+            // request (and a cache entry) per arbitrary ICAO.
+            string normalizedIcao = icao.ToUpperInvariant();
+            if (tracker.GetAircraft(normalizedIcao) == null)
+            {
+                return Results.NotFound(new ErrorResponse($"Aircraft not found: {normalizedIcao}"));
             }
 
             uint icaoUint = uint.Parse(icao, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
@@ -291,7 +281,7 @@ public static partial class DaemonApiRoutes
             };
         });
 
-        // GET /api/v1/aircraft/{icao}/history — Aircraft history
+        // GET /api/v1/aircraft/{icao}/history: aircraft history
         app.MapGet("/api/v1/aircraft/{icao}/history", (string icao, HttpContext httpContext) =>
         {
             if (!IcaoPattern().IsMatch(icao))
@@ -301,8 +291,14 @@ public static partial class DaemonApiRoutes
 
             string normalizedIcao = icao.ToUpperInvariant();
 
-            // Parse type parameter (single value only — comma-separated no longer supported)
-            string? typeParam = httpContext.Request.Query["type"].FirstOrDefault();
+            if (!TryGetSingleQueryValue(httpContext, "type", out string? typeParam, out IResult? error) ||
+                !TryGetSingleQueryValue(httpContext, "limit", out string? limitParam, out error) ||
+                !TryGetSingleQueryValue(httpContext, "after", out string? afterParam, out error))
+            {
+                return error;
+            }
+
+            // Parse type parameter (a single type; a comma-separated list is rejected)
             string? requestedType = null;
 
             if (!string.IsNullOrEmpty(typeParam))
@@ -321,12 +317,12 @@ public static partial class DaemonApiRoutes
             }
 
             // Parse limit parameter
-            string? limitParam = httpContext.Request.Query["limit"].FirstOrDefault();
             int? limit = null;
 
             if (!string.IsNullOrEmpty(limitParam))
             {
-                if (!int.TryParse(limitParam, out int parsedLimit) || parsedLimit <= 0)
+                if (!int.TryParse(limitParam, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedLimit) ||
+                    parsedLimit <= 0)
                 {
                     return Results.BadRequest(new ErrorResponse($"Invalid limit: {limitParam}. Must be a positive integer."));
                 }
@@ -336,12 +332,12 @@ public static partial class DaemonApiRoutes
             }
 
             // Parse after parameter
-            string? afterParam = httpContext.Request.Query["after"].FirstOrDefault();
             long? after = null;
 
             if (!string.IsNullOrEmpty(afterParam))
             {
-                if (!long.TryParse(afterParam, out long parsedAfter) || parsedAfter < 0)
+                if (!long.TryParse(afterParam, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsedAfter) ||
+                    parsedAfter < 0)
                 {
                     return Results.BadRequest(new ErrorResponse($"Invalid after: {afterParam}"));
                 }
@@ -368,47 +364,32 @@ public static partial class DaemonApiRoutes
             };
 
             bool includeAll = requestedType == null;
+            var query = new HistoryQuery(limit, after);
 
             if (includeAll || requestedType!.Equals("Position", StringComparison.OrdinalIgnoreCase))
             {
-                response["Position"] = after.HasValue
-                    ? DaemonApiMapper.ToPositionHistory(aircraft, after.Value)
-                    : limit.HasValue
-                        ? DaemonApiMapper.ToPositionHistory(aircraft, limit.Value)
-                        : DaemonApiMapper.ToPositionHistory(aircraft);
+                response["Position"] = DaemonApiMapper.ToPositionHistory(aircraft, query);
             }
 
             if (includeAll || requestedType!.Equals("Altitude", StringComparison.OrdinalIgnoreCase))
             {
-                response["Altitude"] = after.HasValue
-                    ? DaemonApiMapper.ToAltitudeHistory(aircraft, after.Value)
-                    : limit.HasValue
-                        ? DaemonApiMapper.ToAltitudeHistory(aircraft, limit.Value)
-                        : DaemonApiMapper.ToAltitudeHistory(aircraft);
+                response["Altitude"] = DaemonApiMapper.ToAltitudeHistory(aircraft, query);
             }
 
             if (includeAll || requestedType!.Equals("Velocity", StringComparison.OrdinalIgnoreCase))
             {
-                response["Velocity"] = after.HasValue
-                    ? DaemonApiMapper.ToVelocityHistory(aircraft, after.Value)
-                    : limit.HasValue
-                        ? DaemonApiMapper.ToVelocityHistory(aircraft, limit.Value)
-                        : DaemonApiMapper.ToVelocityHistory(aircraft);
+                response["Velocity"] = DaemonApiMapper.ToVelocityHistory(aircraft, query);
             }
 
             if (includeAll || requestedType!.Equals("State", StringComparison.OrdinalIgnoreCase))
             {
-                response["State"] = after.HasValue
-                    ? DaemonApiMapper.ToStateHistory(aircraft, after.Value)
-                    : limit.HasValue
-                        ? DaemonApiMapper.ToStateHistory(aircraft, limit.Value)
-                        : DaemonApiMapper.ToStateHistory(aircraft);
+                response["State"] = DaemonApiMapper.ToStateHistory(aircraft, query);
             }
 
             return Results.Json(response, jsonOptions);
         });
 
-        // GET /api/v1/stats — Statistics
+        // GET /api/v1/stats: statistics
         app.MapGet("/api/v1/stats", () =>
         {
             StreamStatistics? stats = getStatistics();
@@ -417,7 +398,7 @@ public static partial class DaemonApiRoutes
                 config.Config.Heatmap?.Collect != false));
         });
 
-        // GET /api/v1/health — Health check
+        // GET /api/v1/health: health check
         app.MapGet("/api/v1/health", () =>
         {
             int uptime = (int)(DateTime.UtcNow - startTime).TotalSeconds;
@@ -428,5 +409,77 @@ public static partial class DaemonApiRoutes
                 AircraftCount: tracker.Count,
                 Timestamp: DateTime.UtcNow));
         });
+    }
+
+    /// <summary>
+    /// Parses the <c>bounds</c> query parameter, written <c>south,west,north,east</c> in
+    /// decimal degrees with an invariant-culture decimal point. The edges are then
+    /// validated by <see cref="GeographicBounds.TryCreate"/>, whose messages are passed on.
+    /// </summary>
+    /// <param name="text">The parameter value.</param>
+    /// <param name="bounds">The parsed box when parsing and validation succeed; default otherwise.</param>
+    /// <param name="error">A human-readable reason when parsing or validation fails; null otherwise.</param>
+    /// <returns><c>true</c> if the value holds four valid edges.</returns>
+    internal static bool TryParseBounds(
+        string? text,
+        out GeographicBounds bounds,
+        [NotNullWhen(false)] out string? error)
+    {
+        bounds = default;
+        string[] parts = (text ?? string.Empty).Split(',');
+        if (parts.Length != 4)
+        {
+            error = string.Create(CultureInfo.InvariantCulture,
+                $"Invalid bounds format: expected 4 comma-separated values (south,west,north,east), got {parts.Length}");
+            return false;
+        }
+
+        double[] values = new double[4];
+        for (int i = 0; i < 4; i++)
+        {
+            if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out values[i]))
+            {
+                error = "Invalid bounds values: all values must be valid numbers";
+                return false;
+            }
+        }
+
+        if (!GeographicBounds.TryCreate(values[0], values[1], values[2], values[3], out bounds, out string? invalid))
+        {
+            error = invalid!;
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a query parameter that may appear at most once. A repeated parameter is an
+    /// error rather than silently reduced to its first value, which would answer a
+    /// different question from the one the client asked.
+    /// </summary>
+    /// <param name="httpContext">The current request.</param>
+    /// <param name="name">The query parameter name.</param>
+    /// <param name="value">The parameter value, or null when absent.</param>
+    /// <param name="error">A 400 result when the parameter is repeated; null otherwise.</param>
+    /// <returns><c>true</c> if the parameter is absent or appears once.</returns>
+    private static bool TryGetSingleQueryValue(
+        HttpContext httpContext,
+        string name,
+        out string? value,
+        [NotNullWhen(false)] out IResult? error)
+    {
+        StringValues values = httpContext.Request.Query[name];
+        if (values.Count > 1)
+        {
+            value = null;
+            error = Results.BadRequest(new ErrorResponse($"Parameter '{name}' must not be repeated"));
+            return false;
+        }
+
+        value = values.FirstOrDefault();
+        error = null;
+        return true;
     }
 }

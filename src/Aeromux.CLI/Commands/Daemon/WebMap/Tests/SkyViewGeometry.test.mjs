@@ -115,7 +115,7 @@ test('minimum altitude above the horizon matches the documented figures', () => 
 
 // -------------------- rectilinear projection --------------------
 
-test('the camera axis lands at the safe-area centre', () => {
+test('the camera axis lands at the safe-area center', () => {
     const basis = cameraBasis(90, 0);
     const p = projectRectilinear(enuVector(90, 0), basis, SAFE, 75);
     near(p.x, SAFE.centreX, 1e-6, 'x');
@@ -165,7 +165,7 @@ test('safe-area insets move the principal point, not just the crop', () => {
     const inset = safeArea(1400, 900, { left: 436 });
     const basis = cameraBasis(90, 0);
     const p = projectRectilinear(enuVector(90, 0), basis, inset, 75);
-    near(p.x, 436 + (1400 - 436) / 2, 1e-6, 'centre shifts clear of the panel');
+    near(p.x, 436 + (1400 - 436) / 2, 1e-6, 'center shifts clear of the panel');
     assert.ok(p.x > SAFE.centreX);
 });
 
@@ -190,8 +190,8 @@ test('flattened mode is continuous across the antimeridian seam', () => {
     near(Math.abs(left - right), SAFE.width, 1, 'opposite edges');
 });
 
-test('flattened mode honours heading so a bearing can be centred', () => {
-    near(projectEquirect(120, 20, 120, SAFE, 800).x, SAFE.centreX, 1e-6, 'centred');
+test('flattened mode honors heading so a bearing can be centered', () => {
+    near(projectEquirect(120, 20, 120, SAFE, 800).x, SAFE.centreX, 1e-6, 'centered');
 });
 
 // -------------------- pitch range --------------------
@@ -367,12 +367,18 @@ test('a normal box is non-inverted and circumscribes the range circle', () => {
     assert.ok(box.east - box.west > naiveSpan, 'poleward edge widens the box');
 });
 
-test('a receiver near the antimeridian never yields an inverted box', () => {
+test('a receiver near the antimeridian yields a box across it', () => {
+    const naive = receiverBox(-18, 0, nmToKm(150));
+    const halfWidth = (naive.east - naive.west) / 2;
+
     for (const lon of [179, -179, 180, -180]) {
         const box = receiverBox(-18, lon, nmToKm(150));
-        assert.ok(box.west <= box.east, `longitude ${lon} produced an inverted box`);
-        assert.equal(box.west, -180, `longitude ${lon} west`);
-        assert.equal(box.east, 180, `longitude ${lon} east`);
+        assert.ok(box.west > box.east, `longitude ${lon} should cross the meridian`);
+        assert.ok(box.west >= -180 && box.west <= 180 && box.east >= -180 && box.east <= 180,
+            `longitude ${lon} within range`);
+        // Same width as the box anywhere else at this latitude, measured across 180.
+        const width = box.east + 360 - box.west;
+        assert.ok(Math.abs(width - 2 * halfWidth) < 1e-9, `longitude ${lon} width`);
     }
 });
 

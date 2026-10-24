@@ -117,4 +117,38 @@ public class InputValidationTests : IAsyncLifetime
         HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/aircraft/407F19/history?limit=10");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task SectionsEmptyAfterSplitting_ReturnsAllSections()
+    {
+        Aircraft aircraft = ApiTestFixture.CreateTestAircraft("407F19");
+        _fixture.TrackerMock.Setup(t => t.GetAircraft("407F19")).Returns(aircraft);
+
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/aircraft/407F19?sections=,");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.TryGetProperty("Identification", out _).Should().BeTrue();
+        doc.RootElement.TryGetProperty("DataQuality", out _).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("/api/v1/aircraft?bounds=46,18,48,20&bounds=0,0,1,1", "bounds")]
+    [InlineData("/api/v1/aircraft?search=BAW&search=DLH", "search")]
+    [InlineData("/api/v1/aircraft/407F19?sections=Position&sections=Status", "sections")]
+    [InlineData("/api/v1/aircraft/407F19/history?type=Position&type=Bogus", "type")]
+    [InlineData("/api/v1/aircraft/407F19/history?limit=5&limit=10", "limit")]
+    [InlineData("/api/v1/aircraft/407F19/history?type=Position&after=1&after=2", "after")]
+    public async Task RepeatedParameter_Returns400(string url, string parameter)
+    {
+        Aircraft aircraft = ApiTestFixture.CreateTestAircraft("407F19");
+        _fixture.TrackerMock.Setup(t => t.GetAircraft("407F19")).Returns(aircraft);
+
+        HttpResponseMessage response = await _fixture.Client.GetAsync(url);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("Error").GetString()
+            .Should().Be($"Parameter '{parameter}' must not be repeated");
+    }
 }

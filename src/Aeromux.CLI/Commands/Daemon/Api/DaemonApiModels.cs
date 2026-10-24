@@ -232,6 +232,14 @@ public sealed record DetailDataQuality(
 // === History ===
 
 /// <summary>
+/// Selects which entries a history request returns. With neither value set, every entry is
+/// returned; <see cref="After"/> takes precedence over <see cref="Limit"/>.
+/// </summary>
+/// <param name="Limit">Return only the most recent N entries.</param>
+/// <param name="After">Return only entries with a sequence ID greater than this value.</param>
+public readonly record struct HistoryQuery(int? Limit, long? After);
+
+/// <summary>
 /// Wrapper for a history type providing buffer metadata.
 /// </summary>
 /// <typeparam name="T">The history entry type (e.g., position, altitude, velocity).</typeparam>
@@ -287,7 +295,7 @@ public sealed record VelocityHistoryEntry(
     int? VerticalRate);
 
 /// <summary>
-/// State history entry — combined position, altitude, and velocity snapshot.
+/// State history entry: a combined position, altitude, and velocity snapshot.
 /// </summary>
 public sealed record StateHistoryEntry(
     long SequenceId,

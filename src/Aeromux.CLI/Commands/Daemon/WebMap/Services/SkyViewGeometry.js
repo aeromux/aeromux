@@ -18,6 +18,7 @@
 // testable under `node --test`.
 
 import { nmFromDisplayUnit } from './UnitConversion.js';
+import { subscriptionBounds } from './GeoBounds.js';
 
 // Mean Earth radius. The effective radius folds in standard optical refraction,
 // which bends light slightly around the curve and so raises the apparent
@@ -36,8 +37,8 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 // Smallest forward component treated as being in front of the camera.
 export const MIN_FORWARD = 1e-4;
 
-// Chip size ramp bounds. True angular size is useless here — a 70 m airliner
-// subtends about a quarter of a pixel at 100 nm — so the glyph is a symbol and
+// Chip size ramp bounds. True angular size is useless here (a 70 m airliner
+// subtends about a quarter of a pixel at 100 nm), so the glyph is a symbol and
 // the ramp is log-compressed between a legible floor and a modest ceiling. A
 // true 1/distance law would imply a 250x size ratio across the range.
 export const CHIP_MIN_PX = 6;
@@ -75,7 +76,7 @@ export function bearingTo(lat1, lon1, lat2, lon2) {
 // Elevation angle and slant range to an aircraft, corrected for the curvature of
 // the Earth and for atmospheric refraction.
 //
-// Working in the plane through the Earth's centre, the receiver, and the
+// Working in the plane through the Earth's center, the receiver, and the
 // aircraft: place the receiver at (0, r1) and the aircraft at
 // (r2*sin gamma, r2*cos gamma). The slant range is then the chord between them,
 // and (r2*cos gamma - r1) / slant is the cosine of the zenith angle, hence the
@@ -84,7 +85,7 @@ export function bearingTo(lat1, lon1, lat2, lon2) {
 // wants.
 //
 // The correction is not cosmetic. An aircraft at 10 km altitude and 300 km ground
-// range sits at about 0.75 degrees — essentially on the horizon — where naive
+// range sits at about 0.75 degrees, essentially on the horizon, where naive
 // flat-Earth trigonometry would claim 1.91 degrees and float it in clear sky.
 export function elevationAndRange(groundKm, aircraftAltM, receiverAltM = 0) {
     const radius = EFFECTIVE_RADIUS_M;
@@ -106,7 +107,7 @@ export function elevationAndRange(groundKm, aircraftAltM, receiverAltM = 0) {
 
 // The receiver's horizon: how far below level it sits, and how far away it is.
 // A receiver at sea level sees the horizon exactly level at zero distance, which
-// is why the scene has no ground plane — at realistic antenna heights there is
+// is why the scene has no ground plane: at realistic antenna heights there is
 // almost no visible ground to draw.
 export function horizon(receiverAltM = 0) {
     const radius = EFFECTIVE_RADIUS_M;
@@ -167,8 +168,8 @@ export function focalPx(fovDeg, safeWidth) {
 //
 // The focal length comes from the safe area, because that is what sets the scale
 // and the principal point. The cone, though, has to cover everywhere a point may
-// legitimately land. Pass `coverage` — the extent of the full canvas measured
-// about the principal point — whenever the two differ, or content that belongs in
+// legitimately land. Pass `coverage` (the extent of the full canvas measured
+// about the principal point) whenever the two differ, or content that belongs in
 // the strip a panel does not actually reach gets culled and leaves it blank.
 export function frustumCosLimit(fovDeg, safe, coverage = safe) {
     const focal = focalPx(fovDeg, safe.width);
@@ -177,10 +178,10 @@ export function frustumCosLimit(fovDeg, safe, coverage = safe) {
 
 // ---------- projection ----------
 
-// Rectilinear (camera-like) projection. The principal point is the centre of the
+// Rectilinear (camera-like) projection. The principal point is the center of the
 // safe area rather than of the canvas: panels float above a full-viewport canvas,
-// so projecting to the canvas centre would place the scene's centre — and
-// anything the camera has just swung to — behind a panel.
+// so projecting to the canvas center would place the scene's center (and
+// anything the camera has just swung to) behind a panel.
 //
 // Returns null for anything outside the frame cone. Pass minCos = 0 to project a
 // point already known to be on-axis without culling it.
@@ -201,8 +202,8 @@ export function projectRectilinear(v, basis, safe, fovDeg, minCos) {
 
 // Equirectangular projection for the flattened 360-degree panorama. Azimuth maps
 // linearly across the full width; elevation runs from the horizon baseline up to
-// the top of the safe area. The baseline is not the bottom of the canvas — the
-// compass labels and the coverage ribbon live below it — so it is passed in.
+// the top of the safe area. The baseline is not the bottom of the canvas (the
+// compass labels and the coverage ribbon live below it), so it is passed in.
 export function projectEquirect(azimuthDeg, elevationDeg, headingDeg, safe, yHorizon) {
     const alpha = wrap180(azimuthDeg - headingDeg);
     return {
@@ -244,7 +245,7 @@ export function safeArea(width, height, insets = {}) {
 // Allowed pitch range. The lower bound is level, since nothing is drawn below the
 // horizon and tilting down would show empty space. The upper bound keeps the
 // camera from tilting past the zenith edge of the frame, and widens as the field
-// of view narrows — a zoomed-in view may lose the horizon, a wide one may not.
+// of view narrows: a zoomed-in view may lose the horizon, a wide one may not.
 export function pitchRange(fovDeg, safe) {
     return { min: 0, max: Math.max(0, 90 - verticalFovDeg(fovDeg, safe) / 2) };
 }
@@ -284,7 +285,7 @@ export function isSubHorizon(elevationDeg, horizonDepressionDeg) {
     return elevationDeg < horizonDepressionDeg;
 }
 
-// Altitude to place an aircraft at, in metres, preferring GNSS over barometric.
+// Altitude to place an aircraft at, in meters, preferring GNSS over barometric.
 //
 // Barometric altitude in ADS-B is always referenced to standard pressure, at
 // every level, so in a non-standard atmosphere it can be out by roughly 1000 ft
@@ -362,7 +363,7 @@ export const BEARING_STEPS = [1, 2, 5, 10, 15, 30, 45, 90];
 // The finest interval from that ladder whose ticks would still be at least
 // `targetPx` apart. Spacing the compass by angle alone gives a row that is dense
 // in the flattened panorama, where the whole circle spans the view, and nearly
-// empty in the camera view, where only a fraction of it does — and that changes
+// empty in the camera view, where only a fraction of it does, and that changes
 // again with the field of view. Choosing by pixels keeps the row looking the same
 // in both.
 export function bearingTickStep(degreesPerPixel, targetPx, ladder = BEARING_STEPS) {
@@ -388,14 +389,13 @@ export function bearingLabelStep(tickStep, degreesPerPixel, targetPx, ladder = B
 //
 // Longitude is sized at the box's *poleward* edge, where a degree of longitude
 // is shortest. Sizing at the receiver's own latitude under-covers the poleward
-// corners — about 5% at 50 degrees north with a 150 nm range.
+// corners by about 5% at 50 degrees north with a 150 nm range.
 //
-// Several degenerate cases cannot be expressed as a non-inverted box and fall
-// back to full-width longitude. The antimeridian case is the important one: a
-// receiver at 179 degrees east yields west = 176.5, east = -178.5, and the
-// server's viewport test is a plain `lon >= west && lon <= east` range check
-// with no wrap handling, so an inverted box would match nothing at all and the
-// view would be silently empty.
+// A box that crosses the 180° meridian comes back with west > east (a receiver at
+// 179 degrees east yields west = 176.5, east = -178.5), which the server reads as
+// running east across the meridian. The cases no single box can express, a pole
+// inside the range or a range wider than half the globe, fall back to full-width
+// longitude.
 export function receiverBox(lat, lon, rangeKm) {
     const dLat = rangeKm / 111.32;
     const south = lat - dLat;
@@ -423,11 +423,5 @@ export function receiverBox(lat, lon, rangeKm) {
         return fullWidth;
     }
 
-    const west = lon - dLon;
-    const east = lon + dLon;
-    if (west < -180 || east > 180) {
-        return fullWidth;
-    }
-
-    return { south, west, north, east };
+    return subscriptionBounds({ south, west: lon - dLon, north, east: lon + dLon });
 }

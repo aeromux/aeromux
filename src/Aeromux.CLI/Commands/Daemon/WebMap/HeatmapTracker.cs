@@ -22,22 +22,22 @@ namespace Aeromux.CLI.Commands.Daemon.WebMap;
 /// In-memory aggregator for the web-map traffic-density heatmap. Records each
 /// observed aircraft position into a sparse 1 nm base grid keyed by cell, storing
 /// the last-seen time per distinct aircraft, and answers per-client queries for
-/// coloured display cells over a rolling time window. The grid is a fixed lattice
-/// squared to an optional reference latitude (typically the receiver's, else 45°) —
-/// it works with or without a receiver.
+/// colored display cells over a rolling time window. The grid is a fixed lattice
+/// squared to an optional reference latitude (typically the receiver's, else 45°),
+/// so it works with or without a receiver.
 /// </summary>
 public sealed class HeatmapTracker
 {
     private const double BaseCellNm = 1.0;        // finest grid resolution
     private const double NmPerDegreeLat = 60.0;   // 1° latitude ≈ 60 nm
     private const double MinCosLat = 0.01;        // clamp cos(lat) near the poles
-    private const int ScaleFloor = 2;             // log(1)=0 guard for the colour scale
+    private const int ScaleFloor = 2;             // log(1)=0 guard for the color scale
     private static readonly TimeSpan Retention = TimeSpan.FromHours(24);
 
     // baseCellId -> (ICAO -> last-seen UTC). Sparse: only visited cells exist.
     // Guarded by a single lock; all access is from the one push-loop thread.
     private readonly Dictionary<long, Dictionary<string, DateTime>> _cells = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly double _cosRefLat;
 
     /// <summary>
@@ -93,17 +93,17 @@ public sealed class HeatmapTracker
     /// </summary>
     /// <param name="cellSizeNm">Display cell size in nautical miles.</param>
     /// <param name="window">Rolling window; clamped to the 24 h retention.</param>
-    /// <param name="viewport">Client viewport (south, west, north, east); null → empty.</param>
-    /// <param name="previousScaleMax">The client's last colour anchor, for smoothing.</param>
+    /// <param name="viewport">Client viewport, possibly crossing the 180° meridian; null → empty.</param>
+    /// <param name="previousScaleMax">The client's last color anchor, for smoothing.</param>
     /// <returns>
-    /// The coloured display cells intersecting the viewport plus the smoothed colour
+    /// The colored display cells intersecting the viewport plus the smoothed color
     /// anchor; <see cref="HeatmapResult.Empty"/> when the viewport is null or no cells
     /// fall within the window.
     /// </returns>
     public HeatmapResult GetCells(
         int cellSizeNm,
         TimeSpan window,
-        (double South, double West, double North, double East)? viewport,
+        GeographicBounds? viewport,
         int previousScaleMax)
     {
         if (viewport is null)
@@ -116,8 +116,8 @@ public sealed class HeatmapTracker
     /// <summary>
     /// Re-bins the whole base grid into display cells and captures the viewport-independent
     /// state: the distinct in-window aircraft count per display cell plus the whole-grid
-    /// colour-scale inputs. Independent of any viewport, so one snapshot serves every client
-    /// on the same configuration; the colour anchor is computed over the whole grid so colour
+    /// color-scale inputs. Independent of any viewport, so one snapshot serves every client
+    /// on the same configuration; the color anchor is computed over the whole grid so color
     /// is identical for every cell and stable while panning.
     /// </summary>
     /// <param name="cellSizeNm">Display cell size in nautical miles.</param>
@@ -128,7 +128,7 @@ public sealed class HeatmapTracker
         TimeSpan effWindow = window > Retention ? Retention : window;
         DateTime cutoff = DateTime.UtcNow - effWindow;
 
-        // Aggregate the whole grid (not just the viewport) into display cells, so the colour
+        // Aggregate the whole grid (not just the viewport) into display cells, so the color
         // anchor computed below reflects every cell and stays stable while the client pans.
         var display = new Dictionary<long, HashSet<string>>();
         lock (_lock)
@@ -136,7 +136,7 @@ public sealed class HeatmapTracker
             foreach ((long baseId, Dictionary<string, DateTime> inner) in _cells)
             {
                 // Union in-window ICAOs straight into the display cell's set, resolving that cell
-                // lazily on the first recent hit — a fully-stale base cell then costs no geometry
+                // lazily on the first recent hit, so a fully-stale base cell then costs no geometry
                 // and allocates no set.
                 HashSet<string>? set = null;
                 foreach ((string icao, DateTime seen) in inner)
@@ -182,19 +182,19 @@ public sealed class HeatmapTracker
     /// <summary>
     /// Projects a <see cref="BuildSnapshot"/> result to one client: emits the display cells
     /// intersecting the viewport and folds the client's previous anchor into the smoothed
-    /// colour scale. Cheap and lock-free — the snapshot is never mutated after building.
+    /// color scale. Cheap and lock-free: the snapshot is never mutated after building.
     /// </summary>
     /// <param name="snapshot">A snapshot from <see cref="BuildSnapshot"/>.</param>
-    /// <param name="viewport">Client viewport (south, west, north, east); null → empty.</param>
-    /// <param name="previousScaleMax">The client's last colour anchor, for smoothing.</param>
+    /// <param name="viewport">Client viewport, possibly crossing the 180° meridian; null → empty.</param>
+    /// <param name="previousScaleMax">The client's last color anchor, for smoothing.</param>
     /// <returns>
-    /// The coloured cells intersecting the viewport plus the smoothed anchor;
+    /// The colored cells intersecting the viewport plus the smoothed anchor;
     /// <see cref="HeatmapResult.Empty"/> when the viewport is null or the snapshot is empty.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="snapshot"/> is null.</exception>
     public HeatmapResult Project(
         HeatmapSnapshot snapshot,
-        (double South, double West, double North, double East)? viewport,
+        GeographicBounds? viewport,
         int previousScaleMax)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -207,12 +207,12 @@ public sealed class HeatmapTracker
         int scaleMax = SmoothScaleMax(snapshot.RawScaleP99, previousScaleMax);
 
         var cells = new List<HeatmapCell>();
-        (double vS, double vW, double vN, double vE) = viewport.Value;
+        GeographicBounds view = viewport.Value;
         foreach ((long did, int count) in snapshot.DisplayCounts)
         {
             (int dr, int dc) = Unpack(did);
             (double s, double w, double n, double e) = BoundsOf(dr, dc, snapshot.CellSizeNm);
-            if (n < vS || s > vN || e < vW || w > vE)
+            if (!view.Intersects(s, w, n, e))
             {
                 continue; // no overlap
             }
@@ -234,7 +234,7 @@ public sealed class HeatmapTracker
             var emptyCells = new List<long>();
             foreach ((long id, Dictionary<string, DateTime> inner) in _cells)
             {
-                List<string> stale = inner.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList();
+                var stale = inner.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList();
                 foreach (string icao in stale)
                 {
                     inner.Remove(icao);
@@ -257,7 +257,7 @@ public sealed class HeatmapTracker
         get { lock (_lock) { return _cells.Count; } }
     }
 
-    // --- Geometry (parameterised by cell size; same formula for base and display grids) ---
+    // --- Geometry (parameterized by cell size; same formula for base and display grids) ---
 
     /// <summary>Row/col index of the cell containing (lat, lon) for a given cell size.</summary>
     private (int Row, int Col) IndexOf(double lat, double lon, double cellNm)
@@ -274,7 +274,7 @@ public sealed class HeatmapTracker
     /// </summary>
     private double DegLon(double cellNm) => (cellNm / NmPerDegreeLat) / _cosRefLat;
 
-    /// <summary>Geographic centre of a cell (used to re-bin base cells into display cells).</summary>
+    /// <summary>Geographic center of a cell (used to re-bin base cells into display cells).</summary>
     private (double Lat, double Lon) CentreOf(int row, int col, double cellNm)
     {
         double degLat = cellNm / NmPerDegreeLat;
@@ -296,7 +296,7 @@ public sealed class HeatmapTracker
 
     private static (int Row, int Col) Unpack(long id) => ((int)(id >> 32), (int)(id & 0xFFFFFFFF));
 
-    // --- Colour scale: relative logarithmic, anchored to a smoothed p99 ---
+    // --- Color scale: relative logarithmic, anchored to a smoothed p99 ---
 
     /// <summary>Nearest-rank 99th percentile of the counts.</summary>
     private static int Percentile99(int[] counts)
@@ -338,7 +338,7 @@ public sealed class HeatmapTracker
 
 /// <summary>
 /// Viewport-independent heatmap state for one (cellSizeNm, window): the distinct
-/// in-window aircraft count per display cell plus the whole-grid colour-scale inputs.
+/// in-window aircraft count per display cell plus the whole-grid color-scale inputs.
 /// Built once by <see cref="HeatmapTracker.BuildSnapshot"/> and shared across every
 /// client on the same configuration, then turned into per-client results by
 /// <see cref="HeatmapTracker.Project"/>.
@@ -359,27 +359,27 @@ public sealed class HeatmapSnapshot
     /// <summary>Distinct in-window aircraft count keyed by packed display cell id.</summary>
     internal Dictionary<long, int> DisplayCounts { get; }
 
-    /// <summary>Whole-grid 99th-percentile count: the un-smoothed colour anchor.</summary>
+    /// <summary>Whole-grid 99th-percentile count: the un-smoothed color anchor.</summary>
     internal int RawScaleP99 { get; }
 
     /// <summary>Whole-grid busiest-cell count, for the legend's peak note.</summary>
     internal int MaxCount { get; }
 
-    /// <summary>Empty snapshot: no cells. RawScaleP99 is unused — Project short-circuits on empty.</summary>
+    /// <summary>Empty snapshot: no cells. RawScaleP99 is unused because Project short-circuits on empty.</summary>
     internal static HeatmapSnapshot Empty(int cellSizeNm) => new(cellSizeNm, new(), 0, 0);
 }
 
-/// <summary>Result of a heatmap query: coloured cells plus the colour anchor.</summary>
-/// <param name="ScaleMax">Colour anchor: the smoothed, nice-rounded 99th-percentile count that maps to red.</param>
+/// <summary>Result of a heatmap query: colored cells plus the color anchor.</summary>
+/// <param name="ScaleMax">Color anchor: the smoothed, nice-rounded 99th-percentile count that maps to red.</param>
 /// <param name="MaxCount">The busiest cell's distinct-aircraft count (for the legend's peak note).</param>
-/// <param name="Cells">The coloured display cells within the client's viewport.</param>
+/// <param name="Cells">The colored display cells within the client's viewport.</param>
 public sealed record HeatmapResult(int ScaleMax, int MaxCount, IReadOnlyList<HeatmapCell> Cells)
 {
     /// <summary>Empty result: floor anchor, no cells.</summary>
     public static readonly HeatmapResult Empty = new(2, 0, []); // 2 == ScaleFloor
 }
 
-/// <summary>One coloured display cell pushed to web-map clients.</summary>
+/// <summary>One colored display cell pushed to web-map clients.</summary>
 /// <param name="South">Southern latitude bound in degrees.</param>
 /// <param name="West">Western longitude bound in degrees.</param>
 /// <param name="North">Northern latitude bound in degrees.</param>

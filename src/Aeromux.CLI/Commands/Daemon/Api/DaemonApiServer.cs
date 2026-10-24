@@ -22,6 +22,8 @@ using Aeromux.Infrastructure.Photos;
 using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Serilog;
@@ -55,10 +57,10 @@ public static class DaemonApiServer
         ArgumentNullException.ThrowIfNull(config);
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
-        // Suppress ASP.NET Core default logging — use existing Serilog configuration
+        // Suppress ASP.NET Core default logging and use the existing Serilog configuration
         builder.Host.UseSerilog();
 
-        // Reduce shutdown timeout from default 30s — SignalR WebSocket connections
+        // Reduce shutdown timeout from the default 30s, because SignalR WebSocket connections
         // would otherwise block StopAsync() until the full timeout expires
         builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(options =>
         {
@@ -84,7 +86,7 @@ public static class DaemonApiServer
         builder.Services.AddSingleton(photoService);
 
         // Register the app-created wrapper instance (not a factory/type) so the DI container does
-        // NOT own its lifetime — the orchestrator disposes it during ordered shutdown. A factory
+        // NOT own its lifetime; the orchestrator disposes it during ordered shutdown. A factory
         // registration would let the container dispose it at web-app shutdown, before the tracker's
         // consumer stops, silently killing enrichment mid-shutdown.
         if (databaseLookup is not null)
@@ -95,14 +97,14 @@ public static class DaemonApiServer
         builder.Services.AddSingleton<MapHubPushService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MapHubPushService>());
 
-        // Range outline tracker — only created when receiver location is configured
+        // Range outline tracker, only created when receiver location is configured
         if (config.Config.Receiver?.Latitude is not null && config.Config.Receiver?.Longitude is not null)
         {
             builder.Services.AddSingleton(new RangeOutlineTracker(
                 config.Config.Receiver.Latitude.Value, config.Config.Receiver.Longitude.Value));
         }
 
-        // Heatmap tracker — registered unless collection is explicitly disabled in config.
+        // Heatmap tracker, registered unless collection is explicitly disabled in config.
         // The receiver latitude (if configured) squares the grid to the coverage area and
         // aligns its columns; falls back to 45° when no receiver is set.
         if (config.Config.Heatmap?.Collect != false)
@@ -115,6 +117,37 @@ public static class DaemonApiServer
 
         WebApplication app = builder.Build();
 
+        // Build shared JsonSerializerOptions for Results.Json() calls
+        JsonSerializerOptions jsonOptions = new()
+        {
+            PropertyNamingPolicy = null,
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+            Converters = { new JsonStringEnumConverter() }
+        };
+
+        // Give bodiless API errors the same {"Error": "..."} shape as every other API error.
+        // Routing answers an unknown /api path with an empty 404 and a wrong method with an
+        // empty 405; the middleware only acts on responses that have no body, so replies that
+        // already carry an ErrorResponse are left alone. Web Map static files keep the default.
+        app.UseStatusCodePages(async context =>
+        {
+            HttpContext http = context.HttpContext;
+            if (!http.Request.Path.StartsWithSegments("/api"))
+            {
+                return;
+            }
+
+            int statusCode = http.Response.StatusCode;
+            string message = statusCode switch
+            {
+                StatusCodes.Status404NotFound => $"Not found: {http.Request.Path}",
+                StatusCodes.Status405MethodNotAllowed => $"Method not allowed: {http.Request.Method}",
+                _ => ReasonPhrases.GetReasonPhrase(statusCode)
+            };
+
+            await http.Response.WriteAsJsonAsync(new ErrorResponse(message), jsonOptions);
+        });
+
         // Serve embedded web map static files from assembly resources
         ManifestEmbeddedFileProvider embeddedProvider = new(
             assembly: typeof(DaemonApiServer).Assembly);
@@ -123,7 +156,7 @@ public static class DaemonApiServer
         {
             [".woff2"] = "font/woff2"
         } };
-        // Embedded assets are baked into the assembly — safe to cache for 24 hours
+        // Embedded assets are baked into the assembly, so they are safe to cache for 24 hours
         app.UseStaticFiles(new StaticFileOptions
         {
             FileProvider = embeddedProvider,
@@ -136,14 +169,6 @@ public static class DaemonApiServer
 
         // Map SignalR hub endpoint
         app.MapHub<MapHub>("/maphub");
-
-        // Build shared JsonSerializerOptions for Results.Json() calls
-        JsonSerializerOptions jsonOptions = new()
-        {
-            PropertyNamingPolicy = null,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-            Converters = { new JsonStringEnumConverter() }
-        };
 
         // Map all API routes
         DaemonApiRoutes.MapRoutes(app, tracker, photoService, getStatistics, startTime, config, jsonOptions);

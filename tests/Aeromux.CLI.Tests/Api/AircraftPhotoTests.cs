@@ -16,6 +16,7 @@
 
 using System.Net;
 using System.Text.Json;
+using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Photos;
 using FluentAssertions;
 using Moq;
@@ -26,8 +27,16 @@ public class AircraftPhotoTests : IAsyncLifetime
 {
     private ApiTestFixture _fixture = null!;
 
-    public async Task InitializeAsync() =>
+    public async Task InitializeAsync()
+    {
         _fixture = await ApiTestFixture.CreateAsync();
+
+        // Photos are looked up only for tracked aircraft, so every ICAO these tests ask
+        // about is tracked unless a test says otherwise.
+        _fixture.TrackerMock
+            .Setup(t => t.GetAircraft(It.IsAny<string>()))
+            .Returns((string icao) => ApiTestFixture.CreateTestAircraft(icao));
+    }
 
     public async Task DisposeAsync() =>
         await _fixture.DisposeAsync();
@@ -82,6 +91,21 @@ public class AircraftPhotoTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadGateway);
     }
 
+    [Fact]
+    public async Task Photo_UntrackedAircraft_Returns404WithoutUpstreamLookup()
+    {
+        _fixture.TrackerMock.Setup(t => t.GetAircraft(It.IsAny<string>())).Returns((Aircraft?)null);
+
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/aircraft/abcdef/photo");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        string json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("Error").GetString().Should().Be("Aircraft not found: ABCDEF");
+        _fixture.PhotoServiceMock.Verify(
+            s => s.GetAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
     [InlineData("XYZ123")]    // non-hex
     [InlineData("12345")]      // too short
@@ -97,7 +121,7 @@ public class AircraftPhotoTests : IAsyncLifetime
     public async Task Photo_LowercaseIcao_AcceptedAndNormalised()
     {
         // The route handler normalizes lowercase to uppercase before calling the service.
-        // Verify the service was called with the uppercase-normalised uint value.
+        // Verify the service was called with the uppercase-normalized uint value.
         uint? capturedIcao = null;
         _fixture.PhotoServiceMock
             .Setup(s => s.GetAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()))

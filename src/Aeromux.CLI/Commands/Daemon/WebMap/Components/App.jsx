@@ -22,6 +22,7 @@ import * as SkyViewManager from '../SkyView/SkyViewManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
 import { loadUnits, saveUnits, loadSettings, saveSettings, loadSort, saveSort, resetAllSettings, loadSheetHeight, saveSheetHeight, clearSheetHeight, nmToKm, resolveDeviceDefaults } from '../Services/UnitConversion.js';
 import { receiverBox, aircraftAltitudeM } from '../Services/SkyViewGeometry.js';
+import { subscriptionBounds } from '../Services/GeoBounds.js';
 import { computeInsets } from '../Services/SafeInsets.js';
 import { clampSheetPx, pxToFraction } from '../Services/SheetHeight.js';
 import { HoverTooltip } from './HoverTooltip.jsx';
@@ -65,7 +66,7 @@ export function App() {
     const heatmapEnabledRef = useRef(settings.heatmap);
     heatmapEnabledRef.current = settings.heatmap;
     // Mirror the view mode and receiver location into refs so the
-    // mount-registered SignalR handlers — onReconnected above all — read current
+    // mount-registered SignalR handlers (onReconnected above all) read current
     // values rather than the ones captured when they were registered.
     const viewModeRef = useRef('map');
     const receiverRef = useRef(null);
@@ -98,7 +99,10 @@ export function App() {
             const rangeNm = Math.min(300, Math.max(10, loadSettings().skyMaxRangeNm));
             return receiverBox(lat, lon, nmToKm(rangeNm));
         }
-        return MapManager.getViewportBounds();
+        // MapLibre reports unwrapped longitudes (east = 188 once the view crosses the
+        // meridian), which the server rejects; fold them into its range here rather
+        // than in getViewportBounds(), whose raw width the readout's area relies on.
+        return subscriptionBounds(MapManager.getViewportBounds());
     }, []);
 
     const applyBounds = useCallback(() => {
@@ -138,7 +142,7 @@ export function App() {
     }, [currentInsets]);
 
     // Flush buffered aircraft updates to state and map.
-    // SignalR pushes individual aircraft updates rapidly — batching them into 50ms
+    // SignalR pushes individual aircraft updates rapidly; batching them into 50ms
     // windows avoids triggering a React re-render for every single update.
     const flushUpdates = useCallback(() => {
         if (updateBuffer.current.length === 0) return;
@@ -303,7 +307,7 @@ export function App() {
     const toggleMore = useCallback((key) => {
         setShowMore(prev => ({ ...prev, [key]: !prev[key] }));
     }, []);
-    // Mobile bottom-sheet height — applied imperatively as a CSS custom property
+    // Mobile bottom-sheet height, applied imperatively as a CSS custom property
     // rather than via a React `style` prop. The panel re-renders on every
     // buffered aircraft update; managing the property outside React's render
     // cycle keeps live drag values from being clobbered mid-gesture. The desktop
@@ -402,7 +406,7 @@ export function App() {
 
     // Adopting a view has to happen after the DOM has been committed: until then
     // the incoming container is still display:none, so it measures zero and the
-    // canvas would be sized 0x0 and draw nothing at all. Both renderers need this —
+    // canvas would be sized 0x0 and draw nothing at all. Both renderers need this:
     // MapLibre also caches the zero size it measured while hidden.
     useEffect(() => {
         SkyViewManager.setActive(viewMode === 'sky');
@@ -426,7 +430,7 @@ export function App() {
 
         // Selection and trail are application state, but each renderer keeps its own
         // copy and only the visible one is kept current. The incoming view is
-        // therefore synchronised in full — including the cleared case, which is what
+        // therefore synchronized in full, including the cleared case, which is what
         // deselecting in one view and returning to the other depends on.
         if (icao) {
             const aircraft = aircraftMapRef.current.get(icao);
@@ -436,7 +440,7 @@ export function App() {
             view.setTrailColor(category);
             view.highlightSelected(icao);
             // Both views bring the selection into view on a switch. The sky view has
-            // to turn and look up to find it; the map centres on it, so that arriving
+            // to turn and look up to find it; the map centers on it, so that arriving
             // from the sky with an aircraft selected does not drop the user wherever
             // the map camera happened to be left.
             if (aircraft?.Coordinate) {
@@ -476,8 +480,8 @@ export function App() {
 
         // Registered on both renderers once, rather than re-registered on every
         // switch, so the switch itself stays stateless. Each callback is gated on
-        // its own view being the active one: a hidden renderer can still emit — the
-        // sky view republishes the pinned tooltip on every frame it draws — and two
+        // its own view being the active one: a hidden renderer can still emit (the
+        // sky view republishes the pinned tooltip on every frame it draws), and two
         // renderers writing the same tooltip state makes it flicker between their
         // two positions.
         for (const [mode, view] of [['map', MapManager], ['sky', SkyViewManager]]) {
@@ -575,7 +579,7 @@ export function App() {
                     connectSignalR();
                 }, 500);
             } catch (e) {
-                // Stats fetch failed — try aircraft without center
+                // Stats fetch failed: try aircraft without center
                 setReceiverPending(false);
                 setTimeout(() => {
                     connectSignalR();
@@ -616,7 +620,7 @@ export function App() {
                             const prev = stateHistoryRef.current;
                             if (prev && prev.enabled !== false) {
                                 const ts = data.Timestamp ? new Date(data.Timestamp).getTime() : Date.now();
-                                // Barometric first, geometric as the fallback — the same
+                                // Barometric first, geometric as the fallback, the same
                                 // order the state history itself records, so live points
                                 // extend that series on one datum. Preferring geometric
                                 // here instead puts a step of several hundred feet at the
@@ -680,7 +684,7 @@ export function App() {
                         setRangeOutline(data);
                     },
                     onHeatmapUpdated: (data) => {
-                        // Drop frames that arrive after toggle-off — an in-flight push would
+                        // Drop frames that arrive after toggle-off; an in-flight push would
                         // otherwise repopulate the cleared overlay.
                         // Sky mode renders no heatmap, and a frame in flight across
                         // the switch would otherwise repopulate a cleared overlay.
@@ -770,8 +774,8 @@ export function App() {
         SkyViewManager.setRangeOutline(rangeOutline);
     }, [settings.rangeOutline, rangeOutline]);
 
-    // Settings reach the renderer here. Without this every sky setting — field of
-    // view, max range, flatten, ribbon, trail, labels — would appear to do nothing.
+    // Settings reach the renderer here. Without this every sky setting (field of
+    // view, max range, flatten, ribbon, trail, labels) would appear to do nothing.
     // Runs in both modes so the canvas is already correct the instant sky mode is
     // entered rather than one render later.
     useEffect(() => {
@@ -886,7 +890,7 @@ export function App() {
                 selected); rendered first so a transient hover paints on top. */}
             <HoverTooltip hover={selectedTooltip} units={units} pinned />
             {/* Hover tooltip for any aircraft except the selected one, whose
-                tooltip is already pinned above — avoids two identical
+                tooltip is already pinned above; this avoids two identical
                 overlapping tooltips. */}
             <HoverTooltip hover={hover && hover.icao !== selectedIcao ? hover : null} units={units} />
 

@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.ModeS.ValueObjects;
+
 namespace Aeromux.CLI.Commands.Daemon.WebMap;
 
 /// <summary>
@@ -24,10 +26,10 @@ namespace Aeromux.CLI.Commands.Daemon.WebMap;
 public sealed class MapHubClientState
 {
     /// <summary>
-    /// The client's current viewport bounds (south, west, north, east).
+    /// The client's current viewport bounds, possibly crossing the 180° meridian.
     /// Null until the client sends its first UpdateViewport call.
     /// </summary>
-    public (double South, double West, double North, double East)? ViewportBounds { get; set; }
+    public GeographicBounds? ViewportBounds { get; set; }
 
     /// <summary>
     /// The ICAO address of the aircraft the client has selected for detail view.
@@ -69,7 +71,7 @@ public sealed class MapHubClientState
     public TimeSpan HeatmapWindow { get; set; } = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// Previous heatmap colour anchor, carried across ticks for scale smoothing.
+    /// Previous heatmap color anchor, carried across ticks for scale smoothing.
     /// </summary>
     public int HeatmapLastScaleMax { get; set; }
 
@@ -82,7 +84,7 @@ public sealed class MapHubClientState
     /// Viewport the heatmap was last projected for. A change means the client panned,
     /// so it must re-project even if the shared snapshot has not been rebuilt.
     /// </summary>
-    public (double South, double West, double North, double East)? HeatmapLastViewport { get; set; }
+    public GeographicBounds? HeatmapLastViewport { get; set; }
 
     /// <summary>
     /// Build time of the shared snapshot this client last projected. The client re-projects
