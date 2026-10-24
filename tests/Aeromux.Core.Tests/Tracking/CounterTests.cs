@@ -69,37 +69,39 @@ public class CounterTests : AircraftStateTrackerTestsBase
     [Fact]
     public void Update_SeenSeconds_CalculatesTimeSinceFirstSeen()
     {
-        // Arrange
-        Tracker = CreateTracker();
+        // Arrange - a manual clock makes the elapsed time exact instead of "at least"
+        var clock = new ManualClock();
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 60, clock);
         ProcessedFrame frame = CreateFrame(RealFrames.AircraftId_471DBC, "471DBC");
 
         // Act
         Tracker.Update(frame);
         DateTime firstSeenTime = Tracker.GetAircraft("471DBC")!.Status.FirstSeen;
 
-        Thread.Sleep(TimeSpan.FromSeconds(2));
+        clock.Advance(TimeSpan.FromSeconds(2));
         Tracker.Update(frame);
 
         Aircraft? aircraft = Tracker.GetAircraft("471DBC");
 
         // Assert
         aircraft.Should().NotBeNull();
-        aircraft!.Status.SeenSeconds.Should().BeGreaterOrEqualTo(2.0);
+        aircraft!.Status.SeenSeconds.Should().Be(2.0);
         aircraft.Status.FirstSeen.Should().Be(firstSeenTime);
     }
 
     [Fact]
     public void Update_PositionMessage_ResetsSeenPosSeconds()
     {
-        // Arrange
-        Tracker = CreateTracker();
+        // Arrange - a manual clock, so the 2 seconds pass without waiting for them
+        var clock = new ManualClock();
+        Tracker = CreateTrackerWithClock(timeoutSeconds: 60, clock);
         ProcessedFrame posFrame = CreateFrame(RealFrames.AirbornePos_80073B_Even, "80073B");
 
         // Act
         Tracker.Update(posFrame);
         Aircraft? after1 = Tracker.GetAircraft("80073B");
 
-        Thread.Sleep(TimeSpan.FromSeconds(2));
+        clock.Advance(TimeSpan.FromSeconds(2));
         Tracker.Update(posFrame);
         Aircraft? after2 = Tracker.GetAircraft("80073B");
 
@@ -108,7 +110,7 @@ public class CounterTests : AircraftStateTrackerTestsBase
         after1!.Status.SeenPosSeconds.Should().Be(0);
 
         after2.Should().NotBeNull();
-        // After 2 seconds, another position update resets SeenPosSeconds to 0
-        after2!.Status.SeenPosSeconds.Should().BeLessThan(1.0); // Should be close to 0
+        // After 2 seconds, another position message resets SeenPosSeconds to exactly 0
+        after2!.Status.SeenPosSeconds.Should().Be(0);
     }
 }
