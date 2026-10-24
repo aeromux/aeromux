@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Aeromux.CLI.Commands.Daemon.WebMap;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Photos;
@@ -67,21 +65,15 @@ public static class DaemonApiServer
             options.ShutdownTimeout = TimeSpan.FromSeconds(3);
         });
 
-        // Configure JSON serialization for all endpoints
+        // Configure JSON serialization for all endpoints. Every result and error body is
+        // written with these server-wide options, so no endpoint passes its own.
         builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
-        {
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-            options.SerializerOptions.PropertyNamingPolicy = null; // PascalCase
-            options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
-        });
+            DaemonJsonOptions.Apply(options.SerializerOptions));
 
-        // Configure SignalR and web map push service
+        // Configure SignalR and web map push service, with the same settings as the REST API
+        // because the Web Map reads the same models over both
         builder.Services.AddSignalR()
-            .AddJsonProtocol(options =>
-            {
-                options.PayloadSerializerOptions.PropertyNamingPolicy = null; // PascalCase to match REST API
-                options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-            });
+            .AddJsonProtocol(options => DaemonJsonOptions.Apply(options.PayloadSerializerOptions));
         builder.Services.AddSingleton(tracker);
         builder.Services.AddSingleton(photoService);
 
@@ -117,14 +109,6 @@ public static class DaemonApiServer
 
         WebApplication app = builder.Build();
 
-        // Build shared JsonSerializerOptions for Results.Json() calls
-        JsonSerializerOptions jsonOptions = new()
-        {
-            PropertyNamingPolicy = null,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-            Converters = { new JsonStringEnumConverter() }
-        };
-
         // Give bodiless API errors the same {"Error": "..."} shape as every other API error.
         // Routing answers an unknown /api path with an empty 404 and a wrong method with an
         // empty 405; the middleware only acts on responses that have no body, so replies that
@@ -145,7 +129,7 @@ public static class DaemonApiServer
                 _ => ReasonPhrases.GetReasonPhrase(statusCode)
             };
 
-            await http.Response.WriteAsJsonAsync(new ErrorResponse(message), jsonOptions);
+            await http.Response.WriteAsJsonAsync(new ErrorResponse(message));
         });
 
         // Serve embedded web map static files from assembly resources
@@ -171,7 +155,7 @@ public static class DaemonApiServer
         app.MapHub<MapHub>("/maphub");
 
         // Map all API routes
-        DaemonApiRoutes.MapRoutes(app, tracker, photoService, getStatistics, startTime, config, jsonOptions);
+        DaemonApiRoutes.MapRoutes(app, tracker, photoService, getStatistics, startTime, config);
 
         return app;
     }

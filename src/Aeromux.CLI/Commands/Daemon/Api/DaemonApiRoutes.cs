@@ -16,7 +16,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
@@ -65,15 +64,13 @@ public static partial class DaemonApiRoutes
     /// <param name="getStatistics">Function to get current stream statistics.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
     /// <param name="config">Validated daemon configuration for receiver and device metadata.</param>
-    /// <param name="jsonOptions">Shared JSON serializer options for dynamic response dictionaries.</param>
     public static void MapRoutes(
         WebApplication app,
         IAircraftStateTracker tracker,
         IAircraftPhotoService photoService,
         Func<StreamStatistics?> getStatistics,
         DateTime startTime,
-        DaemonValidatedConfig config,
-        JsonSerializerOptions jsonOptions)
+        DaemonValidatedConfig config)
     {
         // GET /api/v1/aircraft: aircraft list (with optional bounds/search filtering)
         app.MapGet("/api/v1/aircraft", (HttpContext httpContext) =>
@@ -235,7 +232,7 @@ public static partial class DaemonApiRoutes
                 response["DataQuality"] = DaemonApiMapper.ToDataQuality(aircraft);
             }
 
-            return Results.Json(response, jsonOptions);
+            return Results.Json(response);
         });
 
         // GET /api/v1/aircraft/{icao}/photo: aircraft photo metadata (Planespotters.net)
@@ -271,7 +268,7 @@ public static partial class DaemonApiRoutes
                     result.Metadata.ThumbnailUrl,
                     result.Metadata.Photographer,
                     result.Metadata.Link,
-                }, jsonOptions),
+                }),
 
                 PhotoOutcome.UpstreamFailure => Results.Json(
                     new ErrorResponse("Upstream photo lookup failed; try again."),
@@ -386,7 +383,7 @@ public static partial class DaemonApiRoutes
                 response["State"] = DaemonApiMapper.ToStateHistory(aircraft, query);
             }
 
-            return Results.Json(response, jsonOptions);
+            return Results.Json(response);
         });
 
         // GET /api/v1/stats: statistics

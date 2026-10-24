@@ -15,7 +15,6 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
@@ -47,7 +46,6 @@ public sealed class MapHubPushService : BackgroundService
     private readonly RangeOutlineTracker? _rangeOutlineTracker;
     private readonly HeatmapTracker? _heatmapTracker;
     private readonly SwappableAircraftDatabaseLookup? _databaseLookup;
-    private readonly JsonSerializerOptions _jsonOptions;
     private DateTime _lastHeatmapPrune = DateTime.MinValue;
 
     // Shared heatmap snapshots keyed by (cell size, window): built once per configuration per
@@ -71,12 +69,6 @@ public sealed class MapHubPushService : BackgroundService
         _rangeOutlineTracker = rangeOutlineTracker;
         _heatmapTracker = heatmapTracker;
         _databaseLookup = databaseLookup;
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = null,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-            Converters = { new JsonStringEnumConverter() }
-        };
     }
 
     /// <inheritdoc />
@@ -370,11 +362,11 @@ public sealed class MapHubPushService : BackgroundService
     /// Trades a short-lived string allocation for simple, reliable deep-equality detection.
     /// Used for the cold detail and outline paths.
     /// </summary>
-    /// <param name="obj">The object to hash; serialized with the shared push options.</param>
+    /// <param name="obj">The object to hash; serialized with the same settings the push itself uses.</param>
     /// <returns>An ordinal hash of the object's JSON representation.</returns>
     private int ComputeHash(object obj)
     {
-        string json = JsonSerializer.Serialize(obj, _jsonOptions);
+        string json = JsonSerializer.Serialize(obj, DaemonJsonOptions.Default);
         return json.GetHashCode(StringComparison.Ordinal);
     }
 

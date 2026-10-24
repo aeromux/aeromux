@@ -58,6 +58,11 @@ public sealed class ApiTestFixture : IAsyncDisposable
     public HttpClient Client => _client;
 
     /// <summary>
+    /// The test server's services, for inspecting what the server registered.
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
+
+    /// <summary>
     /// Creates a new test fixture. Call InitializeAsync() to start the server.
     /// </summary>
     private ApiTestFixture(
