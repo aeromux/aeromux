@@ -202,6 +202,73 @@ public sealed partial class MessageParser
     // BDS Register Parsers (Comm-B Data)
     // ========================================
 
+    // Status-gated fields per register, as (status bit, first data bit, last data bit) in MB
+    // bit numbering (1-56). The data bits include the sign bit where the field has one.
+    // BDS 1,0, 1,7, 2,0 and 3,0 have no status bits.
+
+    // BDS 4,0 selected vertical intention: MCP/FCU selected altitude, FMS selected altitude,
+    // barometric pressure setting, MCP/FCU mode bits (VNAV, altitude hold, approach),
+    // target altitude source. Reserved bits 40-47 and 52-53 are checked in TryParseBds40.
+    // Reference: ICAO Doc 9871, Table A-2-64
+    private static readonly (int Status, int First, int Last)[] Bds40StatusFields =
+        [(1, 2, 13), (14, 15, 26), (27, 28, 39), (48, 49, 51), (54, 55, 56)];
+
+    // BDS 4,4 meteorological routine air report: wind speed and direction (one status bit),
+    // average static pressure, turbulence, humidity. The figure of merit (bits 1-4) and the
+    // static air temperature (sign bit 24, bits 25-34) have no status bit.
+    // Reference: ICAO Doc 9871, Table A-2-68
+    private static readonly (int Status, int First, int Last)[] Bds44StatusFields =
+        [(5, 6, 23), (35, 36, 46), (47, 48, 49), (50, 51, 56)];
+
+    // BDS 4,5 meteorological hazard report: turbulence, wind shear, microburst, icing,
+    // wake vortex, static air temperature (sign + 9 bits), average static pressure,
+    // radio height. Reserved bits 52-56 are checked in TryParseBds45.
+    // Reference: ICAO Doc 9871, Table A-2-69
+    private static readonly (int Status, int First, int Last)[] Bds45StatusFields =
+        [(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12), (13, 14, 15), (16, 17, 26), (27, 28, 38), (39, 40, 51)];
+
+    // BDS 5,0 track and turn report: roll angle (sign + 9 bits), true track angle
+    // (sign + 10 bits), ground speed, track angle rate (sign + 9 bits), true airspeed.
+    // Reference: ICAO Doc 9871, Table A-2-80
+    private static readonly (int Status, int First, int Last)[] Bds50StatusFields =
+        [(1, 2, 11), (12, 13, 23), (24, 25, 34), (35, 36, 45), (46, 47, 56)];
+
+    // BDS 5,3 air-referenced state vector: magnetic heading (sign + 10 bits), indicated
+    // airspeed, Mach number, true airspeed, altitude rate (sign + 8 bits).
+    // Reference: ICAO Doc 9871, Table A-2-83 (not checked; the layout follows pyModeS 2.22)
+    private static readonly (int Status, int First, int Last)[] Bds53StatusFields =
+        [(1, 2, 12), (13, 14, 23), (24, 25, 33), (34, 35, 46), (47, 48, 56)];
+
+    // BDS 6,0 heading and speed report: magnetic heading (sign + 10 bits), indicated airspeed,
+    // Mach number, barometric altitude rate (sign + 9 bits), inertial vertical rate (sign + 9 bits).
+    // Reference: ICAO Doc 9871, Table A-2-96
+    private static readonly (int Status, int First, int Last)[] Bds60StatusFields =
+        [(1, 2, 12), (13, 14, 23), (24, 25, 34), (35, 36, 45), (46, 47, 56)];
+
+    /// <summary>
+    /// Checks the status-bit rule: a field whose status bit is 0 must be all zeros.
+    /// </summary>
+    /// <param name="mb">56-bit MB field (7 bytes).</param>
+    /// <param name="fields">The register's status-gated fields.</param>
+    /// <returns><see langword="true"/> if a field marked invalid carries data, which rules the register out.</returns>
+    /// <remarks>
+    /// ICAO Doc 9871 requires every bit of an unavailable field to be set to zero, including
+    /// the sign bit that follows the status bit in signed fields. A reply from another register
+    /// rarely satisfies this for a register it only resembles, so the rule rejects most of them.
+    /// </remarks>
+    private static bool ViolatesStatusRule(ReadOnlySpan<byte> mb, ReadOnlySpan<(int Status, int First, int Last)> fields)
+    {
+        foreach ((int status, int first, int last) in fields)
+        {
+            if (ExtractBits(mb, status, 1) == 0 && ExtractBits(mb, first, last - first + 1) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Infers the BDS code from MB field (56-bit Comm-B message) and parses the data.
     /// Uses pattern matching against all 10 Comm-B BDS registers.
@@ -300,8 +367,7 @@ public sealed partial class MessageParser
         }
 
         // Try MRAR registers (4,4/4,5) - meteorological reports
-        // These must be tried before BDS 5,3 because BDS 5,3 has lenient validation
-        // (only requires one field) and can incorrectly match meteorological messages
+        // These are tried before BDS 5,3, which is the least likely register to be reported
         Bds44MeteorologicalRoutine? bds44 = TryParseBds44(mb);
         if (bds44 != null)
         {
@@ -315,7 +381,7 @@ public sealed partial class MessageParser
         }
 
         // Try BDS 5,3 (Air-referenced state vector)
-        // Placed after meteorological registers due to lenient validation
+        // Tried last: of all the registers inferred here, it is the least likely to be reported
         Bds53AirReferencedState? bds53 = TryParseBds53(mb);
         if (bds53 != null)
         {
@@ -477,6 +543,11 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds40SelectedVerticalIntention? TryParseBds40(ReadOnlySpan<byte> mb)
     {
+        if (ViolatesStatusRule(mb, Bds40StatusFields))
+        {
+            return null; // A field marked invalid carries data
+        }
+
         // BDS 4,0: No fixed identifier, use status bits and range checks (per ICAO Annex 10 Vol IV)
         // Structure:
         // - Bit 1: MCP/FCU selected altitude status
@@ -590,6 +661,11 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds44MeteorologicalRoutine? TryParseBds44(ReadOnlySpan<byte> mb)
     {
+        if (ViolatesStatusRule(mb, Bds44StatusFields))
+        {
+            return null; // A field marked invalid carries data
+        }
+
         // BDS 4,4 Meteorological Routine Air Report structure (per ICAO Annex 10 Vol IV):
         // - Bits 1-4: Figure of Merit / Source (4 bits, valid range: 0-4, no status bit)
         // - Bit 5: Wind valid (applies to BOTH speed and direction)
@@ -648,11 +724,6 @@ public sealed partial class MessageParser
                 return null; // Invalid direction
             }
         }
-        else if (windSpeedRaw != 0 || windDirRaw != 0)
-        {
-            // Status bit consistency: if wind status is invalid, both speed and direction must be zero
-            return null;
-        }
 
         // Decode static air temperature
         // Temperature is always present in valid BDS 4,4 messages (no status bit)
@@ -676,11 +747,6 @@ public sealed partial class MessageParser
                 return null; // Outside valid pressure range
             }
         }
-        else if (pressureRaw != 0)
-        {
-            // Validation: if pressure not valid, raw value must be zero
-            return null;
-        }
 
         // Decode turbulence severity (0=Nil, 1=Light, 2=Moderate, 3=Severe)
         Severity? turbulence = null;
@@ -691,11 +757,6 @@ public sealed partial class MessageParser
                 return null; // Invalid severity value
             }
             turbulence = (Severity)turbulenceRaw;
-        }
-        else if (turbulenceRaw != 0)
-        {
-            // Validation: if turbulence not valid, raw value must be zero
-            return null;
         }
 
         // Decode relative humidity
@@ -708,11 +769,6 @@ public sealed partial class MessageParser
             {
                 return null; // Invalid percentage
             }
-        }
-        else if (humidityRaw != 0)
-        {
-            // Validation: if humidity not valid, raw value must be zero
-            return null;
         }
 
         // BDS 4,4 requires at least one meteorological field to be valid
@@ -731,6 +787,11 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds45MeteorologicalHazard? TryParseBds45(ReadOnlySpan<byte> mb)
     {
+        if (ViolatesStatusRule(mb, Bds45StatusFields))
+        {
+            return null; // A field marked invalid carries data
+        }
+
         // BDS 4,5 structure (simplified):
         // - Bit 1: Turbulence status
         // - Bits 2-3: Turbulence severity (0-3)
@@ -860,6 +921,11 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds50TrackAndTurn? TryParseBds50(ReadOnlySpan<byte> mb)
     {
+        if (ViolatesStatusRule(mb, Bds50StatusFields))
+        {
+            return null; // A field marked invalid carries data
+        }
+
         // BDS 5,0 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Roll angle status
         // - Bits 2-11: Roll angle (10 bits, signed, range: -90 to +90°, resolution: 45/256 deg = 0.176°)
@@ -990,6 +1056,11 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds53AirReferencedState? TryParseBds53(ReadOnlySpan<byte> mb)
     {
+        if (ViolatesStatusRule(mb, Bds53StatusFields))
+        {
+            return null; // A field marked invalid carries data
+        }
+
         // BDS 5,3 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Magnetic heading status
         // - Bits 2-12: Magnetic heading (11 bits sign-magnitude, range: 0-360°, resolution: 90/512 deg = 0.176°)
@@ -1000,8 +1071,7 @@ public sealed partial class MessageParser
         // - Bit 34: TAS status
         // - Bits 35-46: TAS (12 bits, range: 0-2047.5 kt, resolution: 0.5 kt)
         // - Bit 47: Vertical rate status
-        // - Bit 48: Vertical rate sign (1=descending, 0=climbing)
-        // - Bits 49-56: Vertical rate magnitude (8 bits, range: 0-16,320 ft/min, resolution: 64 ft/min)
+        // - Bits 48-56: Vertical rate (sign bit 48 + 8 bits, two's complement, range: -16,384 to +16,320 ft/min, resolution: 64 ft/min)
 
         int hdgStatus = ExtractBits(mb, 1, 1);
         int hdgRaw = ExtractBits(mb, 2, 11);
@@ -1074,8 +1144,8 @@ public sealed partial class MessageParser
             }
             else
             {
-                // Sign-magnitude encoding: sign bit determines positive/negative
-                int value = vrSign == 1 ? -vrRaw : vrRaw;
+                // Two's complement: the sign bit adds -256 to the 8-bit value
+                int value = vrSign == 1 ? vrRaw - 256 : vrRaw;
                 vr = value * 64; // 64 ft/min resolution
 
                 // Typical aircraft vertical rates: ±8000 ft/min
@@ -1100,6 +1170,11 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds60HeadingAndSpeed? TryParseBds60(ReadOnlySpan<byte> mb)
     {
+        if (ViolatesStatusRule(mb, Bds60StatusFields))
+        {
+            return null; // A field marked invalid carries data
+        }
+
         // BDS 6,0 structure (per ICAO Annex 10 Vol IV):
         // - Bit 1: Magnetic heading status
         // - Bits 2-12: Magnetic heading (11 bits, range: 0-360°, resolution: 90/512 deg = 0.176°)

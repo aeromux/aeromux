@@ -497,4 +497,150 @@ public static class BdsFrames
     /// Full Message: A8001EBCFFFB23286004A73F6A5B
     /// </remarks>
     public const string BdsInference_8001EB_Is50 = "A8001EBCFFFB23286004A73F6A5B";
+
+    // ========================================
+    // BDS Inference: Status-Bit Rule
+    // ========================================
+    // ICAO Doc 9871 requires a field whose status bit is 0 to be all zeros, sign bit
+    // included. These frames break that rule in the register they look like, so they are
+    // not that register.
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21) that looks like BDS 5,3 but breaks the status-bit rule
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 4D2407 (extracted from CRC parity)
+    /// MB Field: 90D148680C901E
+    ///
+    /// Read as BDS 5,3, only the magnetic heading is valid (47.3°). IAS (status bit 13),
+    /// Mach (24), TAS (34) and altitude rate (47) are all marked invalid, yet their bits
+    /// are not zero.
+    ///
+    /// Expected Results:
+    /// - BDS Code: Unknown
+    /// </remarks>
+    public const string BdsInference_4D2407_Not53 = "A800129390D148680C901E4474E6";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21) that looks like BDS 4,5 but breaks the status-bit rule
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 80073B (extracted from CRC parity), cruising at FL400 according to its
+    /// altitude replies in the same capture
+    /// MB Field: E26677A4661360
+    ///
+    /// Read as BDS 4,5, it reports severe turbulence, nil microburst, moderate icing,
+    /// 281 hPa and a radio height of 2480 ft. Wake vortex (status bit 13) and temperature
+    /// (status bit 16) are marked invalid, yet their bits are not zero.
+    ///
+    /// Expected Results:
+    /// - BDS Code: Unknown
+    /// </remarks>
+    public const string BdsInference_80073B_Not45 = "A8000A19E26677A4661360046D94";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21) that looks like BDS 6,0 but breaks the status-bit rule
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 4D2407 (extracted from CRC parity)
+    /// MB Field: 8368513A659023
+    ///
+    /// Read as BDS 6,0, it reports IAS 40 kt at Mach 0.932, which cannot both be true.
+    /// The inertial vertical rate (status bit 46) is marked invalid, yet its bits are not
+    /// zero.
+    ///
+    /// Expected Results:
+    /// - BDS Code: Unknown
+    /// </remarks>
+    public const string BdsInference_4D2407_Not60 = "A80012938368513A659023B23ED0";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21) that looks like BDS 4,0 but breaks the status-bit rule
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_2.txt
+    /// ICAO: 472FD2 (extracted from CRC parity)
+    /// MB Field: 000A4326BE0000
+    ///
+    /// Read as BDS 4,0, its only valid field is an 886.3 mb pressure setting. The MCP
+    /// altitude (status bit 1) and FMS altitude (status bit 14) are marked invalid, yet
+    /// their bits are not zero.
+    ///
+    /// Expected Results:
+    /// - BDS Code: Unknown
+    /// </remarks>
+    public const string BdsInference_472FD2_Not40 = "A800089B000A4326BE00004DF35C";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21) that looks like BDS 4,0 but is BDS 6,0
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 2.22.0 test data (tests/data/sample_data_commb_df21.csv), GPL-3.0
+    /// ICAO: 44058F
+    /// MB Field: D519A325A00000
+    ///
+    /// Read as BDS 4,0, it reports an MCP selected altitude of 43568 ft and an 872 mb
+    /// pressure setting, but the FMS altitude (status bit 14) is marked invalid and its
+    /// bits are not zero. Read as BDS 6,0, every field is consistent: magnetic heading
+    /// 239.2°, IAS 209 kt, Mach 0.6, barometric vertical rate 0 ft/min, inertial vertical
+    /// rate invalid. Neighboring replies from the same aircraft in that data show the
+    /// heading moving to 239.6°, which as BDS 4,0 would be a selected altitude drifting
+    /// by 32 ft per reply.
+    ///
+    /// Expected Results:
+    /// - BDS Code: 6,0
+    /// - Magnetic Heading: 239.2°
+    /// - IAS: 209 kt
+    /// - Mach: 0.6
+    /// </remarks>
+    public const string BdsInference_44058F_Is60 = "A80004B0D519A325A000007820CC";
+
+    /// <summary>
+    /// Comm-B Altitude Reply (DF 20) with BDS 6,0, inertial vertical rate invalid
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 2.22.0 test data (tests/data/sample_data_commb_df20.csv), GPL-3.0
+    /// ICAO: 4CA6E3
+    /// Altitude: 26375 ft barometric
+    /// MB Field: 901A2F2B21C000
+    ///
+    /// A valid BDS 6,0 whose inertial vertical rate is marked invalid (status bit 46) with
+    /// all of its bits zero, as the rule requires. Every BDS 6,0 in the aeromux captures
+    /// reports both vertical rates, so this frame comes from the pyModeS data.
+    ///
+    /// Expected Results:
+    /// - BDS Code: 6,0
+    /// - Magnetic Heading: 45.2°
+    /// - IAS: 279 kt
+    /// - Mach: 0.688
+    /// - Barometric Vertical Rate: 1792 ft/min
+    /// - Inertial Vertical Rate: null
+    /// </remarks>
+    public const string BdsInference_4CA6E3_Is60 = "A0001117901A2F2B21C000B31B62";
+
+    /// <summary>
+    /// Comm-B Identity Reply (DF 21) with BDS 5,0, track angle rate invalid
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 4A068C (extracted from CRC parity)
+    /// MB Field: FC1CE524400496
+    ///
+    /// A valid BDS 5,0 whose track angle rate is marked invalid (status bit 35) with all of
+    /// its bits zero, as the rule requires. readsb scores it as a tie between BDS 5,0 and
+    /// 6,0; consecutive replies from the same aircraft show a smoothly changing track and
+    /// ground speed, which only BDS 5,0 explains.
+    ///
+    /// Expected Results:
+    /// - BDS Code: 5,0
+    /// - Roll Angle: -5.6°
+    /// - Track Angle: 290.0°
+    /// - Ground Speed: 290 kt
+    /// - True Airspeed: 300 kt
+    /// - Track Angle Rate: null
+    /// </remarks>
+    public const string BdsInference_4A068C_Is50 = "A8000800FC1CE524400496E1E748";
 }

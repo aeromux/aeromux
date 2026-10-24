@@ -228,4 +228,25 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
         aircraft.Autopilot.AltitudeHoldMode.Should().BeNull("mode bits are not valid");
         aircraft.Autopilot.ApproachMode.Should().BeNull("mode bits are not valid");
     }
+
+    [Fact]
+    public void Update_ReplyBreakingBds45StatusRule_DoesNotReportHazards()
+    {
+        // Arrange - DF 21 reply from 80073B (cruising at FL400) that reads as a BDS 4,5 with
+        // severe turbulence and moderate icing, but carries data in invalid fields
+        Tracker = CreateTracker();
+        ProcessedFrame frame = CreateFrame(BdsFrames.BdsInference_80073B_Not45, "80073B");
+
+        // Act
+        Tracker.Update(frame);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("80073B");
+        aircraft.Should().NotBeNull();
+        (aircraft!.Meteo?.Turbulence).Should().BeNull("the reply is not a BDS 4,5");
+        (aircraft.Meteo?.Microburst).Should().BeNull("the reply is not a BDS 4,5");
+        (aircraft.Meteo?.Icing).Should().BeNull("the reply is not a BDS 4,5");
+        (aircraft.Meteo?.Pressure).Should().BeNull("the reply is not a BDS 4,5");
+        (aircraft.Meteo?.RadioHeight).Should().BeNull("the reply is not a BDS 4,5");
+    }
 }
