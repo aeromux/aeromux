@@ -21,6 +21,7 @@ using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -104,10 +105,40 @@ public static class DaemonApiServer
             builder.Services.AddSingleton(new HeatmapTracker(config.Config.Receiver?.Latitude));
         }
 
+        // Compress responses with the framework's own Brotli and gzip providers, Brotli first so
+        // it wins when a client accepts both. Browsers offer Brotli only over HTTPS, so a Web Map
+        // opened over plain HTTP on the local network gets gzip; Brotli serves HTTPS reverse
+        // proxies that forward the browser's Accept-Encoding, and scripts. The defaults compress
+        // JSON, HTML, CSS and JavaScript at the fastest level and leave fonts and images alone.
+        builder.Services.AddResponseCompression(options =>
+        {
+            options.Providers.Add<BrotliCompressionProvider>();
+            options.Providers.Add<GzipCompressionProvider>();
+        });
+
         // Bind to configured address and port
         builder.WebHost.UseUrls($"http://{config.BindAddress}:{config.ApiPort}");
 
         WebApplication app = builder.Build();
+
+        // First in the pipeline, so error bodies are compressed too. The SignalR endpoint is
+        // excluded: no transport, including the event-stream and long-polling fallbacks, may
+        // be buffered by a compressor.
+        app.UseWhen(
+            context => !context.Request.Path.StartsWithSegments("/maphub"),
+            branch => branch.UseResponseCompression());
+
+        // Live data must never be served from a cache, and photo metadata must not outlive the
+        // daemon's own time limit in one. Set before the endpoint runs so errors carry it too.
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.Headers.CacheControl = "no-store";
+            }
+
+            await next(context);
+        });
 
         // Give bodiless API errors the same {"Error": "..."} shape as every other API error.
         // Routing answers an unknown /api path with an empty 404 and a wrong method with an

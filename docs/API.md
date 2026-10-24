@@ -653,7 +653,7 @@ curl -s "http://localhost:8080/api/v1/stats"
 }
 ```
 
-The `Uptime` field is the number of seconds since the API server started, which is a few seconds after the daemon itself starts, once devices and the database are initialized. The `Stream` section shows cumulative frame counts since the receiver started. `FramesPerSecond` is the average rate of valid frames over that whole period, not an instantaneous rate, so it changes slowly once the daemon has been running for a while.
+The `Uptime` field is the number of seconds since the daemon started, the same span the session summary reports when the daemon stops. The `Stream` section shows cumulative frame counts since the receiver started. `FramesPerSecond` is the average rate of valid frames over that whole period, not an instantaneous rate, so it changes slowly once the daemon has been running for a while.
 
 When the daemon has no SDR device, for example when it only consumes Beast input, there are no frame statistics: every `Stream` field is `0` and `Devices` is `0`.
 
@@ -683,6 +683,8 @@ The HTTP server starts only after the aircraft state tracker is running, so any 
 All API responses follow consistent serialization conventions:
 
 - **Content-Type:** All responses are served as `application/json`.
+- **Caching:** Every API response, errors included, carries `Cache-Control: no-store`, so no browser or proxy serves live data from a cache.
+- **Compression:** Responses are compressed when the client asks for it, with Brotli (`br`) preferred over `gzip` when both are offered, and every compressed response carries `Vary: Accept-Encoding`. Browsers offer Brotli only over HTTPS, so a browser on the local network typically receives gzip. With `curl`, add `--compressed`. The Web Map's static files are compressed the same way; the SignalR connection at `/maphub` is not.
 - **Field names** use PascalCase throughout, matching the C# property names in the underlying data model.
 - **Timestamps** are formatted as ISO 8601 strings in UTC (e.g., `"2026-03-13T14:30:00Z"`).
 - **Null handling** follows an explicit inclusion policy: within any returned section, all fields are always present. Fields that have no data are set to `null` rather than being omitted, which allows clients to discover the full schema from any single response.

@@ -41,6 +41,7 @@ namespace Aeromux.CLI.Commands.Daemon;
 public sealed class DaemonOrchestrator : IAsyncDisposable
 {
     private readonly DaemonValidatedConfig _config;
+    private readonly DateTime _sessionStart;
     private SwappableAircraftDatabaseLookup? _databaseLookup;
     private DatabaseAutoUpdater? _autoUpdater;
     private ReceiverStream? _receiverStream;
@@ -55,10 +56,13 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     /// Creates a new daemon orchestrator with the specified validated configuration.
     /// </summary>
     /// <param name="config">Validated daemon configuration.</param>
-    public DaemonOrchestrator(DaemonValidatedConfig config)
+    /// <param name="sessionStart">UTC time the daemon session started, before any device or
+    /// service; the REST API reports uptime from it, so it agrees with the session summary.</param>
+    public DaemonOrchestrator(DaemonValidatedConfig config, DateTime sessionStart)
     {
         ArgumentNullException.ThrowIfNull(config);
         _config = config;
+        _sessionStart = sessionStart;
     }
 
     /// <summary>
@@ -92,7 +96,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         Log.Information("Device stream started");
 
         // Create the enrichment lookup. When database enrichment is enabled we always create a
-        // swappable wrapper — even if no database file exists yet — so the auto-updater can
+        // swappable wrapper, even if no database file exists yet, so the auto-updater can
         // download one and hot-swap it in live (first-run) without a restart. When enrichment is
         // disabled we leave it null exactly as before.
         DatabaseConfig? databaseConfig = _config.Config.Database;
@@ -161,9 +165,8 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         // Start REST API server (if enabled)
         if (_config.ApiEnabled)
         {
-            DateTime startTime = DateTime.UtcNow;
             _webApp = DaemonApiServer.Build(_config, _aircraftTracker, _photoService,
-                () => _receiverStream?.GetStatistics(), startTime, _databaseLookup);
+                () => _receiverStream?.GetStatistics(), _sessionStart, _databaseLookup);
             await _webApp.StartAsync(cancellationToken);
             Log.Information("REST API listening on http://{Bind}:{Port}/api/v1",
                 _config.BindAddress, _config.ApiPort);
@@ -210,7 +213,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         }
         else if (databaseConfig?.AutoUpdate is null || databaseConfig.AutoUpdate.Enabled)
         {
-            // Auto-update wanted (default on) but enrichment cannot run — report the accurate reason.
+            // Auto-update wanted (default on) but enrichment cannot run: report the accurate reason.
             if (databaseConfig is { Enabled: true } && string.IsNullOrWhiteSpace(databaseConfig.Path))
             {
                 Log.Warning("Database auto-update requested but no database.path is configured — auto-update disabled.");

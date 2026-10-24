@@ -50,7 +50,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
         DaemonSessionSummaryReporter.LogSessionStart();
         Console.WriteLine("Aeromux daemon starting...");
 
-        // Track session start time for summary statistics
+        // Track session start time for the summary statistics and the REST API's uptime
         DateTime sessionStart = DateTime.UtcNow;
 
         try
@@ -62,7 +62,7 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             DaemonValidatedConfig validatedConfig = DaemonConfigValidator.Validate(settings, config);
 
             // Create and start all daemon services (receiver stream, aircraft tracker, broadcasters)
-            var orchestrator = new DaemonOrchestrator(validatedConfig);
+            var orchestrator = new DaemonOrchestrator(validatedConfig, sessionStart);
             try
             {
                 await orchestrator.StartAsync(cancellationToken);

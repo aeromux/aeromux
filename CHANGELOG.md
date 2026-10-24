@@ -4,6 +4,10 @@ All notable changes to Aeromux will be documented in this file.
 
 ## [0.8.3] — Unreleased
 
+### Changed
+
+- **REST API and Web Map: Compressed Responses and Uncached Live Data** — The daemon now compresses what it serves, using the Brotli and gzip support built into .NET, so the Web Map's first load over the local network is about a third of its former size (the map library alone drops from about 1 MB to under 400 KB) and API responses shrink by more. Brotli is used whenever the client offers it, which browsers do over HTTPS; on plain HTTP they receive gzip. The live connection the Web Map uses for updates is left uncompressed. Every API response now also carries `Cache-Control: no-store`, so no browser or proxy can show stale aircraft data from a cache. `Uptime` in `/api/v1/stats` and `/api/v1/health` now counts from when the daemon started, matching the session duration it logs on exit, rather than from when its web server came up a few seconds later.
+
 ### Fixed
 
 - **Web Map: Aircraft Missing Across the 180° Meridian** — A map view that crossed the 180° meridian, or one zoomed out far enough to show the world more than once, could come up empty or stop following the view. MapLibre reports such views with longitudes past ±180 (an eastern edge of 188°, for example), which the server rejected: the initial load and the refetch after a reconnect got an error instead of aircraft, and live updates kept going to the previous view. A wide screen at zoom 2 centered on Europe was already enough to trigger it. The Web Map now folds its view into range before sending it, and the server, the live updates and the heatmap all understand a box whose western edge is east of its eastern edge as one that crosses the meridian. The Sky View uses the same rule, so a receiver near the meridian now subscribes to its own range instead of the whole world.

@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.Core.ModeS.ValueObjects;
@@ -46,6 +47,7 @@ public sealed class MapHubPushService : BackgroundService
     private readonly RangeOutlineTracker? _rangeOutlineTracker;
     private readonly HeatmapTracker? _heatmapTracker;
     private readonly SwappableAircraftDatabaseLookup? _databaseLookup;
+    private readonly ConcurrentDictionary<string, MapHubClientState> _clientStates;
     private DateTime _lastHeatmapPrune = DateTime.MinValue;
 
     // Shared heatmap snapshots keyed by (cell size, window): built once per configuration per
@@ -63,9 +65,26 @@ public sealed class MapHubPushService : BackgroundService
         RangeOutlineTracker? rangeOutlineTracker = null,
         HeatmapTracker? heatmapTracker = null,
         SwappableAircraftDatabaseLookup? databaseLookup = null)
+        : this(tracker, hubContext, MapHub.ClientStates, rangeOutlineTracker, heatmapTracker, databaseLookup)
+    {
+    }
+
+    /// <summary>
+    /// Initializes the push service over a given set of client states instead of the hub's
+    /// shared one. Lets tests run the service against clients no other instance can touch.
+    /// Not used by dependency injection, which only considers public constructors.
+    /// </summary>
+    internal MapHubPushService(
+        IAircraftStateTracker tracker,
+        IHubContext<MapHub> hubContext,
+        ConcurrentDictionary<string, MapHubClientState> clientStates,
+        RangeOutlineTracker? rangeOutlineTracker = null,
+        HeatmapTracker? heatmapTracker = null,
+        SwappableAircraftDatabaseLookup? databaseLookup = null)
     {
         _tracker = tracker;
         _hubContext = hubContext;
+        _clientStates = clientStates;
         _rangeOutlineTracker = rangeOutlineTracker;
         _heatmapTracker = heatmapTracker;
         _databaseLookup = databaseLookup;
@@ -93,12 +112,17 @@ public sealed class MapHubPushService : BackgroundService
         }
     }
 
-    private async Task PushUpdates(CancellationToken cancellationToken)
+    /// <summary>
+    /// Runs one push tick: feeds the coverage trackers, then sends each connected client
+    /// the changes for its viewport, its selected aircraft, and its overlays.
+    /// </summary>
+    /// <param name="cancellationToken">Stops the tick between clients.</param>
+    internal async Task PushUpdates(CancellationToken cancellationToken)
     {
         DateTime nowUtc = DateTime.UtcNow;
         IReadOnlyList<Aircraft> allAircraft = _tracker.GetAllAircraft();
         int totalCount = allAircraft.Count;
-        bool hasClients = !MapHub.ClientStates.IsEmpty;
+        bool hasClients = !_clientStates.IsEmpty;
 
         // Live enrichment-database state for the Web Map header subtitle (read once per tick so
         // every client sees the same value; reflects a hot-swap on the next tick).
@@ -149,7 +173,7 @@ public sealed class MapHubPushService : BackgroundService
         List<RangeOutlineCoordinate>? outline = _rangeOutlineTracker?.GetOutline();
         int outlineHash = outline is not null ? ComputeHash(outline) : 0;
 
-        foreach ((string connectionId, MapHubClientState state) in MapHub.ClientStates)
+        foreach ((string connectionId, MapHubClientState state) in _clientStates)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -231,6 +255,9 @@ public sealed class MapHubPushService : BackgroundService
             if (selectedAircraft is not null)
             {
                 Dictionary<string, object?> detail = BuildDetailResponse(selectedAircraft);
+                // The detail carries its own Timestamp, so this hash differs every tick and the
+                // detail is re-sent each second. The Web Map relies on that: every detail push
+                // adds a point to the flight-profile chart.
                 int detailHash = ComputeHash(detail);
 
                 if (detailHash != state.LastPushedDetailHash)
@@ -309,7 +336,7 @@ public sealed class MapHubPushService : BackgroundService
         // Collect the distinct configurations in use, so each is built once below and shared by
         // every client on it rather than rebuilt per client.
         var needed = new HashSet<(int, long)>();
-        foreach ((_, MapHubClientState state) in MapHub.ClientStates)
+        foreach ((_, MapHubClientState state) in _clientStates)
         {
             if (state.HeatmapEnabled)
             {
