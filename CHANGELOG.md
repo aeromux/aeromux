@@ -4,6 +4,10 @@ All notable changes to Aeromux will be documented in this file.
 
 ## [0.9.0] — Unreleased
 
+### Added
+
+- **REST API: Configuration Endpoint** — `GET /api/v1/config` returns the configuration the daemon is running with, after the built-in defaults, the YAML file and the command-line options are combined, in the same structure as `aeromux.yaml`. `ConfigFile` names the YAML file that was loaded, or is `null` when none was, which answers the common question of why a setting in the file seems to be ignored. With `?source=true`, every value also says where it came from: `Cli`, `Yaml` or `Default`. The receiver UUID is shown as `"(redacted)"`, because MLAT aggregators identify a feeder by it.
+
 ### Fixed
 
 - **Configuration: Empty Configuration File Stopped Aeromux** — An `aeromux.yaml` with nothing in it, or with every line commented out, stopped the daemon and the live display at startup with `Failed to load configuration` and an internal null reference error. Such a file now means what it says: nothing is configured, and every setting keeps its default.

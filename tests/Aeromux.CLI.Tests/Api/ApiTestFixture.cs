@@ -80,7 +80,8 @@ public sealed class ApiTestFixture : IAsyncDisposable
     /// <summary>
     /// Creates and starts a new test fixture with an in-memory API server.
     /// </summary>
-    public static async Task<ApiTestFixture> CreateAsync()
+    /// <param name="config">The daemon configuration to serve; <see cref="CreateDefaultConfig"/> when null.</param>
+    public static async Task<ApiTestFixture> CreateAsync(DaemonValidatedConfig? config = null)
     {
         var trackerMock = new Mock<IAircraftStateTracker>();
         trackerMock.Setup(t => t.GetAllAircraft()).Returns(new List<Aircraft>());
@@ -91,7 +92,39 @@ public sealed class ApiTestFixture : IAsyncDisposable
             .Setup(s => s.GetAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PhotoResult(PhotoOutcome.NoPhoto, PhotoMetadata.Negative()));
 
-        var config = new DaemonValidatedConfig
+        config ??= CreateDefaultConfig();
+
+        DateTime startTime = DateTime.UtcNow;
+
+        // Use a shared reference so the lambda captures the same fixture instance we return
+        var fixture = new ApiTestFixture(null!, null!, trackerMock, photoServiceMock);
+
+        WebApplication app = DaemonApiServer.Build(
+            config,
+            trackerMock.Object,
+            photoServiceMock.Object,
+            () => fixture.Statistics,
+            startTime);
+
+        // Use random port for tests
+        app.Urls.Clear();
+        app.Urls.Add("http://127.0.0.1:0");
+        await app.StartAsync();
+
+        // Get the actual bound URL and update the fixture in-place
+        string url = app.Urls.First();
+        fixture._app = app;
+        fixture._client = new HttpClient { BaseAddress = new Uri(url) };
+
+        return fixture;
+    }
+
+    /// <summary>
+    /// The configuration the fixture serves by default: a receiver location, Beast output
+    /// only, no SDR or Beast input. Tests needing another adjust it with <c>with</c>.
+    /// </summary>
+    public static DaemonValidatedConfig CreateDefaultConfig() =>
+        new()
         {
             Config = new AeromuxConfig
             {
@@ -118,31 +151,6 @@ public sealed class ApiTestFixture : IAsyncDisposable
             EnabledSdrSources = [],
             BeastSources = []
         };
-
-        DateTime startTime = DateTime.UtcNow;
-
-        // Use a shared reference so the lambda captures the same fixture instance we return
-        var fixture = new ApiTestFixture(null!, null!, trackerMock, photoServiceMock);
-
-        WebApplication app = DaemonApiServer.Build(
-            config,
-            trackerMock.Object,
-            photoServiceMock.Object,
-            () => fixture.Statistics,
-            startTime);
-
-        // Use random port for tests
-        app.Urls.Clear();
-        app.Urls.Add("http://127.0.0.1:0");
-        await app.StartAsync();
-
-        // Get the actual bound URL and update the fixture in-place
-        string url = app.Urls.First();
-        fixture._app = app;
-        fixture._client = new HttpClient { BaseAddress = new Uri(url) };
-
-        return fixture;
-    }
 
     /// <summary>
     /// Creates a test Aircraft record with reasonable defaults.

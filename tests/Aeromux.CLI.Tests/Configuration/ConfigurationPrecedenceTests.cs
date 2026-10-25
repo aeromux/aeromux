@@ -15,7 +15,9 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Globalization;
+using System.Text.Json.Nodes;
 using Aeromux.CLI.Commands.Daemon;
+using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.CLI.Tests.Commands.Daemon;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.Configuration.Enums;
@@ -155,6 +157,69 @@ public sealed class ConfigurationPrecedenceTests : IDisposable
 
         Read(config, keyPath).Should().Be(expectedCli);
         config.Origin.SourceOf(keyPath).Should().Be(ConfigurationSource.Cli);
+    }
+
+    // === What /api/v1/config reports ===
+
+    [Theory]
+    [MemberData(nameof(Options))]
+    public void ConfigReport_ShowsTheYamlValueAndSource(
+        string keyPath, string yaml, string[] args, string expectedDefault, string expectedYaml, string expectedCli)
+    {
+        _ = (args, expectedDefault, expectedCli);
+
+        JsonObject report = DaemonConfigReport.Build(Resolve(yaml), includeSource: true);
+
+        ReportedSources(report, keyPath).Should().AllBe("Yaml");
+        ReportedValue(report, keyPath).Should().Be(keyPath == "receiver.receiverUuid" ? DaemonConfigReport.Redacted : expectedYaml);
+    }
+
+    [Theory]
+    [MemberData(nameof(Options))]
+    public void ConfigReport_ShowsTheCommandLineValueAndSource(
+        string keyPath, string yaml, string[] args, string expectedDefault, string expectedYaml, string expectedCli)
+    {
+        _ = (expectedDefault, expectedYaml);
+
+        JsonObject report = DaemonConfigReport.Build(Resolve(yaml, args), includeSource: true);
+
+        ReportedSources(report, keyPath).Should().AllBe("Cli");
+        ReportedValue(report, keyPath).Should().Be(keyPath == "receiver.receiverUuid" ? DaemonConfigReport.Redacted : expectedCli);
+    }
+
+    /// <summary>
+    /// The report's node for a key path: each segment in PascalCase.
+    /// </summary>
+    private static JsonNode ReportNode(JsonObject report, string keyPath) =>
+        keyPath.Split('.').Aggregate<string, JsonNode>(report,
+            (node, segment) => node[string.Concat(char.ToUpperInvariant(segment[0]).ToString(), segment[1..])]!);
+
+    /// <summary>
+    /// The sources reported for a key: one per field for the Beast source list, one otherwise.
+    /// </summary>
+    private static IEnumerable<string?> ReportedSources(JsonObject report, string keyPath) =>
+        keyPath == "beastSources"
+            ? ReportNode(report, keyPath).AsArray()
+                .SelectMany(item => item!.AsObject().Select(field => (string?)field.Value!["Source"]))
+            : [(string?)ReportNode(report, keyPath)["Source"]];
+
+    /// <summary>
+    /// The reported value as the invariant text <see cref="Read"/> produces.
+    /// </summary>
+    private static string ReportedValue(JsonObject report, string keyPath)
+    {
+        JsonNode node = ReportNode(report, keyPath);
+        if (keyPath == "beastSources")
+        {
+            return string.Join(",", node.AsArray().Select(item => $"{item!["Host"]!["Value"]}:{item["Port"]!["Value"]}"));
+        }
+
+        return node["Value"] switch
+        {
+            null => "null",
+            JsonArray array => string.Join(",", array.Select(item => item!.ToString())),
+            JsonNode value => value.ToJsonString().Trim('"')
+        };
     }
 
     // === Implied values ===

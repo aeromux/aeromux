@@ -63,7 +63,7 @@ public static partial class DaemonApiRoutes
     /// <param name="photoService">Aircraft photo service backing the <c>/api/v1/aircraft/{icao}/photo</c> endpoint.</param>
     /// <param name="getStatistics">Function to get current stream statistics.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
-    /// <param name="config">Validated daemon configuration for receiver and device metadata.</param>
+    /// <param name="config">Validated daemon configuration, reported by the config endpoint.</param>
     public static void MapRoutes(
         WebApplication app,
         IAircraftStateTracker tracker,
@@ -393,6 +393,24 @@ public static partial class DaemonApiRoutes
             return Results.Ok(DaemonApiMapper.ToStats(
                 stats, tracker, config.EnabledSdrSources.Count, startTime, config.Config.Receiver,
                 config.Config.Heatmap?.Collect != false));
+        });
+
+        // GET /api/v1/config: the effective configuration, optionally with each value's source
+        app.MapGet("/api/v1/config", (HttpContext httpContext) =>
+        {
+            if (!TryGetSingleQueryValue(httpContext, "source", out string? sourceParam, out IResult? error))
+            {
+                return error;
+            }
+
+            // Empty means absent, as for every other parameter
+            bool includeSource = false;
+            if (!string.IsNullOrEmpty(sourceParam) && !bool.TryParse(sourceParam, out includeSource))
+            {
+                return Results.BadRequest(new ErrorResponse($"Invalid source: {sourceParam}. Must be true or false."));
+            }
+
+            return Results.Json(DaemonConfigReport.Build(config, includeSource));
         });
 
         // GET /api/v1/health: health check

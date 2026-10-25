@@ -28,7 +28,7 @@ namespace Aeromux.CLI.Commands.Daemon.Api;
 /// </summary>
 public static class DaemonApiMapper
 {
-    private static readonly string AppVersion = (Assembly.GetExecutingAssembly()
+    internal static readonly string AppVersion = (Assembly.GetExecutingAssembly()
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown")
         .Split('+')[0];
 
