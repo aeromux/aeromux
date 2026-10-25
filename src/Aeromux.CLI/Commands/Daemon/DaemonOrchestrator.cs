@@ -31,7 +31,8 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// </summary>
 /// <remarks>
 /// CRITICAL SHUTDOWN ORDER enforced by DisposeAsync:
-/// 0. Stop the database auto-updater (so a hot-swap cannot race connection disposal)
+/// 0. Stop the statistics sampler (so no reading touches a stream being torn down) and the
+///    database auto-updater (so a hot-swap cannot race connection disposal)
 /// 1. Stop TCP broadcasters (unsubscribe from device stream)
 /// 2. Stop REST API server
 /// 3. Stop receiver stream (close RTL-SDR devices, complete broadcast channel)
@@ -45,6 +46,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     private SwappableAircraftDatabaseLookup? _databaseLookup;
     private DatabaseAutoUpdater? _autoUpdater;
     private ReceiverStream? _receiverStream;
+    private DaemonStatisticsSampler? _statistics;
     private AircraftStateTracker? _aircraftTracker;
     private AircraftPhotoCache? _photoCache;
     private AircraftPhotoService? _photoService;
@@ -95,6 +97,11 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         // ReceiverStream.StartAsync() initializes the internal broadcaster task and makes Subscribe() available
         await _receiverStream.StartAsync(cancellationToken);
         Log.Information("Device stream started");
+
+        // Read the stream's statistics once a second from now on, so rates and source
+        // health have a history by the time the REST API is asked for them
+        _statistics = new DaemonStatisticsSampler(() => _receiverStream?.GetReceiverStatistics());
+        _statistics.Start(cancellationToken);
 
         // Create the enrichment lookup. When database enrichment is enabled we always create a
         // swappable wrapper, even if no database file exists yet, so the auto-updater can
@@ -250,8 +257,15 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         Console.WriteLine("Shutting down TCP broadcasters, tracker, and device stream...");
         Log.Information("Shutting down TCP broadcasters, tracker, and device stream...");
 
-        // Step 0: Stop the database auto-updater before anything else, so a hot-swap can never race
-        // the disposal of the enrichment connection (Step 6) or the tracker's consumer (Step 5).
+        // Step 0: Stop the statistics sampler before anything else, so no reading touches the
+        // receiver stream while it is torn down (Step 3).
+        if (_statistics != null)
+        {
+            await _statistics.DisposeAsync();
+        }
+
+        // Stop the database auto-updater too, so a hot-swap can never race the disposal of the
+        // enrichment connection (Step 6) or the tracker's consumer (Step 5).
         if (_autoUpdater != null)
         {
             await _autoUpdater.DisposeAsync();
