@@ -46,7 +46,7 @@ internal sealed class LiveTuiDisplay
     /// Keyboard input is checked every 50ms for responsive navigation.
     /// </remarks>
     public async Task<int> RunAsync(
-        IFrameStream stream,
+        ReceiverStream stream,
         LiveSettings settings,
         ReceiverConfig? receiverConfig,
         DateTime sessionStart,
@@ -224,7 +224,6 @@ internal sealed class LiveTuiDisplay
                             {
                                 ctx.UpdateTarget(LiveAircraftTableBuilder.Build(
                                     sortedAircraft,
-                                    stream.GetStatistics(),
                                     state.SelectedRow,
                                     state.DistanceUnit,
                                     state.AltitudeUnit,
@@ -311,7 +310,7 @@ internal sealed class LiveTuiDisplay
             // Display session summary with statistics
             LiveSessionReporter.LogSessionSummary(
                 sessionStart,
-                stream.GetStatistics(),
+                stream.GetReceiverStatistics(),
                 tracker.GetAllAircraft().Count);
         }
 

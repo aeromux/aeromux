@@ -209,16 +209,6 @@ public class BeastStreamReconnectionTests
         reader.Should().NotBeNull();
     }
 
-    // ─── Statistics ───
-
-    [Fact]
-    public async Task GetStatistics_ReturnsNull()
-    {
-        // Beast source doesn't expose statistics (only raw frames)
-        await using var stream = new BeastStream("127.0.0.1", 30005, DefaultTracking);
-        stream.GetStatistics().Should().BeNull();
-    }
-
     // ─── Constructor Validation ───
 
     [Fact]

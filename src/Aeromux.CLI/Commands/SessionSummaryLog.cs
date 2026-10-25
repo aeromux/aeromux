@@ -1,0 +1,157 @@
+// Aeromux Multi-SDR Mode S and ADSB Demodulator and Decoder for .NET
+// Copyright (C) 2025-2026 Nandor Toth <dev@nandortoth.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see http://www.gnu.org/licenses.
+
+using System.Globalization;
+using Aeromux.Infrastructure.Streaming;
+using Serilog;
+
+namespace Aeromux.CLI.Commands;
+
+/// <summary>
+/// Writes the body of the session summary that the daemon and the live command log when
+/// they stop: the totals, then one block per input source.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The figures and their names are those of <c>GET /api/v1/stats</c>, read from the same
+/// <see cref="ReceiverStatistics"/>, so the log and the API never disagree.
+/// </para>
+/// <para>
+/// The summary is read by people, in the log file and on the terminal, so it is laid out
+/// for reading: one value per line, labels padded so that every number ends in the same
+/// column. Each line is still a message template, so the values remain structured
+/// properties. String properties use the <c>:l</c> format, which writes them without
+/// quotes in every sink.
+/// </para>
+/// </remarks>
+internal static class SessionSummaryLog
+{
+    /// <summary>The line between two blocks, as wide as the heading's separators.</summary>
+    internal const string BlockSeparator = "───────────────────────────────────────────────────────────────";
+
+    /// <summary>
+    /// Logs the summary body: the duration and totals, then a block for the SDR devices
+    /// together, one per device, one per Beast source, and one for MLAT, each only when
+    /// that source exists.
+    /// </summary>
+    /// <param name="logger">The logger to write to.</param>
+    /// <param name="statistics">The last reading of the receiver, or null when it never started.</param>
+    /// <param name="duration">How long the session ran.</param>
+    /// <param name="aircraftTracked">Aircraft tracked at the end, logged after the frames; null to leave it out.</param>
+    internal static void Write(
+        ILogger logger,
+        ReceiverStatistics? statistics,
+        TimeSpan duration,
+        int? aircraftTracked = null)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+
+        logger.Information("Session duration     {Duration,11:l}", FormatDuration(duration));
+
+        if (statistics == null)
+        {
+            logger.Information("No statistics: the receiver did not start");
+            return;
+        }
+
+        double average = duration > TimeSpan.Zero ? statistics.FramesDelivered / duration.TotalSeconds : 0;
+        logger.Information("Frames delivered     {FramesDelivered,11:N0}   {AveragePerSecond:N1} per second on average",
+            statistics.FramesDelivered, average);
+
+        if (aircraftTracked is { } aircraft)
+        {
+            logger.Information("Aircraft tracked     {AircraftTracked,11:N0}", aircraft);
+        }
+
+        if (statistics.Sdr is { } sdr)
+        {
+            WriteSdr(logger, sdr);
+        }
+
+        foreach (BeastSourceStatistics source in statistics.BeastSources)
+        {
+            logger.Information(BlockSeparator);
+            logger.Information("Beast source {Host:l}:{Port}", source.Host, source.Port);
+            logger.Information("  Received           {Received,11:N0}", source.Received);
+            CountWithShare(logger, "  Unconfirmed        {Unconfirmed,11:N0}",
+                "  Unconfirmed        {Unconfirmed,11:N0}  {UnconfirmedShare,5:F1}%", source.Unconfirmed, source.Received);
+            CountWithShare(logger, "  Accepted           {Accepted,11:N0}",
+                "  Accepted           {Accepted,11:N0}  {AcceptedShare,5:F1}%", source.Accepted, source.Received);
+            logger.Information("  Reconnects         {Reconnects,11:N0}", source.Reconnects);
+        }
+
+        if (statistics.Mlat is { } mlat)
+        {
+            logger.Information(BlockSeparator);
+            logger.Information("MLAT");
+            logger.Information("  Received           {Received,11:N0}", mlat.Received);
+        }
+    }
+
+    private static void WriteSdr(ILogger logger, SdrStatistics sdr)
+    {
+        long extracted = sdr.Devices.Sum(d => d.Extracted);
+
+        // CRC errors, unconfirmed and accepted divide the extracted frames between them, so
+        // only they get a share. Corrected frames are part of unconfirmed and accepted.
+        logger.Information(BlockSeparator);
+        logger.Information("SDR, all devices");
+        logger.Information("  Extracted          {Extracted,11:N0}", extracted);
+        CountWithShare(logger, "  CRC errors         {CrcErrors,11:N0}",
+            "  CRC errors         {CrcErrors,11:N0}  {CrcErrorsShare,5:F1}%", sdr.Devices.Sum(d => d.CrcErrors), extracted);
+        logger.Information("  Corrected          {Corrected,11:N0}", sdr.Devices.Sum(d => d.Corrected));
+        CountWithShare(logger, "  Unconfirmed        {Unconfirmed,11:N0}",
+            "  Unconfirmed        {Unconfirmed,11:N0}  {UnconfirmedShare,5:F1}%", sdr.Unconfirmed, extracted);
+        CountWithShare(logger, "  Accepted           {Accepted,11:N0}",
+            "  Accepted           {Accepted,11:N0}  {AcceptedShare,5:F1}%", sdr.Accepted, extracted);
+
+        foreach (SdrDeviceStatistics device in sdr.Devices)
+        {
+            logger.Information(BlockSeparator);
+            logger.Information("Device '{DeviceName:l}' (index {DeviceIndex})", device.Name, device.DeviceIndex);
+            logger.Information("  Extracted          {Extracted,11:N0}", device.Extracted);
+            CountWithShare(logger, "  CRC errors         {CrcErrors,11:N0}",
+                "  CRC errors         {CrcErrors,11:N0}  {CrcErrorsShare,5:F1}%", device.CrcErrors, device.Extracted);
+            logger.Information("  Corrected          {Corrected,11:N0}", device.Corrected);
+            logger.Information("  Duplicates         {Duplicates,11:N0}", device.Duplicates);
+            logger.Information("  Messages           {Messages,11:N0}", device.Messages);
+        }
+    }
+
+    /// <summary>
+    /// Logs a count with its share of <paramref name="total"/>, or without one when the
+    /// total is 0 and a share would mean nothing.
+    /// </summary>
+    private static void CountWithShare(ILogger logger, string template, string templateWithShare, long count, long total)
+    {
+        if (total > 0)
+        {
+            logger.Information(templateWithShare, count, count * 100.0 / total);
+        }
+        else
+        {
+            logger.Information(template, count);
+        }
+    }
+
+    /// <summary>
+    /// Formats a duration as hours, minutes and seconds, with the hours counted in full:
+    /// a session of 25 hours reads <c>25:00:00</c>, not <c>01:00:00</c>.
+    /// </summary>
+    internal static string FormatDuration(TimeSpan duration) =>
+        string.Create(CultureInfo.InvariantCulture,
+            $"{(long)duration.TotalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}");
+}

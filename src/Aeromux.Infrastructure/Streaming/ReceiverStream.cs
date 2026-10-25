@@ -383,44 +383,12 @@ public sealed class ReceiverStream : IFrameStream
     }
 
     /// <summary>
-    /// Gets current statistics snapshot aggregated from all SDR device workers.
-    /// Returns null when no SDR devices are active (Beast-only mode).
-    /// </summary>
-    /// <returns>Aggregated stream statistics, or null if no SDR devices are active.</returns>
-    public StreamStatistics? GetStatistics()
-    {
-        if (_workers.Count == 0)
-        {
-            return null;
-        }
-
-        // Aggregate statistics from all workers (SDR devices + MLAT).
-        //
-        // The confidence tracker is NOT summed: every worker was handed the same
-        // instance (see StartAsync), so its counters are already receiver-wide and
-        // summing them multiplies the total by the device count. Doing so made
-        // ValidFrames exceed TotalFrames on any multi-device receiver, which in turn
-        // made the derived CRC error count negative and the frames-per-second figure
-        // too high by the same factor.
-        //
-        // The other three are per-worker objects constructed inside DeviceWorker, so
-        // they are summed.
-        return new StreamStatistics(
-            _workers.Sum(w => w.PreambleDetector.FramesExtracted),
-            _confidenceTracker?.ConfidentFrames ?? 0,
-            _mlatWorker?.FramesReceived ?? 0,
-            _workers.Sum(w => w.ValidatedFrameFactory.FramesCorrected),
-            _workers.Sum(w => w.MessageParser.MessagesParsed),
-            DateTime.UtcNow - _workers.Min(w => w.StartTime));
-    }
-
-    /// <summary>
     /// Gets a reading of every input: SDR devices, Beast sources and MLAT, and the frames
     /// delivered from all of them. Returns null until <see cref="StartAsync"/> has finished.
     /// </summary>
     /// <remarks>
-    /// Unlike <see cref="GetStatistics"/>, this covers Beast-only receivers and reports each
-    /// source separately. The worker and source lists are filled during StartAsync only, so
+    /// Covers every input, Beast-only receivers included, and reports each source
+    /// separately. The worker and source lists are filled during StartAsync only, so
     /// reading them once it has finished needs no lock.
     /// </remarks>
     public ReceiverStatistics? GetReceiverStatistics()
@@ -435,7 +403,9 @@ public sealed class ReceiverStream : IFrameStream
         {
             // Disjoint: the shared tracker counts a frame as unconfirmed, or its worker counts
             // it as accepted. Only SDR workers filter through the shared tracker; MLAT only
-            // marks addresses as confirmed, which moves no counter.
+            // marks addresses as confirmed, which moves no counter. The tracker is read once,
+            // never summed per worker: every worker holds the same instance, so summing would
+            // multiply its counts by the number of devices.
             long accepted = _workers.Sum(w => w.FramesAccepted);
             long unconfirmed = _confidenceTracker?.UnconfidentFrames ?? 0;
 

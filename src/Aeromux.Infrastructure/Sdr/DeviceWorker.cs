@@ -735,8 +735,18 @@ public sealed class DeviceWorker : IDisposable
         int confConfirmed = _confidenceTracker.ConfirmedIcaos;
         long confExpired = _confidenceTracker.ExpiredIcaos;
 
-        Log.Information("Confidence Tracking: {Total:N0} frames processed",
-            confTotal);
+        // Under ReceiverStream every device shares one tracker, so these figures are the
+        // receiver's, the same in every device's block
+        if (_ownsConfidenceTracker)
+        {
+            Log.Information("Confidence Tracking: {Total:N0} frames processed",
+                confTotal);
+        }
+        else
+        {
+            Log.Information("Confidence Tracking (shared by all devices): {Total:N0} frames processed",
+                confTotal);
+        }
         Log.Information("  - Confident: {Confident:N0} ({ConfidentRate:F1}%)",
             confConfident, confConfidentRate);
         Log.Information("  - Active ICAOs: {Tracked:N0} tracked, {Confirmed:N0} confirmed",

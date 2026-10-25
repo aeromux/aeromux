@@ -58,36 +58,22 @@ public static class LiveSessionReporter
     }
 
     /// <summary>
-    /// Logs aggregated session statistics from the live display session.
+    /// Logs the session summary: the duration, the frames delivered, the aircraft tracked,
+    /// and one block per input source, with the figures and names of the daemon's
+    /// <c>GET /api/v1/stats</c>.
     /// </summary>
     /// <param name="sessionStart">UTC timestamp when the session started.</param>
-    /// <param name="stats">Stream statistics, or null if unavailable.</param>
-    /// <param name="trackedAircraftCount">Number of aircraft tracked during the session.</param>
+    /// <param name="statistics">The receiver's last reading, or null if it never started.</param>
+    /// <param name="trackedAircraftCount">Number of aircraft tracked at the end of the session.</param>
     public static void LogSessionSummary(
         DateTime sessionStart,
-        StreamStatistics? stats,
+        ReceiverStatistics? statistics,
         int trackedAircraftCount)
     {
-        TimeSpan sessionDuration = DateTime.UtcNow - sessionStart;
-
         Log.Information("═══════════════════════════════════════════════════════════════");
         Log.Information("Live Command Session Summary");
         Log.Information("═══════════════════════════════════════════════════════════════");
-        Log.Information("Session duration: {Duration}", sessionDuration.ToString(@"hh\:mm\:ss"));
-
-        if (stats != null)
-        {
-            Log.Information("Total frames: {TotalFrames:N0}", stats.TotalFrames);
-            Log.Information("Valid frames: {ValidFrames:N0}", stats.ValidFrames);
-            Log.Information("Corrected frames: {CorrectedFrames:N0}", stats.CorrectedFrames);
-            Log.Information("Messages parsed: {ParsedMessages:N0}", stats.ParsedMessages);
-        }
-        else
-        {
-            Log.Information("Statistics not available (Beast-only mode)");
-        }
-
-        Log.Information("Total aircraft tracked: {AircraftCount}", trackedAircraftCount);
-        Log.Information("═══════════════════════════════════════════════════════════════");
+        // No closing separator: the session end, logged right after, opens with one
+        SessionSummaryLog.Write(Log.Logger, statistics, DateTime.UtcNow - sessionStart, trackedAircraftCount);
     }
 }

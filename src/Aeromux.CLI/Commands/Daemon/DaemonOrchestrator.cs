@@ -234,10 +234,10 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets aggregated stream statistics from all devices.
+    /// Gets a reading of every input source, the one <c>/api/v1/stats</c> is built from.
     /// </summary>
-    /// <returns>Stream statistics, or null if the stream hasn't started.</returns>
-    public StreamStatistics? GetStatistics() => _receiverStream?.GetStatistics();
+    /// <returns>The reading, or null if the stream hasn't started.</returns>
+    public ReceiverStatistics? GetReceiverStatistics() => _receiverStream?.GetReceiverStatistics();
 
     /// <summary>
     /// Performs ordered shutdown of all daemon services.

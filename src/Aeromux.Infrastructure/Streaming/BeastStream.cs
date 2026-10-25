@@ -271,13 +271,6 @@ public sealed class BeastStream : IFrameStream
         }
     }
 
-    /// <summary>
-    /// Returns null: <see cref="StreamStatistics"/> describes the SDR pipeline (preamble
-    /// detection, CRC correction), which a Beast source does not have. Its own frame counters
-    /// and connection state come from <see cref="GetSourceStatistics"/>.
-    /// </summary>
-    public StreamStatistics? GetStatistics() => null;
-
     /// <summary>Gets the configured Beast server host.</summary>
     public string Host => _host;
 

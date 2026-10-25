@@ -76,12 +76,12 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
                 await shutdown.WaitForShutdownAsync();
 
                 // Collect statistics before disposal (stream still alive)
-                StreamStatistics? stats = orchestrator.GetStatistics();
+                ReceiverStatistics? stats = orchestrator.GetReceiverStatistics();
 
                 // Ordered shutdown: broadcasters -> stream -> tracker
                 await orchestrator.DisposeAsync();
 
-                // Display session summary with aggregated statistics from all devices
+                // Log the session summary, one block per input source
                 DaemonSessionSummaryReporter.LogSessionSummary(sessionStart, stats);
                 DaemonSessionSummaryReporter.LogSessionEnd();
 

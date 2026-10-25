@@ -61,22 +61,4 @@ public interface IFrameStream : IAsyncDisposable
     /// Safe to call multiple times with same reader (idempotent).
     /// </summary>
     void Unsubscribe(ChannelReader<ProcessedFrame> reader);
-
-    /// <summary>
-    /// Gets current statistics snapshot (if available).
-    /// Returns null if stream doesn't provide statistics (e.g., remote streams).
-    /// Statistics are aggregated from all underlying devices.
-    /// </summary>
-    StreamStatistics? GetStatistics();
 }
-
-/// <summary>
-/// Statistics snapshot from a frame stream.
-/// </summary>
-public record StreamStatistics(
-    long TotalFrames,
-    long ValidFrames,
-    long MlatFrames,
-    long CorrectedFrames,
-    long ParsedMessages,
-    TimeSpan Uptime);

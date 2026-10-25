@@ -18,7 +18,6 @@ using System.Text.RegularExpressions;
 using Aeromux.Core.Configuration;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
-using Aeromux.Infrastructure.Streaming;
 using Spectre.Console;
 
 namespace Aeromux.CLI.Commands.Live;
@@ -33,7 +32,6 @@ internal static class LiveAircraftTableBuilder
     /// Builds the aircraft list table with dynamic viewport, scrollbar, search highlighting, and three-row footer.
     /// </summary>
     /// <param name="sortedAircraft">Aircraft list (filtered and sorted).</param>
-    /// <param name="stats">Stream statistics from ReceiverStream, or null in client mode.</param>
     /// <param name="selectedRow">Index of currently selected row for highlighting.</param>
     /// <param name="distanceUnit">Unit to display distances (miles or kilometers).</param>
     /// <param name="altitudeUnit">Unit to display altitudes (feet or meters).</param>
@@ -46,7 +44,6 @@ internal static class LiveAircraftTableBuilder
     /// <returns>Spectre.Console Table with aircraft data, footer, and fixed width.</returns>
     public static Table Build(
         List<Aircraft> sortedAircraft,
-        StreamStatistics? stats,
         int selectedRow,
         DistanceUnit distanceUnit,
         AltitudeUnit altitudeUnit,

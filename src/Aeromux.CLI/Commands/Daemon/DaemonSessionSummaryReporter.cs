@@ -37,26 +37,18 @@ public static class DaemonSessionSummaryReporter
     }
 
     /// <summary>
-    /// Logs aggregated session statistics from all devices.
+    /// Logs the session summary: the duration, the frames delivered, and one block per
+    /// input source, with the figures and names of <c>GET /api/v1/stats</c>.
     /// </summary>
     /// <param name="sessionStart">UTC timestamp when the session started.</param>
-    /// <param name="stats">Stream statistics from all devices, or null if unavailable.</param>
-    public static void LogSessionSummary(DateTime sessionStart, StreamStatistics? stats)
+    /// <param name="statistics">The receiver's last reading, taken before shutdown, or null if it never started.</param>
+    public static void LogSessionSummary(DateTime sessionStart, ReceiverStatistics? statistics)
     {
-        if (stats != null)
-        {
-            TimeSpan sessionDuration = DateTime.UtcNow - sessionStart;
-            Log.Information("═══════════════════════════════════════════════════════════════");
-            Log.Information("Aeromux Session Summary");
-            Log.Information("═══════════════════════════════════════════════════════════════");
-            Log.Information("Session duration: {Duration}", sessionDuration.ToString(@"hh\:mm\:ss"));
-            Log.Information("Total frames: {TotalFrames:N0}", stats.TotalFrames);
-            Log.Information("Valid frames: {ValidFrames:N0}", stats.ValidFrames);
-            Log.Information("Corrected frames: {CorrectedFrames:N0}", stats.CorrectedFrames);
-            Log.Information("Messages parsed: {ParsedMessages:N0}", stats.ParsedMessages);
-            Log.Information("MLAT frames: {MlatFrames:N0}", stats.MlatFrames);
-            Log.Information("═══════════════════════════════════════════════════════════════");
-        }
+        Log.Information("═══════════════════════════════════════════════════════════════");
+        Log.Information("Aeromux Session Summary");
+        Log.Information("═══════════════════════════════════════════════════════════════");
+        // No closing separator: the session end, logged right after, opens with one
+        SessionSummaryLog.Write(Log.Logger, statistics, DateTime.UtcNow - sessionStart);
     }
 
     /// <summary>
