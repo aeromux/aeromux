@@ -33,6 +33,8 @@ namespace Aeromux.CLI.Commands.Daemon.Api;
 /// </summary>
 public static class DaemonApiServer
 {
+    private const string ApiCorsPolicy = "Api";
+
     /// <summary>
     /// Builds a configured WebApplication for the REST API.
     /// </summary>
@@ -117,6 +119,28 @@ public static class DaemonApiServer
             options.Providers.Add<GzipCompressionProvider>();
         });
 
+        // Browser access from other origins, only to the origins the operator listed. Nothing is
+        // registered when the list is empty, so responses stay exactly as without CORS. No
+        // credentials and only GET: every endpoint is a read, and none needs a cookie or a
+        // non-safelisted request header.
+        bool corsEnabled = config.ApiCorsOrigins.Count > 0;
+        if (corsEnabled)
+        {
+            builder.Services.AddCors(options => options.AddPolicy(ApiCorsPolicy, policy =>
+            {
+                if (config.ApiCorsOrigins.Contains("*"))
+                {
+                    policy.AllowAnyOrigin();
+                }
+                else
+                {
+                    policy.WithOrigins([.. config.ApiCorsOrigins]);
+                }
+
+                policy.WithMethods(HttpMethods.Get);
+            }));
+        }
+
         // Bind to configured address and port
         builder.WebHost.UseUrls($"http://{config.BindAddress}:{config.ApiPort}");
 
@@ -140,6 +164,16 @@ public static class DaemonApiServer
 
             await next(context);
         });
+
+        // CORS for the REST API only. The Web Map is served by the daemon itself, and the
+        // SignalR hub would need credentials support from another origin. The middleware
+        // answers a preflight OPTIONS itself, so it never reaches routing's 405.
+        if (corsEnabled)
+        {
+            app.UseWhen(
+                context => context.Request.Path.StartsWithSegments("/api"),
+                branch => branch.UseCors(ApiCorsPolicy));
+        }
 
         // Give bodiless API errors the same {"Error": "..."} shape as every other API error.
         // Routing answers an unknown /api path with an empty 404 and a wrong method with an
