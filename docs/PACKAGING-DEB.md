@@ -168,7 +168,9 @@ Creates the data and log directories, creates the `aeromux` system user and grou
 sudo dpkg -i aeromux_0.8.4-1_arm64.deb
 ```
 
-Stops the running service, installs new files, and restarts the service. If the configuration file has been modified by the user, `dpkg` prompts whether to keep the user's version or install the new package version.
+Installs the new files and restarts the service if it was running, so the new version takes over. The service stays enabled if it was enabled, and a stopped service is not started. Reinstalling the same version behaves the same way. If the configuration file has been modified by the user, `dpkg` prompts whether to keep the user's version or install the new package version.
+
+Upgrading from 0.8.3 or earlier still disables the service, because `dpkg` runs the removal script of the version already installed. After that one upgrade, enable it again with `sudo systemctl enable --now aeromux`.
 
 ### Remove
 

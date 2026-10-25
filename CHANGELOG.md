@@ -8,6 +8,10 @@ All notable changes to Aeromux will be documented in this file.
 
 - **Tracking: Vertical Rate Source** — The vertical rate an aircraft broadcasts comes either from its GNSS receiver or from its barometric air data, and the two can differ noticeably. The source is now reported as `VerticalRateSource` (`"GNSS"` or `"Barometric"`) in the velocity section of the REST API aircraft detail and the JSON broadcast, and shown as "Vertical Rate Source" in the TUI and the Web Map detail panel.
 
+### Changed
+
+- **Packaging: Service Stays Enabled When Upgrading the Debian Package** — Installing a new `.deb` over an existing installation with `dpkg -i`, or reinstalling the same one, used to stop and disable the `aeromux` service, so it stayed off until it was enabled again with `systemctl enable --now aeromux`. An upgrade now leaves the service enabled, and restarts it if it was running so the new version takes over. Upgrading to 0.8.4 still runs the removal script of the version already installed, so after that one upgrade the service has to be enabled once more.
+
 ### Fixed
 
 - **Tracking: Position "Last Update" for Aircraft That Are Not Moving** — An aircraft's position "Last Update", shown in the Web Map detail panel and the TUI and reported as `Position.LastUpdate` by the REST API and the JSON broadcast, only moved when the reported position changed. An aircraft sending positions every second without moving, as many do while parked, hovering or barely moving, appeared to have stopped reporting its position. Worse, after 30 seconds without movement the tracker treated its position as stale and stopped checking new positions against the aircraft's possible speed, so a single corrupted position report could put it many miles away and draw a line across the map. `LastUpdate` now records when a position was last received and accepted, moved or not, which keeps that check working. Surface positions no longer record an update time for messages that carried no usable position.

@@ -29,6 +29,13 @@ case "$1" in
         # Reload systemd daemon
         systemctl daemon-reload
 
+        # On upgrade, restart the service only if it was running so the new
+        # version takes over. A fresh install is not started, because the
+        # configuration has to be edited first.
+        if [ -n "$2" ]; then
+            systemctl try-restart aeromux
+        fi
+
         # Display post-install message on fresh install only
         if [ -z "$2" ]; then
             # Check if sudo is available (present on Raspberry Pi OS, not on pure Debian)

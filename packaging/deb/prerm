@@ -2,7 +2,7 @@
 set -e
 
 case "$1" in
-    remove|upgrade)
+    remove)
         # Stop service if active
         if systemctl is-active --quiet aeromux; then
             systemctl stop aeromux
@@ -12,6 +12,12 @@ case "$1" in
         if systemctl is-enabled --quiet aeromux; then
             systemctl disable aeromux
         fi
+        ;;
+    upgrade)
+        # Leave the service running and enabled. dpkg renames the new binary
+        # into place, so the running process is unaffected, and postinst
+        # restarts it on the new version. Disabling here would leave the
+        # service off after every upgrade or reinstall.
         ;;
 esac
 
