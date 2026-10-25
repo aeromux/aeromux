@@ -25,9 +25,33 @@ aeromux daemon --api-enabled false  # disable the API
 
 When the API is disabled, the HTTP server is not started and the port is not opened. The same server also hosts the Web Map and its live-update connection, so disabling the API disables the Web Map as well.
 
+### Browser access from other origins (CORS)
+
+Browsers stop a web page from reading responses from another origin (scheme, host and port) unless the server allows it. The Web Map is served by the daemon itself and is not affected, and neither are clients that are not browsers, such as curl, scripts, Home Assistant or Node-RED. It matters only for a dashboard served from somewhere else that calls the API from the browser.
+
+To allow such a dashboard, list its origin in `apiCorsOrigins`:
+
+```yaml
+network:
+  apiCorsOrigins:
+    - http://dashboard.local:3000
+    - https://grafana.example.net
+```
+
+```bash
+aeromux daemon --api-cors-origin http://dashboard.local:3000 --api-cors-origin https://grafana.example.net
+```
+
+`--api-cors-origin` can be repeated and, like `--beast-source`, replaces the list from the YAML file as a whole. The list is empty by default, which allows no other origin and leaves every response unchanged.
+
+- Each entry is an `http` or `https` origin with a host and an optional port, and nothing else: no path, query or fragment. A trailing `/` is removed. Anything else stops the daemon at startup with `Invalid CORS origin 'X': expected http(s)://host[:port] or *`.
+- `*` allows every origin. The daemon starts with a warning in the log, because any web page opened in a browser that can reach the daemon could then read its API, including the configuration at `/api/v1/config`.
+- CORS applies to paths under `/api` only, for `GET` and its preflight `OPTIONS` request, which is answered with `204`. No credentials are allowed. An allowed origin receives `Access-Control-Allow-Origin`; any other origin receives the same response without it, and the browser blocks the read.
+- The live-update connection at `/maphub` has no CORS policy: it serves the bundled Web Map only.
+
 ## Endpoints
 
-The API exposes six endpoints, all under the `/api/v1/` prefix. All endpoints accept only `GET` requests:
+The API exposes seven endpoints, all under the `/api/v1/` prefix. All endpoints accept only `GET` requests:
 
 | Endpoint                              | Description                                                                         |
 |---------------------------------------|-------------------------------------------------------------------------------------|
@@ -35,8 +59,9 @@ The API exposes six endpoints, all under the `/api/v1/` prefix. All endpoints ac
 | `GET /api/v1/aircraft/{icao}`         | Returns detailed information for a single aircraft, organized into 10 sections      |
 | `GET /api/v1/aircraft/{icao}/history` | Returns position, altitude, velocity, and state history for a single aircraft       |
 | `GET /api/v1/aircraft/{icao}/photo`   | Returns photo metadata sourced from Planespotters.net (thumbnail URL + attribution) |
-| `GET /api/v1/stats`                   | Returns receiver and session statistics including uptime and frame rates            |
-| `GET /api/v1/health`                  | Lightweight health check for Docker, monitoring tools, and readiness probes         |
+| `GET /api/v1/config`                  | Returns the configuration the daemon runs with, optionally with each value's source |
+| `GET /api/v1/stats`                   | Returns measurements per input and output: frame counts, rates and connection state |
+| `GET /api/v1/health`                  | Reports whether the inputs are delivering, for Docker, monitoring tools and probes  |
 
 Each query parameter may appear at most once in a request. Repeating one, as in `?type=Position&type=State`, returns HTTP 400 rather than silently using the first value.
 
@@ -90,9 +115,9 @@ The response includes a `Count` field for convenience, a `Timestamp` indicating 
 
 The aircraft list endpoint supports optional query parameters for filtering results:
 
-| Parameter | Type   | Default | Description                                                                  |
-|-----------|--------|---------|------------------------------------------------------------------------------|
-| `bounds`  | string | (none)  | Geographic bounding box: `<south>,<west>,<north>,<east>`                     |
+| Parameter | Type   | Default | Description                                                                   |
+|-----------|--------|---------|-------------------------------------------------------------------------------|
+| `bounds`  | string | (none)  | Geographic bounding box: `<south>,<west>,<north>,<east>`                      |
 | `search`  | string | (none)  | Case-insensitive substring search across callsign, ICAO, squawk, registration |
 
 The `bounds` and `search` parameters are mutually exclusive. Providing both returns HTTP 400.
@@ -625,9 +650,129 @@ Photo metadata returned by this endpoint originates from Planespotters' public p
 
 Upstream, the daemon identifies itself to Planespotters with a descriptive `User-Agent` (`Aeromux/{version} (+https://github.com/aeromux/aeromux)`) as required for server-side clients. No API key is needed.
 
+## Effective Configuration
+
+The configuration endpoint returns the configuration the daemon is running with, after the built-in defaults, the YAML file and the command-line options are combined and validated. It answers the most common support question, "why is my setting not applied?", without reading log files.
+
+```bash
+curl -s "http://localhost:8080/api/v1/config"
+```
+
+```json
+{
+  "Version": "0.9.0",
+  "Timestamp": "2026-10-25T14:30:00Z",
+  "ConfigFile": "/etc/aeromux/aeromux.yaml",
+  "Logging": {
+    "Level": "Information",
+    "Console": { "Enabled": false, "Colored": true },
+    "File": {
+      "Enabled": true,
+      "Path": "logs/aeromux-.log",
+      "RollingInterval": "Day",
+      "RetainedFileCount": 7,
+      "FileSizeLimitMb": 100
+    }
+  },
+  "SdrSources": [
+    {
+      "Name": "default",
+      "DeviceIndex": 0,
+      "GainMode": "Manual",
+      "TunerGain": 49.6,
+      "PpmCorrection": 0,
+      "Enabled": true,
+      "PreambleThreshold": 1.8125,
+      "DeduplicationWindow": 50,
+      "MaxTrackedFrames": 1000
+    }
+  ],
+  "BeastSources": [],
+  "Network": {
+    "BeastOutputPort": 30005,
+    "BeastOutputEnabled": true,
+    "JsonOutputPort": 30006,
+    "JsonOutputEnabled": false,
+    "SbsOutputPort": 30003,
+    "SbsOutputEnabled": false,
+    "ApiPort": 8080,
+    "ApiEnabled": true,
+    "ApiCorsOrigins": [],
+    "BindAddress": "0.0.0.0"
+  },
+  "Tracking": {
+    "ConfidenceLevel": "Medium",
+    "IcaoTimeoutSeconds": 30,
+    "AircraftTimeoutSeconds": 60,
+    "EnablePositionHistory": true,
+    "EnableAltitudeHistory": true,
+    "EnableVelocityHistory": true,
+    "EnableStateHistory": true,
+    "MaxHistorySize": 1000
+  },
+  "Receiver": {
+    "Latitude": 46.907982,
+    "Longitude": 19.693172,
+    "Altitude": 120,
+    "Name": "Kecskemét",
+    "ReceiverUuid": "(redacted)"
+  },
+  "Database": {
+    "Enabled": true,
+    "Path": "/var/lib/aeromux/db",
+    "AutoUpdate": {
+      "Enabled": true,
+      "CheckOnStartup": true,
+      "CheckIntervalHours": 24,
+      "PruneOldDatabases": true
+    }
+  },
+  "Mlat": { "Enabled": true, "InputPort": 30104 },
+  "Heatmap": { "Collect": true }
+}
+```
+
+- The structure follows `aeromux.yaml`, with the YAML keys in PascalCase, so each field maps back to the line that sets it. Every section and every field is always present: a receiver that is not configured is a `Receiver` section of `null` values.
+- `ConfigFile` is the absolute path of the YAML file that was loaded, or `null` when none was (no `--config`, and no `aeromux.yaml` in the working directory).
+- The values are the ones in effect. A command-line option shows its value, not the one in the file, and `Database.AutoUpdate` shows the settings after their defaults and limits are applied. `SdrSources` lists every configured device, enabled or not; which devices are actually running is reported by the statistics endpoint.
+- `Receiver.ReceiverUuid` reads `"(redacted)"` when a UUID is set and `null` when not. MLAT aggregators identify a feeder by this UUID, so publishing it would let anyone who can reach the API feed timing data under the operator's identity. Nothing else is withheld.
+
+### Where each value came from
+
+With `source=true`, every configuration value becomes an object that names the layer it came from. `Version`, `Timestamp` and `ConfigFile` stay as they are.
+
+```bash
+curl -s "http://localhost:8080/api/v1/config?source=true" | jq .Network
+```
+
+```json
+{
+  "BeastOutputPort":    { "Value": 30005,       "Source": "Default" },
+  "BeastOutputEnabled": { "Value": true,        "Source": "Default" },
+  "JsonOutputPort":     { "Value": 30006,       "Source": "Default" },
+  "JsonOutputEnabled":  { "Value": false,       "Source": "Default" },
+  "SbsOutputPort":      { "Value": 30003,       "Source": "Default" },
+  "SbsOutputEnabled":   { "Value": false,       "Source": "Default" },
+  "ApiPort":            { "Value": 8081,        "Source": "Yaml" },
+  "ApiEnabled":         { "Value": true,        "Source": "Default" },
+  "ApiCorsOrigins":     { "Value": [],          "Source": "Default" },
+  "BindAddress":        { "Value": "127.0.0.1", "Source": "Cli" }
+}
+```
+
+| `Source`  | Meaning                                                                                                                                   |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `Cli`     | A command-line option set this value, or replaced the list it belongs to (`--beast-source` replaces all of `BeastSources`)                |
+| `Yaml`    | The key is written in the loaded YAML file, even if its value is the same as the default                                                  |
+| `Default` | Neither: the built-in default                                                                                                             |
+
+`Value` keeps its JSON type: a port is still a number and a flag still a boolean. In lists such as `SdrSources`, each field is judged on its own, so a device that sets only `name` and `tunerGain` reports `Yaml` for those two and `Default` for the rest. How the layers combine is described under Configuration Priority in [CLI.md](CLI.md).
+
+`source` accepts `true` and `false` in any letter case. `false`, an empty value and leaving the parameter out all return the plain form. Any other value returns HTTP 400: `{"Error":"Invalid source: yes. Must be true or false."}`.
+
 ## Statistics
 
-The statistics endpoint returns information about the receiver's operational state, including how long the daemon has been running, how many aircraft are currently tracked, and detailed frame processing metrics. The frame statistics are useful for monitoring receiver health and diagnosing reception issues.
+The statistics endpoint reports measurements only: how many frames each input delivers, how they fare at each stage of processing, which sources are connected, and how many clients each output serves. The configuration they run under is reported by the configuration endpoint.
 
 ```bash
 curl -s "http://localhost:8080/api/v1/stats"
@@ -636,35 +781,120 @@ curl -s "http://localhost:8080/api/v1/stats"
 ```json
 {
   "Version": "0.9.0",
-  "Timestamp": "2026-03-13T14:30:00Z",
+  "Timestamp": "2026-10-25T14:30:00Z",
   "Uptime": 3600,
   "AircraftCount": 42,
-  "Devices": 1,
-  "Stream": {
-    "TotalFrames": 125000,
-    "ValidFrames": 98000,
-    "CrcErrors": 27000,
-    "FramesPerSecond": 34.7
+  "Frames": {
+    "Total": 412400,
+    "PerSecond": 112.4,
+    "AveragePerSecond": 114.6
   },
-  "Receiver": {
-    "Latitude": 46.907982,
-    "Longitude": 19.693172,
-    "AltitudeMeters": 120,
-    "Name": "Kecskemét"
+  "Sdr": {
+    "Extracted": 1250000,
+    "CrcErrors": 790000,
+    "Corrected": 12000,
+    "Unconfirmed": 61000,
+    "Accepted": 399000,
+    "AcceptedPerSecond": 109.8,
+    "Devices": [
+      {
+        "Name": "default",
+        "DeviceIndex": 0,
+        "SamplesPerSecond": 2400000,
+        "Extracted": 1250000,
+        "CrcErrors": 790000,
+        "Corrected": 12000,
+        "Duplicates": 300,
+        "Messages": 398700,
+        "ExtractedPerSecond": 346.1
+      }
+    ]
   },
-  "HeatmapCollectionEnabled": true
+  "BeastSources": [
+    {
+      "Host": "192.168.1.20",
+      "Port": 30005,
+      "Connected": true,
+      "Since": "2026-10-25T13:30:04Z",
+      "Reconnects": 0,
+      "Received": 12000,
+      "Unconfirmed": 900,
+      "Accepted": 11100,
+      "AcceptedPerSecond": 3.1
+    }
+  ],
+  "Mlat": {
+    "Clients": 1,
+    "Received": 2600,
+    "ReceivedPerSecond": 0.7
+  },
+  "Outputs": {
+    "Beast": { "Clients": 2 },
+    "Json": null,
+    "Sbs": null
+  },
+  "Database": { "Version": "2026.10.20" }
 }
 ```
 
-The `Uptime` field is the number of seconds since the daemon started, the same span the session summary reports when the daemon stops. The `Stream` section shows cumulative frame counts since the receiver started. `FramesPerSecond` is the average rate of valid frames over that whole period, not an instantaneous rate, so it changes slowly once the daemon has been running for a while.
+| Field                                     | Meaning                                                                                                                                    |
+|-------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `Uptime`                                  | Seconds since the daemon started, the same span the session summary reports when it stops                                                  |
+| `Frames.Total`                            | Frames handed to the aircraft tracker from every source (SDR, Beast and MLAT) since start                                                  |
+| `Frames.PerSecond`                        | The same over the last 60 seconds                                                                                                          |
+| `Frames.AveragePerSecond`                 | `Total` divided by `Uptime`                                                                                                                |
+| `Sdr`                                     | `null` when no SDR device runs                                                                                                             |
+| `Sdr.Extracted`                           | Frames the preamble detector found, all devices                                                                                            |
+| `Sdr.CrcErrors`                           | Extracted frames that failed the CRC check and could not be corrected                                                                      |
+| `Sdr.Corrected`                           | Frames that passed the CRC check only after a single-bit correction                                                                        |
+| `Sdr.Unconfirmed`                         | Frames that passed the CRC check but came from an aircraft address not yet confirmed (noise, or an aircraft heard for the first time)      |
+| `Sdr.Accepted`                            | Frames passed on for decoding, including frames without an ICAO aircraft address (TIS-B and ADS-R track numbers, DF 19)                    |
+| `Sdr.AcceptedPerSecond`                   | `Accepted` over the last 60 seconds                                                                                                        |
+| `Sdr.Devices[]`                           | One entry per running device, in configuration order                                                                                       |
+| `…SamplesPerSecond`                       | IQ samples received over the last 60 seconds: close to the sample rate when the device is healthy, `0` when it has stopped delivering      |
+| `…Extracted`, `…CrcErrors`, `…Corrected`  | As above, for this device                                                                                                                  |
+| `…Duplicates`                             | Frames this device's duplicate filter dropped                                                                                              |
+| `…Messages`                               | Messages this device decoded                                                                                                               |
+| `…ExtractedPerSecond`                     | `Extracted` over the last 60 seconds                                                                                                       |
+| `BeastSources[]`                          | One entry per Beast input, `[]` when there are none                                                                                        |
+| `…Connected`, `…Since`                    | Whether the source is connected, and since when; `Since` is `null` while the first connection attempt is still under way                   |
+| `…Reconnects`                             | Successful connections after the first                                                                                                     |
+| `…Received`, `…Unconfirmed`, `…Accepted`  | Frames decoded from the source; those dropped because their address is not yet confirmed; those passed on                                  |
+| `…AcceptedPerSecond`                      | `Accepted` over the last 60 seconds                                                                                                        |
+| `Mlat`                                    | `null` when MLAT input is disabled                                                                                                         |
+| `Mlat.Clients`                            | Connected mlat-client instances                                                                                                            |
+| `Mlat.Received`, `Mlat.ReceivedPerSecond` | MLAT frames received, in total and over the last 60 seconds                                                                                |
+| `Outputs.Beast`, `.Json`, `.Sbs`          | `{ "Clients": n }`, or `null` when that output is disabled                                                                                 |
+| `Database`                                | `null` when database enrichment is off; `Version` is the loaded database, which changes when the auto-updater installs a new one, and is `null` until one is loaded |
 
-When the daemon has no SDR device, for example when it only consumes Beast input, there are no frame statistics: every `Stream` field is `0` and `Devices` is `0`.
+Counters are cumulative since their source started. For one SDR frame, the stages are: extracted by the preamble detector, CRC check (with single-bit correction), confirmation of the aircraft address, duplicate filter, decoder. Every extracted frame either fails the CRC check or passes it, and every frame that passes is either unconfirmed or accepted, so `Extracted = CrcErrors + Unconfirmed + Accepted`, and for a Beast source `Received = Unconfirmed + Accepted`, up to the few frames being processed at the moment of reading. The device totals add up to the `Sdr` totals.
 
-The `Receiver` section includes the station's geographic location as configured in the YAML file, which is useful for clients that need to calculate distances or render the receiver on a map. The `HeatmapCollectionEnabled` field reflects the `heatmap.collect` configuration option: whether the daemon is aggregating the Web Map traffic-density heatmap grid.
+`Unconfirmed` and `Accepted` exist only for the SDR devices as a whole, because all devices and the MLAT input share one record of confirmed addresses: an aircraft confirmed through one is confirmed for all.
+
+**Rates.** Every `PerSecond` field covers the last 60 seconds, sampled once a second, so a monitoring tool polling every 30 to 60 seconds sees the period it polled across. During the first minute the rates cover the time since the daemon started. `Frames.AveragePerSecond` is the average over the whole session.
+
+**Judging reception.** The share of `CrcErrors` in `Extracted` says how much of what the receiver picks up is too damaged to use, which is what to watch when adjusting the antenna or the gain. Most of these are noise and weak or overlapping signals, so a high share is normal; a change in it after an adjustment is what matters.
+
+### Migrating from 0.8
+
+The statistics endpoint changed shape in 0.9.0. The fields it no longer has moved as follows:
+
+| Old field                                   | New location                                                                                                     |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| `Receiver.Latitude`, `.Longitude`, `.Name`  | `/api/v1/config` `Receiver.*`                                                                                    |
+| `Receiver.AltitudeMeters`                   | `/api/v1/config` `Receiver.Altitude`                                                                             |
+| `HeatmapCollectionEnabled`                  | `/api/v1/config` `Heatmap.Collect`                                                                               |
+| `Devices`                                   | The length of `Sdr.Devices`, `0` when `Sdr` is `null`                                                            |
+| `Stream.TotalFrames`                        | `Sdr.Extracted`                                                                                                  |
+| `Stream.ValidFrames`                        | `Sdr.Accepted`                                                                                                   |
+| `Stream.CrcErrors`                          | `Sdr.CrcErrors`, now only frames that failed the CRC check; with `Sdr.Unconfirmed` it gives about the old figure |
+| `Stream.FramesPerSecond`                    | `Sdr.AcceptedPerSecond`, now over the last 60 seconds instead of the whole session                               |
+
+A daemon without an SDR device, receiving only Beast input, used to report zeros. It now reports `Sdr` as `null`, its Beast sources and MLAT input with their own figures, and `Frames.Total` from every source.
 
 ## Health Check
 
-The health check endpoint provides a lightweight status response designed for Docker health checks, monitoring tools, load balancers, and readiness probes. It returns minimal data to keep the response fast and the payload small.
+The health check endpoint reports whether the daemon's inputs are delivering. It is meant for Docker health checks, monitoring tools, load balancers and readiness probes.
 
 ```bash
 curl -s "http://localhost:8080/api/v1/health"
@@ -672,14 +902,34 @@ curl -s "http://localhost:8080/api/v1/health"
 
 ```json
 {
-  "Status": "OK",
+  "Status": "Degraded",
   "Uptime": 3600,
   "AircraftCount": 42,
-  "Timestamp": "2026-03-13T14:30:00Z"
+  "Timestamp": "2026-10-25T14:30:00Z",
+  "Problems": [
+    "Beast source 192.168.1.20:30005 has been disconnected for 45 s"
+  ]
 }
 ```
 
-The HTTP server starts only after the aircraft state tracker is running, so any response from this endpoint reports `OK`. A daemon that is still starting does not answer at all: the connection is refused, which orchestration tools treat as not ready.
+An input source is **failing** when, for at least 10 seconds:
+
+| Source       | Failing when                     |
+|--------------|----------------------------------|
+| SDR device   | It has delivered no IQ samples   |
+| Beast source | It has not been connected        |
+
+Samples, not frames, decide for an SDR device: a receiver with no aircraft in range, at night or in a quiet area, still delivers samples and is working. A Beast source that is connected but silent is treated the same way. MLAT input is not judged, because mlat-client is optional and reconnects on its own.
+
+| `Status`    | When                                              | HTTP |
+|-------------|---------------------------------------------------|------|
+| `OK`        | No source is failing                              | 200  |
+| `Degraded`  | Some sources are failing, at least one is not     | 200  |
+| `Unhealthy` | Every input source is failing                     | 503  |
+
+`Degraded` is answered with 200 so that an orchestrator does not restart a daemon that is still receiving through its other inputs; `Problems` says what is wrong. `Unhealthy` is answered with 503, so `curl --fail`, Docker `HEALTHCHECK` and uptime monitors react without reading the body. `Problems` lists one message per failing source, such as `SDR device 'default' (index 0) has delivered no samples for 15 s`, and is `[]` when the status is `OK`.
+
+The 10 seconds cover the first Beast connection attempt and a brief USB interruption, and are short enough that a monitor polling every 30 seconds sees a failure on its next poll. A daemon that has been running for less than 10 seconds therefore reports `OK`. One that is still starting does not answer at all: the connection is refused, which orchestration tools treat as not ready.
 
 ## Response Format
 
@@ -707,6 +957,7 @@ All error responses use a consistent format with a single `Error` field containi
 | 405  | The request used a method other than GET, which is the only supported HTTP method                         |
 | 500  | An unexpected server error                                                                                |
 | 502  | The photo endpoint could not get an answer from Planespotters; the next request retries                   |
+| 503  | The health check found every input source failing; the body is the usual health response, not an error    |
 
 ### Error Examples
 
@@ -747,6 +998,10 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&afte
 
 curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?type=Position&after=abc"
 # {"Error":"Invalid after: abc"}  (HTTP 400)
+
+# A source value other than true or false
+curl -s "http://localhost:8080/api/v1/config?source=yes"
+# {"Error":"Invalid source: yes. Must be true or false."}  (HTTP 400)
 
 # Using after without specifying a type
 curl -s "http://localhost:8080/api/v1/aircraft/407F19/history?after=42"
@@ -827,11 +1082,25 @@ curl -s "http://localhost:8080/api/v1/aircraft" | jq .Count
 ### Verify that the receiver is running and healthy
 
 ```bash
-curl -s "http://localhost:8080/api/v1/health" | jq .Status
+# Exits with an error when every input is failing (HTTP 503)
+curl -s --fail "http://localhost:8080/api/v1/health" | jq '{Status, Problems}'
 ```
 
-### Monitor the frame processing rate and error ratio
+### Monitor the frame rate and the CRC error ratio
 
 ```bash
-curl -s "http://localhost:8080/api/v1/stats" | jq '{FPS: .Stream.FramesPerSecond, Errors: .Stream.CrcErrors, Total: .Stream.TotalFrames}'
+curl -s "http://localhost:8080/api/v1/stats" | jq '{PerSecond: .Frames.PerSecond, Accepted: .Sdr.AcceptedPerSecond, CrcErrorRatio: (.Sdr.CrcErrors / .Sdr.Extracted)}'
+```
+
+### Check the state of every Beast source
+
+```bash
+curl -s "http://localhost:8080/api/v1/stats" | jq '.BeastSources[] | {Host, Port, Connected, Since, Reconnects}'
+```
+
+### Find out why a setting is not applied
+
+```bash
+# Which file was loaded, and where the network settings came from
+curl -s "http://localhost:8080/api/v1/config?source=true" | jq '{ConfigFile, Network}'
 ```

@@ -516,7 +516,7 @@ The three formats serve different ecosystems:
 
 ### REST API
 
-The REST API is an ASP.NET Core Minimal API that provides on-demand access to the aircraft tracker's state. Unlike the broadcast formats, which push data continuously, the API requires clients to poll for updates. It exposes five endpoints under `/api/v1/`: aircraft list, aircraft detail, aircraft history, receiver statistics, and a health check. Per-IP rate limiting prevents abuse. See the [API Guide](API.md) for full endpoint documentation.
+The REST API is an ASP.NET Core Minimal API that provides on-demand access to the aircraft tracker's state. Unlike the broadcast formats, which push data continuously, the API requires clients to poll for updates. It exposes seven endpoints under `/api/v1/`: aircraft list, aircraft detail, aircraft history, aircraft photo, the effective configuration, statistics, and a health check. Statistics and health come from `DaemonStatisticsSampler`, which reads the receiver stream's per-source counters once a second and keeps a minute of readings, so rates cover the last 60 seconds and a source that stopped delivering is noticed after 10 seconds. Browsers on other origins may read the API only when the operator lists them (CORS). See the [API Guide](API.md) for full endpoint documentation.
 
 ---
 
@@ -880,7 +880,7 @@ src/
 ```
 
 - **FrameAggregator.cs** — Merges `ProcessedFrame` records from multiple device workers into a single `Channel<ProcessedFrame>`. Simple pass-through — no filtering or reordering.
-- **ReceiverStream.cs** — The central hub: creates device workers, manages the shared `IcaoConfidenceTracker`, runs the fan-out broadcast task, and provides `Subscribe()`/`Unsubscribe()` for consumers. If you are adding a new output format, you will subscribe to this stream.
+- **ReceiverStream.cs** — The central hub: creates device workers, manages the shared `IcaoConfidenceTracker`, runs the fan-out broadcast task, and provides `Subscribe()`/`Unsubscribe()` for consumers. If you are adding a new output format, you will subscribe to this stream. `GetReceiverStatistics()` reads the counters of every input (each SDR device, each Beast source with its connection state, MLAT) for the REST API.
 - **BeastStream.cs** — Connects to a remote Beast TCP source (dump1090, readsb, another Aeromux instance), parses Beast binary data, applies confidence filtering through its own `IcaoConfidenceTracker`, and produces `ProcessedFrame` records. Used by `ReceiverStream` internally — one instance per configured Beast source. Includes automatic reconnection with exponential backoff.
 
 ### Aircraft Tracking
@@ -909,9 +909,12 @@ src/
 ├── Aeromux.CLI/
 │   └── Commands/
 │       └── Daemon/
+│           ├── DaemonHealthEvaluator.cs
+│           ├── DaemonStatisticsSampler.cs
 │           └── Api/
 │               ├── DaemonApiRoutes.cs
-│               └── DaemonApiServer.cs
+│               ├── DaemonApiServer.cs
+│               └── DaemonConfigReport.cs
 └── Aeromux.Infrastructure/
     └── Network/
         ├── TcpBroadcaster.cs
@@ -925,8 +928,11 @@ src/
 - **BeastEncoder.cs** — Stateless encoder that converts `ValidatedFrame` to Beast binary format. No dependency on the tracker — works purely from raw frame data.
 - **JsonEncoder.cs** — Encodes full aircraft state as newline-delimited JSON. Depends on `IAircraftStateTracker` to look up consolidated state via `GetAircraft()`. Implements per-aircraft rate limiting (1 update/second).
 - **SbsEncoder.cs** — Encodes aircraft state as BaseStation CSV. Depends on `IAircraftStateTracker` for state lookups and subscribes to `OnAircraftAdded`/`OnAircraftExpired` events for AIR message lifecycle.
-- **DaemonApiServer.cs** — ASP.NET Core Minimal API host. Configures Kestrel, rate limiting, and JSON serialization.
-- **DaemonApiRoutes.cs** — Maps HTTP endpoints (`/api/v1/aircraft`, `/api/v1/stats`, etc.) to handler methods that query the tracker. If you are adding a new API endpoint, add it here.
+- **DaemonApiServer.cs** — ASP.NET Core Minimal API host. Configures Kestrel, JSON serialization, response compression, and CORS for the origins the operator lists.
+- **DaemonApiRoutes.cs** — Maps HTTP endpoints (`/api/v1/aircraft`, `/api/v1/stats`, etc.) to handler methods that query the tracker, the statistics sampler, or the configuration. If you are adding a new API endpoint, add it here.
+- **DaemonConfigReport.cs** — Builds the `/api/v1/config` response: the effective configuration in the order of `aeromux.yaml`, optionally with the source (CLI, YAML or default) of every value.
+- **DaemonStatisticsSampler.cs** — Reads `ReceiverStream.GetReceiverStatistics()` once a second and keeps the last 60 seconds of readings, from which `/api/v1/stats` takes its rates and `/api/v1/health` its source history.
+- **DaemonHealthEvaluator.cs** — Decides the `/api/v1/health` status from a sampler snapshot: an SDR device without samples or a disconnected Beast source for 10 seconds is failing.
 
 ### MLAT and Database
 

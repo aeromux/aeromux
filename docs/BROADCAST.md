@@ -14,13 +14,13 @@ Configure broadcast settings in the `network` section of `aeromux.yaml`:
 
 ```yaml
 network:
-  beastPort: 30005
+  beastOutputPort: 30005
   beastOutputEnabled: true
 
-  jsonPort: 30006
+  jsonOutputPort: 30006
   jsonOutputEnabled: false
 
-  sbsPort: 30003
+  sbsOutputPort: 30003
   sbsOutputEnabled: false
 
   bindAddress: "0.0.0.0"
@@ -32,13 +32,13 @@ CLI options allow you to override any YAML setting. Each format has a port optio
 
 ```bash
 # Beast broadcast is enabled by default on port 30005
-aeromux daemon --beast-port 30005 --beast-output-enabled true
+aeromux daemon --beast-output-port 30005 --beast-output-enabled true
 
 # Enable JSON broadcast on port 30006
-aeromux daemon --json-port 30006 --json-output-enabled true
+aeromux daemon --json-output-port 30006 --json-output-enabled true
 
 # Enable SBS broadcast on port 30003
-aeromux daemon --sbs-port 30003 --sbs-output-enabled true
+aeromux daemon --sbs-output-port 30003 --sbs-output-enabled true
 
 # Restrict all broadcasters to accept connections only from the local machine
 aeromux daemon --bind-address 127.0.0.1

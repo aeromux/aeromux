@@ -22,6 +22,19 @@ Every individual setting follows the same resolution order: **CLI > YAML > Defau
 | 2           | YAML configuration file | `network.beastOutputPort: 30005` |
 | 3 (lowest)  | Built-in default        | `30005`                          |
 
+The rules in detail:
+
+- **Lists are replaced, never merged.** `--beast-source` replaces the whole `beastSources` list, `--api-cors-origin` replaces `apiCorsOrigins`, and an `sdrSources` list in the YAML file replaces the built-in single device.
+- **A key you do not write keeps its default**, also inside a section you do write. A `network` section that sets only `apiPort` leaves every other network setting at its default.
+- **An empty section, an empty file and a file with only comments** mean the same as not writing them: the defaults apply.
+- **Invalid input stops startup** with the file named: YAML that does not parse, a key that does not exist (`Property 'bogusKey' not found on type …`, often a misspelling), a value that is not one of the allowed names, or an IP address that does not parse. Nothing is silently ignored.
+- **Allowed names are not case-sensitive**: `debug`, `Debug` and `DEBUG` are the same log level, and the same holds for gain modes, confidence levels and rolling intervals.
+- **`--config PATH` must name a file that exists.** Without `--config`, Aeromux reads `aeromux.yaml` from the working directory if there is one, and uses the defaults if there is not.
+- **Some options imply others.** `--database PATH` also enables database enrichment. `--sdr-source` together with `--beast-source` adds SDR input to the Beast input instead of being replaced by it.
+- **On/off options** can be written as `--api-enabled`, `--api-enabled true`, `--api-enabled false` or `--api-enabled=false`.
+
+A running daemon reports the configuration it uses, and where each value came from, at `GET /api/v1/config?source=true` (see the [API Guide](API.md)).
+
 ## Input Sources
 
 Both the `daemon` and `live` commands support the same unified input model. Aeromux can receive data from local RTL-SDR devices, from remote Beast TCP sources, or from both simultaneously. Frames from all active sources are automatically aggregated and deduplicated by the tracker, regardless of whether they originate from an SDR device or a network source.
@@ -82,17 +95,18 @@ The daemon command runs Aeromux as a background service for continuous, unattend
 
 The daemon serves decoded data over TCP in up to three standard formats, each independently configurable. It also exposes a read-only REST API for web interfaces and third-party integrations. See the [Broadcast Guide](BROADCAST.md) for protocol details and the [API Guide](API.md) for the REST API documentation.
 
-| Option                          | Description                                       | Default   |
-|---------------------------------|---------------------------------------------------|-----------|
-| `--beast-output-port <port>`    | TCP port for Beast binary protocol output         | `30005`   |
-| `--beast-output-enabled <bool>` | Enable or disable Beast output                    | `true`    |
-| `--sbs-output-port <port>`      | TCP port for SBS/BaseStation text protocol output | `30003`   |
-| `--sbs-output-enabled <bool>`   | Enable or disable SBS output                      | `false`   |
-| `--json-output-port <port>`     | TCP port for streaming JSON output                | `30006`   |
-| `--json-output-enabled <bool>`  | Enable or disable JSON output                     | `false`   |
-| `--api-port <port>`             | TCP port for the REST API                         | `8080`    |
-| `--api-enabled <bool>`          | Enable or disable the REST API                    | `true`    |
-| `--bind-address <ip>`           | Network interface to bind all listeners to        | `0.0.0.0` |
+| Option                          | Description                                                                                                                                                 | Default   |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| `--beast-output-port <port>`    | TCP port for Beast binary protocol output                                                                                                                   | `30005`   |
+| `--beast-output-enabled <bool>` | Enable or disable Beast output                                                                                                                              | `true`    |
+| `--sbs-output-port <port>`      | TCP port for SBS/BaseStation text protocol output                                                                                                           | `30003`   |
+| `--sbs-output-enabled <bool>`   | Enable or disable SBS output                                                                                                                                | `false`   |
+| `--json-output-port <port>`     | TCP port for streaming JSON output                                                                                                                          | `30006`   |
+| `--json-output-enabled <bool>`  | Enable or disable JSON output                                                                                                                               | `false`   |
+| `--api-port <port>`             | TCP port for the REST API                                                                                                                                   | `8080`    |
+| `--api-enabled <bool>`          | Enable or disable the REST API                                                                                                                              | `true`    |
+| `--api-cors-origin <origin>`    | Browser origin allowed to read the REST API, such as `http://dashboard.local:3000`, or `*` for any. Can be specified multiple times; replaces the YAML list | None      |
+| `--bind-address <ip>`           | Network interface to bind all listeners to, MLAT input included                                                                                             | `0.0.0.0` |
 
 #### MLAT Options
 
@@ -235,13 +249,14 @@ aeromux version --verbose
 
 The YAML configuration file is organized into the following top-level sections. Each section controls a specific aspect of Aeromux's behavior. See [`aeromux.example.yaml`](../aeromux.example.yaml) for a fully commented template with detailed explanations of every option.
 
-| Section        | Description                                                                                                  |
-|----------------|--------------------------------------------------------------------------------------------------------------|
-| `sdrSources`   | RTL-SDR device configurations, including friendly name, device index, gain, and PPM frequency correction     |
-| `beastSources` | Beast TCP input sources, each specified as a host and port pair                                              |
-| `network`      | Output protocol ports and enable/disable flags for Beast, SBS, JSON, and the REST API, plus the bind address |
-| `tracking`     | Confidence level for ICAO filtering, aircraft and ICAO timeout durations, and history buffer settings        |
-| `receiver`     | Station geographic location (latitude, longitude, altitude) and receiver UUID for MLAT triangulation         |
-| `mlat`         | MLAT input enable/disable flag and the port for receiving positions from mlat-client                         |
-| `database`     | Aircraft metadata database directory path and enable/disable flag                                            |
-| `logging`      | Log level, console and file output settings, log rotation, and retention                                     |
+| Section        | Description                                                                                                                                         |
+|----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sdrSources`   | RTL-SDR device configurations, including friendly name, device index, gain, and PPM frequency correction                                            |
+| `beastSources` | Beast TCP input sources, each specified as a host and port pair                                                                                     |
+| `network`      | Output protocol ports and enable/disable flags for Beast, SBS, JSON, and the REST API, the REST API's allowed browser origins, and the bind address |
+| `tracking`     | Confidence level for ICAO filtering, aircraft and ICAO timeout durations, and history buffer settings                                               |
+| `receiver`     | Station geographic location (latitude, longitude, altitude) and receiver UUID for MLAT triangulation                                                |
+| `mlat`         | MLAT input enable/disable flag and the port for receiving positions from mlat-client                                                                |
+| `database`     | Aircraft metadata database directory path, enable/disable flag, and automatic updates                                                               |
+| `logging`      | Log level, console and file output settings, log rotation, and retention                                                                            |
+| `heatmap`      | Whether the daemon collects the Web Map's 24-hour traffic heatmap                                                                                   |

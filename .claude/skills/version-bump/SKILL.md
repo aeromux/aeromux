@@ -64,8 +64,8 @@ naming around the number.
 - `docs/PACKAGING-DEB.md` — `<ver>-1` package examples and the version table.
 - `docs/PACKAGING-PKG.md` — `<ver>` package/notarization examples and the table.
 - `docs/DOCKER.md` — the version-specific tag examples, tarball names, and table.
-- `docs/API.md` — the `"Version": "<ver>"` field in the `GET /api/v1/stats`
-  example response.
+- `docs/API.md` — the `"Version": "<ver>"` field in the `GET /api/v1/config`
+  and `GET /api/v1/stats` example responses.
 
 > These are illustrative "e.g." strings, not functional config. Update them so a
 > reader copying a command gets the current version. If a grep turns up the

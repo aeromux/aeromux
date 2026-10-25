@@ -199,7 +199,7 @@ The main sections are:
 
 - **`sdrSources`** — Your RTL-SDR receivers. Configure gain, frequency correction (PPM), preamble sensitivity, and enable or disable individual devices.
 - **`beastSources`** — External Beast TCP input sources. Connect to dump1090, readsb, or another Aeromux instance. Can be used alongside SDR sources.
-- **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the REST API port/toggle and bind address.
+- **`network`** — Which output protocols to enable (Beast, SBS, JSON) and their TCP ports. Also configures the REST API port/toggle, the browser origins allowed to read it (CORS), and the bind address.
 - **`tracking`** — Controls how strictly aircraft are filtered. The confidence level determines how many detections are required before an aircraft is reported, reducing false positives from noise.
 - **`receiver`** — Your station's geographic location (latitude, longitude, altitude). This is needed for surface vehicle position decoding and for MLAT triangulation.
 - **`database`** — Aircraft metadata database settings. Configure the storage path and enable database enrichment for aircraft identification data.
