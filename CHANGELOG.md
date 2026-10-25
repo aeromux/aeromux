@@ -4,6 +4,10 @@ All notable changes to Aeromux will be documented in this file.
 
 ## [0.9.0] — Unreleased
 
+### Fixed
+
+- **Configuration: Empty Configuration File Stopped Aeromux** — An `aeromux.yaml` with nothing in it, or with every line commented out, stopped the daemon and the live display at startup with `Failed to load configuration` and an internal null reference error. Such a file now means what it says: nothing is configured, and every setting keeps its default.
+
 ## [0.8.4] — 2026-10-25
 
 ### Added

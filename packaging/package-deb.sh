@@ -50,6 +50,16 @@ usage() {
 # Logging helper (suppressed in silent mode)
 log() { [ "$SILENT" = true ] || echo "$@"; }
 
+# Fail when a substitution no longer matches aeromux.example.yaml. The sed patterns match exact
+# column alignment and comment text, so realigning a comment in the example would otherwise ship
+# the example's development values (debug logging, relative paths) without any error.
+require_config_line() {
+    grep -qF -- "$2" "$1" || {
+        echo "Error: generated config $1 is missing: $2 (did aeromux.example.yaml change?)" >&2
+        exit 1
+    }
+}
+
 # Run a command quietly — suppress output on success, show on failure
 run_quiet() {
     local output
@@ -122,6 +132,9 @@ build_package() {
         -e 's|path: "logs/aeromux-.log"             |path: "/var/log/aeromux/aeromux-.log" |' \
         -e 's|path: "artifacts/db/"                   |path: "/var/lib/aeromux/"               |' \
         "$EXAMPLE_CONFIG" > "$staging/etc/aeromux/aeromux.yaml"
+    require_config_line "$staging/etc/aeromux/aeromux.yaml" 'level: information'
+    require_config_line "$staging/etc/aeromux/aeromux.yaml" 'path: "/var/log/aeromux/aeromux-.log"'
+    require_config_line "$staging/etc/aeromux/aeromux.yaml" 'path: "/var/lib/aeromux/"'
 
     # Generate control file from template
     local installed_size

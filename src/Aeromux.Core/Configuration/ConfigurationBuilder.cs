@@ -29,13 +29,25 @@ public class ConfigurationBuilder
 {
     /// <summary>
     /// Builds configuration from settings using the hierarchy: Defaults → YAML → CLI overrides.
-    /// This is the main entry point for configuration building.
     /// </summary>
     /// <param name="settings">Global settings containing config path and CLI overrides.</param>
     /// <param name="yamlLoader">The YAML configuration loader (injected for testability).</param>
     /// <returns>The fully built and merged configuration.</returns>
     /// <exception cref="FileNotFoundException">Thrown when user specifies --config but file doesn't exist.</exception>
-    public AeromuxConfig BuildFromSettings(IGlobalSettings settings, IYamlConfigurationLoader yamlLoader)
+    public AeromuxConfig BuildFromSettings(IGlobalSettings settings, IYamlConfigurationLoader yamlLoader) =>
+        Build(settings, yamlLoader).Config;
+
+    /// <summary>
+    /// Builds configuration from settings using the hierarchy: Defaults → YAML → CLI overrides,
+    /// and records which file was loaded and which keys the YAML file and the global CLI
+    /// options set. This is the main entry point for configuration building.
+    /// </summary>
+    /// <param name="settings">Global settings containing config path and CLI overrides.</param>
+    /// <param name="yamlLoader">The YAML configuration loader (injected for testability).</param>
+    /// <returns>The merged configuration and its origin.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when user specifies --config but file doesn't exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the YAML file cannot be loaded.</exception>
+    public ConfigurationResult Build(IGlobalSettings settings, IYamlConfigurationLoader yamlLoader)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(yamlLoader);
@@ -46,14 +58,18 @@ public class ConfigurationBuilder
         // 2. Determine config file path
         string configPath = settings.ConfigPath ?? "aeromux.yaml";
         bool isDefaultPath = settings.ConfigPath == null;
+        string? loadedPath = null;
+        IReadOnlySet<string> yamlKeys = ConfigurationOrigin.None.YamlKeys;
 
         // 3. Try to load and merge YAML file
         if (File.Exists(configPath))
         {
             try
             {
-                AeromuxConfig yamlConfig = yamlLoader.LoadFromFile(configPath);
-                config = MergeYamlIntoConfig(config, yamlConfig);
+                YamlConfigurationDocument document = yamlLoader.LoadDocument(configPath);
+                config = MergeYamlIntoConfig(config, document.Config);
+                yamlKeys = document.KeyPaths;
+                loadedPath = Path.GetFullPath(configPath);
             }
             catch (Exception ex)
             {
@@ -69,9 +85,10 @@ public class ConfigurationBuilder
         // else: aeromux.yaml doesn't exist - that's fine, use defaults
 
         // 4. Apply command-line overrides (highest priority)
-        config = ApplyCommandLineOverrides(config, settings);
+        var cliKeys = new HashSet<string>(StringComparer.Ordinal);
+        config = ApplyCommandLineOverrides(config, settings, cliKeys);
 
-        return config;
+        return new ConfigurationResult(config, new ConfigurationOrigin(loadedPath, yamlKeys, cliKeys));
     }
 
     /// <summary>
@@ -88,7 +105,7 @@ public class ConfigurationBuilder
                 Console = new ConsoleLoggingConfig
                 {
                     Enabled = false,
-                    Colored = false
+                    Colored = true
                 },
                 File = new FileLoggingConfig
                 {
@@ -172,24 +189,30 @@ public class ConfigurationBuilder
     /// CLI args have the highest priority and override both defaults and YAML.
     /// At this point, all config sections are guaranteed to be non-null from merge step.
     /// </summary>
-    private static AeromuxConfig ApplyCommandLineOverrides(AeromuxConfig config, IGlobalSettings settings)
+    /// <param name="config">The merged configuration to override.</param>
+    /// <param name="settings">Global settings holding the CLI overrides.</param>
+    /// <param name="cliKeys">Receives the key path of every value an override sets.</param>
+    private static AeromuxConfig ApplyCommandLineOverrides(
+        AeromuxConfig config, IGlobalSettings settings, HashSet<string> cliKeys)
     {
         // Apply CLI overrides (highest priority)
         // All sections are non-null after merge, so use null-forgiving operator
 
         // Note: Network port overrides (--beast-output-port, --json-output-port, --sbs-output-port, --bind-address)
-        // are daemon-specific and handled directly in DaemonCommand.ExecuteAsync()
-        // using ValidatePort() and ValidateBindAddress() methods.
+        // are daemon-specific and handled directly by DaemonConfigValidator.
 
         if (settings.LogLevel.HasValue)
         {
             config.Logging!.Level = settings.LogLevel.Value;
+            cliKeys.Add("logging.level");
         }
 
         if (settings.DatabasePath != null)
         {
             config.Database!.Path = settings.DatabasePath;
             config.Database.Enabled = true;
+            cliKeys.Add("database.path");
+            cliKeys.Add("database.enabled");
         }
 
         return config;

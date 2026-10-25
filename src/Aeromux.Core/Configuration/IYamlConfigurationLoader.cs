@@ -30,5 +30,15 @@ public interface IYamlConfigurationLoader
     /// <returns>The loaded configuration, or a configuration with null sections if not specified in YAML.</returns>
     /// <exception cref="FileNotFoundException">Thrown when the configuration file does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when YAML parsing fails.</exception>
-    AeromuxConfig LoadFromFile(string path);
+    AeromuxConfig LoadFromFile(string path) => LoadDocument(path).Config;
+
+    /// <summary>
+    /// Loads configuration from a YAML file together with the key paths the file writes.
+    /// An empty or comment-only file yields a configuration whose sections are all null.
+    /// </summary>
+    /// <param name="path">The absolute or relative path to the YAML configuration file.</param>
+    /// <returns>The loaded configuration and its key paths.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the configuration file does not exist.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when YAML parsing fails.</exception>
+    YamlConfigurationDocument LoadDocument(string path);
 }

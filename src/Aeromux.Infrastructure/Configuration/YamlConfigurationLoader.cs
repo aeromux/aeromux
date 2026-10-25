@@ -16,6 +16,7 @@
 
 using Aeromux.Core.Configuration;
 using Serilog;
+using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -35,7 +36,15 @@ public class YamlConfigurationLoader : IYamlConfigurationLoader
     /// <returns>A validated AeromuxConfig instance.</returns>
     /// <exception cref="FileNotFoundException">Thrown when the configuration file does not exist.</exception>
     /// <exception cref="InvalidOperationException">Thrown when configuration validation fails.</exception>
-    public AeromuxConfig LoadFromFile(string path)
+    public AeromuxConfig LoadFromFile(string path) => LoadDocument(path).Config;
+
+    /// <summary>
+    /// Loads configuration from a YAML file together with the key paths it writes.
+    /// </summary>
+    /// <param name="path">The absolute or relative path to the YAML configuration file.</param>
+    /// <returns>The deserialized configuration and every key path written in the file.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the configuration file does not exist.</exception>
+    public YamlConfigurationDocument LoadDocument(string path)
     {
         Log.Debug("Loading configuration from {ConfigPath}", path);
 
@@ -55,9 +64,11 @@ public class YamlConfigurationLoader : IYamlConfigurationLoader
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .Build();
 
-        // Deserialize YAML into strongly-typed configuration object
-        // Enums are automatically converted from lowercase strings (e.g., "debug" -> LogEventLevel.Debug)
-        AeromuxConfig config = deserializer.Deserialize<AeromuxConfig>(yaml);
+        // Deserialize YAML into strongly-typed configuration object.
+        // Enums are converted from strings case-insensitively (e.g., "debug" -> LogEventLevel.Debug).
+        // An empty or comment-only file has no document, for which YamlDotNet returns null; that
+        // is a file that writes nothing, so every section keeps its default.
+        AeromuxConfig config = deserializer.Deserialize<AeromuxConfig?>(yaml) ?? new AeromuxConfig();
 
         // Log successful load with source counts
         int sdrCount = config.SdrSources?.Count ?? 0;
@@ -77,6 +88,65 @@ public class YamlConfigurationLoader : IYamlConfigurationLoader
             Log.Debug("Receiver config is null after YAML deserialization");
         }
 
-        return config;
+        return new YamlConfigurationDocument(config, ReadKeyPaths(yaml));
+    }
+
+    /// <summary>
+    /// Collects every mapping key written in the YAML text as a key path (see
+    /// <see cref="ConfigurationOrigin"/>). The deserialized object cannot answer this, because
+    /// a key the file omits and a key it writes with the default value look the same there.
+    /// </summary>
+    /// <param name="yaml">The YAML text, already known to deserialize.</param>
+    /// <returns>The key paths, sections included.</returns>
+    private static IReadOnlySet<string> ReadKeyPaths(string yaml)
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        var stream = new YamlStream();
+        stream.Load(new StringReader(yaml));
+
+        if (stream.Documents.Count > 0 && stream.Documents[0].RootNode is YamlMappingNode root)
+        {
+            CollectMapping(root, prefix: null, paths);
+        }
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Records each key of a mapping and descends into nested mappings and into the mapping
+    /// items of sequences. A sequence of scalars stays a single path.
+    /// </summary>
+    private static void CollectMapping(YamlMappingNode mapping, string? prefix, HashSet<string> paths)
+    {
+        foreach (KeyValuePair<YamlNode, YamlNode> entry in mapping.Children)
+        {
+            if (entry.Key is not YamlScalarNode { Value: { } key })
+            {
+                continue;
+            }
+
+            string path = prefix is null ? key : $"{prefix}.{key}";
+            paths.Add(path);
+
+            switch (entry.Value)
+            {
+                case YamlMappingNode child:
+                    CollectMapping(child, path, paths);
+                    break;
+
+                case YamlSequenceNode sequence:
+                    for (int i = 0; i < sequence.Children.Count; i++)
+                    {
+                        if (sequence.Children[i] is YamlMappingNode item)
+                        {
+                            string itemPath = $"{path}[{i}]";
+                            paths.Add(itemPath);
+                            CollectMapping(item, itemPath, paths);
+                        }
+                    }
+
+                    break;
+            }
+        }
     }
 }

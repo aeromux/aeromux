@@ -65,6 +65,16 @@ usage() {
 # Logging helper (suppressed in silent mode)
 log() { [ "$SILENT" = true ] || echo "$@"; }
 
+# Fail when a substitution no longer matches aeromux.example.yaml. The sed patterns match exact
+# column alignment and comment text, so realigning a comment in the example would otherwise ship
+# the example's development values (debug logging, relative paths) without any error.
+require_config_line() {
+    grep -qF -- "$2" "$1" || {
+        echo "Error: generated config $1 is missing: $2 (did aeromux.example.yaml change?)" >&2
+        exit 1
+    }
+}
+
 # Run a command quietly — suppress output on success, show on failure
 run_quiet() {
     local output
@@ -139,6 +149,9 @@ build_package() {
         -e 's|path: "logs/aeromux-.log"             # Log file path with date placeholder|path: "$HOME/Library/Logs/aeromux/aeromux-.log" # Log file path with date placeholder|' \
         -e 's|path: "artifacts/db/"                   # Directory for database storage (relative or absolute path)|path: "$HOME/Library/Application Support/aeromux/" # Directory for database storage (relative or absolute path)|' \
         "$EXAMPLE_CONFIG" > "$staging/payload/share/aeromux.example.yaml"
+    require_config_line "$staging/payload/share/aeromux.example.yaml" 'level: information'
+    require_config_line "$staging/payload/share/aeromux.example.yaml" 'path: "$HOME/Library/Logs/aeromux/aeromux-.log"'
+    require_config_line "$staging/payload/share/aeromux.example.yaml" 'path: "$HOME/Library/Application Support/aeromux/"'
 
     # Copy the same config to the scripts directory for postinstall to place
     cp "$staging/payload/share/aeromux.example.yaml" "$staging/scripts/aeromux.yaml"

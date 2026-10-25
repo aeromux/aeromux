@@ -31,4 +31,12 @@
     </None>
   </ItemGroup>
 
+  <!-- The checked-in example configurations, linked rather than copied so the tests
+       always read the files that ship -->
+  <ItemGroup>
+    <None Include="..\..\aeromux.example*.yaml" LinkBase="ExampleConfigs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

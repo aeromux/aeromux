@@ -51,10 +51,12 @@ public class ConfigurationInterceptor : ICommandInterceptor
             // All logic is in ConfigurationBuilder (separation of concerns)
             var builder = new ConfigurationBuilder();
             var loader = new YamlConfigurationLoader();
-            AeromuxConfig config = builder.BuildFromSettings(globalSettings, loader);
+            ConfigurationResult result = builder.Build(globalSettings, loader);
+            AeromuxConfig config = result.Config;
 
-            // Store configuration globally for access by any class
+            // Store configuration and its origin globally for access by any class
             ConfigurationProvider.Current = config;
+            ConfigurationProvider.Origin = result.Origin;
 
             // Configure logging from the final merged configuration
             // Config sections are guaranteed non-null after building

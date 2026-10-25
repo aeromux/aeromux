@@ -24,6 +24,7 @@ namespace Aeromux.Core.Configuration;
 public static class ConfigurationProvider
 {
     private static AeromuxConfig? _config;
+    private static ConfigurationOrigin _origin = ConfigurationOrigin.None;
 
     /// <summary>
     /// Gets or sets the current application configuration.
@@ -38,8 +39,22 @@ public static class ConfigurationProvider
     }
 
     /// <summary>
-    /// Clears the loaded configuration.
+    /// Gets or sets where the current configuration came from: the loaded YAML file, the keys
+    /// it writes, and the keys the global CLI options set. Set next to <see cref="Current"/>.
+    /// </summary>
+    public static ConfigurationOrigin Origin
+    {
+        get => _origin;
+        set => _origin = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// Clears the loaded configuration and its origin.
     /// Primarily used for testing to reset state between test runs.
     /// </summary>
-    internal static void Reset() => _config = null;
+    internal static void Reset()
+    {
+        _config = null;
+        _origin = ConfigurationOrigin.None;
+    }
 }
