@@ -8,6 +8,7 @@ All notable changes to Aeromux will be documented in this file.
 
 - **Configuration: Empty Configuration File Stopped Aeromux** — An `aeromux.yaml` with nothing in it, or with every line commented out, stopped the daemon and the live display at startup with `Failed to load configuration` and an internal null reference error. Such a file now means what it says: nothing is configured, and every setting keeps its default.
 - **Daemon: Port Check Ignored Command-Line Ports** — The daemon refuses ports below 1024, which need administrator rights, but it checked the ports from the YAML file instead of the ones actually used. A port given on the command line, such as `--api-port 80`, slipped past the check and failed later when the port could not be opened, while `--api-port 9000` was refused if the YAML file still said `apiPort: 80`. The check now applies to the port the daemon will listen on, wherever it was set.
+- **MLAT: Input Ignored the Bind Address** — The MLAT input, where mlat-client sends the positions it computes (port 30104 by default), always listened on every network interface, even when `bindAddress` or `--bind-address` limited the daemon to one, such as `127.0.0.1` to keep it local. It now listens on the same address as the daemon's other listeners, so an mlat-client running on another machine needs a bind address that machine can reach.
 
 ## [0.8.4] — 2026-10-25
 

@@ -66,6 +66,7 @@ public sealed class ReceiverStream : IFrameStream
     private readonly TrackingConfig _trackingConfig;
     private readonly ReceiverConfig? _receiverConfig;
     private readonly MlatConfig? _mlatConfig;
+    private readonly IPAddress _mlatBindAddress;
     private FrameAggregator? _aggregator;  // Always created (for SDR devices + Beast + MLAT)
     private readonly List<DeviceWorker> _workers = [];
     private readonly List<BeastStream> _beastStreams = [];
@@ -95,13 +96,18 @@ public sealed class ReceiverStream : IFrameStream
     /// <param name="receiverConfig">Receiver location for surface position decoding, or null if not configured.</param>
     /// <param name="mlatConfig">MLAT input configuration, or null to disable MLAT.</param>
     /// <param name="beastSourceConfigs">Beast TCP input sources, or null for SDR-only mode.</param>
+    /// <param name="mlatBindAddress">
+    /// Address the MLAT input listens on, normally the daemon's bind address. Null listens on
+    /// every interface.
+    /// </param>
     /// <exception cref="ArgumentException">Thrown when no input sources (SDR or Beast) are provided.</exception>
     public ReceiverStream(
         List<SdrSourceConfig>? sourceConfigs,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig,
         MlatConfig? mlatConfig = null,
-        List<BeastSourceConfig>? beastSourceConfigs = null)
+        List<BeastSourceConfig>? beastSourceConfigs = null,
+        IPAddress? mlatBindAddress = null)
     {
         bool hasSdr = sourceConfigs is { Count: > 0 };
         bool hasBeast = beastSourceConfigs is { Count: > 0 };
@@ -117,6 +123,7 @@ public sealed class ReceiverStream : IFrameStream
         _trackingConfig = trackingConfig;
         _receiverConfig = receiverConfig;
         _mlatConfig = mlatConfig;
+        _mlatBindAddress = mlatBindAddress ?? IPAddress.Any;
     }
 
     /// <summary>
@@ -210,14 +217,14 @@ public sealed class ReceiverStream : IFrameStream
             {
                 _mlatWorker = new MlatWorker(
                     _mlatConfig.InputPort,
-                    IPAddress.Any,  // Accept from any interface
+                    _mlatBindAddress,  // The daemon's bind address, or every interface when none was given
                     _receiverConfig,
                     _confidenceTracker,  // Shared tracker - MLAT marks ICAOs as confident
                     onDataParsed: (frame, message) =>
                         _aggregator.AddData(new ProcessedFrame(frame, message, DateTime.UtcNow, FrameSource.Mlat)));
 
                 _mlatWorker.Start(_internalCts.Token);
-                Log.Information("MLAT input worker started on port {Port}", _mlatConfig.InputPort);
+                Log.Information("MLAT input worker started on {Address}:{Port}", _mlatBindAddress, _mlatConfig.InputPort);
             }
             else
             {
@@ -406,6 +413,63 @@ public sealed class ReceiverStream : IFrameStream
             _workers.Sum(w => w.MessageParser.MessagesParsed),
             DateTime.UtcNow - _workers.Min(w => w.StartTime));
     }
+
+    /// <summary>
+    /// Gets a reading of every input: SDR devices, Beast sources and MLAT, and the frames
+    /// delivered from all of them. Returns null until <see cref="StartAsync"/> has finished.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="GetStatistics"/>, this covers Beast-only receivers and reports each
+    /// source separately. The worker and source lists are filled during StartAsync only, so
+    /// reading them once it has finished needs no lock.
+    /// </remarks>
+    public ReceiverStatistics? GetReceiverStatistics()
+    {
+        if (!_started || _aggregator == null)
+        {
+            return null;
+        }
+
+        SdrStatistics? sdr = null;
+        if (_workers.Count > 0)
+        {
+            // Disjoint: the shared tracker counts a frame as unconfirmed, or its worker counts
+            // it as accepted. Only SDR workers filter through the shared tracker; MLAT only
+            // marks addresses as confirmed, which moves no counter.
+            long accepted = _workers.Sum(w => w.FramesAccepted);
+            long unconfirmed = _confidenceTracker?.UnconfidentFrames ?? 0;
+
+            sdr = new SdrStatistics(unconfirmed, accepted,
+            [
+                .. _workers.Select(w => new SdrDeviceStatistics(
+                    w.DeviceName,
+                    w.DeviceIndex,
+                    w.StartTime,
+                    w.TotalSamplesReceived,
+                    w.PreambleDetector.FramesExtracted,
+                    w.ValidatedFrameFactory.FramesInvalid,
+                    w.ValidatedFrameFactory.FramesCorrected,
+                    w.FrameDeduplicator.DuplicatesFiltered,
+                    w.MessageParser.MessagesParsed))
+            ]);
+        }
+
+        MlatStatistics? mlat = _mlatWorker == null
+            ? null
+            : new MlatStatistics(_mlatWorker.ConnectedClients, _mlatWorker.FramesReceived);
+
+        return new ReceiverStatistics(
+            _aggregator.TotalFrames,
+            sdr,
+            [.. _beastStreams.Select(b => b.GetSourceStatistics())],
+            mlat);
+    }
+
+    /// <summary>
+    /// Gets the endpoint the MLAT input listens on, or null when MLAT is disabled or the
+    /// stream has not started.
+    /// </summary>
+    internal IPEndPoint? MlatEndpoint => _mlatWorker?.LocalEndpoint;
 
     /// <summary>
     /// Disposes all resources in the correct shutdown order.

@@ -221,6 +221,12 @@ public sealed class MlatWorker : IDisposable
     public int ConnectedClients => _connectedClients;
 
     /// <summary>
+    /// Gets the endpoint the listener is bound to, or null before <see cref="Start"/>.
+    /// Reports the actual port when the worker was started on port 0.
+    /// </summary>
+    internal IPEndPoint? LocalEndpoint => (IPEndPoint?)_listener?.LocalEndpoint;
+
+    /// <summary>
     /// Disposes resources and stops accepting new connections.
     /// </summary>
     public void Dispose()

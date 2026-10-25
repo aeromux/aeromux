@@ -83,7 +83,8 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
             _config.Config.Tracking!,
             _config.Config.Receiver,
             _config.MlatConfig,
-            _config.UseBeast ? _config.BeastSources : null);
+            _config.UseBeast ? _config.BeastSources : null,
+            _config.BindAddress);
 
         Log.Information("Receiver stream created. SDR={SdrCount}, Beast={BeastCount}",
             _config.EnabledSdrSources.Count, _config.BeastSources.Count);

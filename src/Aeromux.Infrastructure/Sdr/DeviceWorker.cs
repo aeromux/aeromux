@@ -116,6 +116,7 @@ public sealed class DeviceWorker : IDisposable
     private long _totalSamplesReceived;        // Total IQ samples received since StartReceiving()
     private long _lastLoggedSampleCount;       // Sample count at last statistics log (for delta calculation)
     private DateTime _receptionStartTime;      // When StartReceiving() was called (tracked via time provider)
+    private long _framesAccepted;              // Frames passed on by confidence filtering
     private Exception? _lastLoggedAsyncReadError;  // Last async read error surfaced to the log (dedupes repeat logging)
 
     /// <summary>
@@ -434,6 +435,11 @@ public sealed class DeviceWorker : IDisposable
                     {
                         continue;
                     }
+
+                    // Counted here rather than read from the tracker: the tracker passes frames
+                    // without an ICAO aircraft address on without counting them, and it is
+                    // shared by every device
+                    _framesAccepted++;
 
                     // Deduplication: filter frames seen within deduplication window (FRUIT, multipath, multiple interrogators)
                     // This prevents expensive parsing of duplicate frames (~30% CPU savings)
@@ -842,6 +848,12 @@ public sealed class DeviceWorker : IDisposable
 
     /// <summary>Gets the configured device name.</summary>
     public string DeviceName => _config.Name;
+
+    /// <summary>Gets the configured RTL-SDR device index.</summary>
+    public int DeviceIndex => _config.DeviceIndex;
+
+    /// <summary>Gets the number of frames this device passed through confidence filtering.</summary>
+    public long FramesAccepted => _framesAccepted;
 
     /// <summary>Gets the total number of I/Q samples received since <see cref="StartReceiving"/>.</summary>
     public long TotalSamplesReceived => _totalSamplesReceived;

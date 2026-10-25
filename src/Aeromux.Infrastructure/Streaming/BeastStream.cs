@@ -69,6 +69,19 @@ public sealed class BeastStream : IFrameStream
     private volatile bool _started;
     private readonly SemaphoreSlim _startLock = new(1, 1);
 
+    // Connection state for statistics. One lock because the three change together, and
+    // only on a connect or disconnect.
+    private readonly Lock _stateLock = new();
+    private bool _connected;
+    private DateTime? _stateSince;  // null until the first connection attempt completes
+    private int _connections;
+
+    // Frame counters, written only by the read loop
+    private long _framesReceived;
+    private long _framesAccepted;
+
+    private readonly Func<int, TimeSpan> _retryDelay;
+
     // Retry configuration: startup → backoff → persistent
     // Phase 1: Fast retries during startup (5 × 5s = 25s)
     private static readonly TimeSpan[] StartupDelays =
@@ -103,6 +116,19 @@ public sealed class BeastStream : IFrameStream
     /// <exception cref="ArgumentNullException">Thrown when trackingConfig is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when port is not between 1 and 65535.</exception>
     public BeastStream(string host, int port, TrackingConfig trackingConfig)
+        : this(host, port, trackingConfig, GetRetryDelay)
+    {
+    }
+
+    /// <summary>
+    /// Creates a BeastStream with its own retry schedule, so tests can reconnect without
+    /// waiting the production delays.
+    /// </summary>
+    /// <param name="host">Beast server hostname or IP address.</param>
+    /// <param name="port">Beast server port.</param>
+    /// <param name="trackingConfig">Tracking configuration for IcaoConfidenceTracker.</param>
+    /// <param name="retryDelay">Returns the delay before retry attempt <c>n</c> (0-based).</param>
+    internal BeastStream(string host, int port, TrackingConfig trackingConfig, Func<int, TimeSpan> retryDelay)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentNullException.ThrowIfNull(trackingConfig);
@@ -114,6 +140,7 @@ public sealed class BeastStream : IFrameStream
 
         _host = host;
         _port = port;
+        _retryDelay = retryDelay;
 
         // Create confidence tracker to filter noise (same as DeviceWorker does)
         // readsb/dump1090 transmit ALL validated frames via Beast, not just confident ones
@@ -245,16 +272,68 @@ public sealed class BeastStream : IFrameStream
     }
 
     /// <summary>
-    /// Gets current statistics snapshot.
-    /// Returns null because Beast source doesn't expose statistics (only raw frames).
-    /// Statistics are only available in standalone mode (from ReceiverStream).
-    /// Remote Beast source doesn't provide frame counts or MLAT info.
+    /// Returns null: <see cref="StreamStatistics"/> describes the SDR pipeline (preamble
+    /// detection, CRC correction), which a Beast source does not have. Its own frame counters
+    /// and connection state come from <see cref="GetSourceStatistics"/>.
     /// </summary>
-    public StreamStatistics? GetStatistics()
+    public StreamStatistics? GetStatistics() => null;
+
+    /// <summary>Gets the configured Beast server host.</summary>
+    public string Host => _host;
+
+    /// <summary>Gets the configured Beast server port.</summary>
+    public int Port => _port;
+
+    /// <summary>
+    /// Gets this source's connection state and frame counters.
+    /// </summary>
+    public BeastSourceStatistics GetSourceStatistics()
     {
-        // Client mode: Beast source doesn't expose statistics
-        // Remote Beast source doesn't provide frame counts or MLAT info
-        return null;
+        bool connected;
+        DateTime? since;
+        int connections;
+        lock (_stateLock)
+        {
+            connected = _connected;
+            since = _stateSince;
+            connections = _connections;
+        }
+
+        // Read the later pipeline stages first: each frame increments Received before it can
+        // reach Unconfirmed or Accepted, so the reading never shows more passed on than read.
+        long accepted = Interlocked.Read(ref _framesAccepted);
+        long unconfirmed = _confidenceTracker.UnconfidentFrames;
+        long received = Interlocked.Read(ref _framesReceived);
+
+        return new BeastSourceStatistics(
+            _host, _port, connected, since, Math.Max(0, connections - 1),
+            received, unconfirmed, accepted);
+    }
+
+    private void MarkConnected()
+    {
+        lock (_stateLock)
+        {
+            _connections++;
+            _connected = true;
+            _stateSince = DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// Records a disconnect, or the failure of the very first attempt. Repeated failed
+    /// attempts while disconnected keep the time the source was first lost.
+    /// </summary>
+    private void MarkDisconnected()
+    {
+        lock (_stateLock)
+        {
+            if (_connected || _stateSince == null)
+            {
+                _connected = false;
+                _stateSince = DateTime.UtcNow;
+            }
+        }
     }
 
     /// <summary>
@@ -274,6 +353,7 @@ public sealed class BeastStream : IFrameStream
                 try
                 {
                     _client = await ConnectAsync(ct);
+                    MarkConnected();
                     Log.Information("BeastStream: Connected to {Host}:{Port}", _host, _port);
                     delayIndex = 0; // Reset retry sequence on successful connection
                 }
@@ -283,9 +363,10 @@ public sealed class BeastStream : IFrameStream
                 }
                 catch (Exception ex) when (ex is SocketException or IOException)
                 {
+                    MarkDisconnected();
                     Log.Warning("BeastStream: Connection to {Host}:{Port} failed: {Error}",
                         _host, _port, ex.Message);
-                    TimeSpan delay = GetRetryDelay(delayIndex++);
+                    TimeSpan delay = _retryDelay(delayIndex++);
                     Log.Information("BeastStream: Retrying {Host}:{Port} in {Delay}s",
                         _host, _port, (int)delay.TotalSeconds);
                     await Task.Delay(delay, ct);
@@ -310,11 +391,12 @@ public sealed class BeastStream : IFrameStream
                 }
 
                 // Disconnected — clean up client, wait, then retry at top of loop
+                MarkDisconnected();
                 _client?.Close();
                 _client?.Dispose();
                 _client = null;
 
-                TimeSpan reconnectDelay = GetRetryDelay(delayIndex++);
+                TimeSpan reconnectDelay = _retryDelay(delayIndex++);
                 Log.Information("BeastStream: Reconnecting to {Host}:{Port} in {Delay}s",
                     _host, _port, (int)reconnectDelay.TotalSeconds);
                 await Task.Delay(reconnectDelay, ct);
@@ -326,6 +408,9 @@ public sealed class BeastStream : IFrameStream
         }
         catch (Exception ex)
         {
+            // The task does not retry after this, so report the source as lost rather than
+            // leaving it connected in the statistics
+            MarkDisconnected();
             Log.Error(ex, "BeastStream: Unexpected error in background task");
         }
     }
@@ -340,6 +425,8 @@ public sealed class BeastStream : IFrameStream
 
         await foreach (ValidatedFrame validatedFrame in _beastParser.ParseStreamAsync(stream, ct))
         {
+            Interlocked.Increment(ref _framesReceived);
+
             // CRITICAL: Apply confidence filtering (same as DeviceWorker)
             // Beast protocol transmits ALL CRC-validated frames (noise + real aircraft)
             bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool _);
@@ -348,6 +435,10 @@ public sealed class BeastStream : IFrameStream
             {
                 continue; // Skip non-confident frames (noise)
             }
+
+            // Counted here rather than read from the tracker, which passes frames without an
+            // ICAO aircraft address on without counting them
+            Interlocked.Increment(ref _framesAccepted);
 
             // Parse message for confident frames only
             ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);
