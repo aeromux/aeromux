@@ -61,8 +61,7 @@ public sealed partial class MessageParser
         int tc = (frame.Data[4] >> 3) & 0x1F;
 
         // Track TC statistics
-        _messagesByTC.TryGetValue(tc, out long count);
-        _messagesByTC[tc] = count + 1;
+        Interlocked.Increment(ref _messagesByTC[tc]);
 
         return tc switch
         {

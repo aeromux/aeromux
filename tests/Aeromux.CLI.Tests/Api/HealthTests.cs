@@ -16,6 +16,7 @@
 
 using System.Net;
 using System.Text.Json;
+using Aeromux.Core.ModeS;
 using Aeromux.Infrastructure.Streaming;
 using FluentAssertions;
 
@@ -120,8 +121,8 @@ public class HealthTests : IAsyncLifetime
         new(0, new SdrStatistics([device]), [beast], null);
 
     private static SdrDeviceStatistics Device(long samples) =>
-        new("default", 0, samples, 0, 0, 0, 0);
+        new("default", 0, samples, 0, 0, 0, 0, MessageTypeCounts.Empty);
 
     private static BeastSourceStatistics Beast(bool connected, DateTime? since = null) =>
-        new("192.168.1.20", 30005, connected, since ?? DateTime.UnixEpoch, 0, 0);
+        new("192.168.1.20", 30005, connected, since ?? DateTime.UnixEpoch, 0, 0, MessageTypeCounts.Empty);
 }

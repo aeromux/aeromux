@@ -15,6 +15,8 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Reflection;
+using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Streaming;
@@ -452,7 +454,8 @@ public static class DaemonApiMapper
                     Corrected: d.Device.Corrected,
                     Duplicates: d.Device.Duplicates,
                     Messages: d.Device.Messages,
-                    MessagesPerSecond: Round(d.MessagesPerSecond)))
+                    MessagesPerSecond: Round(d.MessagesPerSecond),
+                    MessageTypes: ToMessageTypes(d.Device.MessageTypes, d.MessageTypes)))
             ];
 
             sdr = new StatsSdr(
@@ -473,11 +476,16 @@ public static class DaemonApiMapper
                 Since: b.Source.Since,
                 Reconnects: b.Source.Reconnects,
                 Messages: b.Source.Messages,
-                MessagesPerSecond: Round(b.MessagesPerSecond)))
+                MessagesPerSecond: Round(b.MessagesPerSecond),
+                MessageTypes: ToMessageTypes(b.Source.MessageTypes, b.MessageTypes)))
         ];
 
-        StatsMlat? mlat = statistics?.Mlat is { } mlatStatistics
-            ? new StatsMlat(mlatStatistics.Clients, mlatStatistics.Messages, Round(snapshot.MlatMessagesPerSecond))
+        StatsMlat? mlat = snapshot.Mlat is { } mlatSnapshot
+            ? new StatsMlat(
+                mlatSnapshot.Mlat.Clients,
+                mlatSnapshot.Mlat.Messages,
+                Round(mlatSnapshot.MessagesPerSecond),
+                ToMessageTypes(mlatSnapshot.Mlat.MessageTypes, mlatSnapshot.MessageTypes))
             : null;
 
         return new StatsResponse(
@@ -494,6 +502,32 @@ public static class DaemonApiMapper
     }
 
     private static StatsOutput? Output(int? clients) => clients is { } count ? new StatsOutput(count) : null;
+
+    /// <summary>
+    /// Maps a source's message counts and rates to entries in code order: DF and TC
+    /// ascending, Comm-B registers ascending with <c>Empty</c> and <c>Unknown</c> last.
+    /// </summary>
+    private static StatsMessageTypes ToMessageTypes(MessageTypeCounts counts, MessageTypeRates rates) => new(
+        [
+            .. counts.DownlinkFormats.OrderBy(c => c.Key).Select(c => new StatsDownlinkFormat(
+                c.Key, c.Value, Round(rates.DownlinkFormats.GetValueOrDefault(c.Key))))
+        ],
+        [
+            .. counts.TypeCodes.OrderBy(c => c.Key).Select(c => new StatsTypeCode(
+                c.Key, c.Value, Round(rates.TypeCodes.GetValueOrDefault(c.Key))))
+        ],
+        [
+            .. counts.BdsCodes.OrderBy(c => BdsOrder(c.Key)).Select(c => new StatsBdsCode(
+                c.Key.ToRegisterName(), c.Value, Round(rates.BdsCodes.GetValueOrDefault(c.Key))))
+        ]);
+
+    // Registers have values of 10 and up; Empty (1) and Unknown (0) go after them
+    private static int BdsOrder(BdsCode code) => code switch
+    {
+        BdsCode.Empty => int.MaxValue - 1,
+        BdsCode.Unknown => int.MaxValue,
+        _ => (int)code
+    };
 
     private static double Round(double rate) => Math.Round(rate, 1);
 

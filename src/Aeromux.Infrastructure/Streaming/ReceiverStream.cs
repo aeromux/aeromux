@@ -406,7 +406,7 @@ public sealed class ReceiverStream : IFrameStream
         // mlat-clients, and the parser's plain counter is not exact under that
         MlatStatistics? mlat = _mlatWorker == null
             ? null
-            : new MlatStatistics(_mlatWorker.ConnectedClients, _mlatWorker.FramesReceived);
+            : new MlatStatistics(_mlatWorker.ConnectedClients, _mlatWorker.FramesReceived, _mlatWorker.MessageTypes);
 
         return new ReceiverStatistics(
             _aggregator.TotalFrames,
@@ -422,6 +422,7 @@ public sealed class ReceiverStream : IFrameStream
     /// </summary>
     private static SdrDeviceStatistics ReadDevice(DeviceWorker worker)
     {
+        MessageTypeCounts messageTypes = worker.MessageParser.GetMessageTypeCounts();
         long messages = worker.MessageParser.MessagesParsed;
         long duplicates = worker.FrameDeduplicator.DuplicatesFiltered;
         long corrected = worker.PreambleDetector.FramesCorrected;
@@ -434,7 +435,8 @@ public sealed class ReceiverStream : IFrameStream
             extracted,
             corrected,
             duplicates,
-            messages);
+            messages,
+            messageTypes);
     }
 
     /// <summary>

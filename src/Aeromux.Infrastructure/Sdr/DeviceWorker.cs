@@ -625,53 +625,12 @@ public sealed class DeviceWorker : IDisposable
                     msgUnsupported,
                     msgUnsupportedRate);
 
-                // === DF (Downlink Format) Breakdown ===
-                // Shows distribution of message types to understand traffic composition
-                var dfBreakdown = _messageParser.MessagesByDF
-                    .Where(kvp => kvp.Value > 0)
-                    .OrderByDescending(kvp => kvp.Value)
-                    .Select(kvp => $"DF {(int)kvp.Key}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
-                    .ToList();
-
-                if (dfBreakdown.Any())
-                {
-                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) DF breakdown: {DFBreakdown}",
-                        _config.Name,
-                        _config.DeviceIndex,
-                        string.Join(", ", dfBreakdown));
-                }
-
-                // === TC (Type Code) Breakdown ===
-                // Shows Extended Squitter (DF 17/18) message type distribution
-                var tcBreakdown = _messageParser.MessagesByTC
-                    .Where(kvp => kvp.Value > 0)
-                    .OrderByDescending(kvp => kvp.Value)
-                    .Select(kvp => $"TC {kvp.Key}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
-                    .ToList();
-
-                if (tcBreakdown.Any())
-                {
-                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) TC breakdown: {TCBreakdown}",
-                        _config.Name,
-                        _config.DeviceIndex,
-                        string.Join(", ", tcBreakdown));
-                }
-
-                // === BDS (Binary Data Subsystem) Breakdown ===
-                // Shows Comm-B (DF 20/21) register type distribution
-                var bdsBreakdown = _messageParser.MessagesByBDS
-                    .Where(kvp => kvp.Value > 0)
-                    .OrderByDescending(kvp => kvp.Value)
-                    .Select(kvp => $"{kvp.Key.ToFormattedString()}: {kvp.Value:N0} ({kvp.Value * 100.0 / msgParsed:F1}%)")
-                    .ToList();
-
-                if (bdsBreakdown.Any())
-                {
-                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) BDS breakdown: {BDSBreakdown}",
-                        _config.Name,
-                        _config.DeviceIndex,
-                        string.Join(", ", bdsBreakdown));
-                }
+                // === Message type breakdown ===
+                // Each code with its share of its own kind, as in the session summary
+                MessageTypeCounts messageTypes = _messageParser.GetMessageTypeCounts();
+                LogBreakdown("DF", messageTypes.DownlinkFormats, code => $"DF {code}");
+                LogBreakdown("TC", messageTypes.TypeCodes, code => $"TC {code}");
+                LogBreakdown("BDS", messageTypes.BdsCodes, code => code.ToFormattedString());
 
                 // Update last logged count for next delta calculation
                 _lastLoggedSampleCount = currentTotal;
@@ -689,8 +648,28 @@ public sealed class DeviceWorker : IDisposable
     }
 
     /// <summary>
+    /// Logs one kind of the message type breakdown at Debug level on a single line, codes
+    /// ordered by count, or nothing when no code of that kind has been seen.
+    /// </summary>
+    private void LogBreakdown<TCode>(string kind, IReadOnlyDictionary<TCode, long> counts, Func<TCode, string> name)
+        where TCode : notnull
+    {
+        if (counts.Count == 0)
+        {
+            return;
+        }
+
+        long total = counts.Values.Sum();
+        string breakdown = string.Join(", ", counts
+            .OrderByDescending(kvp => kvp.Value)
+            .Select(kvp => $"{name(kvp.Key)}: {kvp.Value:N0} ({kvp.Value * 100.0 / total:F1}%)"));
+
+        Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) {Kind} breakdown: {Breakdown}",
+            _config.Name, _config.DeviceIndex, kind, breakdown);
+    }
+
+    /// <summary>
     /// Logs comprehensive final statistics when the device is stopped.
-    /// Includes message parsing breakdown by DF/TC with counts and percentages.
     /// </summary>
     private void LogFinalStatistics()
     {
@@ -768,59 +747,7 @@ public sealed class DeviceWorker : IDisposable
         Log.Information("  - Unsupported: {Unsupported:N0} ({UnsupportedRate:F1}%)",
             msgUnsupported, msgUnsupportedRate);
 
-        // DF (Downlink Format) breakdown
-        var dfBreakdown = _messageParser.MessagesByDF
-            .Where(kvp => kvp.Value > 0)
-            .OrderByDescending(kvp => kvp.Value)
-            .ToList();
-
-        if (dfBreakdown.Any())
-        {
-            Log.Information("Downlink Format (DF) Breakdown:");
-            foreach (KeyValuePair<DownlinkFormat, long> kvp in dfBreakdown)
-            {
-                double percentage = msgParsed > 0 ? kvp.Value * 100.0 / msgParsed : 0.0;
-                Log.Information("  - DF {DF,-5}: {Count,8:N0} messages ({Percentage,5:F1}%)",
-                    (int)kvp.Key, kvp.Value, percentage);
-            }
-        }
-
-        // TC (Type Code) breakdown for Extended Squitter (DF 17/18)
-        var tcBreakdown = _messageParser.MessagesByTC
-            .Where(kvp => kvp.Value > 0)
-            .OrderByDescending(kvp => kvp.Value)
-            .ToList();
-
-        if (tcBreakdown.Any())
-        {
-            long totalTcMessages = tcBreakdown.Sum(kvp => kvp.Value);
-            Log.Information("Type Code (TC) Breakdown (DF 17/18 only):");
-            foreach (KeyValuePair<int, long> kvp in tcBreakdown)
-            {
-                double percentage = totalTcMessages > 0 ? kvp.Value * 100.0 / totalTcMessages : 0.0;
-                Log.Information("  - TC {TC,-5}: {Count,8:N0} messages ({Percentage,5:F1}%)",
-                    kvp.Key, kvp.Value, percentage);
-            }
-        }
-
-        // BDS (Binary Data Subsystem) breakdown for Comm-B messages (DF 20/21)
-        var bdsBreakdown = _messageParser.MessagesByBDS
-            .Where(kvp => kvp.Value > 0)
-            .OrderByDescending(kvp => kvp.Value)
-            .ToList();
-
-        if (bdsBreakdown.Any())
-        {
-            long totalBdsMessages = bdsBreakdown.Sum(kvp => kvp.Value);
-            Log.Information("BDS Code Breakdown (DF 20/21 Comm-B only):");
-            foreach (KeyValuePair<BdsCode, long> kvp in bdsBreakdown)
-            {
-                double percentage = totalBdsMessages > 0 ? kvp.Value * 100.0 / totalBdsMessages : 0.0;
-                Log.Information("  - {BDS,-8}: {Count,8:N0} messages ({Percentage,5:F1}%)",
-                    kvp.Key.ToFormattedString(), kvp.Value, percentage);
-            }
-        }
-
+        // The messages by type are in the session summary, for every source
         Log.Information("═══════════════════════════════════════════════════════════════");
     }
 

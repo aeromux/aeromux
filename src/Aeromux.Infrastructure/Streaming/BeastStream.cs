@@ -292,7 +292,8 @@ public sealed class BeastStream : IFrameStream
         // number of messages; only the read loop writes it
         return new BeastSourceStatistics(
             _host, _port, connected, since, Math.Max(0, connections - 1),
-            _messageParser.MessagesParsed);
+            _messageParser.MessagesParsed,
+            _messageParser.GetMessageTypeCounts());
     }
 
     private void MarkConnected()

@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.CLI.Commands.Daemon;
+using Aeromux.Core.ModeS;
 using Aeromux.Infrastructure.Streaming;
 using FluentAssertions;
 
@@ -118,13 +119,13 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
             messages: 0,
             sdr: Sdr(Device("default", samples: 0, messages: 0)),
             beast: [Beast("192.168.1.20", 30005, messages: 0)],
-            mlat: new MlatStatistics(1, 0)));
+            mlat: new MlatStatistics(1, 0, MessageTypeCounts.Empty)));
         _clock.Advance(TimeSpan.FromSeconds(10));
         SampleAt(Receiver(
             messages: 1000,
             sdr: Sdr(Device("default", samples: 24_000_000, messages: 3000)),
             beast: [Beast("192.168.1.20", 30005, messages: 150)],
-            mlat: new MlatStatistics(1, 50)));
+            mlat: new MlatStatistics(1, 50, MessageTypeCounts.Empty)));
 
         StatisticsSnapshot snapshot = _sampler.GetSnapshot();
 
@@ -135,7 +136,7 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
         snapshot.Devices[0].MessagesPerSecond.Should().Be(300);
         snapshot.BeastSources.Should().ContainSingle();
         snapshot.BeastSources[0].MessagesPerSecond.Should().Be(15);
-        snapshot.MlatMessagesPerSecond.Should().Be(5);
+        snapshot.Mlat!.MessagesPerSecond.Should().Be(5);
     }
 
     [Fact]
@@ -164,6 +165,51 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
         sources[0].MessagesPerSecond.Should().Be(10);
         sources[1].MessagesPerSecond.Should().Be(2);
     }
+
+    // === Message type rates ===
+
+    [Fact]
+    public void MessageTypes_RateCoversTheWindow()
+    {
+        SampleAt(Receiver(sdr: Sdr(Device("default", 0) with { MessageTypes = Types(df17: 0) })));
+        _clock.Advance(TimeSpan.FromSeconds(10));
+        SampleAt(Receiver(sdr: Sdr(Device("default", 0) with { MessageTypes = Types(df17: 500) })));
+
+        _sampler.GetSnapshot().Devices[0].MessageTypes.DownlinkFormats[17].Should().Be(50);
+    }
+
+    [Fact]
+    public void MessageTypes_ACodeFirstSeenInsideTheWindow_CountsFromZero()
+    {
+        // TC 0 appears after 10 seconds; its 30 messages over the next 10 are 30 / 20 s
+        // measured from the window's start, not 0 from its first reading
+        SampleAt(Receiver(beast: [Beast("feeder", 30005) with { MessageTypes = Types(df17: 0) }]));
+        _clock.Advance(TimeSpan.FromSeconds(10));
+        SampleAt(Receiver(beast: [Beast("feeder", 30005) with { MessageTypes = Types(df17: 100, tc0: 10) }]));
+        _clock.Advance(TimeSpan.FromSeconds(10));
+        SampleAt(Receiver(beast: [Beast("feeder", 30005) with { MessageTypes = Types(df17: 200, tc0: 30) }]));
+
+        MessageTypeRates rates = _sampler.GetSnapshot().BeastSources[0].MessageTypes;
+
+        rates.TypeCodes[0].Should().Be(1.5);
+        rates.DownlinkFormats[17].Should().Be(10);
+    }
+
+    [Fact]
+    public void MessageTypes_WindowSlides()
+    {
+        SampleAt(Receiver(mlat: new MlatStatistics(0, 0, Types(df17: 0))));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        SampleAt(Receiver(mlat: new MlatStatistics(0, 0, Types(df17: 600))));
+        SampleEverySecond(60, () => Receiver(mlat: new MlatStatistics(0, 0, Types(df17: 600))));
+
+        _sampler.GetSnapshot().Mlat!.MessageTypes.DownlinkFormats[17].Should().Be(0, "the burst is now older than 60 seconds");
+    }
+
+    private static MessageTypeCounts Types(long df17, long tc0 = 0) => new(
+        new Dictionary<int, long> { [17] = df17 },
+        tc0 > 0 ? new Dictionary<int, long> { [0] = tc0 } : new Dictionary<int, long>(),
+        new Dictionary<Aeromux.Core.ModeS.Enums.BdsCode, long>());
 
     // === Source history ===
 
@@ -242,9 +288,9 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
     internal static SdrStatistics Sdr(params SdrDeviceStatistics[] devices) => new(devices);
 
     internal static SdrDeviceStatistics Device(string name, long samples, long messages = 0, int index = 0) =>
-        new(name, index, samples, 0, 0, 0, messages);
+        new(name, index, samples, 0, 0, 0, messages, MessageTypeCounts.Empty);
 
     internal static BeastSourceStatistics Beast(
         string host, int port, long messages = 0, bool connected = true, DateTime? since = null) =>
-        new(host, port, connected, since ?? DateTime.UnixEpoch, 0, messages);
+        new(host, port, connected, since ?? DateTime.UnixEpoch, 0, messages, MessageTypeCounts.Empty);
 }

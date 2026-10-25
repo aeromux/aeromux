@@ -51,7 +51,11 @@ public class ReceiverStreamStatisticsTests
         statistics.Sdr.Should().BeNull();
         statistics.BeastSources.Should().ContainSingle()
             .Which.Should().Match<BeastSourceStatistics>(s => s.Host == "127.0.0.1" && s.Port == port);
-        statistics.Mlat.Should().Be(new MlatStatistics(0, 0));
+        // Compared field by field: the message type dictionaries inside make record equality
+        // compare references
+        statistics.Mlat!.Clients.Should().Be(0);
+        statistics.Mlat.Messages.Should().Be(0);
+        statistics.Mlat.MessageTypes.DownlinkFormats.Should().BeEmpty();
         statistics.Messages.Should().Be(0);
     }
 

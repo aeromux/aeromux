@@ -95,7 +95,7 @@ public sealed partial class MessageParser
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
 
         // Track BDS code statistics
-        _messagesByBDS[bdsCode]++;
+        Interlocked.Increment(ref _messagesByBDS[(int)bdsCode]);
 
         return new CommBAltitudeReply(
             frame.IcaoAddress,
@@ -160,7 +160,7 @@ public sealed partial class MessageParser
         (BdsCode bdsCode, BdsData? bdsData) = InferBds(mb);
 
         // Track BDS code statistics
-        _messagesByBDS[bdsCode]++;
+        Interlocked.Increment(ref _messagesByBDS[(int)bdsCode]);
 
         return new CommBIdentityReply(
             frame.IcaoAddress,

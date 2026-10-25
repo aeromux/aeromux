@@ -16,6 +16,8 @@
 
 using System.Globalization;
 using Aeromux.CLI.Commands;
+using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Streaming;
 using FluentAssertions;
 using Serilog;
@@ -32,14 +34,14 @@ public class SessionSummaryLogTests
 {
     private const string Separator = SessionSummaryLog.BlockSeparator;
 
-    private static readonly SdrDeviceStatistics Sdr0 = new("sdr0", 0, 0, 10_508, 112, 1_909, 8_495);
-    private static readonly SdrDeviceStatistics Sdr1 = new("sdr1", 1, 0, 8_489, 97, 1_555, 6_877);
-    private static readonly BeastSourceStatistics Feeder = new("10.1.10.24", 30005, true, DateTime.UnixEpoch, 0, 111_993);
+    private static readonly SdrDeviceStatistics Sdr0 = new("sdr0", 0, 0, 10_508, 112, 1_909, 8_495, MessageTypeCounts.Empty);
+    private static readonly SdrDeviceStatistics Sdr1 = new("sdr1", 1, 0, 8_489, 97, 1_555, 6_877, MessageTypeCounts.Empty);
+    private static readonly BeastSourceStatistics Feeder = new("10.1.10.24", 30005, true, DateTime.UnixEpoch, 0, 111_993, MessageTypeCounts.Empty);
 
     [Fact]
     public void EverySource_MatchesTheDocumentedLayout()
     {
-        var statistics = new ReceiverStatistics(127_365, new SdrStatistics([Sdr0, Sdr1]), [Feeder], new MlatStatistics(0, 0));
+        var statistics = new ReceiverStatistics(127_365, new SdrStatistics([Sdr0, Sdr1]), [Feeder], new MlatStatistics(0, 0, MessageTypeCounts.Empty));
 
         Write(statistics, TimeSpan.FromMinutes(1)).Should().Equal(
             "Session duration        00:01:00",
@@ -112,8 +114,8 @@ public class SessionSummaryLogTests
     [Fact]
     public void NothingDelivered_HasNoShares()
     {
-        var silent = new BeastSourceStatistics("feeder", 30005, false, null, 0, 0);
-        var statistics = new ReceiverStatistics(0, null, [silent], new MlatStatistics(0, 0));
+        var silent = new BeastSourceStatistics("feeder", 30005, false, null, 0, 0, MessageTypeCounts.Empty);
+        var statistics = new ReceiverStatistics(0, null, [silent], new MlatStatistics(0, 0, MessageTypeCounts.Empty));
 
         List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
 
@@ -141,6 +143,83 @@ public class SessionSummaryLogTests
     {
         Write(new ReceiverStatistics(5, null, [], null), TimeSpan.Zero)[1]
             .Should().Be("Messages                       5   0.0 per second on average");
+    }
+
+    // === Message type tables ===
+
+    private static readonly MessageTypeCounts Sdr0Types = new(
+        new Dictionary<int, long> { [17] = 4600, [11] = 1700, [4] = 900, [20] = 650, [5] = 345, [21] = 300 },
+        new Dictionary<int, long> { [11] = 2100, [19] = 1900, [4] = 300, [29] = 150, [31] = 100, [0] = 50 },
+        new Dictionary<BdsCode, long>
+        {
+            [BdsCode.Bds60] = 400, [BdsCode.Bds40] = 280, [BdsCode.Bds50] = 190, [BdsCode.Bds20] = 50, [BdsCode.Unknown] = 30
+        });
+
+    [Fact]
+    public void DeviceTable_MatchesTheDocumentedLayout()
+    {
+        var statistics = new ReceiverStatistics(8_495, new SdrStatistics([Sdr0 with { MessageTypes = Sdr0Types }]), [], null);
+
+        List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
+
+        lines.SkipWhile(l => l != "Device 'sdr0' (index 0)").Should().Equal(
+            "Device 'sdr0' (index 0)",
+            "  Extracted               10,508",
+            "  Corrected                  112",
+            "  Duplicates               1,909",
+            "  Messages                 8,495  100.0%",
+            "",
+            "  DF          Count  Share   TC          Count  Share   BDS             Count  Share",
+            "  17          4,600  54.1%   11          2,100  45.7%   6,0               400  42.1%",
+            "  11          1,700  20.0%   19          1,900  41.3%   4,0               280  29.5%",
+            "  4             900  10.6%   4             300   6.5%   5,0               190  20.0%",
+            "  20            650   7.7%   29            150   3.3%   2,0                50   5.3%",
+            "  5             345   4.1%   31            100   2.2%   Unknown            30   3.2%",
+            "  21            300   3.5%   0              50   1.1%");
+    }
+
+    [Fact]
+    public void Table_ShorterColumnsLeaveTheirCellsEmpty()
+    {
+        var types = new MessageTypeCounts(
+            new Dictionary<int, long> { [11] = 30, [20] = 10 },
+            new Dictionary<int, long>(),
+            new Dictionary<BdsCode, long> { [BdsCode.Bds40] = 10 });
+        var statistics = new ReceiverStatistics(40, null, [Feeder with { Messages = 40, MessageTypes = types }], null);
+
+        List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
+
+        lines.SkipWhile(l => !l.StartsWith("  DF ", StringComparison.Ordinal)).Skip(1).Should().Equal(
+            "  11             30  75.0%                              4,0                10 100.0%",
+            "  20             10  25.0%");
+    }
+
+    [Fact]
+    public void SourceWithNoCodes_HasNoTableAndNoBlankLine()
+    {
+        var statistics = new ReceiverStatistics(0, null, [Feeder with { Messages = 0 }], null);
+
+        List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
+
+        lines.Should().NotContain("");
+        lines.Should().NotContain(l => l.StartsWith("  DF ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Mlat_GetsATable()
+    {
+        var types = new MessageTypeCounts(
+            new Dictionary<int, long> { [17] = 2600 }, new Dictionary<int, long> { [11] = 2600 }, new Dictionary<BdsCode, long>());
+        var statistics = new ReceiverStatistics(2_600, null, [], new MlatStatistics(1, 2_600, types));
+
+        List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
+
+        lines.SkipWhile(l => l != "MLAT").Should().ContainInOrder(
+            "MLAT",
+            "  Messages                 2,600  100.0%",
+            "",
+            "  DF          Count  Share   TC          Count  Share   BDS             Count  Share",
+            "  17          2,600 100.0%   11          2,600 100.0%");
     }
 
     [Theory]
@@ -175,9 +254,20 @@ public class SessionSummaryLogTests
         var sink = new CapturingSink();
         using Logger logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
 
-        SessionSummaryLog.Write(logger, statistics, duration, aircraftTracked);
-
+        // The message type tables are text formatted with the machine's culture when they are
+        // written, so the culture is set for writing as well as for rendering
         CultureInfo english = CultureInfo.GetCultureInfo("en-US");
+        CultureInfo previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = english;
+        try
+        {
+            SessionSummaryLog.Write(logger, statistics, duration, aircraftTracked);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+
         return [.. sink.Events.Select(e => e.RenderMessage(english))];
     }
 

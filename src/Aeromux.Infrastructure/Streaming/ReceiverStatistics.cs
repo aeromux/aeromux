@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.ModeS;
+
 namespace Aeromux.Infrastructure.Streaming;
 
 /// <summary>
@@ -52,6 +54,7 @@ public sealed record SdrStatistics(IReadOnlyList<SdrDeviceStatistics> Devices);
 /// duplicates nor messages were held back because their address belongs to no confirmed
 /// aircraft yet.
 /// </param>
+/// <param name="MessageTypes">The messages by downlink format, type code and Comm-B register.</param>
 public sealed record SdrDeviceStatistics(
     string Name,
     int DeviceIndex,
@@ -59,7 +62,8 @@ public sealed record SdrDeviceStatistics(
     long Extracted,
     long Corrected,
     long Duplicates,
-    long Messages);
+    long Messages,
+    MessageTypeCounts MessageTypes);
 
 /// <summary>
 /// One Beast TCP input and its connection state.
@@ -73,17 +77,20 @@ public sealed record SdrDeviceStatistics(
 /// </param>
 /// <param name="Reconnects">Successful connections after the first.</param>
 /// <param name="Messages">Messages handed on from this source.</param>
+/// <param name="MessageTypes">The messages by downlink format, type code and Comm-B register.</param>
 public sealed record BeastSourceStatistics(
     string Host,
     int Port,
     bool Connected,
     DateTime? Since,
     int Reconnects,
-    long Messages);
+    long Messages,
+    MessageTypeCounts MessageTypes);
 
 /// <summary>
 /// The MLAT input.
 /// </summary>
 /// <param name="Clients">Connected mlat-client instances.</param>
 /// <param name="Messages">MLAT messages handed on.</param>
-public sealed record MlatStatistics(int Clients, long Messages);
+/// <param name="MessageTypes">The messages by downlink format, type code and Comm-B register.</param>
+public sealed record MlatStatistics(int Clients, long Messages, MessageTypeCounts MessageTypes);

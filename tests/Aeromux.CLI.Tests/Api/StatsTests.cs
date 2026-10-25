@@ -18,6 +18,8 @@ using System.Text.Json;
 using Aeromux.CLI.Commands.Daemon;
 using Aeromux.CLI.Commands.Daemon.Api;
 using Aeromux.Core.Tracking;
+using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Streaming;
 using FluentAssertions;
 using Moq;
@@ -72,7 +74,7 @@ public class StatsTests : IAsyncLifetime
             messages: 1,
             sdr: new SdrStatistics([Device("roof", 0)]),
             beast: [Beast(messages: 0)],
-            mlat: new MlatStatistics(0, 0)));
+            mlat: new MlatStatistics(0, 0, MessageTypeCounts.Empty)));
 
         using JsonDocument doc = await GetStatsAsync();
         JsonElement root = doc.RootElement;
@@ -81,10 +83,10 @@ public class StatsTests : IAsyncLifetime
             "Extracted", "Corrected", "Duplicates", "Messages", "MessagesPerSecond", "Devices");
         Names(root.GetProperty("Sdr").GetProperty("Devices")[0]).Should().Equal(
             "Name", "DeviceIndex", "SamplesPerSecond", "Extracted", "Corrected", "Duplicates",
-            "Messages", "MessagesPerSecond");
+            "Messages", "MessagesPerSecond", "MessageTypes");
         Names(root.GetProperty("BeastSources")[0]).Should().Equal(
-            "Host", "Port", "Connected", "Since", "Reconnects", "Messages", "MessagesPerSecond");
-        Names(root.GetProperty("Mlat")).Should().Equal("Clients", "Messages", "MessagesPerSecond");
+            "Host", "Port", "Connected", "Since", "Reconnects", "Messages", "MessagesPerSecond", "MessageTypes");
+        Names(root.GetProperty("Mlat")).Should().Equal("Clients", "Messages", "MessagesPerSecond", "MessageTypes");
     }
 
     [Fact]
@@ -149,13 +151,13 @@ public class StatsTests : IAsyncLifetime
             messages: 0,
             sdr: new SdrStatistics([Device("roof", 0)]),
             beast: [Beast(messages: 0)],
-            mlat: new MlatStatistics(1, 0)));
+            mlat: new MlatStatistics(1, 0, MessageTypeCounts.Empty)));
         _fixture.Clock.Advance(TimeSpan.FromSeconds(3));
         _fixture.Sample(Receiver(
             messages: 1000,
             sdr: new SdrStatistics([Device("roof", 0, samples: 7_200_000, messages: 700)]),
             beast: [Beast(messages: 200)],
-            mlat: new MlatStatistics(1, 100)));
+            mlat: new MlatStatistics(1, 100, MessageTypeCounts.Empty)));
 
         using JsonDocument doc = await GetStatsAsync();
         JsonElement root = doc.RootElement;
@@ -190,7 +192,7 @@ public class StatsTests : IAsyncLifetime
         DateTime since = new(2026, 10, 25, 13, 30, 4, DateTimeKind.Utc);
         _fixture.Sample(Receiver(
             messages: 11_100,
-            beast: [new BeastSourceStatistics("192.168.1.20", 30005, true, since, 2, 11_100)]));
+            beast: [new BeastSourceStatistics("192.168.1.20", 30005, true, since, 2, 11_100, MessageTypeCounts.Empty)]));
 
         using JsonDocument doc = await GetStatsAsync();
         JsonElement root = doc.RootElement;
@@ -208,7 +210,7 @@ public class StatsTests : IAsyncLifetime
     [Fact]
     public async Task BeastSource_StillOnItsFirstAttempt_HasNullSince()
     {
-        _fixture.Sample(Receiver(beast: [new BeastSourceStatistics("feeder", 30005, false, null, 0, 0)]));
+        _fixture.Sample(Receiver(beast: [new BeastSourceStatistics("feeder", 30005, false, null, 0, 0, MessageTypeCounts.Empty)]));
 
         using JsonDocument doc = await GetStatsAsync();
 
@@ -218,13 +220,71 @@ public class StatsTests : IAsyncLifetime
     [Fact]
     public async Task Mlat_ReportsClientsAndMessages()
     {
-        _fixture.Sample(Receiver(mlat: new MlatStatistics(Clients: 2, Messages: 2600)));
+        _fixture.Sample(Receiver(mlat: new MlatStatistics(Clients: 2, Messages: 2600, MessageTypeCounts.Empty)));
 
         using JsonDocument doc = await GetStatsAsync();
         JsonElement mlat = doc.RootElement.GetProperty("Mlat");
 
         mlat.GetProperty("Clients").GetInt32().Should().Be(2);
         mlat.GetProperty("Messages").GetInt64().Should().Be(2600);
+    }
+
+    // === Message types ===
+
+    [Fact]
+    public async Task MessageTypes_AreEntriesInCodeOrder()
+    {
+        var types = new MessageTypeCounts(
+            new Dictionary<int, long> { [17] = 4600, [4] = 900, [11] = 1700 },
+            new Dictionary<int, long> { [19] = 1900, [0] = 50, [11] = 2100 },
+            new Dictionary<BdsCode, long> { [BdsCode.Unknown] = 30, [BdsCode.Bds60] = 400, [BdsCode.Empty] = 5, [BdsCode.Bds40] = 280 });
+        _fixture.Sample(Receiver(sdr: new SdrStatistics([Device("roof", 0, messages: 7200, types: types)])));
+
+        using JsonDocument doc = await GetStatsAsync();
+        JsonElement messageTypes = doc.RootElement.GetProperty("Sdr").GetProperty("Devices")[0].GetProperty("MessageTypes");
+
+        Names(messageTypes).Should().Equal("DownlinkFormats", "TypeCodes", "BdsCodes");
+        messageTypes.GetProperty("DownlinkFormats").EnumerateArray().Select(e => e.GetProperty("DF").GetInt32())
+            .Should().Equal(4, 11, 17);
+        messageTypes.GetProperty("TypeCodes").EnumerateArray().Select(e => e.GetProperty("TC").GetInt32())
+            .Should().Equal(0, 11, 19);
+        messageTypes.GetProperty("BdsCodes").EnumerateArray().Select(e => e.GetProperty("BDS").GetString())
+            .Should().Equal("4,0", "6,0", "Empty", "Unknown");
+        JsonElement df17 = messageTypes.GetProperty("DownlinkFormats")[2];
+        Names(df17).Should().Equal("DF", "Total", "PerSecond");
+        df17.GetProperty("Total").GetInt64().Should().Be(4600);
+    }
+
+    [Fact]
+    public async Task MessageTypes_RatesCoverTheWindow()
+    {
+        MessageTypeCounts Types(long df17, long tc0) => new(
+            new Dictionary<int, long> { [17] = df17 },
+            new Dictionary<int, long> { [0] = tc0 },
+            new Dictionary<BdsCode, long>());
+
+        _fixture.Sample(Receiver(beast: [Beast(messages: 0) with { MessageTypes = Types(0, 0) }]));
+        _fixture.Clock.Advance(TimeSpan.FromSeconds(3));
+        _fixture.Sample(Receiver(beast: [Beast(messages: 200) with { MessageTypes = Types(200, 10) }]));
+
+        using JsonDocument doc = await GetStatsAsync();
+        JsonElement messageTypes = doc.RootElement.GetProperty("BeastSources")[0].GetProperty("MessageTypes");
+
+        messageTypes.GetProperty("DownlinkFormats")[0].GetProperty("PerSecond").GetDouble().Should().Be(66.7);
+        messageTypes.GetProperty("TypeCodes")[0].GetProperty("PerSecond").GetDouble().Should().Be(3.3);
+    }
+
+    [Fact]
+    public async Task MessageTypes_NoneSeen_AreThreeEmptyArrays()
+    {
+        _fixture.Sample(Receiver(mlat: new MlatStatistics(0, 0, MessageTypeCounts.Empty)));
+
+        using JsonDocument doc = await GetStatsAsync();
+        JsonElement messageTypes = doc.RootElement.GetProperty("Mlat").GetProperty("MessageTypes");
+
+        messageTypes.GetProperty("DownlinkFormats").GetArrayLength().Should().Be(0);
+        messageTypes.GetProperty("TypeCodes").GetArrayLength().Should().Be(0);
+        messageTypes.GetProperty("BdsCodes").GetArrayLength().Should().Be(0);
     }
 
     // === Outputs and database ===
@@ -295,9 +355,9 @@ public class StatsTests : IAsyncLifetime
 
     private static SdrDeviceStatistics Device(
         string name, int index, long samples = 0, long extracted = 0, long corrected = 0,
-        long duplicates = 0, long messages = 0) =>
-        new(name, index, samples, extracted, corrected, duplicates, messages);
+        long duplicates = 0, long messages = 0, MessageTypeCounts? types = null) =>
+        new(name, index, samples, extracted, corrected, duplicates, messages, types ?? MessageTypeCounts.Empty);
 
     private static BeastSourceStatistics Beast(long messages) =>
-        new("feeder", 30005, true, DateTime.UnixEpoch, 0, messages);
+        new("feeder", 30005, true, DateTime.UnixEpoch, 0, messages, MessageTypeCounts.Empty);
 }

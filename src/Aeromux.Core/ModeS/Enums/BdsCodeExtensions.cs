@@ -33,7 +33,24 @@ public static class BdsCodeExtensions
             BdsCode.Unknown => "Unknown",
             BdsCode.Empty => "Empty",
             // Format numeric BDS codes as "BDS X,Y" (e.g., 60 -> "BDS 6,0")
-            _ => $"BDS {(int)bdsCode / 10},{(int)bdsCode % 10}"
+            _ => $"BDS {bdsCode.ToRegisterName()}"
+        };
+    }
+
+    /// <summary>
+    /// Formats a BDS code as its register number alone, the way tables and the REST API
+    /// list them under a <c>BDS</c> heading (e.g., "6,0").
+    /// </summary>
+    /// <param name="bdsCode">BDS code enum value.</param>
+    /// <returns>The register (e.g., "6,0"), or "Unknown" or "Empty".</returns>
+    public static string ToRegisterName(this BdsCode bdsCode)
+    {
+        return bdsCode switch
+        {
+            BdsCode.Unknown => "Unknown",
+            BdsCode.Empty => "Empty",
+            // Numeric BDS codes as "X,Y" (e.g., 60 -> "6,0")
+            _ => $"{(int)bdsCode / 10},{(int)bdsCode % 10}"
         };
     }
 }

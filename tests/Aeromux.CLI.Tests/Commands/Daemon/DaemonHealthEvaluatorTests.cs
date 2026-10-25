@@ -15,6 +15,7 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.CLI.Commands.Daemon;
+using Aeromux.Core.ModeS;
 using Aeromux.Infrastructure.Streaming;
 using FluentAssertions;
 using static Aeromux.CLI.Tests.Commands.Daemon.DaemonStatisticsSamplerTests;
@@ -129,7 +130,7 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     public void BeastStillOnItsFirstAttempt_CountsFromWhenItFirstAppeared()
     {
         // Since is null until the first attempt completes
-        _current = Receiver(beast: [new BeastSourceStatistics("feeder", 30005, false, null, 0, 0)]);
+        _current = Receiver(beast: [new BeastSourceStatistics("feeder", 30005, false, null, 0, 0, MessageTypeCounts.Empty)]);
         _sampler.Sample();
 
         _clock.Advance(TimeSpan.FromSeconds(9));
@@ -182,15 +183,15 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     {
         SampleAndAdvance(Receiver(
                 sdr: Sdr(Device("default", 0)),
-                mlat: new MlatStatistics(Clients: 0, Messages: 0)),
+                mlat: new MlatStatistics(Clients: 0, Messages: 0, MessageTypeCounts.Empty)),
             TimeSpan.Zero);
         SampleAndAdvance(Receiver(
                 sdr: Sdr(Device("default", 2_400_000)),
-                mlat: new MlatStatistics(Clients: 0, Messages: 0)),
+                mlat: new MlatStatistics(Clients: 0, Messages: 0, MessageTypeCounts.Empty)),
             TimeSpan.FromMinutes(1));
         SampleAndAdvance(Receiver(
                 sdr: Sdr(Device("default", 146_400_000)),
-                mlat: new MlatStatistics(Clients: 0, Messages: 0)),
+                mlat: new MlatStatistics(Clients: 0, Messages: 0, MessageTypeCounts.Empty)),
             TimeSpan.Zero);
 
         Evaluate().Status.Should().Be("OK", "no mlat-client connected and no MLAT frames is not a problem");

@@ -66,8 +66,8 @@ public class NoPositionInformationTest
         // Assert - Verify TC 0 is counted in statistics (not as unsupported)
         message.Should().NotBeNull();
         message.Should().BeOfType<NoPositionInformation>();
-        _parser.MessagesByTC.Should().ContainKey(0);
-        _parser.MessagesByTC[0].Should().Be(1);
+        _parser.GetMessageTypeCounts().TypeCodes.Should().ContainKey(0)
+            .WhoseValue.Should().Be(1);
     }
 
     [Fact]

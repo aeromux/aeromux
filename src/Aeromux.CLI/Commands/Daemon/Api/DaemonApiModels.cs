@@ -363,7 +363,8 @@ public sealed record StatsSdrDevice(
     long Corrected,
     long Duplicates,
     long Messages,
-    double MessagesPerSecond);
+    double MessagesPerSecond,
+    StatsMessageTypes MessageTypes);
 
 /// <summary>
 /// One Beast TCP input and its connection state.
@@ -375,7 +376,8 @@ public sealed record StatsBeastSource(
     DateTime? Since,
     int Reconnects,
     long Messages,
-    double MessagesPerSecond);
+    double MessagesPerSecond,
+    StatsMessageTypes MessageTypes);
 
 /// <summary>
 /// The MLAT input.
@@ -383,7 +385,34 @@ public sealed record StatsBeastSource(
 public sealed record StatsMlat(
     int Clients,
     long Messages,
-    double MessagesPerSecond);
+    double MessagesPerSecond,
+    StatsMessageTypes MessageTypes);
+
+/// <summary>
+/// A source's messages by kind. Each list holds the codes seen since the source started,
+/// in code order (registers, then <c>Empty</c> and <c>Unknown</c> for Comm-B), as entries
+/// rather than objects keyed by code, so every entry has a fixed shape.
+/// </summary>
+public sealed record StatsMessageTypes(
+    IReadOnlyList<StatsDownlinkFormat> DownlinkFormats,
+    IReadOnlyList<StatsTypeCode> TypeCodes,
+    IReadOnlyList<StatsBdsCode> BdsCodes);
+
+/// <summary>
+/// Messages of one downlink format: in total, and per second over the last 60 seconds.
+/// </summary>
+public sealed record StatsDownlinkFormat(int DF, long Total, double PerSecond);
+
+/// <summary>
+/// ADS-B messages of one type code: in total, and per second over the last 60 seconds.
+/// </summary>
+public sealed record StatsTypeCode(int TC, long Total, double PerSecond);
+
+/// <summary>
+/// Comm-B replies of one register, written as in the documentation (<c>"4,0"</c>), or
+/// <c>"Empty"</c> and <c>"Unknown"</c>: in total, and per second over the last 60 seconds.
+/// </summary>
+public sealed record StatsBdsCode(string BDS, long Total, double PerSecond);
 
 /// <summary>
 /// The TCP outputs; an output is null when it is disabled.

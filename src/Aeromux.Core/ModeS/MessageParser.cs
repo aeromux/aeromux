@@ -71,26 +71,19 @@ public sealed partial class MessageParser
     private long _validationFailures;   // Expected failures: invalid data, returns null
     private long _unexpectedErrors;     // Unexpected exceptions: bugs, should be 0
     private long _unsupportedMessages;  // Unsupported DF/TC (DF 24 Comm-D, rare formats)
-    private readonly Dictionary<DownlinkFormat, long> _messagesByDF = new();
-    private readonly Dictionary<int, long> _messagesByTC = new();
-    private readonly Dictionary<BdsCode, long> _messagesByBDS = new();
+
+    // Message counts by kind, indexed by code: DF and TC are 5-bit fields, BDS by its enum
+    // value. Arrays rather than dictionaries, incremented with Interlocked, because the
+    // REST API reads them from another thread while the source writes, and the MLAT input
+    // parses the frames of every connected mlat-client through one parser at once.
+    private readonly long[] _messagesByDF = new long[32];
+    private readonly long[] _messagesByTC = new long[32];
+    private readonly long[] _messagesByBDS = new long[Enum.GetValues<BdsCode>().Max(b => (int)b) + 1];
 
     public MessageParser(string? deviceName = null, int? deviceIndex = null)
     {
         _deviceName = deviceName;
         _deviceIndex = deviceIndex;
-
-        // Initialize all DF counters to 0
-        foreach (DownlinkFormat df in Enum.GetValues<DownlinkFormat>())
-        {
-            _messagesByDF[df] = 0;
-        }
-
-        // Initialize all BDS counters to 0
-        foreach (BdsCode bds in Enum.GetValues<BdsCode>())
-        {
-            _messagesByBDS[bds] = 0;
-        }
     }
 
     /// <summary>
@@ -114,7 +107,7 @@ public sealed partial class MessageParser
         ArgumentNullException.ThrowIfNull(frame);
 
         _messagesParsed++;
-        _messagesByDF[frame.DownlinkFormat]++;
+        Interlocked.Increment(ref _messagesByDF[(int)frame.DownlinkFormat]);
 
         try
         {
@@ -211,17 +204,26 @@ public sealed partial class MessageParser
     public long UnsupportedMessages => _unsupportedMessages;
 
     /// <summary>
-    /// Message count by Downlink Format.
+    /// Gets the messages parsed so far by downlink format, type code and Comm-B register,
+    /// each kind holding only the codes seen at least once. Safe to call from any thread.
     /// </summary>
-    public IReadOnlyDictionary<DownlinkFormat, long> MessagesByDF => _messagesByDF;
+    public MessageTypeCounts GetMessageTypeCounts() => new(
+        Read(_messagesByDF, code => code),
+        Read(_messagesByTC, code => code),
+        Read(_messagesByBDS, code => (BdsCode)code));
 
-    /// <summary>
-    /// Message count by Type Code (for DF 17/18 only).
-    /// </summary>
-    public IReadOnlyDictionary<int, long> MessagesByTC => _messagesByTC;
-
-    /// <summary>
-    /// Message count by BDS Code (for DF 20/21 Comm-B only).
-    /// </summary>
-    public IReadOnlyDictionary<BdsCode, long> MessagesByBDS => _messagesByBDS;
+    private static Dictionary<TKey, long> Read<TKey>(long[] counts, Func<int, TKey> key)
+        where TKey : notnull
+    {
+        var result = new Dictionary<TKey, long>();
+        for (int code = 0; code < counts.Length; code++)
+        {
+            long count = Interlocked.Read(ref counts[code]);
+            if (count > 0)
+            {
+                result[key(code)] = count;
+            }
+        }
+        return result;
+    }
 }

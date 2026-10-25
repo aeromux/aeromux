@@ -15,6 +15,8 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using System.Globalization;
+using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Streaming;
 using Serilog;
 
@@ -94,6 +96,7 @@ internal static class SessionSummaryLog
             logger.Information("Beast source {Host:l}:{Port}", source.Host, source.Port);
             MessagesLine(logger, source.Messages, allSources);
             logger.Information("  Reconnects         {Reconnects,11:N0}", source.Reconnects);
+            MessageTypesTable(logger, source.MessageTypes);
         }
 
         if (statistics.Mlat is { } mlat)
@@ -101,6 +104,7 @@ internal static class SessionSummaryLog
             logger.Information(BlockSeparator);
             logger.Information("MLAT");
             MessagesLine(logger, mlat.Messages, allSources);
+            MessageTypesTable(logger, mlat.MessageTypes);
         }
     }
 
@@ -120,6 +124,7 @@ internal static class SessionSummaryLog
             logger.Information("Device '{DeviceName:l}' (index {DeviceIndex})", device.Name, device.DeviceIndex);
             RadioLines(logger, device.Extracted, device.Corrected, device.Duplicates);
             MessagesLine(logger, device.Messages, allSources);
+            MessageTypesTable(logger, device.MessageTypes);
         }
     }
 
@@ -150,6 +155,81 @@ internal static class SessionSummaryLog
             logger.Information("  Messages           {Messages,11:N0}", messages);
         }
     }
+
+    // Column widths of the message type table: the code (DF and TC numbers, BDS
+    // registers up to "Unknown"), its count, and its share of its column
+    private const int DfWidth = 6;
+    private const int TcWidth = 6;
+    private const int BdsWidth = 10;
+    private const int CountWidth = 11;
+    private const int ShareWidth = 7;
+
+    /// <summary>
+    /// Logs a source's messages by kind as one table, after a blank line: DF, TC and BDS
+    /// side by side, each column ordered by count with each code's share of its column.
+    /// </summary>
+    /// <remarks>
+    /// Side by side, a source takes as many rows as its longest column, about fifteen; one
+    /// row per code would take about forty. The rows are text built with fixed widths and
+    /// the machine's culture, like the numbers elsewhere in the log, and written with the
+    /// <c>:l</c> format so no sink quotes them. They are not structured properties: the
+    /// structured form is <c>GET /api/v1/stats</c>, and a row holds three unrelated codes.
+    /// </remarks>
+    private static void MessageTypesTable(ILogger logger, MessageTypeCounts types)
+    {
+        List<string>[] columns =
+        [
+            Column(types.DownlinkFormats, code => code.ToString(CultureInfo.InvariantCulture), DfWidth),
+            Column(types.TypeCodes, code => code.ToString(CultureInfo.InvariantCulture), TcWidth),
+            Column(types.BdsCodes, code => code.ToRegisterName(), BdsWidth)
+        ];
+        int rows = columns.Max(c => c.Count);
+        if (rows == 0)
+        {
+            return;
+        }
+
+        int[] widths = [DfWidth + CountWidth + ShareWidth, TcWidth + CountWidth + ShareWidth, BdsWidth + CountWidth + ShareWidth];
+
+        logger.Information("");
+        logger.Information("{Row:l}", "  " + string.Join("   ",
+            Cell("DF", DfWidth, "Count", "Share"),
+            Cell("TC", TcWidth, "Count", "Share"),
+            Cell("BDS", BdsWidth, "Count", "Share")));
+
+        for (int row = 0; row < rows; row++)
+        {
+            string line = "  " + string.Join("   ",
+                Enumerable.Range(0, 3).Select(c => row < columns[c].Count ? columns[c][row] : new string(' ', widths[c])));
+            logger.Information("{Row:l}", line.TrimEnd());
+        }
+    }
+
+    /// <summary>
+    /// One column of the table: the cells of a kind, highest count first, ties by code value.
+    /// </summary>
+    private static List<string> Column<TCode>(
+        IReadOnlyDictionary<TCode, long> counts, Func<TCode, string> name, int codeWidth)
+        where TCode : notnull
+    {
+        long total = counts.Values.Sum();
+        CultureInfo culture = CultureInfo.CurrentCulture;
+
+        return
+        [
+            .. counts
+                .OrderByDescending(c => c.Value)
+                .ThenBy(c => c.Key)
+                .Select(c => Cell(
+                    name(c.Key),
+                    codeWidth,
+                    c.Value.ToString("N0", culture),
+                    (c.Value * 100.0 / total).ToString("F1", culture) + "%"))
+        ];
+    }
+
+    private static string Cell(string code, int codeWidth, string count, string share) =>
+        code.PadRight(codeWidth) + count.PadLeft(CountWidth) + share.PadLeft(ShareWidth);
 
     /// <summary>
     /// Formats a duration as hours, minutes and seconds, with the hours counted in full:

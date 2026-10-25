@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using Aeromux.Core.ModeS;
+using Aeromux.Core.ModeS.Enums;
 using Aeromux.Infrastructure.Streaming;
 using Serilog;
 
@@ -175,23 +177,65 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
                 return 0;
             }
 
+            // Each code's rate, from the oldest reading that has the source. A code missing
+            // from that reading counts as 0 there (GetValueOrDefault), so a code first seen
+            // inside the window counts from zero rather than from its first reading.
+            MessageTypeRates TypeRates(Func<ReceiverStatistics, MessageTypeCounts?> types)
+            {
+                if (types(current) is not { } now)
+                {
+                    return MessageTypeRates.Empty;
+                }
+
+                return new MessageTypeRates(
+                    now.DownlinkFormats.Keys.ToDictionary(
+                        code => code, code => WindowRate(s => types(s)?.DownlinkFormats.GetValueOrDefault(code))),
+                    now.TypeCodes.Keys.ToDictionary(
+                        code => code, code => WindowRate(s => types(s)?.TypeCodes.GetValueOrDefault(code))),
+                    now.BdsCodes.Keys.ToDictionary(
+                        code => code, code => WindowRate(s => types(s)?.BdsCodes.GetValueOrDefault(code))));
+            }
+
             IReadOnlyList<DeviceSnapshot> devices =
             [
                 .. (current.Sdr?.Devices ?? []).Select(device => new DeviceSnapshot(
                     device,
                     WindowRate(s => FindDevice(s, device.Name)?.Samples),
                     WindowRate(s => FindDevice(s, device.Name)?.Messages),
-                    _deviceSamples[device.Name].IncreasedAt))
+                    _deviceSamples[device.Name].IncreasedAt,
+                    TypeRates(s => FindDevice(s, device.Name)?.MessageTypes)))
             ];
 
-            string[] beastKeys = BeastKeys(current.BeastSources);
+            // Every reading's Beast keys once, rather than again for each counter and code
+            // that looks a source up in it
+            var beastKeysByReading = new Dictionary<ReceiverStatistics, string[]>(ReferenceEqualityComparer.Instance);
+            foreach (Reading reading in _readings)
+            {
+                beastKeysByReading[reading.Statistics] = BeastKeys(reading.Statistics.BeastSources);
+            }
+
+            BeastSourceStatistics? FindBeast(ReceiverStatistics statistics, string key)
+            {
+                int index = Array.IndexOf(beastKeysByReading[statistics], key);
+                return index < 0 ? null : statistics.BeastSources[index];
+            }
+
+            string[] beastKeys = beastKeysByReading[current];
             IReadOnlyList<BeastSourceSnapshot> beastSources =
             [
                 .. current.BeastSources.Select((source, i) => new BeastSourceSnapshot(
                     source,
                     WindowRate(s => FindBeast(s, beastKeys[i])?.Messages),
-                    _beastFirstSeen[beastKeys[i]]))
+                    _beastFirstSeen[beastKeys[i]],
+                    TypeRates(s => FindBeast(s, beastKeys[i])?.MessageTypes)))
             ];
+
+            MlatSnapshot? mlat = current.Mlat is { } currentMlat
+                ? new MlatSnapshot(
+                    currentMlat,
+                    WindowRate(s => s.Mlat?.Messages),
+                    TypeRates(s => s.Mlat?.MessageTypes))
+                : null;
 
             return new StatisticsSnapshot(
                 current,
@@ -200,7 +244,7 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
                 WindowRate(s => s.Sdr?.Devices.Sum(d => d.Messages)),
                 devices,
                 beastSources,
-                WindowRate(s => s.Mlat?.Messages));
+                mlat);
         }
     }
 
@@ -209,13 +253,6 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
 
     private static SdrDeviceStatistics? FindDevice(ReceiverStatistics statistics, string name) =>
         statistics.Sdr?.Devices.FirstOrDefault(d => d.Name == name);
-
-    private static BeastSourceStatistics? FindBeast(ReceiverStatistics statistics, string key)
-    {
-        string[] keys = BeastKeys(statistics.BeastSources);
-        int index = Array.IndexOf(keys, key);
-        return index < 0 ? null : statistics.BeastSources[index];
-    }
 
     /// <summary>
     /// Identifies Beast sources by host and port. The same source listed twice is unusual
@@ -265,7 +302,7 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
 /// <param name="SdrMessagesPerSecond">Messages from all SDR devices together, per second.</param>
 /// <param name="Devices">One entry per SDR device, in the order of the reading.</param>
 /// <param name="BeastSources">One entry per Beast source, in the order of the reading.</param>
-/// <param name="MlatMessagesPerSecond">MLAT messages, per second.</param>
+/// <param name="Mlat">The MLAT input, or null when it is disabled or before the first reading.</param>
 public sealed record StatisticsSnapshot(
     ReceiverStatistics? Statistics,
     DateTime? TakenAt,
@@ -273,10 +310,10 @@ public sealed record StatisticsSnapshot(
     double SdrMessagesPerSecond,
     IReadOnlyList<DeviceSnapshot> Devices,
     IReadOnlyList<BeastSourceSnapshot> BeastSources,
-    double MlatMessagesPerSecond)
+    MlatSnapshot? Mlat)
 {
     /// <summary>The snapshot before the first reading: no sources and no rates.</summary>
-    public static StatisticsSnapshot Empty { get; } = new(null, null, 0, 0, [], [], 0);
+    public static StatisticsSnapshot Empty { get; } = new(null, null, 0, 0, [], [], null);
 }
 
 /// <summary>
@@ -288,11 +325,13 @@ public sealed record StatisticsSnapshot(
 /// <param name="SamplesLastIncreased">
 /// When the sample count last went up (UTC), or when the device first appeared if it never has.
 /// </param>
+/// <param name="MessageTypes">Messages per second over the window, by kind and code.</param>
 public sealed record DeviceSnapshot(
     SdrDeviceStatistics Device,
     double SamplesPerSecond,
     double MessagesPerSecond,
-    DateTime SamplesLastIncreased);
+    DateTime SamplesLastIncreased,
+    MessageTypeRates MessageTypes);
 
 /// <summary>
 /// One Beast source in a <see cref="StatisticsSnapshot"/>.
@@ -300,7 +339,39 @@ public sealed record DeviceSnapshot(
 /// <param name="Source">The source's state and counters from the latest reading.</param>
 /// <param name="MessagesPerSecond">Messages handed on per second over the window.</param>
 /// <param name="FirstSeen">When a reading first contained the source (UTC).</param>
+/// <param name="MessageTypes">Messages per second over the window, by kind and code.</param>
 public sealed record BeastSourceSnapshot(
     BeastSourceStatistics Source,
     double MessagesPerSecond,
-    DateTime FirstSeen);
+    DateTime FirstSeen,
+    MessageTypeRates MessageTypes);
+
+/// <summary>
+/// The MLAT input in a <see cref="StatisticsSnapshot"/>.
+/// </summary>
+/// <param name="Mlat">The input's counters from the latest reading.</param>
+/// <param name="MessagesPerSecond">MLAT messages per second over the window.</param>
+/// <param name="MessageTypes">Messages per second over the window, by kind and code.</param>
+public sealed record MlatSnapshot(
+    MlatStatistics Mlat,
+    double MessagesPerSecond,
+    MessageTypeRates MessageTypes);
+
+/// <summary>
+/// Messages per second over the sampling window, by downlink format, type code and Comm-B
+/// register, for the codes a source has seen.
+/// </summary>
+/// <param name="DownlinkFormats">Per second by downlink format.</param>
+/// <param name="TypeCodes">Per second by ADS-B type code.</param>
+/// <param name="BdsCodes">Per second by Comm-B register.</param>
+public sealed record MessageTypeRates(
+    IReadOnlyDictionary<int, double> DownlinkFormats,
+    IReadOnlyDictionary<int, double> TypeCodes,
+    IReadOnlyDictionary<BdsCode, double> BdsCodes)
+{
+    /// <summary>No codes.</summary>
+    public static MessageTypeRates Empty { get; } = new(
+        new Dictionary<int, double>(),
+        new Dictionary<int, double>(),
+        new Dictionary<BdsCode, double>());
+}

@@ -118,9 +118,14 @@ public class BeastStreamStateTests
         }
         await network.WriteAsync(EncodeLong(Df18Cf1Position));
 
-        BeastSourceStatistics statistics = await WaitForAsync(stream, s => s.Messages == 5);
+        // The parser counts a message a moment before its type, so wait for both
+        BeastSourceStatistics statistics = await WaitForAsync(
+            stream, s => s.Messages == 5 && s.MessageTypes.DownlinkFormats.Values.Sum() == 5);
 
         statistics.Messages.Should().Be(5);
+        statistics.MessageTypes.DownlinkFormats.Should().Equal(new Dictionary<int, long> { [17] = 4, [18] = 1 });
+        statistics.MessageTypes.TypeCodes.Should().Equal(
+            new Dictionary<int, long> { [11] = 4 }, "the DF 18 frame without an ICAO address has no type code");
     }
 
     // ─── Helpers ───

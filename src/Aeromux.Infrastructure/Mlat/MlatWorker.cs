@@ -221,6 +221,11 @@ public sealed class MlatWorker : IDisposable
     public int ConnectedClients => _connectedClients;
 
     /// <summary>
+    /// Gets the MLAT messages parsed so far by downlink format, type code and Comm-B register.
+    /// </summary>
+    public MessageTypeCounts MessageTypes => _messageParser.GetMessageTypeCounts();
+
+    /// <summary>
     /// Gets the endpoint the listener is bound to, or null before <see cref="Start"/>.
     /// Reports the actual port when the worker was started on port 0.
     /// </summary>

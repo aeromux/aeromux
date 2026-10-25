@@ -845,13 +845,16 @@ curl -s "http://localhost:8080/api/v1/stats"
 | `…Duplicates`                             | Frames this device's duplicate filter dropped (multipath, replies to several interrogators)                                                                         |
 | `…Messages`                               | Messages this device handed to the aircraft tracker                                                                                                                 |
 | `…MessagesPerSecond`                      | `Messages` over the last 60 seconds                                                                                                                                 |
+| `…MessageTypes`                           | This device's messages by downlink format, type code and Comm-B register (see Messages by type)                                                                     |
 | `BeastSources[]`                          | One entry per Beast input, `[]` when there are none                                                                                                                 |
 | `…Connected`, `…Since`                    | Whether the source is connected, and since when; `Since` is `null` while the first connection attempt is still under way                                            |
 | `…Reconnects`                             | Successful connections after the first                                                                                                                              |
 | `…Messages`, `…MessagesPerSecond`         | Messages this source handed to the aircraft tracker, in total and over the last 60 seconds                                                                          |
+| `…MessageTypes`                           | This source's messages by kind, as for a device                                                                                                                     |
 | `Mlat`                                    | `null` when MLAT input is disabled                                                                                                                                  |
 | `Mlat.Clients`                            | Connected mlat-client instances                                                                                                                                     |
 | `Mlat.Messages`, `Mlat.MessagesPerSecond` | MLAT messages handed to the aircraft tracker, in total and over the last 60 seconds                                                                                 |
+| `Mlat.MessageTypes`                       | MLAT messages by kind, as for a device                                                                                                                              |
 | `Outputs.Beast`, `.Json`, `.Sbs`          | `{ "Clients": n }`, or `null` when that output is disabled                                                                                                          |
 | `Database`                                | `null` when database enrichment is off; `Version` is the loaded database, which changes when the auto-updater installs a new one, and is `null` until one is loaded |
 
@@ -862,6 +865,40 @@ curl -s "http://localhost:8080/api/v1/stats"
 **Rates.** Every `PerSecond` field covers the last 60 seconds, sampled once a second, so a monitoring tool polling every 30 to 60 seconds sees the period it polled across. During the first minute the rates cover the time since the daemon started. `Messages.AveragePerSecond` is the average over the whole session.
 
 **Comparing receivers.** `MessagesPerSecond` is the figure that says how much a device hears; compare it between devices, or for one device before and after a change of antenna, gain or position. A growing share of `Corrected` in `Extracted` means more frames arrive with a damaged bit, typically weaker signals or more interference.
+
+### Messages by type
+
+Every SDR device, every Beast source and the MLAT input report their messages by downlink format (DF), by ADS-B type code (TC) and by Comm-B register (BDS), as `MessageTypes`:
+
+```json
+"MessageTypes": {
+  "DownlinkFormats": [
+    { "DF": 11, "Total": 1700, "PerSecond": 28.3 },
+    { "DF": 17, "Total": 4600, "PerSecond": 76.7 },
+    { "DF": 20, "Total": 650, "PerSecond": 10.8 }
+  ],
+  "TypeCodes": [
+    { "TC": 0, "Total": 50, "PerSecond": 0.8 },
+    { "TC": 11, "Total": 2100, "PerSecond": 35.0 },
+    { "TC": 19, "Total": 1900, "PerSecond": 31.7 }
+  ],
+  "BdsCodes": [
+    { "BDS": "4,0", "Total": 280, "PerSecond": 4.7 },
+    { "BDS": "6,0", "Total": 400, "PerSecond": 6.7 },
+    { "BDS": "Unknown", "Total": 30, "PerSecond": 0.5 }
+  ]
+}
+```
+
+| Field               | Meaning                                                                                                                                                 |
+|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `DownlinkFormats[]` | One entry per DF the source has decoded since it started, in DF order. The totals add up to the source's `Messages`                                     |
+| `TypeCodes[]`       | One entry per TC, for DF 17 and for DF 18 frames that carry ADS-B with an ICAO address                                                                  |
+| `BdsCodes[]`        | One entry per Comm-B register of the DF 20 and DF 21 replies, written `"4,0"`, then `"Empty"` (an all-zero reply) and `"Unknown"` (no register matched) |
+| `…Total`            | Messages since the source started                                                                                                                       |
+| `…PerSecond`        | The same over the last 60 seconds; a code first seen within that time counts from zero                                                                  |
+
+Only codes seen at least once are listed. The breakdown answers questions the totals cannot: a growing share of TC 0 (an airborne message without position information) is what GNSS interference looks like, when aircraft lose their satellite position and stop reporting it; the DF entries show how much of the traffic is ADS-B (DF 17) and how much is replies to radar interrogations (DF 4, 5, 20 and 21). The session summary in the log carries the same breakdown for every source.
 
 ### Migrating from 0.8
 
@@ -1081,6 +1118,17 @@ curl -s "http://localhost:8080/api/v1/stats" | jq '.Sdr.Devices[]? | {Name, Samp
 ```
 
 On a daemon without an SDR device this prints nothing.
+
+### Check for GNSS interference
+
+```bash
+curl -s "http://localhost:8080/api/v1/stats" | jq '(.Sdr.Devices // [])[], .BeastSources[]
+  | {Source: (.Name // "\(.Host):\(.Port)"),
+     TC0PerSecond: ([.MessageTypes.TypeCodes[] | select(.TC == 0).PerSecond] | add // 0),
+     AllTCPerSecond: ([.MessageTypes.TypeCodes[].PerSecond] | add // 0)}'
+```
+
+The share of TC 0 in all type codes, per source, over the last minute. It works with or without an SDR device, and gives 0 for a source that has decoded no ADS-B yet.
 
 ### Check the state of every Beast source
 
