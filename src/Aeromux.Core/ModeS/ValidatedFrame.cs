@@ -44,6 +44,17 @@ public sealed record ValidatedFrame(
     bool WasCorrected)
 {
     /// <summary>
+    /// Gets whether the address is an ICAO aircraft address. False for DF 19 and for DF 18
+    /// frames whose control field or IMF bit says the address is a TIS-B track number, an
+    /// anonymous address or similar.
+    /// </summary>
+    /// <remarks>
+    /// Set by <see cref="ValidatedFrameFactory"/>. Such frames still go to Beast output, but
+    /// must not confirm an address or create an aircraft.
+    /// </remarks>
+    public bool HasIcaoAddress { get; init; } = true;
+
+    /// <summary>
     /// Gets the frame length in bits (56 or 112).
     /// </summary>
     public int LengthBits => Data.Length * 8;

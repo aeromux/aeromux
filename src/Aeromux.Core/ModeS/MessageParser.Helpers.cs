@@ -351,20 +351,38 @@ public sealed partial class MessageParser
     /// <param name="tc">Type code (1-4).</param>
     /// <param name="ca">Category field (3 bits, 0-7).</param>
     /// <returns>Aircraft category enum value.</returns>
-    private static AircraftCategory GetAircraftCategory(int tc, int ca)
+    internal static AircraftCategory GetAircraftCategory(int tc, int ca) => (tc, ca) switch
     {
-        // Combine TC and CA into lookup value (TC * 10 + CA)
-        int combined = (tc * 10) + ca;
+        // CA 0 means no category information in every set
+        (>= 1 and <= 4, 0) => AircraftCategory.NoInformation,
 
-        // Map to enum (enum values are defined as TC * 10 + CA)
-        if (EnumValidator.IsValidAircraftCategory(combined))
-        {
-            return (AircraftCategory)combined;
-        }
+        // TC 2, set C: surface vehicles and obstacles
+        (2, 1) => AircraftCategory.SurfaceEmergencyVehicle,
+        (2, 2) => AircraftCategory.SurfaceServiceVehicle,
+        (2, 3) => AircraftCategory.PointObstacle,
+        (2, 4) => AircraftCategory.ClusterObstacle,
+        (2, 5) => AircraftCategory.LineObstacle,
 
-        // Unknown combination - return Reserved
-        return AircraftCategory.Reserved;
-    }
+        // TC 3, set B: gliders, lighter-than-air, parachutists, ultralights, UAVs, space vehicles
+        (3, 1) => AircraftCategory.Glider,
+        (3, 2) => AircraftCategory.LighterThanAir,
+        (3, 3) => AircraftCategory.Parachutist,
+        (3, 4) => AircraftCategory.Ultralight,
+        (3, 6) => AircraftCategory.UnmannedAerialVehicle,
+        (3, 7) => AircraftCategory.SpaceVehicle,
+
+        // TC 4, set A: aircraft by wake vortex category
+        (4, 1) => AircraftCategory.Light,
+        (4, 2) => AircraftCategory.Small,
+        (4, 3) => AircraftCategory.Large,
+        (4, 4) => AircraftCategory.HighVortexLarge,
+        (4, 5) => AircraftCategory.Heavy,
+        (4, 6) => AircraftCategory.HighPerformance,
+        (4, 7) => AircraftCategory.Rotorcraft,
+
+        // Set D (TC 1), set B CA 5, set C CA 6-7
+        _ => AircraftCategory.Reserved
+    };
 
     /// <summary>
     /// Decodes 12-bit altitude field for TC 9-18 (barometric) or TC 20-22 (GNSS).

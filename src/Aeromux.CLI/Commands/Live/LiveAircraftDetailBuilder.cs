@@ -431,6 +431,10 @@ internal static class LiveAircraftDetailBuilder
             : "N/A (no data yet)";
         allRows.Add(new DetailRow("Vertical Rate", verticalRate));
 
+        // Vertical Rate Source (TC 19): GNSS or barometric
+        string verticalRateSource = aircraft.Velocity.VerticalRateSource?.ToDisplayString() ?? "N/A (no data yet)";
+        allRows.Add(new DetailRow("Vertical Rate Source", verticalRateSource));
+
         // Barometric Vertical Rate (BDS 6,0)
         string baroVerticalRate = aircraft.FlightDynamics?.BarometricVerticalRate.HasValue == true
             ? $"{aircraft.FlightDynamics.BarometricVerticalRate.Value:+0;-#} ft/min"

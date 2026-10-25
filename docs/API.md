@@ -243,6 +243,7 @@ curl -s "http://localhost:8080/api/v1/aircraft/407F19?sections=Position,Velocity
     "HeadingType": null,
     "HorizontalReference": null,
     "VerticalRate": 0,
+    "VerticalRateSource": "Barometric",
     "BarometricVerticalRate": null,
     "InertialVerticalRate": null,
     "RollAngle": null,

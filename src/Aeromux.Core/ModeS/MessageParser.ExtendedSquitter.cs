@@ -22,12 +22,36 @@ using Serilog;
 namespace Aeromux.Core.ModeS;
 
 /// <summary>
-/// MessageParser partial class: Extended Squitter messages (DF 17/18/19 - ADS-B).
+/// MessageParser partial class: Extended Squitter messages (DF 17/18 - ADS-B, TIS-B, ADS-R).
 /// Extended Squitter (ES) are 112-bit Mode S transmissions carrying ADS-B data.
 /// Handles all Type Codes for identification, position, velocity, and status messages.
 /// </summary>
 public sealed partial class MessageParser
 {
+    /// <summary>
+    /// Parses a DF 18 extended squitter when it uses the ADS-B layout with an ICAO address.
+    /// </summary>
+    /// <remarks>
+    /// CF 0 (non-transponder ADS-B), CF 2 (fine TIS-B) and CF 6 (ADS-R) carry ADS-B messages.
+    /// They are decoded only with an ICAO address, so a TIS-B track number never shows up as an
+    /// aircraft. CF 3 (coarse TIS-B) uses a different layout, and CF 1, 4, 5 and 7 carry no
+    /// ICAO address or no defined format.
+    /// </remarks>
+    private ModeSMessage? ParseNonTransponderExtendedSquitter(ValidatedFrame frame)
+    {
+        // Control field (bits 6-8, 3 bits)
+        int cf = frame.Data[0] & 0x07;
+        if (cf is 0 or 2 or 6 && IcaoAddressClassifier.HasIcaoAddress(frame.Data))
+        {
+            return ParseExtendedSquitter(frame);
+        }
+
+        _unsupportedMessages++;
+        Log.Debug("Unsupported DF 18 CF {ControlField} from address {IcaoAddress} (not ICAO-addressed ADS-B)",
+            cf, frame.IcaoAddress);
+        return null;
+    }
+
     /// <summary>
     /// Parses Extended Squitter (DF 17/18) with Type Code routing.
     /// </summary>
@@ -69,22 +93,26 @@ public sealed partial class MessageParser
 
     /// <summary>
     /// Parses no position information message from Type Code 0.
-    /// TC 0 is a reserved code indicating no position information is available.
+    /// TC 0 carries no position, but its altitude field can still hold a barometric altitude.
     /// </summary>
     /// <param name="frame">Validated frame to parse.</param>
-    /// <returns>NoPositionInformation message containing only base fields.</returns>
+    /// <returns>NoPositionInformation message with the barometric altitude, if present.</returns>
     /// <remarks>
-    /// TC 0 messages contain no additional data beyond the standard Mode S header.
-    /// This method simply constructs a NoPositionInformation message with base fields.
+    /// The altitude field (bits 41-52, ME bits 9-20) uses the same encoding as TC 9-18.
     /// </remarks>
     private ModeSMessage ParseNoPositionInformation(ValidatedFrame frame)
     {
+        // Extract altitude - bits 41-52 (12 bits), same encoding as TC 9-18
+        int altRaw = ExtractBits(frame.Data, 41, 12);
+        Altitude? altitude = DecodeAltitude(altRaw, AltitudeType.Barometric);
+
         return new NoPositionInformation(
             frame.IcaoAddress,
             frame.Timestamp,
             frame.DownlinkFormat,
             frame.SignalStrength,
-            frame.WasCorrected);
+            frame.WasCorrected,
+            altitude);
     }
 
     // ========================================
@@ -233,13 +261,18 @@ public sealed partial class MessageParser
         int? verticalRate = ParseVerticalRate(frame);
         int? geometricDelta = ParseGeometricDelta(frame);
 
+        // Vertical rate source (bit 68, 1 bit): 0 = GNSS, 1 = barometric; only meaningful with a rate
+        VerticalRateSource? verticalRateSource = verticalRate != null
+            ? (VerticalRateSource)ExtractBits(frame.Data, 68, 1)
+            : null;
+
         // Route to subtype-specific parsers
         return subtype switch
         {
             VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic
-                => ParseGroundSpeedVelocity(frame, subtype, verticalRate, nacv, geometricDelta),
+                => ParseGroundSpeedVelocity(frame, subtype, verticalRate, verticalRateSource, nacv, geometricDelta),
             VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic
-                => ParseAirspeedVelocity(frame, subtype, verticalRate, nacv, geometricDelta),
+                => ParseAirspeedVelocity(frame, subtype, verticalRate, verticalRateSource, nacv, geometricDelta),
             _ => null  // Unknown subtype
         };
     }
@@ -251,6 +284,7 @@ public sealed partial class MessageParser
         ValidatedFrame frame,
         VelocitySubtype subtype,
         int? verticalRate,
+        VerticalRateSource? verticalRateSource,
         NavigationAccuracyCategoryVelocity? nacv,
         int? geometricDelta)
     {
@@ -264,29 +298,31 @@ public sealed partial class MessageParser
         // Extract NS velocity (V_ns) - bits 58-67 (10 bits)
         int vns = ExtractBits(frame.Data, 58, 10);
 
-        // Check for "no data" (all zeros)
-        if (vew == 0 || vns == 0)
+        // A zero component means "not available": speed and track can't be computed, but the
+        // vertical rate and altitude delta in the same message are still valid
+        Velocity? velocity = null;
+        double? normalizedHeading = null;
+        if (vew != 0 && vns != 0)
         {
-            return null;
+            // Calculate velocity components (knots)
+            int multiplier = (subtype == VelocitySubtype.GroundSpeedSupersonic) ? 4 : 1;  // Supersonic multiplier
+            int vx = (sew == 0 ? 1 : -1) * (vew - 1) * multiplier;  // East = positive
+            int vy = (sns == 0 ? 1 : -1) * (vns - 1) * multiplier;  // North = positive
+
+            // Calculate ground speed (magnitude), rounded to the nearest knot
+            int groundSpeed = (int)Math.Round(Math.Sqrt((vx * vx) + (vy * vy)), MidpointRounding.AwayFromZero);
+
+            // Reject implausible ground speed (both axes simultaneously maxed = bit corruption)
+            if (groundSpeed > 4096)
+            {
+                return null;
+            }
+
+            // Calculate track angle (0-360°, North = 0°)
+            double trackAngle = Math.Atan2(vx, vy) * 180.0 / Math.PI;
+            normalizedHeading = ((trackAngle % 360) + 360) % 360;
+            velocity = Velocity.FromKnots(groundSpeed, VelocityType.GroundSpeed);
         }
-
-        // Calculate velocity components (knots)
-        int multiplier = (subtype == VelocitySubtype.GroundSpeedSupersonic) ? 4 : 1;  // Supersonic multiplier
-        int vx = (sew == 0 ? 1 : -1) * (vew - 1) * multiplier;  // East = positive
-        int vy = (sns == 0 ? 1 : -1) * (vns - 1) * multiplier;  // North = positive
-
-        // Calculate ground speed (magnitude)
-        int groundSpeed = (int)Math.Sqrt((vx * vx) + (vy * vy));
-
-        // Reject implausible ground speed (both axes simultaneously maxed = bit corruption)
-        if (groundSpeed > 4096)
-        {
-            return null;
-        }
-
-        // Calculate track angle (0-360°, North = 0°)
-        double trackAngle = Math.Atan2(vx, vy) * 180.0 / Math.PI;
-        double normalizedHeading = ((trackAngle % 360) + 360) % 360;
 
         return new AirborneVelocity(
             frame.IcaoAddress,
@@ -294,12 +330,13 @@ public sealed partial class MessageParser
             frame.DownlinkFormat,
             frame.SignalStrength,
             frame.WasCorrected,
-            Velocity.FromKnots(groundSpeed, VelocityType.GroundSpeed),
+            velocity,
             normalizedHeading,
             verticalRate,
             subtype,
             nacv,
-            geometricDelta);
+            geometricDelta,
+            verticalRateSource);
     }
 
     /// <summary>
@@ -309,6 +346,7 @@ public sealed partial class MessageParser
         ValidatedFrame frame,
         VelocitySubtype subtype,
         int? verticalRate,
+        VerticalRateSource? verticalRateSource,
         NavigationAccuracyCategoryVelocity? nacv,
         int? geometricDelta)
     {
@@ -322,9 +360,10 @@ public sealed partial class MessageParser
         // Extract airspeed value (AS) - bits 58-67 (10 bits)
         int asRaw = ExtractBits(frame.Data, 58, 10);
 
-        // Calculate heading (0-360°)
+        // Calculate heading (0-360°); the status bit alone says whether it is available, and
+        // raw 0 is magnetic north
         double? heading = null;
-        if (sh == 1 && hdg != 0)
+        if (sh == 1)
         {
             heading = hdg * 360.0 / 1024.0;
         }
@@ -354,7 +393,8 @@ public sealed partial class MessageParser
             verticalRate,
             subtype,
             nacv,
-            geometricDelta);
+            geometricDelta,
+            verticalRateSource);
     }
 
     /// <summary>
@@ -362,9 +402,6 @@ public sealed partial class MessageParser
     /// </summary>
     private int? ParseVerticalRate(ValidatedFrame frame)
     {
-        // Extract VrSrc (vertical rate source) - bit 68 (1 bit, 0=GNSS, 1=Barometric)
-        int vrSrc = ExtractBits(frame.Data, 68, 1);  // Not used currently
-
         // Extract SVr (vertical rate sign) - bit 69 (1 bit, 0=climb, 1=descent)
         int svr = ExtractBits(frame.Data, 69, 1);
 
@@ -409,8 +446,8 @@ public sealed partial class MessageParser
         int sDif = ExtractBits(frame.Data, 81, 1);
         int dAlt = ExtractBits(frame.Data, 82, 7);
 
-        // Check if delta is unavailable (all zeros or all ones)
-        if (dAlt is 0 or 127)
+        // Only raw 0 means unavailable; raw 127 is the top of the range (3,150 ft or more)
+        if (dAlt == 0)
         {
             return null;
         }
@@ -1460,13 +1497,15 @@ public sealed partial class MessageParser
 
                     // Approach mode (bit 84, 1 bit)
                     approachMode = ExtractBits(frame.Data, 84, 1) == 1;
+
+                    // LNAV mode (bit 86, 1 bit): an MCP/FCU mode like the ones above, so it is
+                    // meaningful only when the mode status bit says the mode bits are valid
+                    lnavMode = ExtractBits(frame.Data, 86, 1) == 1;
                 }
 
-                // TCAS/ACAS operational (bit 85, 1 bit)
+                // TCAS/ACAS operational (bit 85, 1 bit): reports the ACAS system rather than an
+                // MCP/FCU mode, so it is read whatever the mode status bit says
                 tcasOperational = ExtractBits(frame.Data, 85, 1) == 1;
-
-                // LNAV mode (bit 86, 1 bit)
-                lnavMode = ExtractBits(frame.Data, 86, 1) == 1;
 
                 break;
             }

@@ -265,26 +265,6 @@ public class EnumValidatorTests
     public void IsValidAcasReplyInformation_ReturnsExpected(int value, bool expected) =>
         EnumValidator.IsValidAcasReplyInformation(value).Should().Be(expected);
 
-    [Theory]
-    [InlineData(0, true)]
-    [InlineData(10, true)]
-    [InlineData(21, true)]
-    [InlineData(23, true)]
-    [InlineData(31, true)]
-    [InlineData(32, true)]
-    [InlineData(33, true)]
-    [InlineData(40, true)]
-    [InlineData(47, true)]
-    [InlineData(1, false)]   // gap
-    [InlineData(11, false)]  // gap
-    [InlineData(22, false)]  // gap
-    [InlineData(34, false)]  // gap
-    [InlineData(48, false)]  // out of range
-    [InlineData(-1, false)]
-    [InlineData(200, false)]
-    public void IsValidAircraftCategory_ReturnsExpected(int value, bool expected) =>
-        EnumValidator.IsValidAircraftCategory(value).Should().Be(expected);
-
     // ========================================
     // Startup-only: ConfidenceLevel
     // ========================================

@@ -23,7 +23,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 
 /// <summary>
 /// Handles AirborneVelocity messages (TC 19) for aircraft in flight.
-/// Updates: Speed, VerticalRate, VelocitySubtype, NACv, LastUpdate,
+/// Updates: Speed, VerticalRate, VerticalRateSource, VelocitySubtype, NACv, LastUpdate,
 /// and conditionally Track (subtype 1-2) or Heading (subtype 3-4).
 /// </summary>
 /// <remarks>
@@ -38,6 +38,10 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// when an aircraft alternates between subtypes.
 /// Note: TrackedVelocity.Track (from TC 19) is different from TrackedVelocity.GroundTrack (from TC 5-8 surface messages).
 /// Track is airborne ground track accounting for wind, while GroundTrack is surface taxi direction.
+/// </para>
+/// <para>
+/// A field the message reports as not available keeps its previous value: a message without a
+/// speed says nothing new about the speed, so it neither clears it nor refreshes LastUpdate.
 /// </para>
 /// </remarks>
 public sealed class AirborneVelocityHandler : ITrackingHandler
@@ -59,25 +63,32 @@ public sealed class AirborneVelocityHandler : ITrackingHandler
         // Heading and Track are NOT set here — they are preserved from previous state.
         // Preserve from other handlers: IndicatedAirspeed, TrueAirspeed, TrackAngle (Comm-B BDS 5,0/5,3/6,0)
         //                               GroundSpeed, GroundTrack (Surface Position TC 5-8)
-        TrackedVelocity velocity = aircraft.Velocity with
+        TrackedVelocity existing = aircraft.Velocity;
+        bool hasSpeed = msg.Velocity != null;
+        bool hasVerticalRate = msg.VerticalRate != null;
+        TrackedVelocity velocity = existing with
         {
-            Speed = msg.Velocity,                                      // Airborne velocity from TC 19
-            VerticalRate = msg.VerticalRate,                           // Climb/descent rate from TC 19
-            VelocitySubtype = msg.Subtype,                             // Velocity source and speed range
-            NACv = msg.NACv,                                           // Navigation accuracy category for velocity
-            LastUpdate = msg.Velocity != null ? timestamp : null       // Update timestamp only if velocity present
+            Speed = msg.Velocity ?? existing.Speed,                                    // Airborne velocity from TC 19
+            VelocitySubtype = hasSpeed ? msg.Subtype : existing.VelocitySubtype,       // Describes the speed above
+            VerticalRate = hasVerticalRate ? msg.VerticalRate : existing.VerticalRate, // Climb/descent rate from TC 19
+            VerticalRateSource = hasVerticalRate                                       // GNSS or barometric, with the rate
+                ? msg.VerticalRateSource
+                : existing.VerticalRateSource,
+            NACv = msg.NACv,                                                           // Navigation accuracy category for velocity
+            LastUpdate = hasSpeed ? timestamp : existing.LastUpdate                    // Refreshed only by a speed
         };
 
         // TC 19 message encoding quirk: the "Heading" field has different meanings per subtype.
         // Only update the directional field this subtype provides — the other is preserved
         // from the previous state by the `with` expression above. This prevents alternating
         // subtype 1-2 and 3-4 messages from nullifying each other's Track/Heading values.
+        // A missing direction keeps the previous value, like the speed.
         velocity = msg.Subtype switch
         {
             VelocitySubtype.GroundSpeedSubsonic or VelocitySubtype.GroundSpeedSupersonic
-                => velocity with { Track = msg.Heading },              // Ground track angle (subtype 1-2)
+                => velocity with { Track = msg.Heading ?? existing.Track },         // Ground track angle (subtype 1-2)
             VelocitySubtype.AirspeedSubsonic or VelocitySubtype.AirspeedSupersonic
-                => velocity with { Heading = msg.Heading },            // True heading (subtype 3-4)
+                => velocity with { Heading = msg.Heading ?? existing.Heading },     // Heading (subtype 3-4)
             _ => velocity
         };
 

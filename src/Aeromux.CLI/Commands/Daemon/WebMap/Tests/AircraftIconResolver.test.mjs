@@ -134,9 +134,40 @@ test('category hit (Light -> cessna)', () => {
     );
 });
 
-test('category miss with non-mapped enum value (NoInformation -> unknown)', () => {
+// The API sends JsonStringEnumMemberName labels; multi-word labels used
+// to be keyed by enum names here and never matched.
+test('category hit by API label (High Vortex Large -> airliner)', () => {
     assert.deepEqual(
-        resolveShape(null, null, null, 'NoInformation'),
+        resolveShape(null, null, null, 'High Vortex Large'),
+        { shapeName: 'airliner', scale: 1, resolvedVia: 'category' }
+    );
+});
+
+test('category hit by API label (High Performance -> hi_perf)', () => {
+    assert.deepEqual(
+        resolveShape(null, null, null, 'High Performance'),
+        { shapeName: 'hi_perf', scale: 0.94, resolvedVia: 'category' }
+    );
+});
+
+test('enum member names are not keys (HighVortexLarge -> unknown)', () => {
+    assert.equal(resolveShape(null, null, null, 'HighVortexLarge').resolvedVia, 'fallback');
+});
+
+test('set B categories resolve to tar1090 shapes', () => {
+    assert.deepEqual(resolveShape(null, null, null, 'Glider / Sailplane'),
+        { shapeName: 'glider', scale: 1, resolvedVia: 'category' });
+    assert.deepEqual(resolveShape(null, null, null, 'Lighter-than-air'),
+        { shapeName: 'balloon', scale: 1, resolvedVia: 'category' });
+    assert.deepEqual(resolveShape(null, null, null, 'Ultralight / Hang-glider / Paraglider'),
+        { shapeName: 'cessna', scale: 0.92, resolvedVia: 'category' });
+    assert.deepEqual(resolveShape(null, null, null, 'Unmanned Aerial Vehicle'),
+        { shapeName: 'uav', scale: 1, resolvedVia: 'category' });
+});
+
+test('category miss with non-mapped label (No Information -> unknown)', () => {
+    assert.deepEqual(
+        resolveShape(null, null, null, 'No Information'),
         { shapeName: 'unknown', scale: 1, resolvedVia: 'fallback' }
     );
 });

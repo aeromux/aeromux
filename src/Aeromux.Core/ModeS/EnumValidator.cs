@@ -30,9 +30,6 @@ public static class EnumValidator
     private static readonly bool[] ValidAcasReplyInformation = CreateLookup(15,
         [0, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14]);
 
-    private static readonly bool[] ValidAircraftCategory = CreateLookup(48,
-        [0, 10, 21, 23, 31, 32, 33, 40, 41, 42, 43, 44, 45, 46, 47]);
-
     // --- Contiguous enums: single unsigned comparison ---
 
     /// <summary>Validates SurveillanceStatus (2-bit, range 0-3).</summary>
@@ -141,11 +138,6 @@ public static class EnumValidator
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsValidAcasReplyInformation(int value) =>
         (uint)value < (uint)ValidAcasReplyInformation.Length && ValidAcasReplyInformation[value];
-
-    /// <summary>Validates AircraftCategory (sparse: 0, 10, 21, 23, 31-33, 40-47).</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsValidAircraftCategory(int value) =>
-        (uint)value < (uint)ValidAircraftCategory.Length && ValidAircraftCategory[value];
 
     // --- Helper ---
 

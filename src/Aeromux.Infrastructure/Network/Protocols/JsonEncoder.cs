@@ -88,6 +88,7 @@ namespace Aeromux.Infrastructure.Network.Protocols;
 ///     "HeadingType": null,
 ///     "HorizontalReference": null,
 ///     "VerticalRate": 0,
+///     "VerticalRateSource": "Barometric",
 ///     "BarometricVerticalRate": null,
 ///     "InertialVerticalRate": null,
 ///     "RollAngle": null,

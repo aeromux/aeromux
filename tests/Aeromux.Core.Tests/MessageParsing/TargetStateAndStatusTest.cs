@@ -449,4 +449,42 @@ public class TargetStateAndStatusTest
                 $"Frame {hexFrame}: Version 2 messages do not include TargetHeadingType field");
         }
     }
+
+    // Made up from TargetStateStatus_4BB183_Lnav: MCP/FCU mode status (frame bit 79) cleared,
+    // LNAV (frame bit 86) and TCAS operational (frame bit 85) left set, parity recomputed
+    private const string ModeStatusClearedLnavSet = "8D4BB183EA48585D74118CB88FD7";
+
+    [Fact]
+    public void ParseMessage_DF17_TC29_ModeStatusValid_ReadsLnav()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(RealFrames.TargetStateStatus_4BB183_Lnav)
+            .WithIcaoAddress("4BB183")
+            .Build();
+
+        // Act
+        TargetStateAndStatus targetState = _parser.ParseMessage(frame).Should().BeOfType<TargetStateAndStatus>().Subject;
+
+        // Assert
+        targetState.LNAVMode.Should().BeTrue();
+        targetState.TCASOperational.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ParseMessage_DF17_TC29_ModeStatusCleared_LnavUnknownTcasStillRead()
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(ModeStatusClearedLnavSet)
+            .WithIcaoAddress("4BB183")
+            .Build();
+
+        // Act
+        TargetStateAndStatus targetState = _parser.ParseMessage(frame).Should().BeOfType<TargetStateAndStatus>().Subject;
+
+        // Assert
+        targetState.LNAVMode.Should().BeNull(because: "LNAV is one of the MCP/FCU mode bits, valid only with the mode status bit set");
+        targetState.TCASOperational.Should().BeTrue(because: "TCAS operational reports the ACAS system, not an MCP/FCU mode");
+    }
 }

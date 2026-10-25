@@ -173,6 +173,12 @@ public sealed class AircraftStateTracker : IAircraftStateTracker, IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(frame);
 
+        // A non-ICAO address would create a phantom aircraft or update an unrelated one
+        if (!frame.Frame.HasIcaoAddress)
+        {
+            return;
+        }
+
         uint icaoRaw = frame.Frame.IcaoRaw;
 
         // AddOrUpdate is atomic - thread-safe for concurrent updates

@@ -48,6 +48,7 @@ public sealed class TrackingHandlerRegistry
         // Position handlers
         Register(new AirbornePositionHandler(trackingConfig));
         Register(new SurfacePositionHandler());
+        Register(new NoPositionInformationHandler());
 
         // Velocity handler
         Register(new AirborneVelocityHandler());

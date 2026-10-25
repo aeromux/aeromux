@@ -122,7 +122,7 @@ public sealed partial class MessageParser
             {
                 // ADS-B Extended Squitter
                 DownlinkFormat.ExtendedSquitter => ParseExtendedSquitter(frame),
-                DownlinkFormat.ExtendedSquitterNonTransponder => ParseExtendedSquitter(frame),
+                DownlinkFormat.ExtendedSquitterNonTransponder => ParseNonTransponderExtendedSquitter(frame),
 
                 // Basic surveillance
                 DownlinkFormat.SurveillanceAltitudeReply => ParseSurveillanceAltitudeReply(frame),
@@ -134,12 +134,11 @@ public sealed partial class MessageParser
                 DownlinkFormat.LongAirAirSurveillance => ParseLongAirAirSurveillance(frame),
 
                 // Less common formats
-                DownlinkFormat.MilitaryExtendedSquitter => ParseExtendedSquitter(frame),
                 DownlinkFormat.CommBAltitudeReply => ParseCommBAltitudeReply(frame),
                 DownlinkFormat.CommBIdentityReply => ParseCommBIdentityReply(frame),
                 DownlinkFormat.CommDExtendedLength => ParseCommDExtendedLength(frame),
 
-                // Not implemented (rare formats)
+                // Not implemented: rare formats, and DF 19 (military, body not standardized)
                 _ => LogUnsupportedDF(frame)
             };
 

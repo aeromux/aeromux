@@ -207,6 +207,7 @@ export function AircraftDetail({ detail, expired, units, receiverLocation, state
                             <DetailField label="Magnetic Declination" value={fmtDeg(vel.MagneticDeclination)} />
                             <DetailField label="Heading Type" value={vel.HeadingType} />
                             <DetailField label="Horizontal Ref" value={vel.HorizontalReference} />
+                            <DetailField label="Vertical Rate Source" value={vel.VerticalRateSource} />
                             <DetailField label="Baro Vertical Rate" value={fmtNum(vel.BarometricVerticalRate, ' ft/min')} />
                             <DetailField label="Inertial Vertical Rate" value={fmtNum(vel.InertialVerticalRate, ' ft/min')} />
                             <DetailField label="Roll Angle" value={fmtDeg(vel.RollAngle)} />

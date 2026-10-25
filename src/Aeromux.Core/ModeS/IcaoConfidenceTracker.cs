@@ -122,6 +122,15 @@ public sealed class IcaoConfidenceTracker : IDisposable
     {
         ArgumentNullException.ThrowIfNull(frame);
 
+        // A non-ICAO address (TIS-B track number, anonymous address, DF 19) is passed on for
+        // Beast output, but must never count toward confirming the aircraft address it may
+        // happen to match
+        if (!frame.HasIcaoAddress)
+        {
+            isNewConfirmedIcao = false;
+            return true;
+        }
+
         _lock.EnterWriteLock();
         try
         {

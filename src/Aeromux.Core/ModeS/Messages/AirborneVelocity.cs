@@ -24,7 +24,9 @@ namespace Aeromux.Core.ModeS.Messages;
 /// Corresponds to Type Code 19 in ADS-B Extended Squitter (DF 17/18).
 /// </summary>
 /// <remarks>
-/// Velocity, Heading, VerticalRate, and NACv may be null if not available in the message.
+/// Velocity, Heading, VerticalRate, and NACv may be null if not available in the message. The
+/// vertical rate and the altitude delta are independent of the velocity, so a message without a
+/// usable velocity still carries them.
 /// Subtype indicates Ground Speed (1-2) or Airspeed (3-4), with supersonic variants.
 /// </remarks>
 /// <param name="IcaoAddress">ICAO aircraft address.</param>
@@ -42,9 +44,10 @@ namespace Aeromux.Core.ModeS.Messages;
 /// Extracted from TC 19 ME bits 49-56 (SDif + dAlt fields).
 /// Positive values indicate GNSS altitude is above barometric (typical: +50 to +100 feet).
 /// Formula: Δh = s × (n - 1) × 25 feet, where s=±1 based on SDif bit, n is dAlt magnitude.
-/// Range: ±25 to ±3,150 feet. Null if unavailable (dAlt = 0 or 127).
+/// Range: 0 to ±3,150 feet, where ±3,150 means that value or more. Null if unavailable (dAlt = 0).
 /// Used to derive geometric altitude when TC 20-22 messages are unavailable.
 /// </param>
+/// <param name="VerticalRateSource">Source of the vertical rate (null when the rate is not available).</param>
 public sealed record AirborneVelocity(
     string IcaoAddress,
     DateTime Timestamp,
@@ -56,4 +59,5 @@ public sealed record AirborneVelocity(
     int? VerticalRate,
     VelocitySubtype Subtype,
     NavigationAccuracyCategoryVelocity? NACv,
-    int? GeometricBarometricDelta) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);
+    int? GeometricBarometricDelta,
+    VerticalRateSource? VerticalRateSource) : ModeSMessage(IcaoAddress, Timestamp, DownlinkFormat, SignalStrength, WasCorrected);

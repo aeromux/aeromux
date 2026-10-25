@@ -436,7 +436,7 @@ public static class RealFrames
     /// TC: 4
     /// CA: 5 (Level 2+ transponder, airborne)
     /// </remarks>
-    public const string AircraftId_8965F3 = "8D8965F325154131CB8820";
+    public const string AircraftId_8965F3 = "8D8965F325154131CB8820ACD5B5";
 
     /// <summary>
     /// Aircraft Identification (TC 4): "UAE182" from ICAO 8964A0
@@ -698,7 +698,7 @@ public static class RealFrames
     /// Subtype: 1 (Ground speed, subsonic)
     /// Velocity: 389 kts ground speed
     /// Heading: 294° (track angle)
-    /// Vertical Rate: -1984 ft/min GNSS (descending)
+    /// Vertical Rate: -1984 ft/min barometric (descending)
     /// GNSS delta: 25 ft
     /// DF: 17
     /// TC: 19
@@ -714,9 +714,9 @@ public static class RealFrames
     /// Source: Real capture (dump1090)
     /// ICAO: 39CEAD
     /// Subtype: 1 (Ground speed, subsonic)
-    /// Velocity: 400 kts ground speed
+    /// Velocity: 400.8 kts ground speed, rounds to 401 (dump1090 truncates to 400)
     /// Heading: 276° (track angle)
-    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// Vertical Rate: 0 ft/min barometric (level flight)
     /// GNSS delta: -375 ft
     /// DF: 17
     /// TC: 19
@@ -732,9 +732,9 @@ public static class RealFrames
     /// Source: Real capture (dump1090)
     /// ICAO: 4D2407
     /// Subtype: 1 (Ground speed, subsonic)
-    /// Velocity: 483 kts ground speed
+    /// Velocity: 483.9 kts ground speed, rounds to 484 (dump1090 truncates to 483)
     /// Heading: 117° (track angle)
-    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// Vertical Rate: 0 ft/min barometric (level flight)
     /// GNSS delta: -75 ft
     /// DF: 17
     /// TC: 19
@@ -750,16 +750,16 @@ public static class RealFrames
     /// Source: Real capture (dump1090)
     /// ICAO: 73806C
     /// Subtype: 1 (Ground speed, subsonic)
-    /// Velocity: 413 kts ground speed
+    /// Velocity: 413.8 kts ground speed, rounds to 414 (dump1090 truncates to 413)
     /// Heading: 317° (track angle)
-    /// Vertical Rate: 896 ft/min GNSS (climbing)
+    /// Vertical Rate: 896 ft/min barometric (climbing)
     /// GNSS delta: -325 ft
     /// DF: 17
     /// TC: 19
     /// CA: 5 (Level 2+ transponder, airborne)
     /// RSSI: -21.2 dBFS
     /// </remarks>
-    public const string AirborneVel_73806C_Climbing = "8D73806C990D1E25B03C8E";
+    public const string AirborneVel_73806C_Climbing = "8D73806C990D1E25B03C8E2979A2";
 
     /// <summary>
     /// Airborne Velocity (TC 19, Subtype 1): Ground speed 404 kts, Heading 299°, Level
@@ -770,7 +770,7 @@ public static class RealFrames
     /// Subtype: 1 (Ground speed, subsonic)
     /// Velocity: 404 kts ground speed
     /// Heading: 299° (track angle)
-    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// Vertical Rate: 0 ft/min barometric (level flight)
     /// GNSS delta: -1300 ft
     /// DF: 17
     /// TC: 19
@@ -778,6 +778,62 @@ public static class RealFrames
     /// RSSI: -24.7 dBFS
     /// </remarks>
     public const string AirborneVel_3C4AD7_Level = "8D3C4AD7990D6617F004B54E6FF0";
+
+    /// <summary>
+    /// Airborne Velocity (TC 19, Subtype 1): Ground speed 400.8 kts, barometric vertical rate +64 ft/min
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 39CEAD
+    /// Subtype: 1 (Ground speed, subsonic)
+    /// Velocity: 400.805 kts ground speed (east-west 356, north-south 159 raw), which truncates to
+    /// 400 and rounds to 401
+    /// Heading: 276° (track angle)
+    /// Vertical Rate: +64 ft/min, barometric (source bit, frame bit 68, set). The older dump1090
+    /// that made this capture prints it as "GNSS"; its source labels are not reliable.
+    /// GNSS delta: -375 ft
+    /// DF: 17
+    /// TC: 19
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -15.0 dBFS
+    /// </remarks>
+    public const string AirborneVel_39CEAD_BaroRate = "8D39CEAD990D9004F00890C99D9C";
+
+    /// <summary>
+    /// Airborne Velocity (TC 19, Subtype 1): Ground speed 446 kts, GNSS vertical rate -64 ft/min
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 80073B
+    /// Subtype: 1 (Ground speed, subsonic)
+    /// Velocity: 446 kts ground speed
+    /// Heading: 294° (track angle)
+    /// Vertical Rate: -64 ft/min, GNSS (source bit, frame bit 68, clear). The older dump1090 that
+    /// made this capture prints it as "barometric"; its source labels are not reliable.
+    /// GNSS delta: -325 ft
+    /// DF: 17
+    /// TC: 19
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -17.4 dBFS
+    /// </remarks>
+    public const string AirborneVel_80073B_GnssRate = "8D80073B990D9B1628088E5A3B96";
+
+    /// <summary>
+    /// Airborne Velocity (TC 19, Subtype 3): True airspeed 473 kts, magnetic heading 131.8°
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 4BB183
+    /// Subtype: 3 (Airspeed, subsonic)
+    /// Velocity: 473 kts true airspeed
+    /// Heading: 131.8° (raw 375 × 360/1024; the older dump1090 prints the raw 375)
+    /// Vertical Rate: 0 ft/min, barometric
+    /// DF: 17
+    /// TC: 19
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -23.6 dBFS
+    /// </remarks>
+    public const string AirborneVel_4BB183_Airspeed = "8D4BB1839B0577BB500400A64C06";
 
     // TC 28: Emergency/Priority Status
 
@@ -923,6 +979,29 @@ public static class RealFrames
     /// same selected altitude and VNAV mode
     /// </remarks>
     public const string TargetStateStatus_80073B = "8D80073BEA4E385F313F8C1E22CE";
+
+    /// <summary>
+    /// Target State and Status (TC 29, Version 2): ICAO 4BB183, Target Alt 36992 ft, LNAV set
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 4BB183
+    /// Subtype: 1 (Version 2)
+    /// Target Altitude: MCP, 36992 ft
+    /// Altimeter Setting: 1012.8 millibars
+    /// Target Heading: 130°
+    /// Active Modes: MCP/FCU mode status valid (frame bit 79); autopilot, VNAV and LNAV (frame
+    /// bit 86) set; the older dump1090 prints "autopilot VNAV" and leaves out LNAV
+    /// ACAS: Operational
+    /// NACp: 0
+    /// NICbaro: 1
+    /// SIL: 0 (per sample)
+    /// DF: 17
+    /// TC: 29
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -20.1 dBFS
+    /// </remarks>
+    public const string TargetStateStatus_4BB183_Lnav = "8D4BB183EA48585D74138CA494D7";
 
     /// <summary>
     /// Target State and Status (TC 29, Version 2): ICAO 71C011, Target Alt 31008 ft, Heading 120°

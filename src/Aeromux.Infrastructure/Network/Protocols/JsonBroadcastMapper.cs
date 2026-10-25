@@ -124,6 +124,7 @@ public static class JsonBroadcastMapper
             HeadingType: aircraft.DataQuality?.HeadingType,
             HorizontalReference: aircraft.DataQuality?.HorizontalReference,
             VerticalRate: aircraft.Velocity.VerticalRate,
+            VerticalRateSource: aircraft.Velocity.VerticalRateSource,
             BarometricVerticalRate: dynamics?.BarometricVerticalRate,
             InertialVerticalRate: dynamics?.InertialVerticalRate,
             RollAngle: dynamics?.RollAngle,

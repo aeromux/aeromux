@@ -117,6 +117,13 @@ public sealed record TrackedVelocity
     public int? VerticalRate { get; init; }
 
     /// <summary>
+    /// Source of VerticalRate from TC 19: GNSS (geometric) or barometric.
+    /// The two can differ noticeably, so consumers comparing rates need to know which one this is.
+    /// Null if no TC 19 message with a vertical rate received yet.
+    /// </summary>
+    public VerticalRateSource? VerticalRateSource { get; init; }
+
+    /// <summary>
     /// Velocity subtype from TC 19 (Airborne Velocity) message.
     /// Indicates velocity source and speed range (subsonic vs supersonic).
     /// Values: GroundSpeedSubsonic, GroundSpeedSupersonic, AirspeedSubsonic, AirspeedSupersonic.

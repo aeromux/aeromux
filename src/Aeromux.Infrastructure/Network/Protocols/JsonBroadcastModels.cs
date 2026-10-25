@@ -75,6 +75,7 @@ public sealed record BroadcastVelocityAndDynamics(
     TargetHeadingType? HeadingType,
     HorizontalReferenceDirection? HorizontalReference,
     int? VerticalRate,
+    VerticalRateSource? VerticalRateSource,
     int? BarometricVerticalRate,
     int? InertialVerticalRate,
     double? RollAngle,

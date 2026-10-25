@@ -522,19 +522,24 @@ export const TYPE_DESCRIPTION_FIRSTCHAR = {
     'G': ['gyrocopter', 1],
 };
 
-// Layer 4: ADS-B emitter category. Keys are the Aeromux C# enum
-// names (Light, Small, ...) emitted by JsonStringEnumConverter, not
-// the ADS-B Ax letter codes. Set "B" categories (glider, balloon,
-// ultralight, UAV) are intentionally omitted — they aren't surfaced
-// from the wire format today.
+// Layer 4: ADS-B emitter category. Keys are the display labels the API
+// sends for the C# AircraftCategory enum (its JsonStringEnumMemberName
+// values, e.g. "High Vortex Large"), not the enum member names and not
+// the ADS-B Ax letter codes. A label change in C# must be mirrored here.
+// Set B follows tar1090; parachutists, space vehicles and set C have no
+// fitting shape and fall through to unknown.
 export const CATEGORY = {
-    'Light':           ['cessna',     1],     // A1
-    'Small':           ['jet_swept',  0.94],  // A2
-    'Large':           ['airliner',   0.96],  // A3
-    'HighVortexLarge': ['airliner',   1],     // A4
-    'Heavy':           ['heavy_2e',   0.92],  // A5
-    'HighPerformance': ['hi_perf',    0.94],  // A6
-    'Rotorcraft':      ['helicopter', 1],     // A7
+    'Light':                                 ['cessna',     1],     // A1
+    'Small':                                 ['jet_swept',  0.94],  // A2
+    'Large':                                 ['airliner',   0.96],  // A3
+    'High Vortex Large':                     ['airliner',   1],     // A4
+    'Heavy':                                 ['heavy_2e',   0.92],  // A5
+    'High Performance':                      ['hi_perf',    0.94],  // A6
+    'Rotorcraft':                            ['helicopter', 1],     // A7
+    'Glider / Sailplane':                    ['glider',     1],     // B1
+    'Lighter-than-air':                      ['balloon',    1],     // B2
+    'Ultralight / Hang-glider / Paraglider': ['cessna',     0.92],  // B4
+    'Unmanned Aerial Vehicle':               ['uav',        1],     // B6
 };
 
 /**
@@ -553,7 +558,8 @@ export const CATEGORY = {
  * @param {string|null} typeWtc
  *        Single-character wake-turbulence code ("L" / "M" / "H" / "J").
  * @param {string|null} emitterCategory
- *        Aeromux C# enum name (e.g. "Heavy"), not the ADS-B Ax letter.
+ *        Category label as the API sends it (e.g. "High Vortex Large"),
+ *        not the C# enum member name or the ADS-B Ax letter.
  * @returns {{shapeName: string, scale: number, resolvedVia: string}}
  */
 export function resolveShape(typeDesignator, typeIcaoClass, typeWtc, emitterCategory) {

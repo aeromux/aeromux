@@ -81,10 +81,8 @@ public sealed class CprDecoder
     /// If not set, range filtering is disabled and all decoded positions are accepted.
     /// </summary>
     /// <param name="receiverLocation">Receiver geographic coordinates.</param>
-    public void SetReceiverLocation(GeographicCoordinate receiverLocation)
-    {
+    public void SetReceiverLocation(GeographicCoordinate receiverLocation) =>
         _receiverLocation = receiverLocation;
-    }
 
     /// <summary>
     /// Decodes CPR-encoded position from airborne position message.
@@ -363,7 +361,7 @@ public sealed class CprDecoder
             < 84.89166191 => 5,
             < 85.75541621 => 4,
             < 86.53536998 => 3,
-            < 87.00000000 => 2,
+            <= 87.00000000 => 2,
             _ => 1
         };
     }

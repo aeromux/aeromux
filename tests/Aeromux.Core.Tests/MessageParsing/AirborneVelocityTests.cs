@@ -29,11 +29,11 @@ public class AirborneVelocityTests
     [Theory]
     [InlineData(RealFrames.AirborneVel_4BB027_Descending, "4BB027", 389,
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
-    [InlineData(RealFrames.AirborneVel_73806C_Climbing, "73806C", 413,
+    [InlineData(RealFrames.AirborneVel_73806C_Climbing, "73806C", 414,
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
-    [InlineData(RealFrames.AirborneVel_4D2407_Level, "4D2407", 483,
+    [InlineData(RealFrames.AirborneVel_4D2407_Level, "4D2407", 484,
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
-    [InlineData(RealFrames.AirborneVel_39CEAD_Level, "39CEAD", 400,
+    [InlineData(RealFrames.AirborneVel_39CEAD_Level, "39CEAD", 401,
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
     [InlineData(RealFrames.AirborneVel_3C4AD7_Level, "3C4AD7", 404,
         VelocityType.GroundSpeed, VelocitySubtype.GroundSpeedSubsonic)]
@@ -184,4 +184,87 @@ public class AirborneVelocityTests
         // Assert
         message.Should().BeNull();
     }
+
+    // ========================================
+    // Field edge cases
+    // ========================================
+
+    // Made up from AirborneVel_4BB183_Airspeed (subtype 3): heading raw set to 0, parity recomputed
+    private const string AirspeedHeadingRaw0 = "8D4BB1839B0400BB500400C918DE";
+
+    // Made up from AirborneVel_39CEAD_BaroRate (subtype 1): east-west velocity raw set to 0
+    private const string GroundSpeedEastWestMissing = "8D39CEAD990C0004F00890768467";
+
+    // Made up from AirborneVel_39CEAD_BaroRate: geometric-barometric delta raw set to 127, sign bit
+    // (GNSS below barometric) kept from the source frame
+    private const string GeometricDeltaRaw127 = "8D39CEAD990D9004F008FF347F04";
+
+    [Fact]
+    public void ParseMessage_DF17_TC19_AirspeedHeadingRaw0_IsNorthNotMissing()
+    {
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(BuildFrame(AirspeedHeadingRaw0, "4BB183"));
+
+        // Assert
+        AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
+        velocity.Heading.Should().Be(0, because: "with the heading status bit set, raw 0 is magnetic north");
+    }
+
+    [Fact]
+    public void ParseMessage_DF17_TC19_MissingVelocityComponent_KeepsVerticalRateAndDelta()
+    {
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(BuildFrame(GroundSpeedEastWestMissing, "39CEAD"));
+
+        // Assert
+        AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
+        velocity.Velocity.Should().BeNull(because: "the east-west component is not available");
+        velocity.Heading.Should().BeNull();
+        velocity.VerticalRate.Should().Be(64, because: "the vertical rate is independent of the velocity components");
+        velocity.GeometricBarometricDelta.Should().Be(-375);
+    }
+
+    [Fact]
+    public void ParseMessage_DF17_TC19_GeometricDeltaRaw127_Is3150Feet()
+    {
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(BuildFrame(GeometricDeltaRaw127, "39CEAD"));
+
+        // Assert
+        AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
+        velocity.GeometricBarometricDelta.Should().Be(-3150, because: "raw 127 means 3,150 ft or more, not missing");
+    }
+
+    [Fact]
+    public void ParseMessage_DF17_TC19_GroundSpeed_IsRoundedNotTruncated()
+    {
+        // Act - east-west 355 kt and north-south 158 kt give 400.805 kt
+        ModeSMessage? message = _parser.ParseMessage(BuildFrame(RealFrames.AirborneVel_39CEAD_BaroRate, "39CEAD"));
+
+        // Assert
+        AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
+        velocity.Velocity!.Knots.Should().Be(401);
+    }
+
+    [Theory]
+    [InlineData(RealFrames.AirborneVel_39CEAD_BaroRate, "39CEAD", 64, VerticalRateSource.Barometric)]
+    [InlineData(RealFrames.AirborneVel_80073B_GnssRate, "80073B", -64, VerticalRateSource.Geometric)]
+    [InlineData(RealFrames.AirborneVel_4BB183_Airspeed, "4BB183", 0, VerticalRateSource.Barometric)]
+    public void ParseMessage_DF17_TC19_VerticalRateSource_FromSourceBit(
+        string hex, string icao, int expectedRate, VerticalRateSource expectedSource)
+    {
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(BuildFrame(hex, icao));
+
+        // Assert
+        AirborneVelocity? velocity = message.Should().BeOfType<AirborneVelocity>().Subject;
+        velocity.VerticalRate.Should().Be(expectedRate);
+        velocity.VerticalRateSource.Should().Be(expectedSource);
+    }
+
+    private static ValidatedFrame BuildFrame(string hex, string icao) =>
+        new ValidatedFrameBuilder()
+            .WithHexData(hex)
+            .WithIcaoAddress(icao)
+            .Build();
 }

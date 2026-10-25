@@ -19,30 +19,33 @@ using System.Text.Json.Serialization;
 namespace Aeromux.Core.ModeS.Enums;
 
 /// <summary>
-/// Aircraft category derived from TC (Type Code) and CA (Category) fields in TC 1-4 messages.
+/// Emitter category derived from the TC (Type Code) and CA (Category) fields in TC 1-4 messages.
 /// Used for wake vortex separation and aircraft classification.
 /// </summary>
 /// <remarks>
-/// The category is encoded as a combination of:
-/// - Type Code (TC): 1-4 (determines general class)
-/// - Category field (CA): 0-7 (3 bits, specific category within class)
+/// Each type code selects a category set and CA (3 bits) the entry within it:
+/// - TC 4: set A, aircraft by wake vortex class
+/// - TC 3: set B, gliders, balloons, parachutists, ultralights, UAVs and space vehicles
+/// - TC 2: set C, surface vehicles and obstacles
+/// - TC 1: set D, reserved
+///
+/// CA 0 means no category information in every set. Values are TC × 10 + CA.
 ///
 /// Wake vortex separation is the spacing required between aircraft to avoid turbulence
 /// created by wingtip vortices from preceding aircraft.
 ///
-/// Reference: ICAO Doc 9871 (Technical Provisions for Mode S Services and Extended Squitter).
+/// Reference: RTCA DO-260B, §2.2.3.2.5.2 (Emitter Category).
 /// </remarks>
 public enum AircraftCategory
 {
-    // TC 1: Reserved / No Category Information
     /// <summary>
-    /// No category information available (TC 1, CA 0).
+    /// No category information (CA 0 in any set).
     /// Common with older transponders that don't report category.
     /// </summary>
     [JsonStringEnumMemberName("No Information")]
     NoInformation = 10,
 
-    // TC 2: Surface Emergency Vehicle / Surface Service Vehicle
+    // TC 2 (set C): surface vehicles and obstacles
     /// <summary>
     /// Surface emergency vehicle (TC 2, CA 1).
     /// </summary>
@@ -50,31 +53,67 @@ public enum AircraftCategory
     SurfaceEmergencyVehicle = 21,
 
     /// <summary>
-    /// Surface service vehicle (TC 2, CA 3).
+    /// Surface service vehicle (TC 2, CA 2).
     /// </summary>
     [JsonStringEnumMemberName("Surface Service Vehicle")]
-    SurfaceServiceVehicle = 23,
-
-    // TC 3: Ground Obstruction
-    /// <summary>
-    /// Point obstacle (TC 3, CA 1).
-    /// </summary>
-    [JsonStringEnumMemberName("Ground Obstacle (Point)")]
-    GroundObstaclePoint = 31,
+    SurfaceServiceVehicle = 22,
 
     /// <summary>
-    /// Cluster obstacle (TC 3, CA 2).
+    /// Point obstacle, including tethered balloons (TC 2, CA 3).
     /// </summary>
-    [JsonStringEnumMemberName("Ground Obstacle (Cluster)")]
-    GroundObstacleCluster = 32,
+    [JsonStringEnumMemberName("Point Obstacle")]
+    PointObstacle = 23,
 
     /// <summary>
-    /// Line obstacle (TC 3, CA 3).
+    /// Cluster obstacle (TC 2, CA 4).
     /// </summary>
-    [JsonStringEnumMemberName("Ground Obstacle (Line)")]
-    GroundObstacleLine = 33,
+    [JsonStringEnumMemberName("Cluster Obstacle")]
+    ClusterObstacle = 24,
 
-    // TC 4: Aircraft (Wake Vortex Categories)
+    /// <summary>
+    /// Line obstacle (TC 2, CA 5).
+    /// </summary>
+    [JsonStringEnumMemberName("Line Obstacle")]
+    LineObstacle = 25,
+
+    // TC 3 (set B): unpowered, lighter-than-air, unmanned and space vehicles
+    /// <summary>
+    /// Glider or sailplane (TC 3, CA 1).
+    /// </summary>
+    [JsonStringEnumMemberName("Glider / Sailplane")]
+    Glider = 31,
+
+    /// <summary>
+    /// Lighter-than-air aircraft: balloon or airship (TC 3, CA 2).
+    /// </summary>
+    [JsonStringEnumMemberName("Lighter-than-air")]
+    LighterThanAir = 32,
+
+    /// <summary>
+    /// Parachutist or skydiver (TC 3, CA 3).
+    /// </summary>
+    [JsonStringEnumMemberName("Parachutist / Skydiver")]
+    Parachutist = 33,
+
+    /// <summary>
+    /// Ultralight, hang-glider or paraglider (TC 3, CA 4).
+    /// </summary>
+    [JsonStringEnumMemberName("Ultralight / Hang-glider / Paraglider")]
+    Ultralight = 34,
+
+    /// <summary>
+    /// Unmanned aerial vehicle (TC 3, CA 6).
+    /// </summary>
+    [JsonStringEnumMemberName("Unmanned Aerial Vehicle")]
+    UnmannedAerialVehicle = 36,
+
+    /// <summary>
+    /// Space or trans-atmospheric vehicle (TC 3, CA 7).
+    /// </summary>
+    [JsonStringEnumMemberName("Space / Trans-atmospheric Vehicle")]
+    SpaceVehicle = 37,
+
+    // TC 4 (set A): aircraft by wake vortex category
     /// <summary>
     /// Light aircraft, maximum takeoff weight less than 7,000 kg (TC 4, CA 1).
     /// Examples: Cessna 172, Piper Cherokee, small general aviation aircraft.
@@ -125,17 +164,8 @@ public enum AircraftCategory
     [JsonStringEnumMemberName("Rotorcraft")]
     Rotorcraft = 47,
 
-    // Additional TC 4 categories (CA 0 and undefined)
     /// <summary>
-    /// No category information for aircraft (TC 4, CA 0).
-    /// Aircraft type but category not specified.
-    /// </summary>
-    [JsonStringEnumMemberName("No Category")]
-    AircraftNoCategory = 40,
-
-    /// <summary>
-    /// Reserved or undefined category.
-    /// Used for TC/CA combinations not defined in the specification.
+    /// Reserved category: all of set D (TC 1), and set B CA 5 and set C CA 6-7.
     /// </summary>
     [JsonStringEnumMemberName("Reserved")]
     Reserved = 0

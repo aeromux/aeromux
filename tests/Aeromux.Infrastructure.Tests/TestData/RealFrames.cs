@@ -406,7 +406,7 @@ public static class RealFrames
     /// TC: 4
     /// CA: 5 (Level 2+ transponder, airborne)
     /// </remarks>
-    public const string AircraftId_8965F3 = "8D8965F325154131CB8820";
+    public const string AircraftId_8965F3 = "8D8965F325154131CB8820ACD5B5";
 
     /// <summary>
     /// Aircraft Identification (TC 4): "UAE182" from ICAO 8964A0
@@ -557,7 +557,7 @@ public static class RealFrames
     /// Subtype: 1 (Ground speed, subsonic)
     /// Velocity: 389 kts ground speed
     /// Heading: 294° (track angle)
-    /// Vertical Rate: -1984 ft/min GNSS (descending)
+    /// Vertical Rate: -1984 ft/min barometric (descending)
     /// GNSS delta: 25 ft
     /// DF: 17
     /// TC: 19
@@ -573,9 +573,9 @@ public static class RealFrames
     /// Source: Real capture (dump1090)
     /// ICAO: 39CEAD
     /// Subtype: 1 (Ground speed, subsonic)
-    /// Velocity: 400 kts ground speed
+    /// Velocity: 400.8 kts ground speed, rounds to 401 (dump1090 truncates to 400)
     /// Heading: 276° (track angle)
-    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// Vertical Rate: 0 ft/min barometric (level flight)
     /// GNSS delta: -375 ft
     /// DF: 17
     /// TC: 19
@@ -591,9 +591,9 @@ public static class RealFrames
     /// Source: Real capture (dump1090)
     /// ICAO: 4D2407
     /// Subtype: 1 (Ground speed, subsonic)
-    /// Velocity: 483 kts ground speed
+    /// Velocity: 483.9 kts ground speed, rounds to 484 (dump1090 truncates to 483)
     /// Heading: 117° (track angle)
-    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// Vertical Rate: 0 ft/min barometric (level flight)
     /// GNSS delta: -75 ft
     /// DF: 17
     /// TC: 19
@@ -609,16 +609,16 @@ public static class RealFrames
     /// Source: Real capture (dump1090)
     /// ICAO: 73806C
     /// Subtype: 1 (Ground speed, subsonic)
-    /// Velocity: 413 kts ground speed
+    /// Velocity: 413.8 kts ground speed, rounds to 414 (dump1090 truncates to 413)
     /// Heading: 317° (track angle)
-    /// Vertical Rate: 896 ft/min GNSS (climbing)
+    /// Vertical Rate: 896 ft/min barometric (climbing)
     /// GNSS delta: -325 ft
     /// DF: 17
     /// TC: 19
     /// CA: 5 (Level 2+ transponder, airborne)
     /// RSSI: -21.2 dBFS
     /// </remarks>
-    public const string AirborneVel_73806C_Climbing = "8D73806C990D1E25B03C8E";
+    public const string AirborneVel_73806C_Climbing = "8D73806C990D1E25B03C8E2979A2";
 
     /// <summary>
     /// Airborne Velocity (TC 19, Subtype 1): Ground speed 404 kts, Heading 299°, Level
@@ -629,7 +629,7 @@ public static class RealFrames
     /// Subtype: 1 (Ground speed, subsonic)
     /// Velocity: 404 kts ground speed
     /// Heading: 299° (track angle)
-    /// Vertical Rate: 0 ft/min GNSS (level flight)
+    /// Vertical Rate: 0 ft/min barometric (level flight)
     /// GNSS delta: -1300 ft
     /// DF: 17
     /// TC: 19

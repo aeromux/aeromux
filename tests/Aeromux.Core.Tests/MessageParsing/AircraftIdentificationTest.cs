@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Aeromux.Core.Tests.Builders;
 using Aeromux.Core.Tests.TestData;
 
@@ -73,5 +75,71 @@ public class AircraftIdentificationTest
         message.Should().NotBeNull();
         AircraftIdentification identification = message.Should().BeOfType<AircraftIdentification>().Subject;
         identification.Category.Should().Be(expectedCategory);
+    }
+
+    [Theory]
+    [InlineData(1, 0, AircraftCategory.NoInformation)]
+    [InlineData(1, 1, AircraftCategory.Reserved)]
+    [InlineData(1, 2, AircraftCategory.Reserved)]
+    [InlineData(1, 3, AircraftCategory.Reserved)]
+    [InlineData(1, 4, AircraftCategory.Reserved)]
+    [InlineData(1, 5, AircraftCategory.Reserved)]
+    [InlineData(1, 6, AircraftCategory.Reserved)]
+    [InlineData(1, 7, AircraftCategory.Reserved)]
+    [InlineData(2, 0, AircraftCategory.NoInformation)]
+    [InlineData(2, 1, AircraftCategory.SurfaceEmergencyVehicle)]
+    [InlineData(2, 2, AircraftCategory.SurfaceServiceVehicle)]
+    [InlineData(2, 3, AircraftCategory.PointObstacle)]
+    [InlineData(2, 4, AircraftCategory.ClusterObstacle)]
+    [InlineData(2, 5, AircraftCategory.LineObstacle)]
+    [InlineData(2, 6, AircraftCategory.Reserved)]
+    [InlineData(2, 7, AircraftCategory.Reserved)]
+    [InlineData(3, 0, AircraftCategory.NoInformation)]
+    [InlineData(3, 1, AircraftCategory.Glider)]
+    [InlineData(3, 2, AircraftCategory.LighterThanAir)]
+    [InlineData(3, 3, AircraftCategory.Parachutist)]
+    [InlineData(3, 4, AircraftCategory.Ultralight)]
+    [InlineData(3, 5, AircraftCategory.Reserved)]
+    [InlineData(3, 6, AircraftCategory.UnmannedAerialVehicle)]
+    [InlineData(3, 7, AircraftCategory.SpaceVehicle)]
+    [InlineData(4, 0, AircraftCategory.NoInformation)]
+    [InlineData(4, 1, AircraftCategory.Light)]
+    [InlineData(4, 2, AircraftCategory.Small)]
+    [InlineData(4, 3, AircraftCategory.Large)]
+    [InlineData(4, 4, AircraftCategory.HighVortexLarge)]
+    [InlineData(4, 5, AircraftCategory.Heavy)]
+    [InlineData(4, 6, AircraftCategory.HighPerformance)]
+    [InlineData(4, 7, AircraftCategory.Rotorcraft)]
+    public void GetAircraftCategory_FollowsDo260bEmitterCategorySets(int tc, int ca, AircraftCategory expected)
+    {
+        // Act
+        AircraftCategory category = MessageParser.GetAircraftCategory(tc, ca);
+
+        // Assert
+        category.Should().Be(expected);
+    }
+
+    [Fact]
+    public void AircraftCategory_SerializesToLabelsTheWebMapDependsOn()
+    {
+        // Arrange - the Web Map picks icons by these strings, so a change must be deliberate
+        var options = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
+        string[] expected =
+        [
+            "\"No Information\"", "\"Surface Emergency Vehicle\"", "\"Surface Service Vehicle\"",
+            "\"Point Obstacle\"", "\"Cluster Obstacle\"", "\"Line Obstacle\"",
+            "\"Glider / Sailplane\"", "\"Lighter-than-air\"", "\"Parachutist / Skydiver\"",
+            "\"Ultralight / Hang-glider / Paraglider\"", "\"Unmanned Aerial Vehicle\"",
+            "\"Space / Trans-atmospheric Vehicle\"", "\"Light\"", "\"Small\"", "\"Large\"",
+            "\"High Vortex Large\"", "\"Heavy\"", "\"High Performance\"", "\"Rotorcraft\"", "\"Reserved\""
+        ];
+
+        // Act
+        string[] labels = Enum.GetValues<AircraftCategory>()
+            .Select(c => JsonSerializer.Serialize(c, options))
+            .ToArray();
+
+        // Assert
+        labels.Should().BeEquivalentTo(expected);
     }
 }

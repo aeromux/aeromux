@@ -210,6 +210,7 @@ Each output line is a self-contained JSON object terminated by a newline charact
     "HeadingType": null,
     "HorizontalReference": null,
     "VerticalRate": 0,
+    "VerticalRateSource": "Barometric",
     "BarometricVerticalRate": null,
     "InertialVerticalRate": null,
     "RollAngle": null,

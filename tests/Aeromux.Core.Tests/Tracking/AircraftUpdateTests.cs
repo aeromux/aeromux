@@ -249,4 +249,58 @@ public class AircraftUpdateTests : AircraftStateTrackerTestsBase
         (aircraft.Meteo?.Pressure).Should().BeNull("the reply is not a BDS 4,5");
         (aircraft.Meteo?.RadioHeight).Should().BeNull("the reply is not a BDS 4,5");
     }
+
+    [Fact]
+    public void Update_NoPositionInformationWithAltitude_UpdatesBarometricAltitude()
+    {
+        // Arrange - TC 0 carries a barometric altitude but no position
+        Tracker = CreateTracker();
+        ProcessedFrame frame = CreateFrame(RealFrames.NoPosition_89642D_36000, "89642D");
+
+        // Act
+        Tracker.Update(frame);
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("89642D");
+        aircraft.Should().NotBeNull();
+        aircraft!.Position.BarometricAltitude.Should().NotBeNull();
+        aircraft.Position.BarometricAltitude!.Feet.Should().Be(36000);
+        aircraft.Position.Coordinate.Should().BeNull(because: "TC 0 carries no position");
+    }
+
+    [Fact]
+    public void Update_NoPositionInformationAfterVelocityDelta_DerivesGeometricAltitude()
+    {
+        // Arrange - a TC 19 delta of -375 ft cached first (frame borrowed for this address)
+        Tracker = CreateTracker();
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_39CEAD_BaroRate, "89642D"));
+
+        // Act
+        Tracker.Update(CreateFrame(RealFrames.NoPosition_89642D_36000, "89642D"));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("89642D");
+        aircraft!.Position.GeometricAltitude.Should().NotBeNull();
+        aircraft.Position.GeometricAltitude!.Feet.Should().Be(36000 - 375);
+    }
+
+    [Fact]
+    public void Update_VelocityMessageWithoutSpeed_KeepsPreviousSpeed()
+    {
+        // Arrange - a real airspeed message (473 kt TAS), then a made-up copy with the airspeed
+        // raw value set to 0 ("not available") and the parity recomputed
+        const string airspeedNotAvailable = "8D4BB1839B057780100400CF0244";
+        Tracker = CreateTracker();
+        Tracker.Update(CreateFrame(RealFrames.AirborneVel_4BB183_Airspeed, "4BB183"));
+        DateTime? firstUpdate = Tracker.GetAircraft("4BB183")!.Velocity.LastUpdate;
+
+        // Act
+        Tracker.Update(CreateFrame(airspeedNotAvailable, "4BB183"));
+
+        // Assert
+        Aircraft? aircraft = Tracker.GetAircraft("4BB183");
+        aircraft!.Velocity.Speed.Should().NotBeNull(because: "a message without a speed says nothing new about it");
+        aircraft.Velocity.Speed!.Knots.Should().Be(473);
+        aircraft.Velocity.LastUpdate.Should().Be(firstUpdate);
+    }
 }

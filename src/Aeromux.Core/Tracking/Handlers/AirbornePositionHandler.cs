@@ -80,6 +80,30 @@ public sealed class AirbornePositionHandler : ITrackingHandler
 
     public Type MessageType => typeof(AirbornePosition);
 
+    /// <summary>
+    /// Derives the geometric altitude from a barometric altitude and the cached
+    /// geometric-barometric delta (TC 19).
+    /// </summary>
+    /// <param name="barometricAltitude">Latest barometric altitude.</param>
+    /// <param name="geometricBarometricDelta">Cached delta in feet (GNSS minus barometric), or null.</param>
+    /// <returns>
+    /// The derived geometric altitude, or <see langword="null"/> when there is no delta or the
+    /// result falls outside -2,000 ft (Dead Sea) to 126,700 ft (Gillham code maximum).
+    /// </returns>
+    /// <remarks>Also used for TC 0 altitudes, which come from the same transmitter.</remarks>
+    internal static Altitude? DeriveGeometricAltitude(Altitude barometricAltitude, int? geometricBarometricDelta)
+    {
+        if (geometricBarometricDelta == null)
+        {
+            return null;
+        }
+
+        int derivedGeometricFeet = barometricAltitude.Feet + geometricBarometricDelta.Value;
+        return derivedGeometricFeet is >= -2000 and <= 126700
+            ? Altitude.FromFeet(derivedGeometricFeet, AltitudeType.Geometric)
+            : null;
+    }
+
     public Aircraft Apply(
         Aircraft aircraft,
         ModeSMessage message,
@@ -118,15 +142,8 @@ public sealed class AirbornePositionHandler : ITrackingHandler
                     // are less frequent (only in TC 19). By deriving from barometric + delta, we maintain
                     // accurate geometric altitude without requiring constant TC 19 updates.
                     // Strategy: Recalculate on every barometric update (TC 9-18), not on delta updates (TC 19)
-                    if (geometricBarometricDelta != null)
-                    {
-                        int derivedGeometricFeet = barometricAltitude.Feet + geometricBarometricDelta.Value;
-                        // Valid Altitude range: -2000 (Dead Sea) to 126700 (Gillham code maximum)
-                        if (derivedGeometricFeet is >= -2000 and <= 126700)
-                        {
-                            geometricAltitude = Altitude.FromFeet(derivedGeometricFeet, AltitudeType.Geometric);
-                        }
-                    }
+                    geometricAltitude = DeriveGeometricAltitude(barometricAltitude, geometricBarometricDelta)
+                                        ?? geometricAltitude;
 
                     break;
                 }
