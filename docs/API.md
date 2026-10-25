@@ -1089,8 +1089,12 @@ curl -s --fail "http://localhost:8080/api/v1/health" | jq '{Status, Problems}'
 ### Monitor the frame rate and the CRC error ratio
 
 ```bash
-curl -s "http://localhost:8080/api/v1/stats" | jq '{PerSecond: .Frames.PerSecond, Accepted: .Sdr.AcceptedPerSecond, CrcErrorRatio: (.Sdr.CrcErrors / .Sdr.Extracted)}'
+curl -s "http://localhost:8080/api/v1/stats" | jq '{PerSecond: .Frames.PerSecond,
+  SdrAcceptedPerSecond: .Sdr.AcceptedPerSecond,
+  CrcErrorRatio: (if (.Sdr.Extracted // 0) > 0 then .Sdr.CrcErrors / .Sdr.Extracted else null end)}'
 ```
+
+`SdrAcceptedPerSecond` and `CrcErrorRatio` are `null` on a daemon without an SDR device, and `CrcErrorRatio` also before the first frame is extracted.
 
 ### Check the state of every Beast source
 
