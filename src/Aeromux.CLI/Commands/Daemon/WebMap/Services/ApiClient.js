@@ -16,7 +16,8 @@
 
 const API = '/api/v1';
 
-export const fetchStats = () => fetch(`${API}/stats`).then(r => r.json());
+// The effective daemon configuration: receiver location, heatmap setting and version.
+export const fetchConfig = () => fetch(`${API}/config`).then(r => r.json());
 
 export const fetchAircraft = (bounds) => {
     const params = bounds

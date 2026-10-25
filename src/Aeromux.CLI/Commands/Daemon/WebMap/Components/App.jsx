@@ -16,7 +16,7 @@
 
 import { h } from 'preact';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'preact/hooks';
-import { fetchStats, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
+import { fetchConfig, fetchAircraft, fetchDetail, fetchHistory, fetchStateHistory } from '../Services/ApiClient.js';
 import * as MapManager from '../Map/MapManager.js';
 import * as SkyViewManager from '../SkyView/SkyViewManager.js';
 import * as SignalR from '../Services/SignalRClient.js';
@@ -507,19 +507,21 @@ export function App() {
             }
         });
 
-        // Fetch stats for receiver location, then initial aircraft
+        // Fetch the configuration for the receiver location, then initial aircraft.
+        // The Receiver section is always present; an unconfigured receiver has null fields.
         (async () => {
             try {
-                const stats = await fetchStats();
-                if (stats.Version) setVersion(stats.Version);
-                setHeatmapCollectionEnabled(stats.HeatmapCollectionEnabled === true);
-                if (stats.Receiver && stats.Receiver.Latitude != null && stats.Receiver.Longitude != null) {
-                    // altM feeds the Sky View horizon; the config key is optional, so
+                const config = await fetchConfig();
+                const receiver = config.Receiver;
+                if (config.Version) setVersion(config.Version);
+                setHeatmapCollectionEnabled(config.Heatmap?.Collect === true);
+                if (receiver && receiver.Latitude != null && receiver.Longitude != null) {
+                    // altM feeds the Sky View horizon; the Altitude key is optional, so
                     // an unset altitude means a horizon exactly at eye level.
                     const loc = {
-                        lat: stats.Receiver.Latitude,
-                        lon: stats.Receiver.Longitude,
-                        altM: stats.Receiver.AltitudeMeters ?? 0
+                        lat: receiver.Latitude,
+                        lon: receiver.Longitude,
+                        altM: receiver.Altitude ?? 0
                     };
                     receiverRef.current = loc;
                     setReceiverLocation(loc);
@@ -562,7 +564,7 @@ export function App() {
                             viewRef.current.updateMarkers(newMap);
 
                             // If no receiver location, fit to aircraft
-                            if (!stats.Receiver || stats.Receiver.Latitude == null) {
+                            if (!receiver || receiver.Latitude == null) {
                                 const positions = data.Aircraft
                                     .filter(a => a.Coordinate)
                                     .map(a => ({ lat: a.Coordinate.Latitude, lon: a.Coordinate.Longitude }));
