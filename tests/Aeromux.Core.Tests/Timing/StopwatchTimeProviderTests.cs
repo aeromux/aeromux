@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Diagnostics;
 using Aeromux.Core.Timing;
 using FluentAssertions;
 
@@ -27,14 +28,16 @@ public class StopwatchTimeProviderTests
         // Arrange
         DateTime before = DateTime.UtcNow;
         var provider = new StopwatchTimeProvider();
-        DateTime after = DateTime.UtcNow;
 
         // Act
         DateTime timestamp = provider.GetCurrentTimestamp();
 
+        // Read after the call, so a thread paused before it widens the bound instead of failing the test
+        DateTime after = DateTime.UtcNow;
+
         // Assert
         timestamp.Should().BeOnOrAfter(before);
-        timestamp.Should().BeOnOrBefore(after.AddMilliseconds(10)); // Allow small processing time
+        timestamp.Should().BeOnOrBefore(after.AddMilliseconds(10)); // Allow drift between DateTime.UtcNow and Stopwatch
     }
 
     [Fact]
@@ -112,14 +115,29 @@ public class StopwatchTimeProviderTests
     {
         // Arrange
         var provider = new StopwatchTimeProvider();
+        var reference = Stopwatch.StartNew();
+
+        // Act - Nest each provider reading between two reference readings. The provider's interval
+        // then always contains the inner reference interval and fits inside the outer one, so a
+        // thread paused anywhere widens the bounds instead of failing the test.
+        TimeSpan outerStart = reference.Elapsed;
         DateTime start = provider.GetCurrentTimestamp();
+        TimeSpan innerStart = reference.Elapsed;
 
-        // Act
-        Thread.Sleep(100); // Sleep for 100ms
+        // Busy-wait rather than sleep: the bounds are exact, so the window only has to dwarf the
+        // call overhead and tick rounding, and spinning never yields the thread to the scheduler
+        while (reference.Elapsed - innerStart < TimeSpan.FromMilliseconds(1))
+        {
+        }
+
+        TimeSpan innerEnd = reference.Elapsed;
         DateTime end = provider.GetCurrentTimestamp();
+        TimeSpan outerEnd = reference.Elapsed;
 
-        // Assert
+        // Assert - Each reading rounds raw timer ticks down to 100 ns TimeSpan ticks, so allow 1 µs
         TimeSpan elapsed = end - start;
-        elapsed.TotalMilliseconds.Should().BeInRange(90, 120); // Allow ±20ms for OS scheduling
+        TimeSpan rounding = TimeSpan.FromMicroseconds(1);
+        elapsed.Should().BeGreaterThanOrEqualTo(innerEnd - innerStart - rounding);
+        elapsed.Should().BeLessThanOrEqualTo(outerEnd - outerStart + rounding);
     }
 }
