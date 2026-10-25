@@ -52,7 +52,7 @@ public class ReceiverStreamStatisticsTests
         statistics.BeastSources.Should().ContainSingle()
             .Which.Should().Match<BeastSourceStatistics>(s => s.Host == "127.0.0.1" && s.Port == port);
         statistics.Mlat.Should().Be(new MlatStatistics(0, 0));
-        statistics.FramesDelivered.Should().Be(0);
+        statistics.Messages.Should().Be(0);
     }
 
     [Fact]
@@ -67,9 +67,9 @@ public class ReceiverStreamStatisticsTests
     }
 
     [Fact]
-    public async Task BeastFrames_AcceptedOnesAreDelivered()
+    public async Task BeastFrames_MessagesAreDelivered()
     {
-        // Low confidence: frames 1 to 4 of the address are unconfirmed, 5 to 8 accepted
+        // Low confidence: frames 1 to 4 of the address are held back, 5 to 8 become messages
         using TcpListener listener = CreateListener(out int port);
         await using ReceiverStream stream = CreateStream(port, mlatEnabled: false);
         await stream.StartAsync(CancellationToken.None);
@@ -85,16 +85,15 @@ public class ReceiverStreamStatisticsTests
 
         using var waitCts = new CancellationTokenSource(WaitLimit);
         ReceiverStatistics statistics;
-        while ((statistics = stream.GetReceiverStatistics()!).FramesDelivered < 4)
+        while ((statistics = stream.GetReceiverStatistics()!).Messages < 4)
         {
             await Task.Delay(10, waitCts.Token);
         }
 
         BeastSourceStatistics source = statistics.BeastSources[0];
         source.Connected.Should().BeTrue();
-        source.Received.Should().Be(8);
-        source.Accepted.Should().Be(4);
-        statistics.FramesDelivered.Should().Be(source.Accepted);
+        source.Messages.Should().Be(4);
+        statistics.Messages.Should().Be(source.Messages, "the receiver's total is the sum of its sources");
     }
 
     private static ReceiverStream CreateStream(int beastPort, bool mlatEnabled) =>

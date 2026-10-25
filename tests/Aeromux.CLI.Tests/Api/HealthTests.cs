@@ -117,11 +117,11 @@ public class HealthTests : IAsyncLifetime
     }
 
     private static ReceiverStatistics Receiver(SdrDeviceStatistics device, BeastSourceStatistics beast) =>
-        new(0, new SdrStatistics(0, 0, [device]), [beast], null);
+        new(0, new SdrStatistics([device]), [beast], null);
 
     private static SdrDeviceStatistics Device(long samples) =>
-        new("default", 0, DateTime.UnixEpoch, samples, 0, 0, 0, 0, 0);
+        new("default", 0, samples, 0, 0, 0, 0);
 
     private static BeastSourceStatistics Beast(bool connected, DateTime? since = null) =>
-        new("192.168.1.20", 30005, connected, since ?? DateTime.UnixEpoch, 0, 0, 0, 0);
+        new("192.168.1.20", 30005, connected, since ?? DateTime.UnixEpoch, 0, 0);
 }

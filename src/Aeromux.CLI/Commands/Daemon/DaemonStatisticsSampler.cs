@@ -180,7 +180,7 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
                 .. (current.Sdr?.Devices ?? []).Select(device => new DeviceSnapshot(
                     device,
                     WindowRate(s => FindDevice(s, device.Name)?.Samples),
-                    WindowRate(s => FindDevice(s, device.Name)?.Extracted),
+                    WindowRate(s => FindDevice(s, device.Name)?.Messages),
                     _deviceSamples[device.Name].IncreasedAt))
             ];
 
@@ -189,18 +189,18 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
             [
                 .. current.BeastSources.Select((source, i) => new BeastSourceSnapshot(
                     source,
-                    WindowRate(s => FindBeast(s, beastKeys[i])?.Accepted),
+                    WindowRate(s => FindBeast(s, beastKeys[i])?.Messages),
                     _beastFirstSeen[beastKeys[i]]))
             ];
 
             return new StatisticsSnapshot(
                 current,
                 latest.Time,
-                WindowRate(s => s.FramesDelivered),
-                WindowRate(s => s.Sdr?.Accepted),
+                WindowRate(s => s.Messages),
+                WindowRate(s => s.Sdr?.Devices.Sum(d => d.Messages)),
                 devices,
                 beastSources,
-                WindowRate(s => s.Mlat?.Received));
+                WindowRate(s => s.Mlat?.Messages));
         }
     }
 
@@ -261,19 +261,19 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
 /// </summary>
 /// <param name="Statistics">The latest reading, or null before the first.</param>
 /// <param name="TakenAt">When the latest reading was taken (UTC), or null before the first.</param>
-/// <param name="FramesPerSecond">Frames delivered from every source, per second.</param>
-/// <param name="SdrAcceptedPerSecond">Frames accepted from the SDR devices, per second.</param>
+/// <param name="MessagesPerSecond">Messages handed to the tracker from every source, per second.</param>
+/// <param name="SdrMessagesPerSecond">Messages from all SDR devices together, per second.</param>
 /// <param name="Devices">One entry per SDR device, in the order of the reading.</param>
 /// <param name="BeastSources">One entry per Beast source, in the order of the reading.</param>
-/// <param name="MlatReceivedPerSecond">MLAT frames received, per second.</param>
+/// <param name="MlatMessagesPerSecond">MLAT messages, per second.</param>
 public sealed record StatisticsSnapshot(
     ReceiverStatistics? Statistics,
     DateTime? TakenAt,
-    double FramesPerSecond,
-    double SdrAcceptedPerSecond,
+    double MessagesPerSecond,
+    double SdrMessagesPerSecond,
     IReadOnlyList<DeviceSnapshot> Devices,
     IReadOnlyList<BeastSourceSnapshot> BeastSources,
-    double MlatReceivedPerSecond)
+    double MlatMessagesPerSecond)
 {
     /// <summary>The snapshot before the first reading: no sources and no rates.</summary>
     public static StatisticsSnapshot Empty { get; } = new(null, null, 0, 0, [], [], 0);
@@ -284,23 +284,23 @@ public sealed record StatisticsSnapshot(
 /// </summary>
 /// <param name="Device">The device's counters from the latest reading.</param>
 /// <param name="SamplesPerSecond">IQ samples received per second over the window.</param>
-/// <param name="ExtractedPerSecond">Frames extracted per second over the window.</param>
+/// <param name="MessagesPerSecond">Messages handed to the tracker per second over the window.</param>
 /// <param name="SamplesLastIncreased">
 /// When the sample count last went up (UTC), or when the device first appeared if it never has.
 /// </param>
 public sealed record DeviceSnapshot(
     SdrDeviceStatistics Device,
     double SamplesPerSecond,
-    double ExtractedPerSecond,
+    double MessagesPerSecond,
     DateTime SamplesLastIncreased);
 
 /// <summary>
 /// One Beast source in a <see cref="StatisticsSnapshot"/>.
 /// </summary>
 /// <param name="Source">The source's state and counters from the latest reading.</param>
-/// <param name="AcceptedPerSecond">Frames accepted per second over the window.</param>
+/// <param name="MessagesPerSecond">Messages handed on per second over the window.</param>
 /// <param name="FirstSeen">When a reading first contained the source (UTC).</param>
 public sealed record BeastSourceSnapshot(
     BeastSourceStatistics Source,
-    double AcceptedPerSecond,
+    double MessagesPerSecond,
     DateTime FirstSeen);

@@ -432,15 +432,15 @@ public static class DaemonApiMapper
         DateTime now = DateTime.UtcNow;
         TimeSpan uptime = now - startTime;
         ReceiverStatistics? statistics = snapshot.Statistics;
-        long framesTotal = statistics?.FramesDelivered ?? 0;
+        long messagesTotal = statistics?.Messages ?? 0;
 
-        var frames = new StatsFrames(
-            Total: framesTotal,
-            PerSecond: Round(snapshot.FramesPerSecond),
-            AveragePerSecond: uptime > TimeSpan.Zero ? Round(framesTotal / uptime.TotalSeconds) : 0);
+        var messages = new StatsMessages(
+            Total: messagesTotal,
+            PerSecond: Round(snapshot.MessagesPerSecond),
+            AveragePerSecond: uptime > TimeSpan.Zero ? Round(messagesTotal / uptime.TotalSeconds) : 0);
 
         StatsSdr? sdr = null;
-        if (statistics?.Sdr is { } sdrStatistics)
+        if (statistics?.Sdr != null)
         {
             StatsSdrDevice[] devices =
             [
@@ -449,20 +449,18 @@ public static class DaemonApiMapper
                     DeviceIndex: d.Device.DeviceIndex,
                     SamplesPerSecond: Round(d.SamplesPerSecond),
                     Extracted: d.Device.Extracted,
-                    CrcErrors: d.Device.CrcErrors,
                     Corrected: d.Device.Corrected,
                     Duplicates: d.Device.Duplicates,
                     Messages: d.Device.Messages,
-                    ExtractedPerSecond: Round(d.ExtractedPerSecond)))
+                    MessagesPerSecond: Round(d.MessagesPerSecond)))
             ];
 
             sdr = new StatsSdr(
                 Extracted: devices.Sum(d => d.Extracted),
-                CrcErrors: devices.Sum(d => d.CrcErrors),
                 Corrected: devices.Sum(d => d.Corrected),
-                Unconfirmed: sdrStatistics.Unconfirmed,
-                Accepted: sdrStatistics.Accepted,
-                AcceptedPerSecond: Round(snapshot.SdrAcceptedPerSecond),
+                Duplicates: devices.Sum(d => d.Duplicates),
+                Messages: devices.Sum(d => d.Messages),
+                MessagesPerSecond: Round(snapshot.SdrMessagesPerSecond),
                 Devices: devices);
         }
 
@@ -474,14 +472,12 @@ public static class DaemonApiMapper
                 Connected: b.Source.Connected,
                 Since: b.Source.Since,
                 Reconnects: b.Source.Reconnects,
-                Received: b.Source.Received,
-                Unconfirmed: b.Source.Unconfirmed,
-                Accepted: b.Source.Accepted,
-                AcceptedPerSecond: Round(b.AcceptedPerSecond)))
+                Messages: b.Source.Messages,
+                MessagesPerSecond: Round(b.MessagesPerSecond)))
         ];
 
         StatsMlat? mlat = statistics?.Mlat is { } mlatStatistics
-            ? new StatsMlat(mlatStatistics.Clients, mlatStatistics.Received, Round(snapshot.MlatReceivedPerSecond))
+            ? new StatsMlat(mlatStatistics.Clients, mlatStatistics.Messages, Round(snapshot.MlatMessagesPerSecond))
             : null;
 
         return new StatsResponse(
@@ -489,7 +485,7 @@ public static class DaemonApiMapper
             Timestamp: now,
             Uptime: (int)uptime.TotalSeconds,
             AircraftCount: tracker.Count,
-            Frames: frames,
+            Messages: messages,
             Sdr: sdr,
             BeastSources: beastSources,
             Mlat: mlat,

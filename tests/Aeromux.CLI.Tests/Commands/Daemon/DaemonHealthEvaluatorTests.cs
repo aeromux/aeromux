@@ -61,7 +61,7 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
         long samples = 0;
         for (int i = 0; i < 30; i++)
         {
-            SampleAndAdvance(Receiver(sdr: Sdr(0, Device("default", samples += 2_400_000))), TimeSpan.FromSeconds(1));
+            SampleAndAdvance(Receiver(sdr: Sdr(Device("default", samples += 2_400_000))), TimeSpan.FromSeconds(1));
         }
 
         Evaluate().Status.Should().Be("OK");
@@ -71,8 +71,8 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     public void DeviceExtractingNothing_ButDeliveringSamples_IsNotFailing()
     {
         // A quiet sky: samples arrive, no frames
-        SampleAndAdvance(Receiver(sdr: Sdr(0, Device("default", 0, extracted: 0))), TimeSpan.FromSeconds(30));
-        SampleAndAdvance(Receiver(sdr: Sdr(0, Device("default", 72_000_000, extracted: 0))), TimeSpan.Zero);
+        SampleAndAdvance(Receiver(sdr: Sdr(Device("default", 0))), TimeSpan.FromSeconds(30));
+        SampleAndAdvance(Receiver(sdr: Sdr(Device("default", 72_000_000))), TimeSpan.Zero);
 
         Evaluate().Status.Should().Be("OK");
     }
@@ -80,8 +80,8 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     [Fact]
     public void DeviceStopsDeliveringSamples_FailsAfterTenSeconds()
     {
-        SampleAndAdvance(Receiver(sdr: Sdr(0, Device("default", 2_400_000))), TimeSpan.FromSeconds(9));
-        SampleAndAdvance(Receiver(sdr: Sdr(0, Device("default", 2_400_000))), TimeSpan.Zero);
+        SampleAndAdvance(Receiver(sdr: Sdr(Device("default", 2_400_000))), TimeSpan.FromSeconds(9));
+        SampleAndAdvance(Receiver(sdr: Sdr(Device("default", 2_400_000))), TimeSpan.Zero);
         Evaluate().Status.Should().Be("OK", "9 seconds is within the threshold");
 
         _clock.Advance(TimeSpan.FromSeconds(1));
@@ -94,7 +94,7 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     [Fact]
     public void DeviceNeverDeliveringSamples_FailsTenSecondsAfterItFirstAppeared()
     {
-        SampleAndAdvance(Receiver(sdr: Sdr(0, Device("roof", 0, index: 1))), TimeSpan.FromSeconds(12.7));
+        SampleAndAdvance(Receiver(sdr: Sdr(Device("roof", 0, index: 1))), TimeSpan.FromSeconds(12.7));
 
         Evaluate().Problems.Should().Equal("SDR device 'roof' (index 1) has delivered no samples for 12 s");
     }
@@ -129,7 +129,7 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     public void BeastStillOnItsFirstAttempt_CountsFromWhenItFirstAppeared()
     {
         // Since is null until the first attempt completes
-        _current = Receiver(beast: [new BeastSourceStatistics("feeder", 30005, false, null, 0, 0, 0, 0)]);
+        _current = Receiver(beast: [new BeastSourceStatistics("feeder", 30005, false, null, 0, 0)]);
         _sampler.Sample();
 
         _clock.Advance(TimeSpan.FromSeconds(9));
@@ -145,15 +145,15 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     public void OneOfTwoSourcesFailing_IsDegraded()
     {
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 2_400_000)),
+                sdr: Sdr(Device("default", 2_400_000)),
                 beast: [Beast("feeder", 30005, connected: false, since: _clock.UtcNow)]),
             TimeSpan.FromSeconds(1));
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 4_800_000)),
+                sdr: Sdr(Device("default", 4_800_000)),
                 beast: [Beast("feeder", 30005, connected: false, since: _clock.UtcNow.AddSeconds(-1))]),
             TimeSpan.FromSeconds(14));
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 38_400_000)),
+                sdr: Sdr(Device("default", 38_400_000)),
                 beast: [Beast("feeder", 30005, connected: false, since: _clock.UtcNow.AddSeconds(-15))]),
             TimeSpan.Zero);
 
@@ -167,7 +167,7 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     public void EverySourceFailing_IsUnhealthy()
     {
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 0)),
+                sdr: Sdr(Device("default", 0)),
                 beast: [Beast("feeder", 30005, connected: false, since: _clock.UtcNow)]),
             TimeSpan.FromSeconds(20));
 
@@ -181,16 +181,16 @@ public class DaemonHealthEvaluatorTests : IAsyncLifetime, IAsyncDisposable
     public void Mlat_IsNeverJudged()
     {
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 0)),
-                mlat: new MlatStatistics(Clients: 0, Received: 0)),
+                sdr: Sdr(Device("default", 0)),
+                mlat: new MlatStatistics(Clients: 0, Messages: 0)),
             TimeSpan.Zero);
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 2_400_000)),
-                mlat: new MlatStatistics(Clients: 0, Received: 0)),
+                sdr: Sdr(Device("default", 2_400_000)),
+                mlat: new MlatStatistics(Clients: 0, Messages: 0)),
             TimeSpan.FromMinutes(1));
         SampleAndAdvance(Receiver(
-                sdr: Sdr(0, Device("default", 146_400_000)),
-                mlat: new MlatStatistics(Clients: 0, Received: 0)),
+                sdr: Sdr(Device("default", 146_400_000)),
+                mlat: new MlatStatistics(Clients: 0, Messages: 0)),
             TimeSpan.Zero);
 
         Evaluate().Status.Should().Be("OK", "no mlat-client connected and no MLAT frames is not a problem");

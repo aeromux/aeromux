@@ -32,102 +32,92 @@ public class SessionSummaryLogTests
 {
     private const string Separator = SessionSummaryLog.BlockSeparator;
 
-    private static readonly SdrDeviceStatistics DefaultDevice =
-        new("default", 0, DateTime.UnixEpoch, 0, 1_250_000, 790_000, 12_000, 300, 398_700);
-
-    private static readonly BeastSourceStatistics Feeder =
-        new("192.168.1.20", 30005, true, DateTime.UnixEpoch, 2, 12_000, 900, 11_100);
+    private static readonly SdrDeviceStatistics Sdr0 = new("sdr0", 0, 0, 10_508, 112, 1_909, 8_495);
+    private static readonly SdrDeviceStatistics Sdr1 = new("sdr1", 1, 0, 8_489, 97, 1_555, 6_877);
+    private static readonly BeastSourceStatistics Feeder = new("10.1.10.24", 30005, true, DateTime.UnixEpoch, 0, 111_993);
 
     [Fact]
     public void EverySource_MatchesTheDocumentedLayout()
     {
-        var statistics = new ReceiverStatistics(
-            412_400,
-            new SdrStatistics(61_000, 399_000, [DefaultDevice]),
-            [Feeder],
-            new MlatStatistics(1, 2_600));
+        var statistics = new ReceiverStatistics(127_365, new SdrStatistics([Sdr0, Sdr1]), [Feeder], new MlatStatistics(0, 0));
 
-        Write(statistics, TimeSpan.FromHours(1)).Should().Equal(
-            "Session duration        01:00:00",
-            "Frames delivered         412,400   114.6 per second on average",
+        Write(statistics, TimeSpan.FromMinutes(1)).Should().Equal(
+            "Session duration        00:01:00",
+            "Messages                 127,365   2,122.8 per second on average",
             Separator,
             "SDR, all devices",
-            "  Extracted            1,250,000",
-            "  CRC errors             790,000   63.2%",
-            "  Corrected               12,000",
-            "  Unconfirmed             61,000    4.9%",
-            "  Accepted               399,000   31.9%",
+            "  Extracted               18,997",
+            "  Corrected                  209",
+            "  Duplicates               3,464",
+            "  Messages                15,372   12.1%",
             Separator,
-            "Device 'default' (index 0)",
-            "  Extracted            1,250,000",
-            "  CRC errors             790,000   63.2%",
-            "  Corrected               12,000",
-            "  Duplicates                 300",
-            "  Messages               398,700",
+            "Device 'sdr0' (index 0)",
+            "  Extracted               10,508",
+            "  Corrected                  112",
+            "  Duplicates               1,909",
+            "  Messages                 8,495    6.7%",
             Separator,
-            "Beast source 192.168.1.20:30005",
-            "  Received                12,000",
-            "  Unconfirmed                900    7.5%",
-            "  Accepted                11,100   92.5%",
-            "  Reconnects                   2",
+            "Device 'sdr1' (index 1)",
+            "  Extracted                8,489",
+            "  Corrected                   97",
+            "  Duplicates               1,555",
+            "  Messages                 6,877    5.4%",
+            Separator,
+            "Beast source 10.1.10.24:30005",
+            "  Messages               111,993   87.9%",
+            "  Reconnects                   0",
             Separator,
             "MLAT",
-            "  Received                 2,600");
+            "  Messages                     0    0.0%");
     }
 
     [Fact]
-    public void SdrTotals_AreSummedOverDevices()
+    public void Shares_AreOfAllSourcesTogether()
     {
-        var statistics = new ReceiverStatistics(0, new SdrStatistics(0, 0,
-        [
-            DefaultDevice,
-            new SdrDeviceStatistics("attic", 1, DateTime.UnixEpoch, 0, 750_000, 210_000, 3_000, 0, 0)
-        ]), [], null);
+        // The aggregator's total can trail the sources by the messages in flight; the shares
+        // still add up to 100% because they are taken of the sources' own sum
+        var statistics = new ReceiverStatistics(990, new SdrStatistics([Sdr0 with { Messages = 250 }]),
+            [Feeder with { Messages = 750 }], null);
 
-        List<string> lines = Write(statistics, TimeSpan.FromHours(1));
+        List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
 
-        lines.Should().ContainInOrder(
-            "SDR, all devices",
-            "  Extracted            2,000,000",
-            "  CRC errors           1,000,000   50.0%",
-            "  Corrected               15,000");
-        lines.Should().Contain("Device 'attic' (index 1)");
+        lines.Should().Contain("  Messages                   250   25.0%");
+        lines.Should().Contain("  Messages                   750   75.0%");
     }
 
     [Fact]
     public void BeastOnly_HasNoSdrBlock()
     {
-        var statistics = new ReceiverStatistics(11_100, null, [Feeder], null);
+        var statistics = new ReceiverStatistics(111_993, null, [Feeder], null);
 
         List<string> lines = Write(statistics, TimeSpan.FromMinutes(30));
 
         lines.Should().NotContain("SDR, all devices");
         lines.Should().NotContain(l => l.StartsWith("Device ", StringComparison.Ordinal));
         lines.Should().NotContain("MLAT");
-        lines.Should().Contain("Beast source 192.168.1.20:30005");
+        lines.Should().ContainInOrder("Beast source 10.1.10.24:30005", "  Messages               111,993  100.0%");
     }
 
     [Fact]
-    public void AircraftTracked_FollowsTheFrames()
+    public void AircraftTracked_FollowsTheMessages()
     {
         var statistics = new ReceiverStatistics(100, null, [Feeder], null);
 
         List<string> lines = Write(statistics, TimeSpan.FromMinutes(1), aircraftTracked: 87);
 
-        lines[1].Should().StartWith("Frames delivered");
+        lines[1].Should().StartWith("Messages ");
         lines[2].Should().Be("Aircraft tracked              87");
     }
 
     [Fact]
-    public void NothingReceived_HasNoShares()
+    public void NothingDelivered_HasNoShares()
     {
-        var silent = new BeastSourceStatistics("feeder", 30005, false, null, 0, 0, 0, 0);
-        var statistics = new ReceiverStatistics(0, null, [silent], null);
+        var silent = new BeastSourceStatistics("feeder", 30005, false, null, 0, 0);
+        var statistics = new ReceiverStatistics(0, null, [silent], new MlatStatistics(0, 0));
 
         List<string> lines = Write(statistics, TimeSpan.FromMinutes(1));
 
-        lines.Should().Contain("  Unconfirmed                  0");
-        lines.Should().Contain("  Accepted                     0");
+        lines.Should().Contain("  Messages                     0");
         lines.Should().NotContain(l => l.Contains('%', StringComparison.Ordinal));
     }
 
@@ -143,14 +133,14 @@ public class SessionSummaryLogTests
     public void Average_HasAThousandsSeparator()
     {
         Write(new ReceiverStatistics(7_061_400, null, [], null), TimeSpan.FromHours(1))[1]
-            .Should().Be("Frames delivered       7,061,400   1,961.5 per second on average");
+            .Should().Be("Messages               7,061,400   1,961.5 per second on average");
     }
 
     [Fact]
     public void ZeroDuration_HasAZeroAverage()
     {
         Write(new ReceiverStatistics(5, null, [], null), TimeSpan.Zero)[1]
-            .Should().Be("Frames delivered               5   0.0 per second on average");
+            .Should().Be("Messages                       5   0.0 per second on average");
     }
 
     [Theory]
@@ -168,14 +158,14 @@ public class SessionSummaryLogTests
     {
         var sink = new CapturingSink();
         using Logger logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
-        var statistics = new ReceiverStatistics(412_400, new SdrStatistics(61_000, 399_000, [DefaultDevice]), [Feeder], null);
+        var statistics = new ReceiverStatistics(127_365, new SdrStatistics([Sdr0]), [Feeder], null);
 
         SessionSummaryLog.Write(logger, statistics, TimeSpan.FromHours(1));
 
-        LogEvent frames = sink.Events.Single(e => e.MessageTemplate.Text.StartsWith("Frames delivered", StringComparison.Ordinal));
-        frames.Properties["FramesDelivered"].Should().Be(new ScalarValue(412_400L));
+        LogEvent total = sink.Events.First(e => e.MessageTemplate.Text.StartsWith("Messages", StringComparison.Ordinal));
+        total.Properties["Messages"].Should().Be(new ScalarValue(127_365L));
         LogEvent device = sink.Events.Single(e => e.MessageTemplate.Text.StartsWith("Device", StringComparison.Ordinal));
-        device.Properties["DeviceName"].Should().Be(new ScalarValue("default"));
+        device.Properties["DeviceName"].Should().Be(new ScalarValue("sdr0"));
     }
 
     // === Helpers ===

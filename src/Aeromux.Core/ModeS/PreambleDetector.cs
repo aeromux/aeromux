@@ -81,6 +81,7 @@ public sealed class PreambleDetector
     private long _preambleCandidates;
     private long _framesExtracted;
     private long _framesRejectedDuringExtraction;  // Would have extracted but rejected due to unknown ICAO
+    private long _framesCorrected;  // Extracted frames whose winning phase needed a single-bit correction
 
     /// <summary>
     /// Creates a new PreambleDetector with specified configuration.
@@ -381,6 +382,7 @@ public sealed class PreambleDetector
         int bestScore = noPhaseTestedYet;
         byte[]? bestMessage = null;
         double bestSignalStrength = 0.0;  // Track signal strength for best phase
+        bool bestWasCorrected = false;    // Whether the best phase needed a single-bit correction
 
         // Test phase groups based on magnitude thresholds
         // Each group tests 1-2 phases that share similar preamble characteristics
@@ -389,23 +391,23 @@ public sealed class PreambleDetector
         int paMag1 = common3456 - diff10And11;
         if (paMag1 >= refLevel)
         {
-            TryPhase(m, pos, 4, ref bestScore, ref bestMessage, ref bestSignalStrength);
-            TryPhase(m, pos, 5, ref bestScore, ref bestMessage, ref bestSignalStrength);
+            TryPhase(m, pos, 4, ref bestScore, ref bestMessage, ref bestSignalStrength, ref bestWasCorrected);
+            TryPhase(m, pos, 5, ref bestScore, ref bestMessage, ref bestSignalStrength, ref bestWasCorrected);
         }
 
         // Group 2: Phases 6 and 7
         int paMag2 = common3456 + diff10And11;
         if (paMag2 >= refLevel)
         {
-            TryPhase(m, pos, 6, ref bestScore, ref bestMessage, ref bestSignalStrength);
-            TryPhase(m, pos, 7, ref bestScore, ref bestMessage, ref bestSignalStrength);
+            TryPhase(m, pos, 6, ref bestScore, ref bestMessage, ref bestSignalStrength, ref bestWasCorrected);
+            TryPhase(m, pos, 7, ref bestScore, ref bestMessage, ref bestSignalStrength, ref bestWasCorrected);
         }
 
         // Group 3: Phase 8
         int paMag3 = sum1And4 + (2 * diff2And3) + diff10And11 + m[pos + 12];
         if (paMag3 >= refLevel)
         {
-            TryPhase(m, pos, 8, ref bestScore, ref bestMessage, ref bestSignalStrength);
+            TryPhase(m, pos, 8, ref bestScore, ref bestMessage, ref bestSignalStrength, ref bestWasCorrected);
         }
 
         // Preamble detection outcome: successful if ANY phase was tested (bestScore changed from initial state)
@@ -415,6 +417,13 @@ public sealed class PreambleDetector
         // Return best message if we found a valid one
         if (bestMessage != null && bestScore > 0)
         {
+            // Counted here, for the phase that won, rather than by the validator: it checks
+            // every phase tried, so its own count includes corrections on losing phases
+            if (bestWasCorrected)
+            {
+                _framesCorrected++;
+            }
+
             // Compute frame timestamp from sample position in magnitude buffer.
             // sampleOffset = pos - PrefixSamples: offset from start of current IQ buffer.
             // Positive for new data region, negative for prefix (previous buffer's trailing samples).
@@ -438,7 +447,7 @@ public sealed class PreambleDetector
     /// <summary>
     /// Tries to extract a message at a specific phase alignment.
     /// Uses ValidatedFrameFactory to verify the extracted message is valid.
-    /// Updates bestScore/bestMessage/bestSignalStrength if this phase produces a better result.
+    /// Updates bestScore/bestMessage/bestSignalStrength/bestWasCorrected if this phase produces a better result.
     /// Uses direct array access - NO MODULO.
     /// Score meanings:
     ///   > 0: Valid message with known/accepted ICAO
@@ -446,7 +455,8 @@ public sealed class PreambleDetector
     ///   -2: Bad message or invalid CRC
     /// </summary>
     private void TryPhase(ReadOnlySpan<ushort> m, int pos, int tryPhase,
-                          ref int bestScore, ref byte[]? bestMessage, ref double bestSignalStrength)
+                          ref int bestScore, ref byte[]? bestMessage, ref double bestSignalStrength,
+                          ref bool bestWasCorrected)
     {
         // Calculate data start position and initial phase
         // Direct calculation - NO MODULO (performance optimization)
@@ -524,6 +534,7 @@ public sealed class PreambleDetector
         if (score > bestScore)
         {
             bestScore = score;
+            bestWasCorrected = validated?.WasCorrected == true;
             // Only save message and compute signal strength if score is positive (accepted)
             if (score > 0)
             {
@@ -741,4 +752,10 @@ public sealed class PreambleDetector
     public long PreambleCandidates => _preambleCandidates;
     public long FramesExtracted => _framesExtracted;
     public long FramesRejectedDuringExtraction => _framesRejectedDuringExtraction;
+
+    /// <summary>
+    /// Gets the number of extracted frames that needed a single-bit correction to pass the
+    /// CRC check, each counted once, for the phase alignment that was used.
+    /// </summary>
+    public long FramesCorrected => _framesCorrected;
 }

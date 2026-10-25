@@ -326,7 +326,7 @@ public sealed record StatsResponse(
     DateTime Timestamp,
     int Uptime,
     int AircraftCount,
-    StatsFrames Frames,
+    StatsMessages Messages,
     StatsSdr? Sdr,
     IReadOnlyList<StatsBeastSource> BeastSources,
     StatsMlat? Mlat,
@@ -334,25 +334,22 @@ public sealed record StatsResponse(
     StatsDatabase? Database);
 
 /// <summary>
-/// Frames handed to the aircraft tracker from every source (SDR, Beast and MLAT).
+/// Messages handed to the aircraft tracker from every source (SDR, Beast and MLAT).
 /// </summary>
-public sealed record StatsFrames(
+public sealed record StatsMessages(
     long Total,
     double PerSecond,
     double AveragePerSecond);
 
 /// <summary>
-/// The SDR devices, totalled, with one entry per running device. Confidence filtering
-/// (<c>Unconfirmed</c>, <c>Accepted</c>) is receiver-wide only, because every device
-/// shares one confidence tracker.
+/// The SDR devices: their counters summed, with one entry per running device.
 /// </summary>
 public sealed record StatsSdr(
     long Extracted,
-    long CrcErrors,
     long Corrected,
-    long Unconfirmed,
-    long Accepted,
-    double AcceptedPerSecond,
+    long Duplicates,
+    long Messages,
+    double MessagesPerSecond,
     IReadOnlyList<StatsSdrDevice> Devices);
 
 /// <summary>
@@ -363,11 +360,10 @@ public sealed record StatsSdrDevice(
     int DeviceIndex,
     double SamplesPerSecond,
     long Extracted,
-    long CrcErrors,
     long Corrected,
     long Duplicates,
     long Messages,
-    double ExtractedPerSecond);
+    double MessagesPerSecond);
 
 /// <summary>
 /// One Beast TCP input and its connection state.
@@ -378,18 +374,16 @@ public sealed record StatsBeastSource(
     bool Connected,
     DateTime? Since,
     int Reconnects,
-    long Received,
-    long Unconfirmed,
-    long Accepted,
-    double AcceptedPerSecond);
+    long Messages,
+    double MessagesPerSecond);
 
 /// <summary>
 /// The MLAT input.
 /// </summary>
 public sealed record StatsMlat(
     int Clients,
-    long Received,
-    double ReceivedPerSecond);
+    long Messages,
+    double MessagesPerSecond);
 
 /// <summary>
 /// The TCP outputs; an output is null when it is disabled.

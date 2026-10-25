@@ -116,7 +116,6 @@ public sealed class DeviceWorker : IDisposable
     private long _totalSamplesReceived;        // Total IQ samples received since StartReceiving()
     private long _lastLoggedSampleCount;       // Sample count at last statistics log (for delta calculation)
     private DateTime _receptionStartTime;      // When StartReceiving() was called (tracked via time provider)
-    private long _framesAccepted;              // Frames passed on by confidence filtering
     private Exception? _lastLoggedAsyncReadError;  // Last async read error surfaced to the log (dedupes repeat logging)
 
     /// <summary>
@@ -436,11 +435,6 @@ public sealed class DeviceWorker : IDisposable
                         continue;
                     }
 
-                    // Counted here rather than read from the tracker: the tracker passes frames
-                    // without an ICAO aircraft address on without counting them, and it is
-                    // shared by every device
-                    _framesAccepted++;
-
                     // Deduplication: filter frames seen within deduplication window (FRUIT, multipath, multiple interrogators)
                     // This prevents expensive parsing of duplicate frames (~30% CPU savings)
                     if (_frameDeduplicator.IsDuplicate(validatedFrame.Data, validatedFrame.Timestamp))
@@ -555,24 +549,19 @@ public sealed class DeviceWorker : IDisposable
                     extracted,
                     extractedRate);
 
-                // === CRC Validation Statistics ===
-                // Monitor frame quality: high invalid rate suggests RF interference or weak signal
-                long crcChecked = _validatedFrameFactory.FramesChecked;
-                long crcValid = _validatedFrameFactory.FramesValid;
-                long crcCorrected = _validatedFrameFactory.FramesCorrected;
-                long crcInvalid = _validatedFrameFactory.FramesInvalid;
-                double crcValidRate = crcChecked > 0 ? crcValid * 100.0 / crcChecked : 0.0;
-                double crcCorrectedRate = crcChecked > 0 ? crcCorrected * 100.0 / crcChecked : 0.0;
+                // === CRC Correction Statistics ===
+                // The preamble detector checks the CRC and corrects single-bit errors while it
+                // extracts, so it extracts only valid frames and is the one to ask; this
+                // worker's own validation never sees a failure or a correction
+                long corrected = _preambleDetector.FramesCorrected;
+                double correctedRate = extracted > 0 ? corrected * 100.0 / extracted : 0.0;
 
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) CRC: {Checked:N0} checked, {Valid:N0} valid ({ValidRate:F1}%), {Corrected:N0} corrected ({CorrectedRate:F1}%), {Invalid:N0} invalid",
+                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) CRC: {Corrected:N0} of {Extracted:N0} extracted frames corrected ({CorrectedRate:F1}%)",
                     _config.Name,
                     _config.DeviceIndex,
-                    crcChecked,
-                    crcValid,
-                    crcValidRate,
-                    crcCorrected,
-                    crcCorrectedRate,
-                    crcInvalid);
+                    corrected,
+                    extracted,
+                    correctedRate);
 
                 // === Confidence Tracking Statistics ===
                 // Monitor noise filtering effectiveness: confident rate shows how well we reject random ICAOs.
@@ -710,22 +699,16 @@ public sealed class DeviceWorker : IDisposable
             _config.Name, _config.DeviceIndex);
         Log.Information("═══════════════════════════════════════════════════════════════");
 
-        // CRC Validation statistics
-        long crcChecked = _validatedFrameFactory.FramesChecked;
-        long crcValid = _validatedFrameFactory.FramesValid;
-        long crcCorrected = _validatedFrameFactory.FramesCorrected;
-        long crcInvalid = _validatedFrameFactory.FramesInvalid;
-        double crcValidRate = crcChecked > 0 ? crcValid * 100.0 / crcChecked : 0.0;
-        double crcCorrectedRate = crcChecked > 0 ? crcCorrected * 100.0 / crcChecked : 0.0;
+        // Extraction statistics, from the preamble detector: it checks the CRC and corrects
+        // single-bit errors while it extracts, so every frame it passes on is valid
+        long extracted = _preambleDetector.FramesExtracted;
+        long corrected = _preambleDetector.FramesCorrected;
+        double correctedRate = extracted > 0 ? corrected * 100.0 / extracted : 0.0;
 
-        Log.Information("CRC Validation: {Checked:N0} frames checked",
-            crcChecked);
-        Log.Information("  - Valid: {Valid:N0} ({ValidRate:F1}%)",
-            crcValid, crcValidRate);
-        Log.Information("  - Corrected: {Corrected:N0} ({CorrectedRate:F1}%)",
-            crcCorrected, crcCorrectedRate);
-        Log.Information("  - Invalid: {Invalid:N0}",
-            crcInvalid);
+        Log.Information("Extraction: {Extracted:N0} frames extracted with a valid CRC",
+            extracted);
+        Log.Information("  - Corrected: {Corrected:N0} ({CorrectedRate:F1}%) [single-bit error repaired]",
+            corrected, correctedRate);
 
         // Confidence tracking statistics
         long confTotal = _confidenceTracker.TotalFrames;
@@ -862,14 +845,8 @@ public sealed class DeviceWorker : IDisposable
     /// <summary>Gets the configured RTL-SDR device index.</summary>
     public int DeviceIndex => _config.DeviceIndex;
 
-    /// <summary>Gets the number of frames this device passed through confidence filtering.</summary>
-    public long FramesAccepted => _framesAccepted;
-
     /// <summary>Gets the total number of I/Q samples received since <see cref="StartReceiving"/>.</summary>
     public long TotalSamplesReceived => _totalSamplesReceived;
-
-    /// <summary>Gets the timestamp when sample reception started.</summary>
-    public DateTime StartTime => _receptionStartTime;
 
     /// <summary>Gets the I/Q-to-magnitude demodulator for this device.</summary>
     public IQDemodulator Demodulator => _demodulator;

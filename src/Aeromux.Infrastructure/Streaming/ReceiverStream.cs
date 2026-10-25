@@ -398,32 +398,12 @@ public sealed class ReceiverStream : IFrameStream
             return null;
         }
 
-        SdrStatistics? sdr = null;
-        if (_workers.Count > 0)
-        {
-            // Disjoint: the shared tracker counts a frame as unconfirmed, or its worker counts
-            // it as accepted. Only SDR workers filter through the shared tracker; MLAT only
-            // marks addresses as confirmed, which moves no counter. The tracker is read once,
-            // never summed per worker: every worker holds the same instance, so summing would
-            // multiply its counts by the number of devices.
-            long accepted = _workers.Sum(w => w.FramesAccepted);
-            long unconfirmed = _confidenceTracker?.UnconfidentFrames ?? 0;
+        SdrStatistics? sdr = _workers.Count == 0
+            ? null
+            : new SdrStatistics([.. _workers.Select(ReadDevice)]);
 
-            sdr = new SdrStatistics(unconfirmed, accepted,
-            [
-                .. _workers.Select(w => new SdrDeviceStatistics(
-                    w.DeviceName,
-                    w.DeviceIndex,
-                    w.StartTime,
-                    w.TotalSamplesReceived,
-                    w.PreambleDetector.FramesExtracted,
-                    w.ValidatedFrameFactory.FramesInvalid,
-                    w.ValidatedFrameFactory.FramesCorrected,
-                    w.FrameDeduplicator.DuplicatesFiltered,
-                    w.MessageParser.MessagesParsed))
-            ]);
-        }
-
+        // MLAT counts its own messages: its parser is shared by the tasks of all connected
+        // mlat-clients, and the parser's plain counter is not exact under that
         MlatStatistics? mlat = _mlatWorker == null
             ? null
             : new MlatStatistics(_mlatWorker.ConnectedClients, _mlatWorker.FramesReceived);
@@ -433,6 +413,28 @@ public sealed class ReceiverStream : IFrameStream
             sdr,
             [.. _beastStreams.Select(b => b.GetSourceStatistics())],
             mlat);
+    }
+
+    /// <summary>
+    /// Reads one device's counters, the later stages first: a frame is counted as extracted
+    /// before it can become a duplicate or a message, so the reading never shows more
+    /// passed on than extracted.
+    /// </summary>
+    private static SdrDeviceStatistics ReadDevice(DeviceWorker worker)
+    {
+        long messages = worker.MessageParser.MessagesParsed;
+        long duplicates = worker.FrameDeduplicator.DuplicatesFiltered;
+        long corrected = worker.PreambleDetector.FramesCorrected;
+        long extracted = worker.PreambleDetector.FramesExtracted;
+
+        return new SdrDeviceStatistics(
+            worker.DeviceName,
+            worker.DeviceIndex,
+            worker.TotalSamplesReceived,
+            extracted,
+            corrected,
+            duplicates,
+            messages);
     }
 
     /// <summary>

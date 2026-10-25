@@ -19,52 +19,44 @@ namespace Aeromux.Infrastructure.Streaming;
 /// <summary>
 /// One reading of every input of a <see cref="ReceiverStream"/>. Counters are cumulative
 /// since their source started; each is read without stopping the pipeline, so a reading
-/// can be a few frames behind on one counter compared to another.
+/// can be a few messages behind on one counter compared to another.
 /// </summary>
-/// <param name="FramesDelivered">Frames handed on from every source (SDR, Beast and MLAT).</param>
+/// <param name="Messages">Messages handed to the aircraft tracker from every source (SDR, Beast and MLAT).</param>
 /// <param name="Sdr">The SDR devices, or null when none runs.</param>
 /// <param name="BeastSources">One entry per Beast input, in configuration order.</param>
 /// <param name="Mlat">The MLAT input, or null when it is disabled.</param>
 public sealed record ReceiverStatistics(
-    long FramesDelivered,
+    long Messages,
     SdrStatistics? Sdr,
     IReadOnlyList<BeastSourceStatistics> BeastSources,
     MlatStatistics? Mlat);
 
 /// <summary>
-/// The SDR devices of a receiver. Confidence filtering is counted receiver-wide only,
-/// because every device shares one confidence tracker.
+/// The SDR devices of a receiver. Totals over the devices are their sums, computed where
+/// they are shown.
 /// </summary>
-/// <param name="Unconfirmed">Frames that passed the CRC but not confidence filtering.</param>
-/// <param name="Accepted">
-/// Frames that passed confidence filtering, including those without an ICAO aircraft
-/// address, which the filter passes on without judging them.
-/// </param>
 /// <param name="Devices">One entry per running device, in configuration order.</param>
-public sealed record SdrStatistics(
-    long Unconfirmed,
-    long Accepted,
-    IReadOnlyList<SdrDeviceStatistics> Devices);
+public sealed record SdrStatistics(IReadOnlyList<SdrDeviceStatistics> Devices);
 
 /// <summary>
-/// One SDR device, counted at each stage of its pipeline.
+/// One SDR device: how it fares on the radio side, and the messages it delivers.
 /// </summary>
 /// <param name="Name">Configured device name.</param>
 /// <param name="DeviceIndex">Configured RTL-SDR device index.</param>
-/// <param name="StartTime">When the device started receiving samples (UTC).</param>
 /// <param name="Samples">IQ samples received.</param>
-/// <param name="Extracted">Frames the preamble detector extracted.</param>
-/// <param name="CrcErrors">Extracted frames that failed the CRC and could not be corrected.</param>
-/// <param name="Corrected">Frames that passed the CRC only after single-bit correction.</param>
+/// <param name="Extracted">Frames the preamble detector extracted with a valid CRC, after a single-bit correction if needed.</param>
+/// <param name="Corrected">Extracted frames that needed the single-bit correction.</param>
 /// <param name="Duplicates">Frames the duplicate filter dropped.</param>
-/// <param name="Messages">Messages the parser decoded.</param>
+/// <param name="Messages">
+/// Messages handed to the aircraft tracker. The extracted frames that are neither
+/// duplicates nor messages were held back because their address belongs to no confirmed
+/// aircraft yet.
+/// </param>
 public sealed record SdrDeviceStatistics(
     string Name,
     int DeviceIndex,
-    DateTime StartTime,
     long Samples,
     long Extracted,
-    long CrcErrors,
     long Corrected,
     long Duplicates,
     long Messages);
@@ -80,22 +72,18 @@ public sealed record SdrDeviceStatistics(
 /// still under way.
 /// </param>
 /// <param name="Reconnects">Successful connections after the first.</param>
-/// <param name="Received">Frames decoded from the source.</param>
-/// <param name="Unconfirmed">Frames dropped by confidence filtering.</param>
-/// <param name="Accepted">Frames passed on, including those without an ICAO aircraft address.</param>
+/// <param name="Messages">Messages handed on from this source.</param>
 public sealed record BeastSourceStatistics(
     string Host,
     int Port,
     bool Connected,
     DateTime? Since,
     int Reconnects,
-    long Received,
-    long Unconfirmed,
-    long Accepted);
+    long Messages);
 
 /// <summary>
 /// The MLAT input.
 /// </summary>
 /// <param name="Clients">Connected mlat-client instances.</param>
-/// <param name="Received">MLAT frames received.</param>
-public sealed record MlatStatistics(int Clients, long Received);
+/// <param name="Messages">MLAT messages handed on.</param>
+public sealed record MlatStatistics(int Clients, long Messages);

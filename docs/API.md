@@ -772,7 +772,7 @@ curl -s "http://localhost:8080/api/v1/config?source=true" | jq .Network
 
 ## Statistics
 
-The statistics endpoint reports measurements only: how many frames each input delivers, how they fare at each stage of processing, which sources are connected, and how many clients each output serves. The configuration they run under is reported by the configuration endpoint.
+The statistics endpoint reports measurements only: how many messages each input delivers, whether it is alive, how the SDR devices fare on the radio side, and how many clients each output serves. The configuration they run under is reported by the configuration endpoint.
 
 ```bash
 curl -s "http://localhost:8080/api/v1/stats"
@@ -782,115 +782,103 @@ curl -s "http://localhost:8080/api/v1/stats"
 {
   "Version": "0.9.0",
   "Timestamp": "2026-10-25T14:30:00Z",
-  "Uptime": 3600,
-  "AircraftCount": 42,
-  "Frames": {
-    "Total": 412400,
-    "PerSecond": 112.4,
-    "AveragePerSecond": 114.6
-  },
+  "Uptime": 60,
+  "AircraftCount": 95,
+  "Messages": { "Total": 127365, "PerSecond": 2122.8, "AveragePerSecond": 2122.8 },
   "Sdr": {
-    "Extracted": 1250000,
-    "CrcErrors": 790000,
-    "Corrected": 12000,
-    "Unconfirmed": 61000,
-    "Accepted": 399000,
-    "AcceptedPerSecond": 109.8,
+    "Extracted": 18997,
+    "Corrected": 209,
+    "Duplicates": 3464,
+    "Messages": 15372,
+    "MessagesPerSecond": 256.2,
     "Devices": [
       {
-        "Name": "default",
+        "Name": "sdr0",
         "DeviceIndex": 0,
-        "SamplesPerSecond": 2400000,
-        "Extracted": 1250000,
-        "CrcErrors": 790000,
-        "Corrected": 12000,
-        "Duplicates": 300,
-        "Messages": 398700,
-        "ExtractedPerSecond": 346.1
+        "SamplesPerSecond": 2400013,
+        "Extracted": 10508,
+        "Corrected": 112,
+        "Duplicates": 1909,
+        "Messages": 8495,
+        "MessagesPerSecond": 141.6
+      },
+      {
+        "Name": "sdr1",
+        "DeviceIndex": 1,
+        "SamplesPerSecond": 2400013,
+        "Extracted": 8489,
+        "Corrected": 97,
+        "Duplicates": 1555,
+        "Messages": 6877,
+        "MessagesPerSecond": 114.6
       }
     ]
   },
   "BeastSources": [
     {
-      "Host": "192.168.1.20",
+      "Host": "10.1.10.24",
       "Port": 30005,
       "Connected": true,
-      "Since": "2026-10-25T13:30:04Z",
+      "Since": "2026-10-25T14:29:00Z",
       "Reconnects": 0,
-      "Received": 12000,
-      "Unconfirmed": 900,
-      "Accepted": 11100,
-      "AcceptedPerSecond": 3.1
+      "Messages": 111993,
+      "MessagesPerSecond": 1866.6
     }
   ],
-  "Mlat": {
-    "Clients": 1,
-    "Received": 2600,
-    "ReceivedPerSecond": 0.7
-  },
-  "Outputs": {
-    "Beast": { "Clients": 2 },
-    "Json": null,
-    "Sbs": null
-  },
-  "Database": { "Version": "2026.10.20" }
+  "Mlat": { "Clients": 0, "Messages": 0, "MessagesPerSecond": 0 },
+  "Outputs": { "Beast": { "Clients": 0 }, "Json": null, "Sbs": null },
+  "Database": null
 }
 ```
 
-| Field                                     | Meaning                                                                                                                                    |
-|-------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `Uptime`                                  | Seconds since the daemon started, the same span the session summary reports when it stops                                                  |
-| `Frames.Total`                            | Frames handed to the aircraft tracker from every source (SDR, Beast and MLAT) since start                                                  |
-| `Frames.PerSecond`                        | The same over the last 60 seconds                                                                                                          |
-| `Frames.AveragePerSecond`                 | `Total` divided by `Uptime`                                                                                                                |
-| `Sdr`                                     | `null` when no SDR device runs                                                                                                             |
-| `Sdr.Extracted`                           | Frames the preamble detector found, all devices                                                                                            |
-| `Sdr.CrcErrors`                           | Extracted frames that failed the CRC check and could not be corrected                                                                      |
-| `Sdr.Corrected`                           | Frames that passed the CRC check only after a single-bit correction                                                                        |
-| `Sdr.Unconfirmed`                         | Frames that passed the CRC check but came from an aircraft address not yet confirmed (noise, or an aircraft heard for the first time)      |
-| `Sdr.Accepted`                            | Frames passed on for decoding, including frames without an ICAO aircraft address (TIS-B and ADS-R track numbers, DF 19)                    |
-| `Sdr.AcceptedPerSecond`                   | `Accepted` over the last 60 seconds                                                                                                        |
-| `Sdr.Devices[]`                           | One entry per running device, in configuration order                                                                                       |
-| `…SamplesPerSecond`                       | IQ samples received over the last 60 seconds: close to the sample rate when the device is healthy, `0` when it has stopped delivering      |
-| `…Extracted`, `…CrcErrors`, `…Corrected`  | As above, for this device                                                                                                                  |
-| `…Duplicates`                             | Frames this device's duplicate filter dropped                                                                                              |
-| `…Messages`                               | Messages this device decoded                                                                                                               |
-| `…ExtractedPerSecond`                     | `Extracted` over the last 60 seconds                                                                                                       |
-| `BeastSources[]`                          | One entry per Beast input, `[]` when there are none                                                                                        |
-| `…Connected`, `…Since`                    | Whether the source is connected, and since when; `Since` is `null` while the first connection attempt is still under way                   |
-| `…Reconnects`                             | Successful connections after the first                                                                                                     |
-| `…Received`, `…Unconfirmed`, `…Accepted`  | Frames decoded from the source; those dropped because their address is not yet confirmed; those passed on                                  |
-| `…AcceptedPerSecond`                      | `Accepted` over the last 60 seconds                                                                                                        |
-| `Mlat`                                    | `null` when MLAT input is disabled                                                                                                         |
-| `Mlat.Clients`                            | Connected mlat-client instances                                                                                                            |
-| `Mlat.Received`, `Mlat.ReceivedPerSecond` | MLAT frames received, in total and over the last 60 seconds                                                                                |
-| `Outputs.Beast`, `.Json`, `.Sbs`          | `{ "Clients": n }`, or `null` when that output is disabled                                                                                 |
+| Field                                     | Meaning                                                                                                                                                             |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Uptime`                                  | Seconds since the daemon started, the same span the session summary reports when it stops                                                                           |
+| `Messages.Total`                          | Messages handed to the aircraft tracker from every source (SDR, Beast and MLAT) since start                                                                         |
+| `Messages.PerSecond`                      | The same over the last 60 seconds                                                                                                                                   |
+| `Messages.AveragePerSecond`               | `Total` divided by `Uptime`                                                                                                                                         |
+| `Sdr`                                     | `null` when no SDR device runs; otherwise the sums of its devices' counters, and their rate                                                                         |
+| `Sdr.Devices[]`                           | One entry per running device, in configuration order                                                                                                                |
+| `…SamplesPerSecond`                       | IQ samples received over the last 60 seconds: close to the sample rate when the device is healthy, `0` when it has stopped delivering                               |
+| `…Extracted`                              | Frames the preamble detector extracted: they passed the CRC check, after a single-bit correction if needed                                                          |
+| `…Corrected`                              | Extracted frames that needed that correction                                                                                                                        |
+| `…Duplicates`                             | Frames this device's duplicate filter dropped (multipath, replies to several interrogators)                                                                         |
+| `…Messages`                               | Messages this device handed to the aircraft tracker                                                                                                                 |
+| `…MessagesPerSecond`                      | `Messages` over the last 60 seconds                                                                                                                                 |
+| `BeastSources[]`                          | One entry per Beast input, `[]` when there are none                                                                                                                 |
+| `…Connected`, `…Since`                    | Whether the source is connected, and since when; `Since` is `null` while the first connection attempt is still under way                                            |
+| `…Reconnects`                             | Successful connections after the first                                                                                                                              |
+| `…Messages`, `…MessagesPerSecond`         | Messages this source handed to the aircraft tracker, in total and over the last 60 seconds                                                                          |
+| `Mlat`                                    | `null` when MLAT input is disabled                                                                                                                                  |
+| `Mlat.Clients`                            | Connected mlat-client instances                                                                                                                                     |
+| `Mlat.Messages`, `Mlat.MessagesPerSecond` | MLAT messages handed to the aircraft tracker, in total and over the last 60 seconds                                                                                 |
+| `Outputs.Beast`, `.Json`, `.Sbs`          | `{ "Clients": n }`, or `null` when that output is disabled                                                                                                          |
 | `Database`                                | `null` when database enrichment is off; `Version` is the loaded database, which changes when the auto-updater installs a new one, and is `null` until one is loaded |
 
-Counters are cumulative since their source started. For one SDR frame, the stages are: extracted by the preamble detector, CRC check (with single-bit correction), confirmation of the aircraft address, duplicate filter, decoder. Every extracted frame either fails the CRC check or passes it, and every frame that passes is either unconfirmed or accepted, so `Extracted = CrcErrors + Unconfirmed + Accepted`, and for a Beast source `Received = Unconfirmed + Accepted`, up to the few frames being processed at the moment of reading. The device totals add up to the `Sdr` totals.
+**Messages.** Every source reports `Messages` with the same meaning: the messages it handed to the aircraft tracker. `Messages.Total` is the sum over all sources, up to the few messages being processed at the moment of reading. Counters are cumulative since their source started, and a device's counters add up to the `Sdr` figures.
 
-`Unconfirmed` and `Accepted` exist only for the SDR devices as a whole, because all devices and the MLAT input share one record of confirmed addresses: an aircraft confirmed through one is confirmed for all.
+**SDR devices.** A frame is extracted when the preamble detector finds it and it passes the CRC check, repaired first if a single bit was wrong (`Corrected`). It then becomes a duplicate (`Duplicates`), a message (`Messages`), or is held back because its address belongs to no aircraft confirmed yet: noise with a valid CRC, or an aircraft heard for the first time. That last group is the difference `Extracted − Duplicates − Messages`.
 
-**Rates.** Every `PerSecond` field covers the last 60 seconds, sampled once a second, so a monitoring tool polling every 30 to 60 seconds sees the period it polled across. During the first minute the rates cover the time since the daemon started. `Frames.AveragePerSecond` is the average over the whole session.
+**Rates.** Every `PerSecond` field covers the last 60 seconds, sampled once a second, so a monitoring tool polling every 30 to 60 seconds sees the period it polled across. During the first minute the rates cover the time since the daemon started. `Messages.AveragePerSecond` is the average over the whole session.
 
-**Judging reception.** The share of `CrcErrors` in `Extracted` says how much of what the receiver picks up is too damaged to use, which is what to watch when adjusting the antenna or the gain. Most of these are noise and weak or overlapping signals, so a high share is normal; a change in it after an adjustment is what matters.
+**Comparing receivers.** `MessagesPerSecond` is the figure that says how much a device hears; compare it between devices, or for one device before and after a change of antenna, gain or position. A growing share of `Corrected` in `Extracted` means more frames arrive with a damaged bit, typically weaker signals or more interference.
 
 ### Migrating from 0.8
 
 The statistics endpoint changed shape in 0.9.0. The fields it no longer has moved as follows:
 
-| Old field                                   | New location                                                                                                     |
-|---------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `Receiver.Latitude`, `.Longitude`, `.Name`  | `/api/v1/config` `Receiver.*`                                                                                    |
-| `Receiver.AltitudeMeters`                   | `/api/v1/config` `Receiver.Altitude`                                                                             |
-| `HeatmapCollectionEnabled`                  | `/api/v1/config` `Heatmap.Collect`                                                                               |
-| `Devices`                                   | The length of `Sdr.Devices`, `0` when `Sdr` is `null`                                                            |
-| `Stream.TotalFrames`                        | `Sdr.Extracted`                                                                                                  |
-| `Stream.ValidFrames`                        | `Sdr.Accepted`                                                                                                   |
-| `Stream.CrcErrors`                          | `Sdr.CrcErrors`, now only frames that failed the CRC check; with `Sdr.Unconfirmed` it gives about the old figure |
-| `Stream.FramesPerSecond`                    | `Sdr.AcceptedPerSecond`, now over the last 60 seconds instead of the whole session                               |
+| Old field                                  | New location                                                                                                                                            |
+|--------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Receiver.Latitude`, `.Longitude`, `.Name` | `/api/v1/config` `Receiver.*`                                                                                                                           |
+| `Receiver.AltitudeMeters`                  | `/api/v1/config` `Receiver.Altitude`                                                                                                                    |
+| `HeatmapCollectionEnabled`                 | `/api/v1/config` `Heatmap.Collect`                                                                                                                      |
+| `Devices`                                  | The length of `Sdr.Devices`, `0` when `Sdr` is `null`                                                                                                   |
+| `Stream.TotalFrames`                       | `Sdr.Extracted` (the same count)                                                                                                                        |
+| `Stream.ValidFrames`                       | No exact successor: it counted the frames whose address was confirmed, before duplicates were removed. `Sdr.Messages` plus `Sdr.Duplicates` comes close |
+| `Stream.CrcErrors`                         | No successor: despite its name it counted the extracted frames that confidence filtering did not count as confirmed, not CRC failures |
+| `Stream.FramesPerSecond`                   | `Sdr.MessagesPerSecond`, messages after duplicates are removed, over the last 60 seconds instead of the whole session                                   |
 
-A daemon without an SDR device, receiving only Beast input, used to report zeros. It now reports `Sdr` as `null`, its Beast sources and MLAT input with their own figures, and `Frames.Total` from every source.
+A daemon without an SDR device, receiving only Beast input, used to report zeros. It now reports `Sdr` as `null`, its Beast sources and MLAT input with their own figures, and `Messages.Total` from every source.
 
 ## Health Check
 
@@ -1086,20 +1074,18 @@ curl -s "http://localhost:8080/api/v1/aircraft" | jq .Count
 curl -s --fail "http://localhost:8080/api/v1/health" | jq '{Status, Problems}'
 ```
 
-### Monitor the frame rate and the CRC error ratio
+### Compare the SDR devices
 
 ```bash
-curl -s "http://localhost:8080/api/v1/stats" | jq '{PerSecond: .Frames.PerSecond,
-  SdrAcceptedPerSecond: .Sdr.AcceptedPerSecond,
-  CrcErrorRatio: (if (.Sdr.Extracted // 0) > 0 then .Sdr.CrcErrors / .Sdr.Extracted else null end)}'
+curl -s "http://localhost:8080/api/v1/stats" | jq '.Sdr.Devices[]? | {Name, SamplesPerSecond, MessagesPerSecond, Extracted, Corrected}'
 ```
 
-`SdrAcceptedPerSecond` and `CrcErrorRatio` are `null` on a daemon without an SDR device, and `CrcErrorRatio` also before the first frame is extracted.
+On a daemon without an SDR device this prints nothing.
 
 ### Check the state of every Beast source
 
 ```bash
-curl -s "http://localhost:8080/api/v1/stats" | jq '.BeastSources[] | {Host, Port, Connected, Since, Reconnects}'
+curl -s "http://localhost:8080/api/v1/stats" | jq '.BeastSources[] | {Host, Port, Connected, Since, Reconnects, Messages, MessagesPerSecond}'
 ```
 
 ### Find out why a setting is not applied

@@ -64,7 +64,7 @@ public class CorsTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.Contains(AllowOrigin).Should().BeFalse();
-        (await response.Content.ReadAsStringAsync()).Should().Contain("\"Frames\"");
+        (await response.Content.ReadAsStringAsync()).Should().Contain("\"Messages\"");
     }
 
     [Fact]

@@ -76,10 +76,6 @@ public sealed class BeastStream : IFrameStream
     private DateTime? _stateSince;  // null until the first connection attempt completes
     private int _connections;
 
-    // Frame counters, written only by the read loop
-    private long _framesReceived;
-    private long _framesAccepted;
-
     private readonly Func<int, TimeSpan> _retryDelay;
 
     // Retry configuration: startup → backoff → persistent
@@ -278,7 +274,7 @@ public sealed class BeastStream : IFrameStream
     public int Port => _port;
 
     /// <summary>
-    /// Gets this source's connection state and frame counters.
+    /// Gets this source's connection state and the messages it has handed on.
     /// </summary>
     public BeastSourceStatistics GetSourceStatistics()
     {
@@ -292,15 +288,11 @@ public sealed class BeastStream : IFrameStream
             connections = _connections;
         }
 
-        // Read the later pipeline stages first: each frame increments Received before it can
-        // reach Unconfirmed or Accepted, so the reading never shows more passed on than read.
-        long accepted = Interlocked.Read(ref _framesAccepted);
-        long unconfirmed = _confidenceTracker.UnconfidentFrames;
-        long received = Interlocked.Read(ref _framesReceived);
-
+        // Every message handed on is parsed exactly once, so the parser's count is the
+        // number of messages; only the read loop writes it
         return new BeastSourceStatistics(
             _host, _port, connected, since, Math.Max(0, connections - 1),
-            received, unconfirmed, accepted);
+            _messageParser.MessagesParsed);
     }
 
     private void MarkConnected()
@@ -418,8 +410,6 @@ public sealed class BeastStream : IFrameStream
 
         await foreach (ValidatedFrame validatedFrame in _beastParser.ParseStreamAsync(stream, ct))
         {
-            Interlocked.Increment(ref _framesReceived);
-
             // CRITICAL: Apply confidence filtering (same as DeviceWorker)
             // Beast protocol transmits ALL CRC-validated frames (noise + real aircraft)
             bool isConfident = _confidenceTracker.TrackAndValidate(validatedFrame, out bool _);
@@ -428,10 +418,6 @@ public sealed class BeastStream : IFrameStream
             {
                 continue; // Skip non-confident frames (noise)
             }
-
-            // Counted here rather than read from the tracker, which passes frames without an
-            // ICAO aircraft address on without counting them
-            Interlocked.Increment(ref _framesAccepted);
 
             // Parse message for confident frames only
             ModeSMessage? message = _messageParser.ParseMessage(validatedFrame);

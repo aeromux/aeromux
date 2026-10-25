@@ -50,7 +50,7 @@ internal static class SessionSummaryLog
     /// <param name="logger">The logger to write to.</param>
     /// <param name="statistics">The last reading of the receiver, or null when it never started.</param>
     /// <param name="duration">How long the session ran.</param>
-    /// <param name="aircraftTracked">Aircraft tracked at the end, logged after the frames; null to leave it out.</param>
+    /// <param name="aircraftTracked">Aircraft tracked at the end, logged after the messages; null to leave it out.</param>
     internal static void Write(
         ILogger logger,
         ReceiverStatistics? statistics,
@@ -67,29 +67,32 @@ internal static class SessionSummaryLog
             return;
         }
 
-        double average = duration > TimeSpan.Zero ? statistics.FramesDelivered / duration.TotalSeconds : 0;
-        logger.Information("Frames delivered     {FramesDelivered,11:N0}   {AveragePerSecond:N1} per second on average",
-            statistics.FramesDelivered, average);
+        double average = duration > TimeSpan.Zero ? statistics.Messages / duration.TotalSeconds : 0;
+        logger.Information("Messages             {Messages,11:N0}   {AveragePerSecond:N1} per second on average",
+            statistics.Messages, average);
 
         if (aircraftTracked is { } aircraft)
         {
             logger.Information("Aircraft tracked     {AircraftTracked,11:N0}", aircraft);
         }
 
+        // Each source's messages as a share of all sources' together, so the shares add up
+        // to 100%. The aggregator's total above can differ from that sum by the messages in
+        // flight at the moment of reading.
+        long allSources = (statistics.Sdr?.Devices.Sum(d => d.Messages) ?? 0)
+            + statistics.BeastSources.Sum(b => b.Messages)
+            + (statistics.Mlat?.Messages ?? 0);
+
         if (statistics.Sdr is { } sdr)
         {
-            WriteSdr(logger, sdr);
+            WriteSdr(logger, sdr, allSources);
         }
 
         foreach (BeastSourceStatistics source in statistics.BeastSources)
         {
             logger.Information(BlockSeparator);
             logger.Information("Beast source {Host:l}:{Port}", source.Host, source.Port);
-            logger.Information("  Received           {Received,11:N0}", source.Received);
-            CountWithShare(logger, "  Unconfirmed        {Unconfirmed,11:N0}",
-                "  Unconfirmed        {Unconfirmed,11:N0}  {UnconfirmedShare,5:F1}%", source.Unconfirmed, source.Received);
-            CountWithShare(logger, "  Accepted           {Accepted,11:N0}",
-                "  Accepted           {Accepted,11:N0}  {AcceptedShare,5:F1}%", source.Accepted, source.Received);
+            MessagesLine(logger, source.Messages, allSources);
             logger.Information("  Reconnects         {Reconnects,11:N0}", source.Reconnects);
         }
 
@@ -97,53 +100,54 @@ internal static class SessionSummaryLog
         {
             logger.Information(BlockSeparator);
             logger.Information("MLAT");
-            logger.Information("  Received           {Received,11:N0}", mlat.Received);
+            MessagesLine(logger, mlat.Messages, allSources);
         }
     }
 
-    private static void WriteSdr(ILogger logger, SdrStatistics sdr)
+    private static void WriteSdr(ILogger logger, SdrStatistics sdr, long allSources)
     {
-        long extracted = sdr.Devices.Sum(d => d.Extracted);
-
-        // CRC errors, unconfirmed and accepted divide the extracted frames between them, so
-        // only they get a share. Corrected frames are part of unconfirmed and accepted.
         logger.Information(BlockSeparator);
         logger.Information("SDR, all devices");
-        logger.Information("  Extracted          {Extracted,11:N0}", extracted);
-        CountWithShare(logger, "  CRC errors         {CrcErrors,11:N0}",
-            "  CRC errors         {CrcErrors,11:N0}  {CrcErrorsShare,5:F1}%", sdr.Devices.Sum(d => d.CrcErrors), extracted);
-        logger.Information("  Corrected          {Corrected,11:N0}", sdr.Devices.Sum(d => d.Corrected));
-        CountWithShare(logger, "  Unconfirmed        {Unconfirmed,11:N0}",
-            "  Unconfirmed        {Unconfirmed,11:N0}  {UnconfirmedShare,5:F1}%", sdr.Unconfirmed, extracted);
-        CountWithShare(logger, "  Accepted           {Accepted,11:N0}",
-            "  Accepted           {Accepted,11:N0}  {AcceptedShare,5:F1}%", sdr.Accepted, extracted);
+        RadioLines(logger,
+            sdr.Devices.Sum(d => d.Extracted),
+            sdr.Devices.Sum(d => d.Corrected),
+            sdr.Devices.Sum(d => d.Duplicates));
+        MessagesLine(logger, sdr.Devices.Sum(d => d.Messages), allSources);
 
         foreach (SdrDeviceStatistics device in sdr.Devices)
         {
             logger.Information(BlockSeparator);
             logger.Information("Device '{DeviceName:l}' (index {DeviceIndex})", device.Name, device.DeviceIndex);
-            logger.Information("  Extracted          {Extracted,11:N0}", device.Extracted);
-            CountWithShare(logger, "  CRC errors         {CrcErrors,11:N0}",
-                "  CRC errors         {CrcErrors,11:N0}  {CrcErrorsShare,5:F1}%", device.CrcErrors, device.Extracted);
-            logger.Information("  Corrected          {Corrected,11:N0}", device.Corrected);
-            logger.Information("  Duplicates         {Duplicates,11:N0}", device.Duplicates);
-            logger.Information("  Messages           {Messages,11:N0}", device.Messages);
+            RadioLines(logger, device.Extracted, device.Corrected, device.Duplicates);
+            MessagesLine(logger, device.Messages, allSources);
         }
     }
 
     /// <summary>
-    /// Logs a count with its share of <paramref name="total"/>, or without one when the
-    /// total is 0 and a share would mean nothing.
+    /// Logs how an SDR device fares on the radio side. No shares: these are not parts of
+    /// one whole (corrected frames are extracted frames, and so are duplicates).
     /// </summary>
-    private static void CountWithShare(ILogger logger, string template, string templateWithShare, long count, long total)
+    private static void RadioLines(ILogger logger, long extracted, long corrected, long duplicates)
     {
-        if (total > 0)
+        logger.Information("  Extracted          {Extracted,11:N0}", extracted);
+        logger.Information("  Corrected          {Corrected,11:N0}", corrected);
+        logger.Information("  Duplicates         {Duplicates,11:N0}", duplicates);
+    }
+
+    /// <summary>
+    /// Logs a source's messages with their share of all sources' messages, or without one
+    /// when no source delivered any and a share would mean nothing.
+    /// </summary>
+    private static void MessagesLine(ILogger logger, long messages, long allSources)
+    {
+        if (allSources > 0)
         {
-            logger.Information(templateWithShare, count, count * 100.0 / total);
+            logger.Information("  Messages           {Messages,11:N0}  {MessagesShare,5:F1}%",
+                messages, messages * 100.0 / allSources);
         }
         else
         {
-            logger.Information(template, count);
+            logger.Information("  Messages           {Messages,11:N0}", messages);
         }
     }
 

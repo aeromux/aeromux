@@ -46,9 +46,7 @@ public class BeastStreamStateTests
         statistics.Connected.Should().BeFalse();
         statistics.Since.Should().BeNull();
         statistics.Reconnects.Should().Be(0);
-        statistics.Received.Should().Be(0);
-        statistics.Unconfirmed.Should().Be(0);
-        statistics.Accepted.Should().Be(0);
+        statistics.Messages.Should().Be(0);
     }
 
     [Fact]
@@ -102,10 +100,10 @@ public class BeastStreamStateTests
     }
 
     [Fact]
-    public async Task Frames_SplitIntoUnconfirmedAndAccepted()
+    public async Task Frames_ConfirmedOnesBecomeMessages()
     {
-        // Low confidence confirms an address on its fifth frame: frames 1 to 4 are
-        // unconfirmed, 5 to 8 accepted. The DF 18 frame carries no ICAO aircraft address,
+        // Low confidence confirms an address on its fifth frame: frames 1 to 4 are held
+        // back, 5 to 8 become messages. The DF 18 frame carries no ICAO aircraft address,
         // so confidence filtering passes it on without judging it.
         var tracking = new TrackingConfig { ConfidenceLevel = ConfidenceLevel.Low };
         using TcpListener listener = CreateListener(out int port);
@@ -120,11 +118,9 @@ public class BeastStreamStateTests
         }
         await network.WriteAsync(EncodeLong(Df18Cf1Position));
 
-        BeastSourceStatistics statistics = await WaitForAsync(stream, s => s.Unconfirmed + s.Accepted == 9);
+        BeastSourceStatistics statistics = await WaitForAsync(stream, s => s.Messages == 5);
 
-        statistics.Received.Should().Be(9);
-        statistics.Unconfirmed.Should().Be(4);
-        statistics.Accepted.Should().Be(5);
+        statistics.Messages.Should().Be(5);
     }
 
     // ─── Helpers ───
