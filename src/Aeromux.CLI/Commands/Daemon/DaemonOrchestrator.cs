@@ -174,7 +174,7 @@ public sealed class DaemonOrchestrator : IAsyncDisposable
         if (_config.ApiEnabled)
         {
             _webApp = DaemonApiServer.Build(_config, _aircraftTracker, _photoService,
-                () => _receiverStream?.GetStatistics(), _sessionStart, _databaseLookup);
+                _statistics, () => OutputClientCounts.For(_config, _broadcasters), _sessionStart, _databaseLookup);
             await _webApp.StartAsync(cancellationToken);
             Log.Information("REST API listening on http://{Bind}:{Port}/api/v1",
                 _config.BindAddress, _config.ApiPort);

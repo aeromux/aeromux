@@ -248,18 +248,4 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
     internal static BeastSourceStatistics Beast(
         string host, int port, long accepted = 0, bool connected = true, DateTime? since = null) =>
         new(host, port, connected, since ?? DateTime.UnixEpoch, 0, accepted, 0, accepted);
-
-    /// <summary>
-    /// A clock that moves only when told to.
-    /// </summary>
-    internal sealed class ManualClock : TimeProvider
-    {
-        private DateTimeOffset _now = new(2026, 10, 25, 12, 0, 0, TimeSpan.Zero);
-
-        public DateTime UtcNow => _now.UtcDateTime;
-
-        public override DateTimeOffset GetUtcNow() => _now;
-
-        public void Advance(TimeSpan by) => _now += by;
-    }
 }

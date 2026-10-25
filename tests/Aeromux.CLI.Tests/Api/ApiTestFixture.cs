@@ -48,9 +48,25 @@ public sealed class ApiTestFixture : IAsyncDisposable
     public Mock<IAircraftPhotoService> PhotoServiceMock { get; }
 
     /// <summary>
-    /// Stream statistics to return from the stats endpoint.
+    /// The receiver reading the statistics sampler takes on its next <see cref="Sample"/>.
     /// </summary>
-    public StreamStatistics? Statistics { get; set; }
+    public ReceiverStatistics? Statistics { get; set; }
+
+    /// <summary>
+    /// The sampler's clock. Nothing samples on its own: tests call <see cref="Sample"/>.
+    /// </summary>
+    public ManualClock Clock { get; } = new();
+
+    /// <summary>
+    /// Connected clients per TCP output, as the stats endpoint reads them. Defaults to the
+    /// outputs the configuration enables, with no clients.
+    /// </summary>
+    public OutputClientCounts OutputClients { get; set; } = new(null, null, null);
+
+    /// <summary>
+    /// The statistics sampler behind the stats and health endpoints.
+    /// </summary>
+    public DaemonStatisticsSampler Sampler { get; private set; } = null!;
 
     /// <summary>
     /// HTTP client for making requests to the test API.
@@ -81,7 +97,10 @@ public sealed class ApiTestFixture : IAsyncDisposable
     /// Creates and starts a new test fixture with an in-memory API server.
     /// </summary>
     /// <param name="config">The daemon configuration to serve; <see cref="CreateDefaultConfig"/> when null.</param>
-    public static async Task<ApiTestFixture> CreateAsync(DaemonValidatedConfig? config = null)
+    /// <param name="databaseLookup">The enrichment lookup; null serves the API with database enrichment off.</param>
+    public static async Task<ApiTestFixture> CreateAsync(
+        DaemonValidatedConfig? config = null,
+        SwappableAircraftDatabaseLookup? databaseLookup = null)
     {
         var trackerMock = new Mock<IAircraftStateTracker>();
         trackerMock.Setup(t => t.GetAllAircraft()).Returns(new List<Aircraft>());
@@ -96,15 +115,19 @@ public sealed class ApiTestFixture : IAsyncDisposable
 
         DateTime startTime = DateTime.UtcNow;
 
-        // Use a shared reference so the lambda captures the same fixture instance we return
+        // Use a shared reference so the lambdas capture the same fixture instance we return
         var fixture = new ApiTestFixture(null!, null!, trackerMock, photoServiceMock);
+        fixture.Sampler = new DaemonStatisticsSampler(() => fixture.Statistics, fixture.Clock);
+        fixture.OutputClients = OutputClientCounts.For(config, null);
 
         WebApplication app = DaemonApiServer.Build(
             config,
             trackerMock.Object,
             photoServiceMock.Object,
-            () => fixture.Statistics,
-            startTime);
+            fixture.Sampler,
+            () => fixture.OutputClients,
+            startTime,
+            databaseLookup);
 
         // Use random port for tests
         app.Urls.Clear();
@@ -228,10 +251,20 @@ public sealed class ApiTestFixture : IAsyncDisposable
         };
     }
 
+    /// <summary>
+    /// Takes one statistics reading of <paramref name="statistics"/> at the clock's current time.
+    /// </summary>
+    public void Sample(ReceiverStatistics statistics)
+    {
+        Statistics = statistics;
+        Sampler.Sample();
+    }
+
     public async ValueTask DisposeAsync()
     {
         _client.Dispose();
         await _app.StopAsync();
         await _app.DisposeAsync();
+        await Sampler.DisposeAsync();
     }
 }

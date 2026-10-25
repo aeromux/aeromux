@@ -314,35 +314,100 @@ public sealed record StateHistoryEntry(
 // === Stats ===
 
 /// <summary>
-/// Response for GET /api/v1/stats.
+/// Response for GET /api/v1/stats: measurements only. The configuration they run under
+/// is reported by GET /api/v1/config.
 /// </summary>
+/// <remarks>
+/// Counters are cumulative since their source started. Rates (<c>PerSecond</c>) cover
+/// the last 60 seconds, or the time since start during the first minute.
+/// </remarks>
 public sealed record StatsResponse(
     string Version,
     DateTime Timestamp,
     int Uptime,
     int AircraftCount,
-    int Devices,
-    StatsStream Stream,
-    StatsReceiver? Receiver,
-    bool HeatmapCollectionEnabled);
+    StatsFrames Frames,
+    StatsSdr? Sdr,
+    IReadOnlyList<StatsBeastSource> BeastSources,
+    StatsMlat? Mlat,
+    StatsOutputs Outputs,
+    StatsDatabase? Database);
 
 /// <summary>
-/// Stream statistics sub-object.
+/// Frames handed to the aircraft tracker from every source (SDR, Beast and MLAT).
 /// </summary>
-public sealed record StatsStream(
-    long TotalFrames,
-    long ValidFrames,
+public sealed record StatsFrames(
+    long Total,
+    double PerSecond,
+    double AveragePerSecond);
+
+/// <summary>
+/// The SDR devices, totalled, with one entry per running device. Confidence filtering
+/// (<c>Unconfirmed</c>, <c>Accepted</c>) is receiver-wide only, because every device
+/// shares one confidence tracker.
+/// </summary>
+public sealed record StatsSdr(
+    long Extracted,
     long CrcErrors,
-    double FramesPerSecond);
+    long Corrected,
+    long Unconfirmed,
+    long Accepted,
+    double AcceptedPerSecond,
+    IReadOnlyList<StatsSdrDevice> Devices);
 
 /// <summary>
-/// Receiver metadata sub-object.
+/// One running SDR device.
 /// </summary>
-public sealed record StatsReceiver(
-    double? Latitude,
-    double? Longitude,
-    int? AltitudeMeters,
-    string? Name);
+public sealed record StatsSdrDevice(
+    string Name,
+    int DeviceIndex,
+    double SamplesPerSecond,
+    long Extracted,
+    long CrcErrors,
+    long Corrected,
+    long Duplicates,
+    long Messages,
+    double ExtractedPerSecond);
+
+/// <summary>
+/// One Beast TCP input and its connection state.
+/// </summary>
+public sealed record StatsBeastSource(
+    string Host,
+    int Port,
+    bool Connected,
+    DateTime? Since,
+    int Reconnects,
+    long Received,
+    long Unconfirmed,
+    long Accepted,
+    double AcceptedPerSecond);
+
+/// <summary>
+/// The MLAT input.
+/// </summary>
+public sealed record StatsMlat(
+    int Clients,
+    long Received,
+    double ReceivedPerSecond);
+
+/// <summary>
+/// The TCP outputs; an output is null when it is disabled.
+/// </summary>
+public sealed record StatsOutputs(
+    StatsOutput? Beast,
+    StatsOutput? Json,
+    StatsOutput? Sbs);
+
+/// <summary>
+/// One enabled TCP output.
+/// </summary>
+public sealed record StatsOutput(int Clients);
+
+/// <summary>
+/// The aircraft database used for enrichment. <c>Version</c> is null until one is loaded.
+/// </summary>
+public sealed record StatsDatabase(string? Version);
 
 // === Health ===
 

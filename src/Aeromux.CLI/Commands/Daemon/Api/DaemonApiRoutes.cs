@@ -20,7 +20,6 @@ using System.Text.RegularExpressions;
 using Aeromux.Core.ModeS.ValueObjects;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Photos;
-using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
@@ -61,17 +60,24 @@ public static partial class DaemonApiRoutes
     /// <param name="app">The web application to register routes on.</param>
     /// <param name="tracker">Aircraft state tracker for data queries.</param>
     /// <param name="photoService">Aircraft photo service backing the <c>/api/v1/aircraft/{icao}/photo</c> endpoint.</param>
-    /// <param name="getStatistics">Function to get current stream statistics.</param>
+    /// <param name="statistics">The statistics sampler, read by the stats and health endpoints.</param>
+    /// <param name="getOutputClients">Returns the connected clients per TCP output.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
     /// <param name="config">Validated daemon configuration, reported by the config endpoint.</param>
+    /// <param name="databaseLookup">The enrichment lookup, or null when database enrichment is off.</param>
     public static void MapRoutes(
         WebApplication app,
         IAircraftStateTracker tracker,
         IAircraftPhotoService photoService,
-        Func<StreamStatistics?> getStatistics,
+        DaemonStatisticsSampler statistics,
+        Func<OutputClientCounts> getOutputClients,
         DateTime startTime,
-        DaemonValidatedConfig config)
+        DaemonValidatedConfig config,
+        SwappableAircraftDatabaseLookup? databaseLookup = null)
     {
+        ArgumentNullException.ThrowIfNull(statistics);
+        ArgumentNullException.ThrowIfNull(getOutputClients);
+
         // GET /api/v1/aircraft: aircraft list (with optional bounds/search filtering)
         app.MapGet("/api/v1/aircraft", (HttpContext httpContext) =>
         {
@@ -386,14 +392,10 @@ public static partial class DaemonApiRoutes
             return Results.Json(response);
         });
 
-        // GET /api/v1/stats: statistics
+        // GET /api/v1/stats: measurements from every input and output
         app.MapGet("/api/v1/stats", () =>
-        {
-            StreamStatistics? stats = getStatistics();
-            return Results.Ok(DaemonApiMapper.ToStats(
-                stats, tracker, config.EnabledSdrSources.Count, startTime, config.Config.Receiver,
-                config.Config.Heatmap?.Collect != false));
-        });
+            Results.Ok(DaemonApiMapper.ToStats(
+                statistics.GetSnapshot(), tracker, startTime, getOutputClients(), databaseLookup)));
 
         // GET /api/v1/config: the effective configuration, optionally with each value's source
         app.MapGet("/api/v1/config", (HttpContext httpContext) =>

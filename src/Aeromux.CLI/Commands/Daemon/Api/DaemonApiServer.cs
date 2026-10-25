@@ -17,7 +17,6 @@
 using Aeromux.CLI.Commands.Daemon.WebMap;
 using Aeromux.Core.Tracking;
 using Aeromux.Infrastructure.Photos;
-using Aeromux.Infrastructure.Streaming;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -40,7 +39,8 @@ public static class DaemonApiServer
     /// <param name="config">Validated daemon configuration.</param>
     /// <param name="tracker">Aircraft state tracker for data queries.</param>
     /// <param name="photoService">Aircraft photo service used by the <c>/api/v1/aircraft/{icao}/photo</c> endpoint and registered as a DI singleton for the SignalR hub.</param>
-    /// <param name="getStatistics">Function to get stream statistics.</param>
+    /// <param name="statistics">The statistics sampler, read by the stats and health endpoints.</param>
+    /// <param name="getOutputClients">Returns the connected clients per TCP output.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
     /// <param name="databaseLookup">Optional live enrichment lookup, used to report the active database version to the Web Map.</param>
     /// <returns>A configured WebApplication ready to be started.</returns>
@@ -48,7 +48,8 @@ public static class DaemonApiServer
         DaemonValidatedConfig config,
         IAircraftStateTracker tracker,
         IAircraftPhotoService photoService,
-        Func<StreamStatistics?> getStatistics,
+        DaemonStatisticsSampler statistics,
+        Func<OutputClientCounts> getOutputClients,
         DateTime startTime,
         SwappableAircraftDatabaseLookup? databaseLookup = null)
     {
@@ -186,7 +187,7 @@ public static class DaemonApiServer
         app.MapHub<MapHub>("/maphub");
 
         // Map all API routes
-        DaemonApiRoutes.MapRoutes(app, tracker, photoService, getStatistics, startTime, config);
+        DaemonApiRoutes.MapRoutes(app, tracker, photoService, statistics, getOutputClients, startTime, config, databaseLookup);
 
         return app;
     }

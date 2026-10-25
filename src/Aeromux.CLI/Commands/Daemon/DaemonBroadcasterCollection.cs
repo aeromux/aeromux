@@ -33,9 +33,19 @@ namespace Aeromux.CLI.Commands.Daemon;
 /// </remarks>
 public sealed class DaemonBroadcasterCollection : IAsyncDisposable
 {
-    private TcpBroadcaster? _beastBroadcaster;
-    private TcpBroadcaster? _jsonBroadcaster;
-    private TcpBroadcaster? _sbsBroadcaster;
+    // Volatile because the REST API reads them for client counts from its own threads
+    private volatile TcpBroadcaster? _beastBroadcaster;
+    private volatile TcpBroadcaster? _jsonBroadcaster;
+    private volatile TcpBroadcaster? _sbsBroadcaster;
+
+    /// <summary>Gets the Beast output's connected clients, or null before its broadcaster is created.</summary>
+    public int? BeastClients => _beastBroadcaster?.ClientCount;
+
+    /// <summary>Gets the JSON output's connected clients, or null before its broadcaster is created.</summary>
+    public int? JsonClients => _jsonBroadcaster?.ClientCount;
+
+    /// <summary>Gets the SBS output's connected clients, or null before its broadcaster is created.</summary>
+    public int? SbsClients => _sbsBroadcaster?.ClientCount;
 
     /// <summary>
     /// Creates and starts TCP broadcasters based on enabled flags in the validated configuration.

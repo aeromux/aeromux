@@ -409,65 +409,97 @@ public static class DaemonApiMapper
     // === Stats ===
 
     /// <summary>
-    /// Maps a StreamStatistics to StatsResponse.
+    /// Maps a statistics snapshot to the stats response. Before the first reading, the
+    /// source sections are empty and the counters zero.
     /// </summary>
-    /// <param name="stats">Stream statistics, or null if not yet available.</param>
-    /// <param name="tracker">Aircraft state tracker for current aircraft count.</param>
-    /// <param name="deviceCount">Number of enabled SDR devices.</param>
+    /// <param name="snapshot">The sampler's latest snapshot.</param>
+    /// <param name="tracker">Aircraft state tracker for the current aircraft count.</param>
     /// <param name="startTime">Daemon start time for uptime calculation.</param>
-    /// <param name="receiverConfig">Receiver configuration, or null if not configured.</param>
-    /// <param name="heatmapCollectionEnabled">Whether server-side heatmap collection is running.</param>
-    /// <returns>The stats response with derived fields (CrcErrors, FramesPerSecond).</returns>
+    /// <param name="outputs">Connected clients per TCP output, null for disabled outputs.</param>
+    /// <param name="database">The enrichment lookup, or null when database enrichment is off.</param>
+    /// <returns>The stats response, with rates rounded to one decimal.</returns>
     public static StatsResponse ToStats(
-        StreamStatistics? stats,
+        StatisticsSnapshot snapshot,
         IAircraftStateTracker tracker,
-        int deviceCount,
         DateTime startTime,
-        Core.Configuration.ReceiverConfig? receiverConfig,
-        bool heatmapCollectionEnabled)
+        OutputClientCounts outputs,
+        SwappableAircraftDatabaseLookup? database)
     {
+        ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(tracker);
-        int uptime = (int)(DateTime.UtcNow - startTime).TotalSeconds;
+        ArgumentNullException.ThrowIfNull(outputs);
 
-        StatsStream stream;
-        if (stats != null)
-        {
-            long crcErrors = stats.TotalFrames - stats.ValidFrames;
-            double fps = stats.Uptime.TotalSeconds > 0
-                ? stats.ValidFrames / stats.Uptime.TotalSeconds
-                : 0;
+        DateTime now = DateTime.UtcNow;
+        TimeSpan uptime = now - startTime;
+        ReceiverStatistics? statistics = snapshot.Statistics;
+        long framesTotal = statistics?.FramesDelivered ?? 0;
 
-            stream = new StatsStream(
-                TotalFrames: stats.TotalFrames,
-                ValidFrames: stats.ValidFrames,
-                CrcErrors: crcErrors,
-                FramesPerSecond: Math.Round(fps, 1));
-        }
-        else
+        var frames = new StatsFrames(
+            Total: framesTotal,
+            PerSecond: Round(snapshot.FramesPerSecond),
+            AveragePerSecond: uptime > TimeSpan.Zero ? Round(framesTotal / uptime.TotalSeconds) : 0);
+
+        StatsSdr? sdr = null;
+        if (statistics?.Sdr is { } sdrStatistics)
         {
-            stream = new StatsStream(0, 0, 0, 0);
+            StatsSdrDevice[] devices =
+            [
+                .. snapshot.Devices.Select(d => new StatsSdrDevice(
+                    Name: d.Device.Name,
+                    DeviceIndex: d.Device.DeviceIndex,
+                    SamplesPerSecond: Round(d.SamplesPerSecond),
+                    Extracted: d.Device.Extracted,
+                    CrcErrors: d.Device.CrcErrors,
+                    Corrected: d.Device.Corrected,
+                    Duplicates: d.Device.Duplicates,
+                    Messages: d.Device.Messages,
+                    ExtractedPerSecond: Round(d.ExtractedPerSecond)))
+            ];
+
+            sdr = new StatsSdr(
+                Extracted: devices.Sum(d => d.Extracted),
+                CrcErrors: devices.Sum(d => d.CrcErrors),
+                Corrected: devices.Sum(d => d.Corrected),
+                Unconfirmed: sdrStatistics.Unconfirmed,
+                Accepted: sdrStatistics.Accepted,
+                AcceptedPerSecond: Round(snapshot.SdrAcceptedPerSecond),
+                Devices: devices);
         }
 
-        StatsReceiver? receiver = null;
-        if (receiverConfig != null)
-        {
-            receiver = new StatsReceiver(
-                Latitude: receiverConfig.Latitude,
-                Longitude: receiverConfig.Longitude,
-                AltitudeMeters: receiverConfig.Altitude,
-                Name: receiverConfig.Name);
-        }
+        StatsBeastSource[] beastSources =
+        [
+            .. snapshot.BeastSources.Select(b => new StatsBeastSource(
+                Host: b.Source.Host,
+                Port: b.Source.Port,
+                Connected: b.Source.Connected,
+                Since: b.Source.Since,
+                Reconnects: b.Source.Reconnects,
+                Received: b.Source.Received,
+                Unconfirmed: b.Source.Unconfirmed,
+                Accepted: b.Source.Accepted,
+                AcceptedPerSecond: Round(b.AcceptedPerSecond)))
+        ];
+
+        StatsMlat? mlat = statistics?.Mlat is { } mlatStatistics
+            ? new StatsMlat(mlatStatistics.Clients, mlatStatistics.Received, Round(snapshot.MlatReceivedPerSecond))
+            : null;
 
         return new StatsResponse(
             Version: AppVersion,
-            Timestamp: DateTime.UtcNow,
-            Uptime: uptime,
+            Timestamp: now,
+            Uptime: (int)uptime.TotalSeconds,
             AircraftCount: tracker.Count,
-            Devices: deviceCount,
-            Stream: stream,
-            Receiver: receiver,
-            HeatmapCollectionEnabled: heatmapCollectionEnabled);
+            Frames: frames,
+            Sdr: sdr,
+            BeastSources: beastSources,
+            Mlat: mlat,
+            Outputs: new StatsOutputs(Output(outputs.Beast), Output(outputs.Json), Output(outputs.Sbs)),
+            Database: database is null ? null : new StatsDatabase(database.CurrentVersion));
     }
+
+    private static StatsOutput? Output(int? clients) => clients is { } count ? new StatsOutput(count) : null;
+
+    private static double Round(double rate) => Math.Round(rate, 1);
 
     // === Private Helpers ===
 
