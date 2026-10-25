@@ -162,7 +162,7 @@ public class BeastEncoder
         buffer[pos++] = 0xe3;
 
         // Write first 8 bytes of UUID directly with escaping
-        // This matches readsb's approach of sending the receiver ID bytes as-is
+        // Consumers treat these 8 bytes as an opaque receiver ID, so they are sent unchanged apart from escaping
         for (int i = 0; i < 8; i++)
         {
             pos = WriteEscapedByte(buffer, pos, uuidBytes[i]);

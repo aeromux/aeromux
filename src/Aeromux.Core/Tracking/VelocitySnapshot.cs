@@ -29,7 +29,7 @@ namespace Aeromux.Core.Tracking;
 /// <param name="Velocity">Airborne velocity from TC 19 (ground speed, true airspeed, or IAS based on VelocitySubtype), null if only surface data available</param>
 /// <param name="Heading">True heading in degrees (0-359.9, null if unavailable) from TC 19 subtype 3-4 - direction nose points</param>
 /// <param name="Track">Ground track angle in degrees (0-359.9, null if unavailable) from TC 19 subtype 1-2 - direction of movement over ground</param>
-/// <param name="GroundSpeed">Surface ground speed from TC 5-8 (0-199 knots, null if unavailable) - airport surface movement during taxi</param>
+/// <param name="GroundSpeed">Surface ground speed from TC 5-8 (0 to 175 knots or more, null if unavailable) - airport surface movement during taxi</param>
 /// <param name="GroundTrack">Surface ground track from TC 5-8 (0-360° with 2.8125° resolution, null if unavailable) - taxi direction on ground</param>
 /// <param name="VerticalRate">Vertical rate in feet per minute (positive = climbing, negative = descending, null if unavailable) from TC 19</param>
 /// <param name="VelocitySubtype">Velocity subtype from TC 19: GroundSpeedSubsonic/Supersonic or AirspeedSubsonic/Supersonic, null if only surface data</param>

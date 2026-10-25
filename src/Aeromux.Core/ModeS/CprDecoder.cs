@@ -299,7 +299,8 @@ public sealed class CprDecoder
     /// </remarks>
     /// <param name="lat">Latitude in decimal degrees (-90 to +90).</param>
     /// <returns>Number of longitude zones (1 at poles, 59 at the equator).</returns>
-    private static int CprNL(double lat)
+    /// <remarks>Also used by <see cref="SurfaceCprDecoder"/>: surface positions use the same NL function.</remarks>
+    internal static int CprNL(double lat)
     {
         double absLat = Math.Abs(lat);
 

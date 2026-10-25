@@ -26,9 +26,9 @@ namespace Aeromux.Core.ModeS.Messages;
 /// </summary>
 /// <remarks>
 /// TC 5-8 differences from TC 9-18:
-/// - Movement field instead of altitude (non-linear quantization, 0-199 kt)
+/// - Movement field instead of altitude (speed bands from stopped to 175 kt or more)
 /// - Ground track instead of surveillance status (0-360°, 360/128 = 2.8125° resolution)
-/// - Modified CPR encoding (NL functions differ from airborne CPR)
+/// - CPR encoding with a 90° base instead of 360° (same NL function as airborne CPR)
 /// </remarks>
 public sealed record SurfacePosition(
     string IcaoAddress,

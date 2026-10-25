@@ -33,9 +33,6 @@ public static class EnumValidator
     private static readonly bool[] ValidAircraftCategory = CreateLookup(48,
         [0, 10, 21, 23, 31, 32, 33, 40, 41, 42, 43, 44, 45, 46, 47]);
 
-    private static readonly bool[] ValidSurfaceMovement = CreateLookup(128,
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 124, 127]);
-
     // --- Contiguous enums: single unsigned comparison ---
 
     /// <summary>Validates SurveillanceStatus (2-bit, range 0-3).</summary>
@@ -149,11 +146,6 @@ public static class EnumValidator
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsValidAircraftCategory(int value) =>
         (uint)value < (uint)ValidAircraftCategory.Length && ValidAircraftCategory[value];
-
-    /// <summary>Validates SurfaceMovement (7-bit, sparse: 0-24, 124, 127).</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsValidSurfaceMovement(int value) =>
-        (uint)value < (uint)ValidSurfaceMovement.Length && ValidSurfaceMovement[value];
 
     // --- Helper ---
 

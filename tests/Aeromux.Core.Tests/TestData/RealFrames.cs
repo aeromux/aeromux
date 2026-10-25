@@ -252,6 +252,36 @@ public static class RealFrames
     /// </remarks>
     public const string AllCall_80073B = "5D80073B5A7A08";
 
+    /// <summary>
+    /// All-Call Reply (DF 11): ICAO 80073B, Capability 5 (airborne), interrogator ID 4
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 80073B (Mode S / ADS-B)
+    /// Capability (CA): 5 (Level 2+ transponder, airborne)
+    /// Interrogator ID (IID): 4 (CRC remainder 0x000004)
+    /// Air/Ground: Airborne
+    /// DF: 11
+    /// RSSI: -17.6 dBFS
+    /// The remainder equals the single-bit syndrome of a parity bit, so a decoder that only
+    /// accepts a zero remainder may "correct" this valid reply by flipping that bit
+    /// </remarks>
+    public const string AllCall_80073B_Iid4 = "5D80073B5A7A2D";
+
+    /// <summary>
+    /// All-Call Reply (DF 11): ICAO 503D74, Capability 5 (airborne), interrogator ID 0
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_1.txt
+    /// ICAO: 503D74 (Mode S / ADS-B)
+    /// Capability (CA): 5 (Level 2+ transponder, airborne)
+    /// Interrogator ID (IID): 0 (CRC remainder 0x000000)
+    /// Air/Ground: Airborne
+    /// DF: 11
+    /// RSSI: -26.1 dBFS
+    /// </remarks>
+    public const string AllCall_503D74 = "5D503D74A90AE7";
+
     // ========================================
     // DF 16: Long Air-Air ACAS
     // ========================================
@@ -423,6 +453,117 @@ public static class RealFrames
     /// RSSI: -13.4 dBFS
     /// </remarks>
     public const string AircraftId_8964A0 = "8D8964A025541171E328200F47FC";
+
+    // TC 5-8: Surface Position
+    // The aeromux captures contain no surface positions; these frames come from pyModeS
+    // 3.6 tests/test_bds06.py (GPL-3.0, like aeromux) and from "The 1090MHz Riddle".
+    // Movement bands and speeds: band middle rounded half away from zero.
+
+    /// <summary>
+    /// Surface Position (TC 8): ICAO 3944F8, movement 0 (no information)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 3944F8
+    /// CA: 4 (on ground)
+    /// Movement: 0 (no information, no speed)
+    /// Ground Track: status 0 (not available)
+    /// CPR Format: even
+    /// </remarks>
+    public const string SurfacePos_3944F8_Mov0 = "8C3944F8400002ACB23CDA192B95";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 394C0F, movement 9 (1-1.25 kt)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 394C0F
+    /// CA: 4 (on ground)
+    /// Movement: 9 (band 1-2 kt, 1-1.25 kt, speed 1 kt)
+    /// Ground Track: 137.8125°
+    /// CPR Format: odd
+    /// </remarks>
+    public const string SurfacePos_394C0F_Mov9 = "8C394C0F389B1667E947DB7BB8BC";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 3461CF, movement 24 (7.5-8 kt)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 3461CF
+    /// CA: 4 (on ground)
+    /// Movement: 24 (band 2-15 kt, 7.5-8 kt, speed 8 kt)
+    /// Ground Track: 241.875°
+    /// CPR Format: even
+    /// </remarks>
+    public const string SurfacePos_3461CF_Mov24 = "8C3461CF398D60597B4EA434C4D7";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 3461CF, movement 25 (8-8.5 kt)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 3461CF
+    /// CA: 4 (on ground)
+    /// Movement: 25 (band 2-15 kt, 8-8.5 kt, speed 8 kt)
+    /// Ground Track: 241.875°
+    /// CPR Format: even
+    /// </remarks>
+    public const string SurfacePos_3461CF_Mov25 = "8C3461CF399D6059814EA81483A9";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 3461CF, movement 39 (15-16 kt)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 3461CF
+    /// CA: 4 (on ground)
+    /// Movement: 39 (band 15-70 kt, 15-16 kt, speed 16 kt)
+    /// Ground Track: 323.4375°
+    /// CPR Format: even
+    /// </remarks>
+    public const string SurfacePos_3461CF_Mov39 = "8C3461CF3A7F3059C94E5BF4E169";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 3950CF, movement 94 (70-72 kt)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 3950CF
+    /// CA: 4 (on ground)
+    /// Movement: 94 (band 70-100 kt, 70-72 kt, speed 71 kt)
+    /// Ground Track: 264.375°
+    /// CPR Format: odd
+    /// </remarks>
+    public const string SurfacePos_3950CF_Mov94 = "8C3950CF3DEDE47BAC304D3B5122";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 393320, movement 109 (100-105 kt)
+    /// </summary>
+    /// <remarks>
+    /// Source: pyModeS 3.6 tests/test_bds06.py
+    /// ICAO: 393320
+    /// CA: 4 (on ground)
+    /// Movement: 109 (band 100-175 kt, 100-105 kt, speed 103 kt)
+    /// Ground Track: 264.375°
+    /// CPR Format: odd
+    /// </remarks>
+    public const string SurfacePos_393320_Mov109 = "8C3933203EDDE47B9E2FFA5E77B8";
+
+    /// <summary>
+    /// Surface Position (TC 7): ICAO 484175, movement 41 (17-18 kt), published worked example
+    /// </summary>
+    /// <remarks>
+    /// Source: "The 1090MHz Riddle", chapter 6 (Surface Position), worked example 2
+    /// ICAO: 484175
+    /// CA: 4 (on ground)
+    /// Movement: 41 (band 15-70 kt, 17-18 kt, speed 18 kt)
+    /// Ground Track: 92.8125°
+    /// CPR Format: odd (CPR latitude 39195, longitude 110320)
+    /// Expected Position: 52.320561, 4.735735 (reference 52.320607, 4.734735 or the
+    /// airfield at 51.990, 4.375; NL 36, longitude zone width 90/35)
+    /// </remarks>
+    public const string SurfacePos_484175_Riddle = "8C4841753A9A153237AEF0F275BE";
 
     // TC 9-18: Airborne Position (Barometric Altitude)
 
@@ -1049,6 +1190,31 @@ public static class RealFrames
     /// RSSI: -16.1 dBFS
     /// </remarks>
     public const string OperationalStatus_5082A0 = "8D5082A0F8210002004BBC2B5534";
+
+    /// <summary>
+    /// Aircraft Operational Status (TC 31, Version 2): ICAO 472FD2, NACp=10, NIC supplement A set
+    /// </summary>
+    /// <remarks>
+    /// Source: Real capture (dump1090), Dump1090_20251223_2.txt
+    /// ICAO: 472FD2
+    /// Version: 2 (DO-260B)
+    /// Capability classes: ACAS
+    /// Operational modes: SAF SDA=3
+    /// NIC supplement A: 1 (ME bit 44, frame bit 76; dump1090 prints "NIC-A: 1")
+    /// NACp: 10 (horizontal accuracy &lt; 10 m)
+    /// GVA: 2 (geometric vertical accuracy)
+    /// SIL: 3 (per hour)
+    /// NICbaro: 1 (barometric altitude cross-checked)
+    /// Heading reference: true north (frame bit 86 = 0)
+    /// Air/Ground: Airborne
+    /// DF: 17
+    /// TC: 31
+    /// CA: 5 (Level 2+ transponder, airborne)
+    /// RSSI: -28.1 dBFS
+    /// The only TC 31 frame in the test data with NIC supplement A set; the heading reference
+    /// bit differs from it, which tells the two bits apart
+    /// </remarks>
+    public const string OperationalStatus_472FD2 = "8D472FD2F8200007005AB8F2BD25";
 
     // ========================================
     // DF 20: Comm-B Altitude Reply

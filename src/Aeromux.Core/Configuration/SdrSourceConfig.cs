@@ -49,7 +49,7 @@ public class SdrSourceConfig
     /// Gets or sets the gain control mode.
     /// Default: Manual (industry standard, maximum sensitivity with 49.6 dB)
     /// Set to AGC only if near airport and manual gain causes strong signal overload.
-    /// Note: AGC is almost never optimal (dump1090-fa documentation).
+    /// Note: manual gain almost always decodes more messages than AGC.
     /// </summary>
     public TunerGainModes GainMode { get; set; } = TunerGainModes.Manual;
 

@@ -285,23 +285,6 @@ public class EnumValidatorTests
     public void IsValidAircraftCategory_ReturnsExpected(int value, bool expected) =>
         EnumValidator.IsValidAircraftCategory(value).Should().Be(expected);
 
-    [Theory]
-    [InlineData(0, true)]
-    [InlineData(1, true)]
-    [InlineData(24, true)]
-    [InlineData(124, true)]
-    [InlineData(127, true)]
-    [InlineData(25, false)]  // gap
-    [InlineData(100, false)] // gap
-    [InlineData(123, false)] // gap
-    [InlineData(125, false)] // gap
-    [InlineData(126, false)] // gap
-    [InlineData(128, false)] // out of range
-    [InlineData(-1, false)]
-    [InlineData(255, false)]
-    public void IsValidSurfaceMovement_ReturnsExpected(int value, bool expected) =>
-        EnumValidator.IsValidSurfaceMovement(value).Should().Be(expected);
-
     // ========================================
     // Startup-only: ConfidenceLevel
     // ========================================

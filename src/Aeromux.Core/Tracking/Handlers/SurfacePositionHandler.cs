@@ -34,7 +34,7 @@ namespace Aeromux.Core.Tracking.Handlers;
 /// <item>Position.IsOnGround: Always set to true for surface messages</item>
 /// <item>Position.MovementCategory: Surface movement speed category for taxi operations</item>
 /// <item>Position.LastUpdate: Time a position was last decoded; unchanged by a message that decoded none</item>
-/// <item>Velocity.GroundSpeed: Surface movement speed (0-199 knots with non-linear quantization)</item>
+/// <item>Velocity.GroundSpeed: Surface movement speed (0 to 175 knots or more, finer at low speeds)</item>
 /// <item>Velocity.GroundTrack: Surface movement direction (0-360° with 2.8125° resolution)</item>
 /// <item>Velocity.LastUpdate: Timestamp when velocity was updated</item>
 /// </list>
@@ -56,9 +56,9 @@ public sealed class SurfacePositionHandler : ITrackingHandler
         var msg = (SurfacePosition)message;
 
         // Update position with coordinate and ground status
-        // Surface CPR uses modified NL functions different from airborne CPR
+        // Surface CPR uses a 90° base instead of 360°, with the same NL function as airborne CPR
         // Surface messages always indicate ground
-        // MovementCategory: Non-linear speed categories optimized for ground operations
+        // MovementCategory: speed bands, finer at the low speeds of ground operations
         // PositionSource tracks where the position came from (Sdr, Beast, or Mlat)
         // HadMlatPosition is set to true if this is an MLAT position or was previously true
         TrackedPosition position = aircraft.Position with
@@ -72,7 +72,7 @@ public sealed class SurfacePositionHandler : ITrackingHandler
         };
 
         // Update velocity with ground movement data
-        // GroundSpeed: Non-linear quantization: 0-199 knots with higher precision at lower speeds
+        // GroundSpeed: middle of the encoded step, 0 to 175 knots or more, finer at lower speeds
         // GroundTrack: 0-360° with 2.8125° resolution (360/128 quantization)
         Velocity? groundSpeed = msg.GroundSpeed.HasValue
             ? Velocity.FromKnots(msg.GroundSpeed.Value, VelocityType.GroundSpeed)

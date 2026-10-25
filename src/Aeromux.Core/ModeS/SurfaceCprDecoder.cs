@@ -26,13 +26,17 @@ namespace Aeromux.Core.ModeS;
 /// </summary>
 /// <remarks>
 /// Surface CPR differs from airborne CPR:
-/// - Uses different NL (Number of Longitude Zones) function with 1.5° latitude zones
+/// - Zones are four times smaller: a 90° base instead of 360° (latitude zones of 90/60° even, 90/59° odd)
 /// - Requires receiver location as reference (no global decoding)
-/// - Resolution: ~3.8 meters at the equator (better precision than airborne)
+/// - Resolution: about 1.3 meters (1.5° / 2^17), finer than airborne
 /// - Only local decoding supported (global decoding not applicable for surface)
 ///
+/// The number of longitude zones uses the same NL function as airborne positions
+/// (<see cref="CprDecoder.CprNL"/>), and odd frames use one zone fewer.
+/// The result is correct while the aircraft is within half a zone of the receiver
+/// (0.75° of latitude, about 45 NM north or south).
+///
 /// Algorithm: ICAO Annex 10, Volume IV, 3.1.2.8.7 (Surface Position Format).
-/// Reference implementation: pyModeS surface.position function.
 /// </remarks>
 public sealed class SurfaceCprDecoder
 {
@@ -123,17 +127,10 @@ public sealed class SurfaceCprDecoder
             return null;
         }
 
-        // Calculate longitude using surface NL function
-        int nl = CalculateSurfaceNL(lat);
-
-        if (nl == 0)
-        {
-            Log.Debug("Surface CPR: NL=0 at latitude {Lat:F4}° (polar singularity)", lat);
-            return null;
-        }
-
-        // Calculate longitude zone size
-        double dLon = 90.0 / nl;
+        // Longitude zone size: 90° divided by the number of longitude zones at this latitude,
+        // one zone fewer for odd frames (same NL function as airborne positions)
+        int oddFlag = cprFormat == CprFormat.Odd ? 1 : 0;
+        double dLon = 90.0 / Math.Max(CprDecoder.CprNL(lat) - oddFlag, 1);
 
         // Calculate longitude index m
         int m = (int)Math.Floor(reference.Longitude / dLon) +
@@ -157,20 +154,6 @@ public sealed class SurfaceCprDecoder
     }
 
     /// <summary>
-    /// Surface NL lookup table (ICAO Annex 10, Volume IV, Table 3-2).
-    /// Maps latitude zone index (floor(abs(lat) / 1.5)) to number of longitude zones.
-    /// </summary>
-    private static readonly int[] SurfaceNlTable =
-    [
-        59, 58, 57, 56, 55, 54, 53, 52, 51, 50,  // 0-15°
-        49, 48, 47, 46, 45, 44, 43, 42, 41, 40,  // 15-30°
-        39, 38, 37, 36, 35, 34, 33, 32, 31, 30,  // 30-45°
-        29, 28, 27, 26, 25, 24, 23, 22, 21, 20,  // 45-60°
-        19, 18, 17, 16, 15, 14, 13, 12, 11, 10,  // 60-75°
-        9,  8,  7,  6,  5,  4,  3,  2,  1,  1    // 75-90°
-    ];
-
-    /// <summary>
     /// Modulo operation that always returns a positive result.
     /// C#'s % operator preserves the sign of the dividend, which produces
     /// incorrect zone indices for negative coordinates (Southern/Western Hemisphere).
@@ -182,32 +165,5 @@ public sealed class SurfaceCprDecoder
     {
         double res = a % b;
         return res < 0 ? res + b : res;
-    }
-
-    /// <summary>
-    /// Calculates the Number of Longitude Zones (NL) for surface CPR at a given latitude.
-    /// Surface NL function differs from airborne NL function.
-    /// </summary>
-    /// <param name="latitude">Latitude in decimal degrees.</param>
-    /// <returns>Number of longitude zones (1-59), or 0 if latitude is out of range.</returns>
-    /// <remarks>
-    /// Surface NL table (ICAO Annex 10, Volume IV, Table 3-2):
-    /// Uses 1.5° latitude zones (60 zones total) instead of airborne's variable zones.
-    /// NL decreases from 59 at the equator to 1 near poles.
-    /// </remarks>
-    private static int CalculateSurfaceNL(double latitude)
-    {
-        double absLat = Math.Abs(latitude);
-
-        // Calculate table index
-        int index = (int)Math.Floor(absLat / 1.5);
-
-        // Clamp to valid range
-        if (index < 0 || index >= SurfaceNlTable.Length)
-        {
-            return 0;  // Invalid latitude
-        }
-
-        return SurfaceNlTable[index];
     }
 }

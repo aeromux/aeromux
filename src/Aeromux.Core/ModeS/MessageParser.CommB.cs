@@ -235,7 +235,7 @@ public sealed partial class MessageParser
 
     // BDS 5,3 air-referenced state vector: magnetic heading (sign + 10 bits), indicated
     // airspeed, Mach number, true airspeed, altitude rate (sign + 8 bits).
-    // Reference: ICAO Doc 9871, Table A-2-83 (not checked; the layout follows pyModeS 2.22)
+    // Reference: ICAO Doc 9871, Table A-2-83 (layout not verified against the table)
     private static readonly (int Status, int First, int Last)[] Bds53StatusFields =
         [(1, 2, 12), (13, 14, 23), (24, 25, 33), (34, 35, 46), (47, 48, 56)];
 
@@ -403,7 +403,8 @@ public sealed partial class MessageParser
             return null;
         }
 
-        // Reserved bits 10-14 must be 0 (per pyModeS line 30 and readsb line 113)
+        // Reserved bits 10-14 must be 0: reserved bits are always transmitted as zero,
+        // so data there means the frame is not BDS 1,0
         // Extract reserved field - bits 10-14 (5 bits)
         int reserved = ExtractBits(mb, 10, 5);
         if (reserved != 0)
@@ -411,20 +412,20 @@ public sealed partial class MessageParser
             return null;
         }
 
-        // Overlay capability conflict validation (per pyModeS lines 34-37)
-        // Bit 15 is overlay capability indicator
-        // Bits 17-23 contain DTI (Data link Terminal Identifier)
+        // Consistency heuristic between overlay command capability (bit 15) and the Mode S
+        // subnetwork version number (bits 17-23): reports with the capability carry version 5
+        // or later, reports without it version 4 or earlier. A frame that breaks this is
+        // treated as a different register.
         int overlayCapable = ExtractBits(mb, 15, 1);
-        int dti = ExtractBits(mb, 17, 7);
+        int subnetworkVersion = ExtractBits(mb, 17, 7);
 
-        // If overlay capable, DTI must be >= 5; if not overlay capable, DTI must be <= 4
-        if (overlayCapable == 1 && dti < 5)
+        if (overlayCapable == 1 && subnetworkVersion < 5)
         {
-            return null; // Invalid: overlay capable but DTI < 5
+            return null; // Overlay capable but subnetwork version below 5
         }
-        if (overlayCapable == 0 && dti > 4)
+        if (overlayCapable == 0 && subnetworkVersion > 4)
         {
-            return null; // Invalid: not overlay capable but DTI > 4
+            return null; // Not overlay capable but subnetwork version 5 or later
         }
 
         // Extract capability bits (bits 9-24, 16 bits)
@@ -438,8 +439,8 @@ public sealed partial class MessageParser
     /// </summary>
     private Bds17GicbCapability? TryParseBds17(ReadOnlySpan<byte> mb)
     {
-        // BDS 1,7 validation per readsb lines 132-134:
-        // Reserved bits 25-56 must all be zero
+        // Bits 25-56 are reserved and must be zero. Most other registers carry data there,
+        // so this is the main check that tells BDS 1,7 apart.
         // Extract reserved field - bits 25-56 (32 bits)
         int reserved = ExtractBits(mb, 25, 32);
         if (reserved != 0)
@@ -447,7 +448,8 @@ public sealed partial class MessageParser
             return null;
         }
 
-        // BDS 2,0 (Aircraft Identification) capability is required (per pyModeS lines 37-38)
+        // Aircraft identification (BDS 2,0) is mandatory for Mode S elementary surveillance,
+        // so a genuine capability report has this bit set
         // Bit 7 in the capability mask corresponds to BDS 2,0
         int bds20Capability = ExtractBits(mb, 7, 1);
         if (bds20Capability == 0)
@@ -477,7 +479,8 @@ public sealed partial class MessageParser
             return null;
         }
 
-        // Allow empty callsign (bits 9-56 all zero) per pyModeS lines 28-29
+        // All-zero character bits carry no identification, but the 0x20 identifier byte still
+        // marks the register, so the frame is accepted with an empty identification
         bool isEmpty = mb[1] == 0 && mb[2] == 0 && mb[3] == 0 &&
                        mb[4] == 0 && mb[5] == 0 && mb[6] == 0;
         if (isEmpty)
@@ -519,16 +522,16 @@ public sealed partial class MessageParser
             return null;
         }
 
-        // Threat type validation: bits 29-30 must not be "11" (3 = not assigned)
-        // per pyModeS lines 28-29
+        // Threat type validation: bits 29-30 must not be "11" (3 = not assigned);
+        // a genuine resolution advisory never carries the unassigned value 3
         int threatType = ExtractBits(mb, 29, 2);
         if (threatType == 3)
         {
             return null; // Threat type 3 is not assigned
         }
 
-        // ACAS III reserved check: bits 16-22 must be < 48 (reserved for future ACAS III)
-        // per pyModeS lines 32-33
+        // Bits 16-22 are reserved for ACAS III, which is not in use. Values of 48 and above are
+        // taken as a sign that the frame is not BDS 3,0; this is a heuristic, not a rule of the standard.
         int acasReserved = ExtractBits(mb, 16, 7);
         if (acasReserved >= 48)
         {
@@ -570,18 +573,18 @@ public sealed partial class MessageParser
         int baroStatus = ExtractBits(mb, 27, 1);
         int baroRaw = ExtractBits(mb, 28, 12);
 
-        // Validation: check reserved bits 40-47 (per pyModeS line 46 and readsb line 361)
+        // Validation: reserved bits 40-47 must be zero (reserved bits are always transmitted as zero)
         int reserved1 = ExtractBits(mb, 40, 8);
         if (reserved1 != 0)
         {
             return null;
         }
 
-        // Extract mode and source fields (per readsb lines 362-366)
+        // Extract mode and source fields
         int modeStatus = ExtractBits(mb, 48, 1);
         int modeRaw = ExtractBits(mb, 49, 3);
 
-        // Validation: check reserved bits 52-53 (per pyModeS line 49 and readsb line 364)
+        // Validation: reserved bits 52-53 must be zero (reserved bits are always transmitted as zero)
         int reserved2 = ExtractBits(mb, 52, 2);
         if (reserved2 != 0)
         {

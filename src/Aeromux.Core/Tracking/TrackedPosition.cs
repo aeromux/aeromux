@@ -75,12 +75,9 @@ public sealed record TrackedPosition
 
     /// <summary>
     /// Surface movement speed category (TC 5-8 surface position messages only).
-    /// Provides categorized speed ranges for ground operations:
-    /// - Stationary: No movement.
-    /// - Speed0_125To1: 0.125 to 1 kt.
-    /// - Speed1To2: 1 to 2 kt.
-    /// - And so on up to Speed150To175 and GreaterThan175.
-    /// These non-linear categories are optimized for taxiing and ground operations.
+    /// The speed band of the movement field: Stopped, below 1 kt, 1-2 kt, 2-15 kt, 15-70 kt,
+    /// 70-100 kt, 100-175 kt, 175 kt or more, or NoInformation / Reserved.
+    /// The bands are finer at low speeds, where taxiing and ground operations happen.
     /// Null if no surface position message received, or if aircraft is airborne.
     /// </summary>
     public SurfaceMovement? MovementCategory { get; init; }

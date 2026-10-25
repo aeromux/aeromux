@@ -227,15 +227,20 @@ public class OperationalStatusTest
         opStatus.NICbaro.Should().Be(expectedNICbaro, "All test frames have barometric altitude cross-checked");
     }
 
+    /// <summary>
+    /// NIC supplement A is ME bit 44 (frame bit 76). 80073B, 4BB0F4 and 5082A0 have it clear
+    /// but the heading reference bit (frame bit 86) set, which separates the two bits.
+    /// </summary>
     [Theory]
     [InlineData(RealFrames.OperationalStatus_471DBC, false)]
     [InlineData(RealFrames.OperationalStatus_71C011, false)]
     [InlineData(RealFrames.OperationalStatus_3C55C5, false)]
     [InlineData(RealFrames.OperationalStatus_4BB027, false)]
-    [InlineData(RealFrames.OperationalStatus_80073B, true)]
+    [InlineData(RealFrames.OperationalStatus_80073B, false)]
     [InlineData(RealFrames.OperationalStatus_06A081, false)]
-    [InlineData(RealFrames.OperationalStatus_4BB0F4, true)]
-    [InlineData(RealFrames.OperationalStatus_5082A0, true)]
+    [InlineData(RealFrames.OperationalStatus_4BB0F4, false)]
+    [InlineData(RealFrames.OperationalStatus_5082A0, false)]
+    [InlineData(RealFrames.OperationalStatus_472FD2, true)]
     public void ParseMessage_DF17_TC31_OperationalStatus_NicSupplementA(
         string hexFrame,
         bool expectedNicSupplementA)
@@ -252,6 +257,36 @@ public class OperationalStatusTest
         message.Should().NotBeNull();
         OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
         opStatus.NICSupplementA.Should().Be(expectedNicSupplementA);
+    }
+
+    /// <summary>
+    /// The horizontal reference direction is ME bit 54 (frame bit 86).
+    /// </summary>
+    [Theory]
+    [InlineData(RealFrames.OperationalStatus_471DBC, HorizontalReferenceDirection.TrueNorth)]
+    [InlineData(RealFrames.OperationalStatus_71C011, HorizontalReferenceDirection.TrueNorth)]
+    [InlineData(RealFrames.OperationalStatus_3C55C5, HorizontalReferenceDirection.TrueNorth)]
+    [InlineData(RealFrames.OperationalStatus_4BB027, HorizontalReferenceDirection.TrueNorth)]
+    [InlineData(RealFrames.OperationalStatus_80073B, HorizontalReferenceDirection.MagneticNorth)]
+    [InlineData(RealFrames.OperationalStatus_06A081, HorizontalReferenceDirection.TrueNorth)]
+    [InlineData(RealFrames.OperationalStatus_4BB0F4, HorizontalReferenceDirection.MagneticNorth)]
+    [InlineData(RealFrames.OperationalStatus_5082A0, HorizontalReferenceDirection.MagneticNorth)]
+    [InlineData(RealFrames.OperationalStatus_472FD2, HorizontalReferenceDirection.TrueNorth)]
+    public void ParseMessage_DF17_TC31_OperationalStatus_HorizontalReferenceDirection(
+        string hexFrame,
+        HorizontalReferenceDirection expectedHrd)
+    {
+        // Arrange
+        ValidatedFrame frame = new ValidatedFrameBuilder()
+            .WithHexData(hexFrame)
+            .Build();
+
+        // Act
+        ModeSMessage? message = _parser.ParseMessage(frame);
+
+        // Assert
+        OperationalStatus? opStatus = message.Should().BeOfType<OperationalStatus>().Subject;
+        opStatus.HRD.Should().Be(expectedHrd);
     }
 
     [Theory]

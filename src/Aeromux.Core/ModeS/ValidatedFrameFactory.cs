@@ -32,7 +32,8 @@ namespace Aeromux.Core.ModeS;
 /// (ICAO Annex 10, Volume IV, Section 3.1.2.3.7.1)
 ///
 /// Two validation modes:
-/// - PI (Parity/Interrogator): ICAO in AA field (DF 11, 17, 18, 19) - CRC remainder must be 0
+/// - PI (Parity/Interrogator): ICAO in AA field (DF 11, 17, 18, 19) - CRC remainder must be 0,
+///   except DF 11, whose remainder is the interrogator ID (IID) in its low 7 bits
 /// - AP (Address/Parity): ICAO encoded in CRC (DF 0, 4, 5, 16, 20, 21) - ICAO = CRC XOR transmitted
 ///
 /// Performance: Uses lookup table for fast CRC calculation (~7-14 table lookups per frame)
@@ -85,13 +86,14 @@ public sealed class ValidatedFrameFactory
         bool isPIMode = UsesPIMode(df);
 
         // Try validating frame as-is
-        if (TryValidate(data, isPIMode, out string? icaoAddress, out uint icaoRaw))
+        if (TryValidate(data, df, isPIMode, out string? icaoAddress, out uint icaoRaw))
         {
             _framesValid++;
             return new ValidatedFrame(data, rawFrame.Timestamp, rawFrame.Timestamp12MHz, icaoRaw, icaoAddress!, signalStrength, false);
         }
 
-        // Try single-bit error correction (only for PI mode - AP mode has no validation)
+        // Try single-bit error correction (only for PI mode - AP mode has no validation).
+        // For DF 11 the full remainder is treated as the error syndrome, which assumes IID 0.
         if (isPIMode && TryCorrectSingleBitError(data, out icaoAddress, out icaoRaw))
         {
             _framesCorrected++;
@@ -106,13 +108,18 @@ public sealed class ValidatedFrameFactory
     /// <summary>
     /// Attempts to validate a frame and extract ICAO address.
     /// </summary>
-    private bool TryValidate(byte[] data, bool isPIMode, out string? icaoAddress, out uint icaoRaw)
+    private bool TryValidate(byte[] data, DownlinkFormat df, bool isPIMode, out string? icaoAddress, out uint icaoRaw)
     {
         if (isPIMode)
         {
-            // PI mode (DF 11, 17, 18, 19): Calculate CRC over entire message, should be 0
+            // PI mode (DF 11, 17, 18, 19): Calculate CRC over entire message.
+            // DF 17/18/19 must give 0. A DF 11 all-call reply's parity is overlaid with the
+            // interrogator ID (IID), so a correct reply leaves the IID in the low 7 bits.
             uint crc = CalculateCrc(data, data.Length);
-            if (crc == 0)
+            bool valid = df == DownlinkFormat.AllCallReply
+                ? (crc & 0xFFFF80) == 0
+                : crc == 0;
+            if (valid)
             {
                 // Valid! ICAO is in AA field (bytes 1-3)
                 icaoRaw = ExtractIcaoUintFromAA(data);

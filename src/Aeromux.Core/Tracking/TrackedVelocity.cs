@@ -53,7 +53,8 @@ public sealed record TrackedVelocity
 
     /// <summary>
     /// Ground speed from TC 5-8 (Surface Position) messages for aircraft on the ground.
-    /// Range: 0-199 knots with non-linear quantization (higher precision at lower speeds).
+    /// Range: 0 to 175 knots or more, in bands that are finer at lower speeds; the value is the
+    /// middle of the encoded step in whole knots.
     /// Separate from Speed field which comes from TC 19 airborne velocity messages.
     /// Used for airport surface movement tracking, taxiing, and ground operations.
     /// Null if no surface position message with ground speed received.

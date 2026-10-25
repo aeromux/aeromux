@@ -435,19 +435,11 @@ public sealed partial class MessageParser
     private ModeSMessage? ParseSurfacePosition(ValidatedFrame frame, int tc)
     {
         // Extract Movement field - bits 38-44 (7 bits)
+        // Every 7-bit value is defined (reserved values give no speed), so none drops the message
         int movementRaw = ExtractBits(frame.Data, 38, 7);
 
-        // Map raw value to SurfaceMovement enum
-        if (!EnumValidator.IsValidSurfaceMovement(movementRaw))
-        {
-            Log.Debug("Invalid surface movement {Movement} in TC {TC} from {Icao} (valid: 0-127), frame: {Frame}",
-                movementRaw, tc, frame.IcaoAddress, frame.Data);
-            return null;
-        }
-        var movement = (SurfaceMovement)movementRaw;
-
-        // Decode movement to ground speed (knots)
-        int? groundSpeed = DecodeMovement(movementRaw);
+        // Decode movement to its speed band and ground speed (knots)
+        (SurfaceMovement movement, int? groundSpeed) = DecodeMovement(movementRaw);
 
         // Extract Ground Track Status (S) - bit 45 (1 bit)
         int trackStatus = ExtractBits(frame.Data, 45, 1);
@@ -499,44 +491,46 @@ public sealed partial class MessageParser
     }
 
     /// <summary>
-    /// Decodes movement field (7 bits) to ground speed in knots.
-    /// Uses non-linear quantization table from ICAO Annex 10, Volume IV, Table 2-14.
+    /// Decodes the 7-bit movement field of a surface position to its speed band and ground speed.
     /// </summary>
     /// <param name="movementRaw">Raw movement value (0-127).</param>
-    /// <returns>Ground speed in knots (midpoint of range), or <see langword="null"/> if no information.</returns>
-    private static int? DecodeMovement(int movementRaw)
+    /// <returns>
+    /// The speed band, and the ground speed in knots at the middle of the encoded step,
+    /// rounded half away from zero; <see langword="null"/> speed for no information and reserved values.
+    /// </returns>
+    /// <remarks>
+    /// Encoding: the bands get finer toward low speeds, where ground movement needs the precision:
+    /// 0 no information, 1 stopped, 2-8 0.125-1 kt in 0.125 kt steps, 9-12 1-2 kt in 0.25 kt,
+    /// 13-38 2-15 kt in 0.5 kt, 39-93 15-70 kt in 1 kt, 94-108 70-100 kt in 2 kt,
+    /// 109-123 100-175 kt in 5 kt, 124 175 kt or more (reported as 175 kt, the only known bound),
+    /// 125-127 reserved.
+    /// </remarks>
+    internal static (SurfaceMovement Category, int? Knots) DecodeMovement(int movementRaw)
     {
         return movementRaw switch
         {
-            0 => null,      // No information
-            1 => 0,         // Stopped
-            2 => 0,         // 0-0.125 kt (use 0 as midpoint)
-            3 => 0,         // 0.125-1 kt (use 0 as approximation)
-            4 => 1,         // 1-2 kt
-            5 => 3,         // 2-5 kt (midpoint: 3.5 ≈ 3)
-            6 => 7,         // 5-10 kt (midpoint: 7.5 ≈ 7)
-            7 => 12,        // 10-15 kt (midpoint: 12.5 ≈ 12)
-            8 => 17,        // 15-20 kt (midpoint: 17.5 ≈ 17)
-            9 => 25,        // 20-30 kt
-            10 => 35,       // 30-40 kt
-            11 => 45,       // 40-50 kt
-            12 => 55,       // 50-60 kt
-            13 => 65,       // 60-70 kt
-            14 => 75,       // 70-80 kt
-            15 => 85,       // 80-90 kt
-            16 => 95,       // 90-100 kt
-            17 => 105,      // 100-110 kt
-            18 => 115,      // 110-120 kt
-            19 => 125,      // 120-130 kt
-            20 => 135,      // 130-140 kt
-            21 => 145,      // 140-150 kt
-            22 => 155,      // 150-160 kt
-            23 => 167,      // 160-175 kt (midpoint: 167.5 ≈ 167)
-            24 => 187,      // 175-199 kt (midpoint: 187)
-            124 => 199,     // ≥ 199 kt (use 199 as approximation)
-            _ => null       // Reserved or invalid
+            0 => (SurfaceMovement.NoInformation, null),
+            1 => (SurfaceMovement.Stopped, 0),
+            <= 8 => (SurfaceMovement.Below1Kt, MovementStepMiddle(movementRaw, 2, 0.125, 0.125)),
+            <= 12 => (SurfaceMovement.From1To2Kt, MovementStepMiddle(movementRaw, 9, 1, 0.25)),
+            <= 38 => (SurfaceMovement.From2To15Kt, MovementStepMiddle(movementRaw, 13, 2, 0.5)),
+            <= 93 => (SurfaceMovement.From15To70Kt, MovementStepMiddle(movementRaw, 39, 15, 1)),
+            <= 108 => (SurfaceMovement.From70To100Kt, MovementStepMiddle(movementRaw, 94, 70, 2)),
+            <= 123 => (SurfaceMovement.From100To175Kt, MovementStepMiddle(movementRaw, 109, 100, 5)),
+            124 => (SurfaceMovement.AtLeast175Kt, 175),
+            _ => (SurfaceMovement.Reserved, null)
         };
     }
+
+    /// <summary>
+    /// Returns the middle of the step a movement value encodes, in whole knots.
+    /// </summary>
+    /// <param name="movementRaw">Raw movement value.</param>
+    /// <param name="firstRaw">First raw value of the band.</param>
+    /// <param name="bandStartKnots">Ground speed at the start of the band.</param>
+    /// <param name="stepKnots">Speed covered by one raw value in this band.</param>
+    private static int MovementStepMiddle(int movementRaw, int firstRaw, double bandStartKnots, double stepKnots) =>
+        (int)Math.Round(bandStartKnots + ((movementRaw - firstRaw + 0.5) * stepKnots), MidpointRounding.AwayFromZero);
 
     /// <summary>
     /// Parses Aircraft Status message (TC 28).
@@ -925,7 +919,8 @@ public sealed partial class MessageParser
                 // Everything else
 
                 // NIC Supplement-A for NIC decoding (together with Surface Position Messages and NIC Supplement-C)
-                nicSupplementA = ExtractBits(frame.Data, 86, 1) == 1;
+                // ME bit 44 (frame bit 76); frame bit 86 is the horizontal reference direction
+                nicSupplementA = ExtractBits(frame.Data, 76, 1) == 1;
 
                 // Navigation Accuracy Category for Position (NACp)
                 int nacpRaw = ExtractBits(frame.Data, 77, 4);
@@ -1185,7 +1180,8 @@ public sealed partial class MessageParser
                 // Everything else
 
                 // NIC Supplement-A for NIC decoding (together with Surface Position Messages and NIC Supplement-C)
-                nicSupplementA = ExtractBits(frame.Data, 86, 1) == 1;
+                // ME bit 44 (frame bit 76); frame bit 86 is the horizontal reference direction
+                nicSupplementA = ExtractBits(frame.Data, 76, 1) == 1;
 
                 // Navigation Accuracy Category for Position (NACp)
                 int nacpRawV2 = ExtractBits(frame.Data, 77, 4);
