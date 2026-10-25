@@ -108,8 +108,8 @@ Maximum tilt is 45°.
 The icon shape for each aircraft is selected by a six-layer fall-through:
 
 1. **ICAO type designator**: direct lookup (for example `A320` → airliner-shape `a320`, `B77W` → `heavy_2e`).
-2. **3-character type description + WTC**: a composite key such as `L2J-H` distinguishes a heavy 777 from a medium-weight CRJ.
-3. **3-character type description (bare)**: a fallback for when wake turbulence is missing. It includes synthesized entries for classes that tar1090 ships only as WTC-suffixed (`L2J` → `airliner`, `L3J` → `md11`).
+2. **3-character type description + WTC**: a composite key such as `L2J-H` distinguishes a heavy 787 from a medium-weight Superjet.
+3. **3-character type description (bare)**: a fallback for when wake turbulence is missing or has no composite entry. It includes synthesized entries for classes that tar1090 ships only as WTC-suffixed (`L2J` → `airliner`, `L3J` → `md11`).
 4. **First character of type description**: `H` → helicopter, `G` → gyrocopter.
 5. **ADS-B emitter category**: `Light`, `Heavy`, `Rotorcraft`, and so on, taken from the downlink itself, so a sensible shape renders even without a database hit.
 6. A generic `unknown` silhouette is the universal fallback when every layer above misses.

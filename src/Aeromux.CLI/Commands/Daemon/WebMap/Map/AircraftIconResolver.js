@@ -27,7 +27,8 @@ import { SHAPES } from './AircraftShapes.js';
 
 // Layer 1: direct ICAO type-designator lookup (e.g. "A320" -> a320).
 // Imported verbatim from tar1090's TypeDesignatorIcons; entries
-// targeting ground-vehicle shapes are dropped.
+// targeting ground-vehicle shapes are dropped. One labeled block of
+// Aeromux additions follows the small business jets.
 export const TYPE_DESIGNATOR = {
     'SHIP': ['blimp', 0.94], // Blimp
     'BALL': ['balloon', 1], // Balloon
@@ -224,6 +225,28 @@ export const TYPE_DESIGNATOR = {
     'EA50': ['jet_nonswept', 0.96],
     'HDJT': ['jet_nonswept', 0.96],
     'SF50': ['jet_nonswept', 0.94],
+
+    // Aeromux additions: types tar1090 has no designator entry for.
+    // Without one, layer 2 draws every business jet in the medium wake
+    // category (about 7t to 136t) as an airliner (L2J-M), and a medium
+    // trijet as a widebody (bare L3J). Scales follow the closest peer
+    // above. Keep this block together when re-syncing against tar1090.
+    'E545': ['jet_swept', 0.92], // 17t
+    'E550': ['jet_swept', 0.92], // 19t
+    'GALX': ['jet_swept', 0.92], // 16t, old designator of the G200
+    'G250': ['jet_swept', 0.92], // 18t, old designator of the G280
+    'C700': ['jet_swept', 0.92], // 18t
+    'GA4C': ['jet_swept', 0.96],
+    'SBR1': ['jet_swept', 0.92], // 9-11t
+    'SBR2': ['jet_swept', 0.92], // 10t
+    'YK42': ['jet_swept', 1.06], // 57t
+    'R722': ['jet_swept', 1.10], // re-engined 727-200
+    'PC24': ['jet_nonswept', 0.96], // 8t
+    'WW23': ['jet_nonswept', 1],
+    'WW24': ['jet_nonswept', 1], // 11t
+    'MU30': ['jet_nonswept', 1], // 7t
+    'BE4W': ['jet_nonswept', 1], // 7t
+    'JCOM': ['jet_nonswept', 1], // 8t
 
     'C97': ['super_guppy', 1],
     'SGUP': ['super_guppy', 1],
@@ -470,7 +493,7 @@ export const TYPE_DESIGNATOR = {
 // Layer 2: ICAO type description ("L2J") with optional wake-turbulence
 // category suffix ("L2J-H"). Composite keys are tried before bare keys
 // when both class and wtc are present, mirroring tar1090's
-// getBaseMarker ordering. Includes two synthesised bare entries for
+// getBaseMarker ordering. Includes two synthesized bare entries for
 // classes that tar1090 only ships as WTC-suffixed (L2J, L3J), so an
 // aircraft with a known class but missing WTC still resolves to a
 // sensible shape rather than dropping to category/unknown.
@@ -506,10 +529,12 @@ export const TYPE_DESCRIPTION = {
     'L4J-M': ['b707',         0.8],
     'L4J-H': ['b707',         1],
 
-    // Synthesised bare entries: tar1090 ships only WTC-suffixed
+    // Synthesized bare entries: tar1090 ships only WTC-suffixed
     // entries for L2J and L3J. When WTC is unknown but the bare
     // class is, fall back to the most-common WTC variant rather
-    // than dropping through to category/unknown.
+    // than dropping through to category/unknown. They also catch a
+    // known WTC with no composite entry (L3J-M, L3J-L), which is why
+    // medium trijets need designator entries.
     'L2J':   ['airliner',     1],     // mirrors L2J-M (medium twinjet)
     'L3J':   ['md11',         1],     // mirrors L3J-H (only L3J variant tar1090 ships)
 };

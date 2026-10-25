@@ -39,6 +39,36 @@ test('B77W resolves to heavy_2e via designator', () => {
     );
 });
 
+test('medium business jet resolves via designator, not L2J-M airliner', () => {
+    // Embraer Praetor 600: L2J in the medium wake category, so without
+    // a designator entry it was drawn as an airliner.
+    assert.deepEqual(
+        resolveShape('E550', 'L2J', 'M', 'Small'),
+        { shapeName: 'jet_swept', scale: 0.92, resolvedVia: 'designator' }
+    );
+});
+
+test('straight-wing medium business jet resolves to jet_nonswept', () => {
+    assert.deepEqual(
+        resolveShape('PC24', 'L2J', 'M', 'Small'),
+        { shapeName: 'jet_nonswept', scale: 0.96, resolvedVia: 'designator' }
+    );
+});
+
+test('medium trijet resolves via designator, not the bare L3J widebody', () => {
+    assert.deepEqual(
+        resolveShape('YK42', 'L3J', 'M', null),
+        { shapeName: 'jet_swept', scale: 1.06, resolvedVia: 'designator' }
+    );
+});
+
+test('airliner without a designator entry still resolves to airliner', () => {
+    assert.deepEqual(
+        resolveShape('SU95', 'L2J', 'M', 'Large'),
+        { shapeName: 'airliner', scale: 1, resolvedVia: 'description-3-wtc' }
+    );
+});
+
 // -------------------- Layer 2: description + WTC --------------------
 
 test('WTC-suffixed composite hit (heavy twinjet, L2J + H)', () => {
@@ -86,24 +116,24 @@ test('unknown WTC value still allows bare fall-back (L4T + "X")', () => {
     );
 });
 
-// -------------------- Synthesised bare entries --------------------
+// -------------------- Synthesized bare entries --------------------
 
-test('synthesised bare fall-back for WTC-only class (L2J without WTC)', () => {
-    // tar1090 has no bare L2J; we synthesise it as airliner.
+test('synthesized bare fall-back for WTC-only class (L2J without WTC)', () => {
+    // tar1090 has no bare L2J; we synthesize it as airliner.
     assert.deepEqual(
         resolveShape(null, 'L2J', null, null),
         { shapeName: 'airliner', scale: 1, resolvedVia: 'description-3' }
     );
 });
 
-test('synthesised bare fall-back for L3J', () => {
+test('synthesized bare fall-back for L3J', () => {
     assert.deepEqual(
         resolveShape(null, 'L3J', null, null),
         { shapeName: 'md11', scale: 1, resolvedVia: 'description-3' }
     );
 });
 
-test('WTC composite still preferred over synthesised bare (L2J + H -> heavy_2e, not airliner)', () => {
+test('WTC composite still preferred over synthesized bare (L2J + H -> heavy_2e, not airliner)', () => {
     const r = resolveShape(null, 'L2J', 'H', null);
     assert.equal(r.shapeName, 'heavy_2e');
     assert.notEqual(r.shapeName, 'airliner');
