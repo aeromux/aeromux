@@ -62,6 +62,14 @@ public class NetworkConfig
     public bool ApiEnabled { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the web origins (<c>http(s)://host[:port]</c>, or <c>*</c>) whose pages may
+    /// read REST API responses from a browser. Browsers block such cross-origin reads unless
+    /// the server allows them; the Web Map and non-browser clients are unaffected either way.
+    /// Default: empty (no cross-origin access).
+    /// </summary>
+    public List<string> ApiCorsOrigins { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets whether Beast binary protocol output is enabled.
     /// When disabled, the Beast broadcaster is not started and the port is not listened on.
     /// Default: true (Beast output enabled).

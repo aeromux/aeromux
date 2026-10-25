@@ -412,6 +412,358 @@ public class DaemonConfigValidatorTests
 
     // ─── Helpers ───
 
+    // ─── Precedence: CLI > YAML > Default for every port and flag ───
+
+    public enum PortOption { Api, BeastOutput, JsonOutput, SbsOutput, MlatInput }
+
+    public enum FlagOption { Api, BeastOutput, JsonOutput, SbsOutput, Mlat }
+
+    private static void SetYamlPort(AeromuxConfig config, PortOption option, int port)
+    {
+        switch (option)
+        {
+            case PortOption.Api: config.Network!.ApiPort = port; break;
+            case PortOption.BeastOutput: config.Network!.BeastOutputPort = port; break;
+            case PortOption.JsonOutput: config.Network!.JsonOutputPort = port; break;
+            case PortOption.SbsOutput: config.Network!.SbsOutputPort = port; break;
+            case PortOption.MlatInput: config.Mlat = new MlatConfig { InputPort = port }; break;
+        }
+    }
+
+    private static DaemonSettings CliPort(PortOption option, int port) => option switch
+    {
+        PortOption.Api => new DaemonSettings { ApiPort = port },
+        PortOption.BeastOutput => new DaemonSettings { BeastOutputPort = port },
+        PortOption.JsonOutput => new DaemonSettings { JsonOutputPort = port },
+        PortOption.SbsOutput => new DaemonSettings { SbsOutputPort = port },
+        PortOption.MlatInput => new DaemonSettings { MlatInputPort = port },
+        _ => throw new ArgumentOutOfRangeException(nameof(option))
+    };
+
+    private static int ResolvedPort(DaemonValidatedConfig result, PortOption option) => option switch
+    {
+        PortOption.Api => result.ApiPort,
+        PortOption.BeastOutput => result.BeastOutputPort,
+        PortOption.JsonOutput => result.JsonOutputPort,
+        PortOption.SbsOutput => result.SbsOutputPort,
+        PortOption.MlatInput => result.MlatConfig.InputPort,
+        _ => throw new ArgumentOutOfRangeException(nameof(option))
+    };
+
+    private static void SetYamlFlag(AeromuxConfig config, FlagOption option, bool value)
+    {
+        switch (option)
+        {
+            case FlagOption.Api: config.Network!.ApiEnabled = value; break;
+            case FlagOption.BeastOutput: config.Network!.BeastOutputEnabled = value; break;
+            case FlagOption.JsonOutput: config.Network!.JsonOutputEnabled = value; break;
+            case FlagOption.SbsOutput: config.Network!.SbsOutputEnabled = value; break;
+            case FlagOption.Mlat: config.Mlat = new MlatConfig { Enabled = value }; break;
+        }
+    }
+
+    private static DaemonSettings CliFlag(FlagOption option, bool value) => option switch
+    {
+        FlagOption.Api => new DaemonSettings { ApiEnabled = value },
+        FlagOption.BeastOutput => new DaemonSettings { BeastOutputEnabled = value },
+        FlagOption.JsonOutput => new DaemonSettings { JsonOutputEnabled = value },
+        FlagOption.SbsOutput => new DaemonSettings { SbsOutputEnabled = value },
+        FlagOption.Mlat => new DaemonSettings { MlatEnabled = value },
+        _ => throw new ArgumentOutOfRangeException(nameof(option))
+    };
+
+    private static bool ResolvedFlag(DaemonValidatedConfig result, FlagOption option) => option switch
+    {
+        FlagOption.Api => result.ApiEnabled,
+        FlagOption.BeastOutput => result.BeastEnabled,
+        FlagOption.JsonOutput => result.JsonEnabled,
+        FlagOption.SbsOutput => result.SbsEnabled,
+        FlagOption.Mlat => result.MlatConfig.Enabled,
+        _ => throw new ArgumentOutOfRangeException(nameof(option))
+    };
+
+    [Theory]
+    [InlineData(PortOption.Api, 8080)]
+    [InlineData(PortOption.BeastOutput, 30005)]
+    [InlineData(PortOption.JsonOutput, 30006)]
+    [InlineData(PortOption.SbsOutput, 30003)]
+    [InlineData(PortOption.MlatInput, 30104)]
+    public void Validate_Port_DefaultWhenNeitherYamlNorCli(PortOption option, int expected)
+    {
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), CreateConfig(sdrEnabled: true));
+
+        ResolvedPort(result, option).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(PortOption.Api)]
+    [InlineData(PortOption.BeastOutput)]
+    [InlineData(PortOption.JsonOutput)]
+    [InlineData(PortOption.SbsOutput)]
+    [InlineData(PortOption.MlatInput)]
+    public void Validate_Port_YamlOverridesDefault(PortOption option)
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        SetYamlPort(config, option, 40000);
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), config);
+
+        ResolvedPort(result, option).Should().Be(40000);
+    }
+
+    [Theory]
+    [InlineData(PortOption.Api)]
+    [InlineData(PortOption.BeastOutput)]
+    [InlineData(PortOption.JsonOutput)]
+    [InlineData(PortOption.SbsOutput)]
+    [InlineData(PortOption.MlatInput)]
+    public void Validate_Port_CliOverridesYaml(PortOption option)
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        SetYamlPort(config, option, 40000);
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(CliPort(option, 41000), config);
+
+        ResolvedPort(result, option).Should().Be(41000);
+    }
+
+    [Theory]
+    [InlineData(FlagOption.Api, true)]
+    [InlineData(FlagOption.BeastOutput, true)]
+    [InlineData(FlagOption.JsonOutput, false)]
+    [InlineData(FlagOption.SbsOutput, false)]
+    [InlineData(FlagOption.Mlat, true)]
+    public void Validate_Flag_DefaultWhenNeitherYamlNorCli(FlagOption option, bool expected)
+    {
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), CreateConfig(sdrEnabled: true));
+
+        ResolvedFlag(result, option).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(FlagOption.Api, false)]
+    [InlineData(FlagOption.BeastOutput, false)]
+    [InlineData(FlagOption.JsonOutput, true)]
+    [InlineData(FlagOption.SbsOutput, true)]
+    [InlineData(FlagOption.Mlat, false)]
+    public void Validate_Flag_YamlOverridesDefault(FlagOption option, bool yamlValue)
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        SetYamlFlag(config, option, yamlValue);
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), config);
+
+        ResolvedFlag(result, option).Should().Be(yamlValue);
+    }
+
+    [Theory]
+    [InlineData(FlagOption.Api, false)]
+    [InlineData(FlagOption.Api, true)]
+    [InlineData(FlagOption.BeastOutput, false)]
+    [InlineData(FlagOption.BeastOutput, true)]
+    [InlineData(FlagOption.JsonOutput, false)]
+    [InlineData(FlagOption.JsonOutput, true)]
+    [InlineData(FlagOption.SbsOutput, false)]
+    [InlineData(FlagOption.SbsOutput, true)]
+    [InlineData(FlagOption.Mlat, false)]
+    [InlineData(FlagOption.Mlat, true)]
+    public void Validate_Flag_CliOverridesYaml(FlagOption option, bool cliValue)
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        SetYamlFlag(config, option, !cliValue);
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(CliFlag(option, cliValue), config);
+
+        ResolvedFlag(result, option).Should().Be(cliValue);
+    }
+
+    // ─── Privileged ports use the resolved value ───
+
+    [Fact]
+    public void Validate_CliApiPortAbovePrivilegedRange_PassesOverPrivilegedYamlPort()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        config.Network!.ApiPort = 80;
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings { ApiPort = 9000 }, config);
+
+        result.ApiPort.Should().Be(9000);
+    }
+
+    [Fact]
+    public void Validate_CliApiPortInPrivilegedRange_Throws()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+
+        Action act = () => DaemonConfigValidator.Validate(new DaemonSettings { ApiPort = 80 }, config);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*API port must be between 1024 and 65535, but was 80*");
+    }
+
+    [Fact]
+    public void Validate_CliOutputPortInPrivilegedRange_Throws()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+
+        Action act = () => DaemonConfigValidator.Validate(new DaemonSettings { BeastOutputPort = 500 }, config);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Beast port must be between 1024 and 65535, but was 500*");
+    }
+
+    [Fact]
+    public void Validate_CliOutputPortAbovePrivilegedRange_PassesOverPrivilegedYamlPort()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        config.Network!.SbsOutputPort = 300;
+        config.Network.SbsOutputEnabled = true;
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings { SbsOutputPort = 31003 }, config);
+
+        result.SbsOutputPort.Should().Be(31003);
+    }
+
+    [Fact]
+    public void Validate_PrivilegedPortOfDisabledOutput_IsAccepted()
+    {
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(
+            new DaemonSettings { JsonOutputPort = 500, JsonOutputEnabled = false }, CreateConfig(sdrEnabled: true));
+
+        result.JsonEnabled.Should().BeFalse();
+    }
+
+    // ─── Command-line keys ───
+
+    [Fact]
+    public void Validate_NoOptions_AddsNoCliKeys()
+    {
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), CreateConfig(sdrEnabled: true));
+
+        result.Origin.CliKeys.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_EveryOption_RecordsItsCliKey()
+    {
+        var settings = new DaemonSettings
+        {
+            BeastSource = ["host:30005"],
+            BindAddress = "127.0.0.1",
+            ApiPort = 9000,
+            ApiEnabled = true,
+            ApiCorsOrigin = ["http://dashboard.local:3000"],
+            BeastOutputPort = 31005,
+            BeastOutputEnabled = true,
+            JsonOutputPort = 31006,
+            JsonOutputEnabled = true,
+            SbsOutputPort = 31003,
+            SbsOutputEnabled = true,
+            MlatEnabled = true,
+            MlatInputPort = 31104,
+            ReceiverUuid = "550e8400-e29b-41d4-a716-446655440000"
+        };
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(settings, CreateConfig(sdrEnabled: true));
+
+        result.Origin.CliKeys.Should().BeEquivalentTo(
+            "beastSources", "network.bindAddress", "network.apiPort", "network.apiEnabled",
+            "network.apiCorsOrigins", "network.beastOutputPort", "network.beastOutputEnabled",
+            "network.jsonOutputPort", "network.jsonOutputEnabled", "network.sbsOutputPort",
+            "network.sbsOutputEnabled", "mlat.enabled", "mlat.inputPort", "receiver.receiverUuid");
+    }
+
+    [Fact]
+    public void Validate_KeepsTheGivenOriginAndAddsDaemonKeys()
+    {
+        var origin = new ConfigurationOrigin(
+            "/etc/aeromux/aeromux.yaml",
+            new HashSet<string> { "network", "network.apiPort" },
+            new HashSet<string> { "logging.level" });
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(
+            new DaemonSettings { ApiPort = 9000 }, CreateConfig(sdrEnabled: true), origin);
+
+        result.Origin.FilePath.Should().Be("/etc/aeromux/aeromux.yaml");
+        result.Origin.YamlKeys.Should().Contain("network.apiPort");
+        result.Origin.CliKeys.Should().BeEquivalentTo("logging.level", "network.apiPort");
+    }
+
+    // ─── CORS origins ───
+
+    [Theory]
+    [InlineData("http://dashboard.local:3000", "http://dashboard.local:3000")]
+    [InlineData("https://grafana.example.net", "https://grafana.example.net")]
+    [InlineData("HTTP://Dashboard.Local:80/", "http://dashboard.local")]
+    [InlineData("https://host:443", "https://host")]
+    [InlineData("http://192.168.1.10:8000/", "http://192.168.1.10:8000")]
+    [InlineData("  http://host:3000  ", "http://host:3000")]
+    [InlineData("*", "*")]
+    public void NormalizeCorsOrigin_AcceptsOriginsAndNormalizes(string origin, string expected)
+    {
+        DaemonConfigValidator.NormalizeCorsOrigin(origin).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("dashboard.local")]
+    [InlineData("ftp://host")]
+    [InlineData("http://host/path")]
+    [InlineData("http://host/?q=1")]
+    [InlineData("http://host/#top")]
+    [InlineData("http://user:pass@host")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("**")]
+    public void NormalizeCorsOrigin_RejectsAnythingButAnOrigin(string origin)
+    {
+        Action act = () => DaemonConfigValidator.NormalizeCorsOrigin(origin);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Invalid CORS origin*expected http(s)://host[:port] or *");
+    }
+
+    [Fact]
+    public void Validate_CorsOrigins_DefaultIsEmpty()
+    {
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), CreateConfig(sdrEnabled: true));
+
+        result.ApiCorsOrigins.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_CorsOrigins_FromYaml_NormalizedAndDeduplicated()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        config.Network!.ApiCorsOrigins = ["http://a.local:3000", "HTTP://A.local:3000/", "https://b.local"];
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(new DaemonSettings(), config);
+
+        result.ApiCorsOrigins.Should().Equal("http://a.local:3000", "https://b.local");
+    }
+
+    [Fact]
+    public void Validate_CorsOrigins_CliReplacesYamlList()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        config.Network!.ApiCorsOrigins = ["http://yaml.local"];
+
+        DaemonValidatedConfig result = DaemonConfigValidator.Validate(
+            new DaemonSettings { ApiCorsOrigin = ["http://cli-a.local", "http://cli-b.local"] }, config);
+
+        result.ApiCorsOrigins.Should().Equal("http://cli-a.local", "http://cli-b.local");
+    }
+
+    [Fact]
+    public void Validate_InvalidCorsOrigin_Throws()
+    {
+        AeromuxConfig config = CreateConfig(sdrEnabled: true);
+        config.Network!.ApiCorsOrigins = ["http://host/path"];
+
+        Action act = () => DaemonConfigValidator.Validate(new DaemonSettings(), config);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("Invalid CORS origin 'http://host/path'*");
+    }
+
     private static AeromuxConfig CreateConfig(bool sdrEnabled = false, bool yamlBeast = false)
     {
         var config = new AeromuxConfig

@@ -225,6 +225,8 @@ public sealed class YamlConfigurationLoaderTests : IDisposable
         config.Logging.File.Path.Should().Be("logs/aeromux-.log");
         config.Network!.BindAddress.Should().Be(IPAddress.Any);
         config.Network.ApiPort.Should().Be(8080);
+        config.Network.ApiCorsOrigins.Should().BeEmpty();
+        document.KeyPaths.Should().Contain("network.apiCorsOrigins", "every example documents the CORS setting");
         config.Tracking!.ConfidenceLevel.Should().Be(ConfidenceLevel.Medium);
         config.Receiver!.Name.Should().Be("Kecskemét");
         config.Receiver.Latitude.Should().NotBeNull();

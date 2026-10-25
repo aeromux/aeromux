@@ -59,7 +59,8 @@ public class DaemonCommand : AsyncCommand<DaemonSettings>
             AeromuxConfig config = ConfigurationProvider.Current;
 
             // Validate and resolve all configuration
-            DaemonValidatedConfig validatedConfig = DaemonConfigValidator.Validate(settings, config);
+            DaemonValidatedConfig validatedConfig = DaemonConfigValidator.Validate(
+                settings, config, ConfigurationProvider.Origin);
 
             // Create and start all daemon services (receiver stream, aircraft tracker, broadcasters)
             var orchestrator = new DaemonOrchestrator(validatedConfig, sessionStart);

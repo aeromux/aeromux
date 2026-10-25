@@ -7,6 +7,7 @@ All notable changes to Aeromux will be documented in this file.
 ### Fixed
 
 - **Configuration: Empty Configuration File Stopped Aeromux** — An `aeromux.yaml` with nothing in it, or with every line commented out, stopped the daemon and the live display at startup with `Failed to load configuration` and an internal null reference error. Such a file now means what it says: nothing is configured, and every setting keeps its default.
+- **Daemon: Port Check Ignored Command-Line Ports** — The daemon refuses ports below 1024, which need administrator rights, but it checked the ports from the YAML file instead of the ones actually used. A port given on the command line, such as `--api-port 80`, slipped past the check and failed later when the port could not be opened, while `--api-port 9000` was refused if the YAML file still said `apiPort: 80`. The check now applies to the port the daemon will listen on, wherever it was set.
 
 ## [0.8.4] — 2026-10-25
 

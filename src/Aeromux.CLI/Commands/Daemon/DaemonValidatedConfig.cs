@@ -61,6 +61,18 @@ public sealed record DaemonValidatedConfig
     /// <summary>Whether the REST API is enabled.</summary>
     public required bool ApiEnabled { get; init; }
 
+    /// <summary>
+    /// Validated, normalized web origins allowed to read the REST API from a browser
+    /// (CLI > YAML > none). Empty means no cross-origin access.
+    /// </summary>
+    public IReadOnlyList<string> ApiCorsOrigins { get; init; } = [];
+
+    /// <summary>
+    /// Where the configuration came from: the loaded YAML file, the keys it writes, and the
+    /// keys set by global and daemon command-line options.
+    /// </summary>
+    public ConfigurationOrigin Origin { get; init; } = ConfigurationOrigin.None;
+
     /// <summary>List of enabled SDR source configurations.</summary>
     public required List<SdrSourceConfig> EnabledSdrSources { get; init; }
 

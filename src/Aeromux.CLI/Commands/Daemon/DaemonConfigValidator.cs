@@ -32,9 +32,14 @@ public static class DaemonConfigValidator
     /// </summary>
     /// <param name="settings">CLI command settings.</param>
     /// <param name="config">Loaded Aeromux configuration.</param>
+    /// <param name="origin">
+    /// Where <paramref name="config"/> came from; the daemon's own CLI keys are added to it.
+    /// Null means no YAML file and no global CLI overrides.
+    /// </param>
     /// <returns>Validated and resolved configuration.</returns>
     /// <exception cref="InvalidOperationException">Thrown when validation fails.</exception>
-    public static DaemonValidatedConfig Validate(DaemonSettings settings, AeromuxConfig config)
+    public static DaemonValidatedConfig Validate(
+        DaemonSettings settings, AeromuxConfig config, ConfigurationOrigin? origin = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(config);
@@ -71,6 +76,7 @@ public static class DaemonConfigValidator
         IPAddress bindAddress = ValidateBindAddress(settings.BindAddress, config.Network.BindAddress);
         Guid? receiverUuid = ValidateReceiverUuid(settings.ReceiverUuid, config.Receiver?.ReceiverUuid);
         var mlatConfig = MlatConfig.Validate(settings.MlatEnabled, settings.MlatInputPort, config.Mlat);
+        IReadOnlyList<string> corsOrigins = ResolveCorsOrigins(settings.ApiCorsOrigin, config.Network.ApiCorsOrigins);
 
         if (!IPAddress.IsLoopback(bindAddress))
         {
@@ -96,7 +102,10 @@ public static class DaemonConfigValidator
             mlatConfig.InputPort, mlatConfig.Enabled ? "enabled" : "disabled");
 
         // Check daemon-specific preconditions (business logic validation)
-        CheckDaemonPreconditions(config, useSdr, beastSources, beastEnabled, jsonEnabled, sbsEnabled);
+        CheckDaemonPreconditions(
+            config, useSdr, beastSources,
+            new ResolvedPort(beastPort, beastEnabled), new ResolvedPort(jsonPort, jsonEnabled),
+            new ResolvedPort(sbsPort, sbsEnabled), apiPort);
 
         List<SdrSourceConfig> enabledSdrSources = useSdr
             ? config.SdrSources?.Where(d => d.Enabled).ToList() ?? []
@@ -117,8 +126,153 @@ public static class DaemonConfigValidator
             JsonEnabled = jsonEnabled,
             SbsEnabled = sbsEnabled,
             EnabledSdrSources = enabledSdrSources,
-            BeastSources = beastSources
+            BeastSources = beastSources,
+            ApiCorsOrigins = corsOrigins,
+            Origin = (origin ?? ConfigurationOrigin.None).WithCliKeys(CollectCliKeys(settings))
         };
+    }
+
+    /// <summary>
+    /// An output port as resolved from CLI and YAML, with whether its output is enabled.
+    /// </summary>
+    private readonly record struct ResolvedPort(int Port, bool Enabled);
+
+    /// <summary>
+    /// Lists the configuration key path of every value a daemon command-line option set, in
+    /// the key format of <see cref="ConfigurationOrigin"/>. <c>--sdr-source</c> has no key: it
+    /// decides whether SDR input runs, not a configuration value.
+    /// </summary>
+    /// <param name="settings">CLI command settings.</param>
+    /// <returns>The key paths set on the command line.</returns>
+    internal static IEnumerable<string> CollectCliKeys(DaemonSettings settings)
+    {
+        if (settings.BeastSource is { Length: > 0 })
+        {
+            yield return "beastSources";
+        }
+
+        if (settings.BindAddress is { Length: > 0 })
+        {
+            yield return "network.bindAddress";
+        }
+
+        if (settings.ApiPort.HasValue)
+        {
+            yield return "network.apiPort";
+        }
+
+        if (settings.ApiEnabled.HasValue)
+        {
+            yield return "network.apiEnabled";
+        }
+
+        if (settings.ApiCorsOrigin is { Length: > 0 })
+        {
+            yield return "network.apiCorsOrigins";
+        }
+
+        if (settings.BeastOutputPort.HasValue)
+        {
+            yield return "network.beastOutputPort";
+        }
+
+        if (settings.BeastOutputEnabled.HasValue)
+        {
+            yield return "network.beastOutputEnabled";
+        }
+
+        if (settings.JsonOutputPort.HasValue)
+        {
+            yield return "network.jsonOutputPort";
+        }
+
+        if (settings.JsonOutputEnabled.HasValue)
+        {
+            yield return "network.jsonOutputEnabled";
+        }
+
+        if (settings.SbsOutputPort.HasValue)
+        {
+            yield return "network.sbsOutputPort";
+        }
+
+        if (settings.SbsOutputEnabled.HasValue)
+        {
+            yield return "network.sbsOutputEnabled";
+        }
+
+        if (settings.MlatEnabled.HasValue)
+        {
+            yield return "mlat.enabled";
+        }
+
+        if (settings.MlatInputPort.HasValue)
+        {
+            yield return "mlat.inputPort";
+        }
+
+        if (settings.ReceiverUuid is { Length: > 0 })
+        {
+            yield return "receiver.receiverUuid";
+        }
+    }
+
+    /// <summary>
+    /// Resolves the CORS origins (a CLI list replaces the YAML list as a whole), validates
+    /// each, and normalizes them so equal origins compare equal.
+    /// </summary>
+    /// <param name="cliOrigins">Origins from <c>--api-cors-origin</c>, or null.</param>
+    /// <param name="yamlOrigins">Origins from <c>network.apiCorsOrigins</c>, or null.</param>
+    /// <returns>The normalized origins without duplicates, in first-seen order.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when an origin is invalid.</exception>
+    private static IReadOnlyList<string> ResolveCorsOrigins(string[]? cliOrigins, List<string>? yamlOrigins)
+    {
+        IEnumerable<string> origins = cliOrigins is { Length: > 0 } ? cliOrigins : yamlOrigins ?? [];
+        List<string> normalized = origins.Select(NormalizeCorsOrigin).Distinct(StringComparer.Ordinal).ToList();
+
+        if (normalized.Contains("*"))
+        {
+            Log.Warning("REST API CORS allows every origin (*): any web page opened in a browser that can reach " +
+                "this daemon can read its API. List specific origins instead to restrict access");
+        }
+        else if (normalized.Count > 0)
+        {
+            Log.Information("REST API CORS origins: {Origins}", string.Join(", ", normalized));
+        }
+
+        return normalized;
+    }
+
+    /// <summary>
+    /// Validates one CORS origin and returns it in canonical form: <c>*</c>, or
+    /// <c>scheme://host[:port]</c> with scheme and host in lowercase and a default port
+    /// omitted, which is how browsers send the <c>Origin</c> header.
+    /// </summary>
+    /// <param name="origin">The origin as configured.</param>
+    /// <returns>The canonical origin.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the origin is not <c>*</c> or an http(s) origin.</exception>
+    internal static string NormalizeCorsOrigin(string origin)
+    {
+        string trimmed = origin?.Trim() ?? string.Empty;
+        if (trimmed == "*")
+        {
+            return trimmed;
+        }
+
+        // An origin is scheme, host and port only. A path other than "/", a query, a fragment
+        // or user info would never match the Origin header a browser sends.
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && uri.Host.Length > 0
+            && uri.AbsolutePath == "/"
+            && !trimmed.Contains('?', StringComparison.Ordinal)
+            && !trimmed.Contains('#', StringComparison.Ordinal)
+            && uri.UserInfo.Length == 0)
+        {
+            return uri.IsDefaultPort ? $"{uri.Scheme}://{uri.Host}" : $"{uri.Scheme}://{uri.Host}:{uri.Port}";
+        }
+
+        throw new InvalidOperationException($"Invalid CORS origin '{origin}': expected http(s)://host[:port] or *");
     }
 
     /// <summary>
@@ -251,9 +405,10 @@ public static class DaemonConfigValidator
         AeromuxConfig config,
         bool useSdr,
         List<BeastSourceConfig> beastSources,
-        bool beastEnabled,
-        bool jsonEnabled,
-        bool sbsEnabled)
+        ResolvedPort beast,
+        ResolvedPort json,
+        ResolvedPort sbs,
+        int apiPort)
     {
         // Check that at least one input source is available
         if (useSdr && config.SdrSources?.Any(d => d.Enabled) != true)
@@ -272,30 +427,31 @@ public static class DaemonConfigValidator
 
         // Check network ports - Only validate ports for ENABLED outputs
         // Ports below 1024 require root/admin privileges, and 65535 is the maximum port number
+        // The resolved ports are checked, so a CLI override is held to the same rule as YAML
         // Note: Port conflict validation is deferred to the OS (bind will fail if port is in use)
-        if (beastEnabled && config.Network?.BeastOutputPort is < 1024 or > 65535)
+        if (beast.Enabled && beast.Port is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: Beast port must be between 1024 and 65535, but was {config.Network?.BeastOutputPort}");
+                $"Cannot start daemon: Beast port must be between 1024 and 65535, but was {beast.Port}");
         }
 
-        if (jsonEnabled && config.Network?.JsonOutputPort is < 1024 or > 65535)
+        if (json.Enabled && json.Port is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: JSON port must be between 1024 and 65535, but was {config.Network?.JsonOutputPort}");
+                $"Cannot start daemon: JSON port must be between 1024 and 65535, but was {json.Port}");
         }
 
-        if (sbsEnabled && config.Network?.SbsOutputPort is < 1024 or > 65535)
+        if (sbs.Enabled && sbs.Port is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {config.Network?.SbsOutputPort}");
+                $"Cannot start daemon: SBS port must be between 1024 and 65535, but was {sbs.Port}");
         }
 
         // ApiPort always validated (used by REST API)
-        if (config.Network?.ApiPort is < 1024 or > 65535)
+        if (apiPort is < 1024 or > 65535)
         {
             throw new InvalidOperationException(
-                $"Cannot start daemon: API port must be between 1024 and 65535, but was {config.Network?.ApiPort}");
+                $"Cannot start daemon: API port must be between 1024 and 65535, but was {apiPort}");
         }
 
         // Validate receiver location (optional, but validate if configured)

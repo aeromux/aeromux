@@ -71,6 +71,10 @@ public class DaemonSettings : GlobalSettings
     [Description("Enable REST API (default: true)")]
     public bool? ApiEnabled { get; set; }
 
+    [CommandOption("--api-cors-origin")]
+    [Description("Allow browser pages from this origin to read the REST API (http(s)://host[:port] or *, repeatable, replaces YAML apiCorsOrigins)")]
+    public string[]? ApiCorsOrigin { get; set; }
+
     [CommandOption("--mlat-enabled")]
     [Description("Enable MLAT input from mlat-client (default: true)")]
     public bool? MlatEnabled { get; set; }
