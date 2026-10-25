@@ -7,6 +7,7 @@ All notable changes to Aeromux will be documented in this file.
 ### Added
 
 - **REST API: Configuration Endpoint** — `GET /api/v1/config` returns the configuration the daemon is running with, after the built-in defaults, the YAML file and the command-line options are combined, in the same structure as `aeromux.yaml`. `ConfigFile` names the YAML file that was loaded, or is `null` when none was, which answers the common question of why a setting in the file seems to be ignored. With `?source=true`, every value also says where it came from: `Cli`, `Yaml` or `Default`. The receiver UUID is shown as `"(redacted)"`, because MLAT aggregators identify a feeder by it.
+- **REST API: Health Check Reports Failing Sources** — `GET /api/v1/health` always answered `OK`, even when the daemon was receiving nothing. It now judges each input: an SDR device fails when it has delivered no samples for 10 seconds, and a Beast source when it has been disconnected for 10 seconds. A quiet sky is not a failure, and MLAT input is not judged. `Status` is `OK` when nothing fails, `Degraded` when some sources fail and at least one still works, and `Unhealthy` when every source fails. `Unhealthy` is answered with HTTP 503, so `curl --fail`, Docker `HEALTHCHECK` and uptime monitors react without reading the body, while `Degraded` keeps 200 so a daemon still receiving through its other inputs is not restarted. The new `Problems` list names each failing source and for how long.
 
 ### Changed
 

@@ -14,11 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Net;
 using System.Text.Json;
+using Aeromux.Infrastructure.Streaming;
 using FluentAssertions;
 
 namespace Aeromux.CLI.Tests.Api;
 
+/// <summary>
+/// Tests for <c>GET /api/v1/health</c>: the status, its HTTP code and the problems, from
+/// readings sampled on the fixture's manual clock. The rules themselves are covered by
+/// the health evaluator's tests.
+/// </summary>
 public class HealthTests : IAsyncLifetime
 {
     private ApiTestFixture _fixture = null!;
@@ -33,13 +40,10 @@ public class HealthTests : IAsyncLifetime
     [Fact]
     public async Task Health_ReturnsExpectedFields()
     {
-        string json = await (await _fixture.Client.GetAsync("/api/v1/health")).Content.ReadAsStringAsync();
-        using JsonDocument doc = JsonDocument.Parse(json);
+        using JsonDocument doc = await GetHealthAsync(HttpStatusCode.OK);
 
-        doc.RootElement.GetProperty("Status").GetString().Should().Be("OK");
-        doc.RootElement.TryGetProperty("Uptime", out _).Should().BeTrue();
-        doc.RootElement.TryGetProperty("AircraftCount", out _).Should().BeTrue();
-        doc.RootElement.TryGetProperty("Timestamp", out _).Should().BeTrue();
+        doc.RootElement.EnumerateObject().Select(p => p.Name).Should().Equal(
+            "Status", "Uptime", "AircraftCount", "Timestamp", "Problems");
     }
 
     [Fact]
@@ -48,4 +52,76 @@ public class HealthTests : IAsyncLifetime
         HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/health");
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
     }
+
+    [Fact]
+    public async Task BeforeAnyReading_IsOkWithNoProblems()
+    {
+        using JsonDocument doc = await GetHealthAsync(HttpStatusCode.OK);
+
+        doc.RootElement.GetProperty("Status").GetString().Should().Be("OK");
+        doc.RootElement.GetProperty("Problems").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EverySourceDelivering_IsOk()
+    {
+        _fixture.Sample(Receiver(Device(samples: 0), Beast(connected: true)));
+        _fixture.Clock.Advance(TimeSpan.FromSeconds(30));
+        _fixture.Sample(Receiver(Device(samples: 72_000_000), Beast(connected: true)));
+
+        using JsonDocument doc = await GetHealthAsync(HttpStatusCode.OK);
+
+        doc.RootElement.GetProperty("Status").GetString().Should().Be("OK");
+        doc.RootElement.GetProperty("Problems").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SomeSourcesFailing_IsDegradedWith200()
+    {
+        // The device keeps delivering, the Beast source was lost 45 seconds ago
+        DateTime lost = _fixture.Clock.UtcNow;
+        _fixture.Sample(Receiver(Device(samples: 0), Beast(connected: false, since: lost)));
+        _fixture.Clock.Advance(TimeSpan.FromSeconds(45));
+        _fixture.Sample(Receiver(Device(samples: 108_000_000), Beast(connected: false, since: lost)));
+
+        using JsonDocument doc = await GetHealthAsync(HttpStatusCode.OK);
+
+        doc.RootElement.GetProperty("Status").GetString().Should().Be("Degraded");
+        doc.RootElement.GetProperty("Problems").EnumerateArray().Select(p => p.GetString())
+            .Should().Equal("Beast source 192.168.1.20:30005 has been disconnected for 45 s");
+    }
+
+    [Fact]
+    public async Task EverySourceFailing_IsUnhealthyWith503()
+    {
+        _fixture.Sample(Receiver(Device(samples: 0), Beast(connected: false, since: _fixture.Clock.UtcNow)));
+        _fixture.Clock.Advance(TimeSpan.FromSeconds(20));
+
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/health");
+        using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+        response.Headers.CacheControl?.NoStore.Should().BeTrue();
+        doc.RootElement.GetProperty("Status").GetString().Should().Be("Unhealthy");
+        doc.RootElement.GetProperty("Problems").EnumerateArray().Select(p => p.GetString()).Should().Equal(
+            "SDR device 'default' (index 0) has delivered no samples for 20 s",
+            "Beast source 192.168.1.20:30005 has been disconnected for 20 s");
+    }
+
+    private async Task<JsonDocument> GetHealthAsync(HttpStatusCode expected)
+    {
+        HttpResponseMessage response = await _fixture.Client.GetAsync("/api/v1/health");
+        response.StatusCode.Should().Be(expected);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
+    private static ReceiverStatistics Receiver(SdrDeviceStatistics device, BeastSourceStatistics beast) =>
+        new(0, new SdrStatistics(0, 0, [device]), [beast], null);
+
+    private static SdrDeviceStatistics Device(long samples) =>
+        new("default", 0, DateTime.UnixEpoch, samples, 0, 0, 0, 0, 0);
+
+    private static BeastSourceStatistics Beast(bool connected, DateTime? since = null) =>
+        new("192.168.1.20", 30005, connected, since ?? DateTime.UnixEpoch, 0, 0, 0, 0);
 }

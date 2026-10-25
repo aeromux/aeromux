@@ -415,16 +415,26 @@ public static partial class DaemonApiRoutes
             return Results.Json(DaemonConfigReport.Build(config, includeSource));
         });
 
-        // GET /api/v1/health: health check
+        // GET /api/v1/health: whether the input sources are delivering. Unhealthy is 503 so
+        // that curl --fail, Docker HEALTHCHECK and uptime monitors react without reading the
+        // body; Degraded stays 200 so that an orchestrator does not restart a daemon that is
+        // still receiving through its other inputs.
         app.MapGet("/api/v1/health", () =>
         {
-            int uptime = (int)(DateTime.UtcNow - startTime).TotalSeconds;
+            // Judged on the sampler's clock, the one its history was recorded on
+            HealthVerdict verdict = DaemonHealthEvaluator.Evaluate(statistics.GetSnapshot(), statistics.UtcNow);
+            DateTime now = DateTime.UtcNow;
 
-            return Results.Ok(new HealthResponse(
-                Status: "OK",
-                Uptime: uptime,
+            var response = new HealthResponse(
+                Status: verdict.Status,
+                Uptime: (int)(now - startTime).TotalSeconds,
                 AircraftCount: tracker.Count,
-                Timestamp: DateTime.UtcNow));
+                Timestamp: now,
+                Problems: verdict.Problems);
+
+            return verdict.Status == DaemonHealthEvaluator.Unhealthy
+                ? Results.Json(response, statusCode: StatusCodes.Status503ServiceUnavailable)
+                : Results.Ok(response);
         });
     }
 

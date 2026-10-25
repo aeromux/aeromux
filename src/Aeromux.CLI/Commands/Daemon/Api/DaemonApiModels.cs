@@ -414,11 +414,17 @@ public sealed record StatsDatabase(string? Version);
 /// <summary>
 /// Response for GET /api/v1/health.
 /// </summary>
+/// <remarks>
+/// <c>Status</c> is <c>OK</c> when no input source is failing, <c>Degraded</c> when some
+/// are, and <c>Unhealthy</c> (served with 503) when all are. <c>Problems</c> has one
+/// message per failing source and is empty when <c>OK</c>.
+/// </remarks>
 public sealed record HealthResponse(
     string Status,
     int Uptime,
     int AircraftCount,
-    DateTime Timestamp);
+    DateTime Timestamp,
+    IReadOnlyList<string> Problems);
 
 // === Error ===
 
