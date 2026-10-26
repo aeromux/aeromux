@@ -922,6 +922,457 @@ body:has(.webgl-error) {
     color: white;
 }
 
+/* ── Statistics ───────────────────────────────────────────────────────────── */
+
+/* The statistics button wears .settings-btn; it only needs to anchor the health dot. */
+.stats-btn {
+    position: relative;
+}
+
+.stats-dot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px white;
+    pointer-events: none;
+}
+
+/* A fixed content width from 481 px up. Between 481 and 768 px the control panel takes
+   the width of its content, and long names or problem lines would stretch it across
+   the view readout, which is not re-measured when a dropdown opens. Below, the panel
+   already spans the screen. */
+@media (min-width: 481px) {
+    .stats-dropdown {
+        width: 248px;
+    }
+}
+
+.stats-health {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 12px;
+}
+
+.stats-health svg {
+    flex-shrink: 0;
+}
+
+.stats-health-label {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+
+/* What the state means, or each problem, under the word rather than the icon (14 px
+   icon and 6 px gap); wrapped rather than cut, since a problem names the source and how
+   long it has failed. */
+.stats-health-line {
+    margin: 2px 0 0 20px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--color-text-secondary);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.stats-scope {
+    margin-top: 6px;
+}
+
+.stats-caption {
+    margin-top: var(--spacing-xs);
+    font-size: 10.5px;
+    color: var(--color-text-secondary);
+}
+
+.stats-loading {
+    padding: var(--spacing-sm) 0 var(--spacing-xs);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.stats-stale-note {
+    margin-top: var(--spacing-xs);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+/* The last figures, kept while the daemon does not answer */
+.stats-stale {
+    opacity: 0.45;
+}
+
+.stats-section {
+    margin-top: 10px;
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--color-panel-border);
+}
+
+/* The dropdown's own top border already separates the first section */
+.stats-panel > .stats-section:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.stats-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
+/* The settings category style, in the secondary gray so it reads at 10 px */
+.stats-section-label {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stats-section-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* One bar per list, its segments the parts; 2 px gaps keep neighbors apart */
+.stats-bar {
+    display: flex;
+    gap: 2px;
+    height: 8px;
+    margin: 6px 0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.stats-segment {
+    flex: 0 1 0;
+    min-width: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.stats-segment.dimmed {
+    opacity: 0.3;
+}
+
+.stats-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+}
+
+.stats-col-swatch { width: 14px; }
+.stats-col-code { width: 40px; }
+.stats-col-value { width: 66px; }
+.stats-col-share { width: 48px; }
+
+/* The header row is for screen readers only; it takes no height. */
+.stats-table-head th {
+    padding: 0;
+    height: 0;
+}
+
+.stats-table td,
+.stats-table tbody th,
+.stats-table tfoot th {
+    padding: 3px 0;
+    font-weight: normal;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.stats-table tbody tr.hovered td,
+.stats-table tfoot tr.hovered td,
+.stats-table tfoot tr.hovered th {
+    background: var(--color-hover-bg);
+}
+
+/* The source rows choose what Message types shows */
+.stats-selectable tbody tr,
+.stats-selectable tfoot tr {
+    cursor: pointer;
+}
+
+/* The aircraft list's selection look, after the hover rule so it wins */
+.stats-table tbody tr.selected td {
+    background: var(--color-selected-bg);
+}
+
+/* The name as a button for the keyboard; the row itself takes the click */
+.stats-row-button {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stats-selectable tbody .stats-row-button {
+    font-weight: 500;
+}
+
+.stats-row-button:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+
+/* Rows a thumb can hit */
+@media (pointer: coarse) {
+    .stats-selectable tbody td,
+    .stats-selectable tbody th,
+    .stats-selectable tfoot td,
+    .stats-selectable tfoot th {
+        height: 40px;
+    }
+}
+
+.stats-swatch {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.stats-code {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4b5563;
+    white-space: nowrap;
+}
+
+.stats-name {
+    overflow: hidden;
+}
+
+.stats-name-text,
+.stats-sub {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stats-sub {
+    font-size: 10px;
+    font-weight: normal;
+    color: var(--color-text-secondary);
+}
+
+
+.stats-table .stats-value {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.stats-table .stats-share {
+    padding-left: 6px;
+    text-align: right;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.stats-table tfoot td,
+.stats-table tfoot th {
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.stats-table tfoot .stats-name,
+.stats-table tfoot .stats-value {
+    font-weight: 600;
+}
+
+.stats-device {
+    margin-top: var(--spacing-xs);
+}
+
+.stats-device-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    font-family: var(--font-family);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    text-align: left;
+}
+
+.stats-device-toggle:hover {
+    background: var(--color-hover-bg);
+}
+
+.stats-chevron {
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+    transition: transform var(--transition-fast);
+}
+
+.stats-chevron.open {
+    transform: rotate(90deg);
+}
+
+.stats-device-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.stats-device-label {
+    font-size: 10px;
+    color: var(--color-text-secondary);
+}
+
+.stats-device-value {
+    width: 66px;
+    flex-shrink: 0;
+    text-align: right;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.stats-device-body {
+    padding: 0 0 var(--spacing-xs) 16px;
+}
+
+.stats-note {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.stats-note-value {
+    color: var(--color-text-primary);
+}
+
+.stats-kinds {
+    margin-top: 6px;
+    margin-bottom: 0;
+}
+
+/* "From:" and the source Message types shows, on a row of its own below the title */
+.stats-types-source {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.stats-types-from {
+    flex-shrink: 0;
+}
+
+.stats-types-source .stats-swatch {
+    flex-shrink: 0;
+}
+
+.stats-types-source-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.stats-show-all {
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: var(--font-family);
+    font-size: 11px;
+    color: var(--color-brand);
+    cursor: pointer;
+}
+
+.stats-show-all:hover {
+    text-decoration: underline;
+}
+
+.stats-types-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+    font-size: 11px;
+    color: #4b5563;
+}
+
+.stats-empty {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.stats-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.stats-footer-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
+.stats-footer-value {
+    color: var(--color-text-primary);
+    text-align: right;
+}
+
+/* Read by screen readers, not shown */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* ── Hover Tooltip ────────────────────────────────────────────────────────── */
 
 .hover-tooltip {

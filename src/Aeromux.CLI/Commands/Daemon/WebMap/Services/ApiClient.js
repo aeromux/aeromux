@@ -28,6 +28,22 @@ export const fetchAircraft = (bounds) => {
 
 export const fetchDetail = (icao) => fetch(`${API}/aircraft/${icao}`).then(r => r.json());
 
+// The receiver's measurements: messages per source, the SDR devices' frames, message
+// types. Throws on a non-OK response, so the caller can tell the daemon did not answer.
+export const fetchStats = () =>
+    fetch(`${API}/stats`).then(r => {
+        if (!r.ok) throw new Error(`stats:${r.status}`);
+        return r.json();
+    });
+
+// The receiver's health. 503 is a reading too (Unhealthy, with the same body), so only
+// other statuses and network errors throw.
+export const fetchHealth = () =>
+    fetch(`${API}/health`).then(r => {
+        if (!r.ok && r.status !== 503) throw new Error(`health:${r.status}`);
+        return r.json();
+    });
+
 export const fetchHistory = (icao) =>
     fetch(`${API}/aircraft/${icao}/history?type=Position`).then(r => r.json());
 

@@ -53,6 +53,38 @@ export function saveSort(sort) {
     }
 }
 
+// What the statistics dropdown shows: rates over the last minute ('now') or totals since
+// start ('total'), and which kind of message type. Kept apart from the interface
+// settings, whose every change re-renders the page and reaches the Sky View renderer.
+const STATS_STORAGE_KEY = 'aeromux-stats';
+const STATS_DEFAULTS = { scope: 'now', kind: 'DF' };
+const STATS_SCOPES = ['now', 'total'];
+const STATS_KINDS = ['DF', 'TC', 'BDS'];
+
+export function loadStatsView() {
+    try {
+        const stored = localStorage.getItem(STATS_STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            return {
+                scope: STATS_SCOPES.includes(parsed.scope) ? parsed.scope : STATS_DEFAULTS.scope,
+                kind: STATS_KINDS.includes(parsed.kind) ? parsed.kind : STATS_DEFAULTS.kind
+            };
+        }
+    } catch (e) {
+        // Ignore parse errors
+    }
+    return { ...STATS_DEFAULTS };
+}
+
+export function saveStatsView(view) {
+    try {
+        localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(view));
+    } catch (e) {
+        // Ignore storage errors
+    }
+}
+
 // Interface settings (range rings toggle, etc.) persisted across sessions
 const SETTINGS_STORAGE_KEY = 'aeromux-settings';
 const SETTINGS_DEFAULTS = {
@@ -165,6 +197,7 @@ export function resetAllSettings() {
         localStorage.removeItem(SORT_STORAGE_KEY);
         localStorage.removeItem(SETTINGS_STORAGE_KEY);
         localStorage.removeItem(SHEET_HEIGHT_STORAGE_KEY);
+        localStorage.removeItem(STATS_STORAGE_KEY);
     } catch (e) {
         // Ignore storage errors
     }

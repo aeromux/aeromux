@@ -16,9 +16,11 @@
 
 import { h, Fragment } from 'preact';
 import { useState, useRef, useEffect, useCallback } from 'preact/hooks';
-import { searchAircraft } from '../Services/ApiClient.js';
+import { searchAircraft, fetchHealth } from '../Services/ApiClient.js';
 import { formatCellSizeLabel, distanceUnitLabel, convertNauticalMiles } from '../Services/UnitConversion.js';
+import { healthView } from '../Services/ReceiverStatistics.js';
 import { HeatmapLegend } from './HeatmapLegend.jsx';
+import { StatsPanel, usePolling } from './StatsPanel.jsx';
 import { ViewToggle } from './ViewToggle.jsx';
 
 // Splits text around a case-insensitive query match and wraps the matched portion in a highlight span
@@ -41,7 +43,22 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
     const [loading, setLoading] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [statsOpen, setStatsOpen] = useState(false);
+    const [health, setHealth] = useState(null);
+    const [healthFailed, setHealthFailed] = useState(false);
     const [confirmingReset, setConfirmingReset] = useState(false);
+
+    // The receiver's health, for the dot on the statistics button whether or not the
+    // dropdown is open. 503 (Unhealthy) is a reading; only no answer is a failure.
+    usePolling(() => {
+        fetchHealth()
+            .then((data) => {
+                setHealth(data);
+                setHealthFailed(false);
+            })
+            .catch(() => setHealthFailed(true));
+    }, 10000);
+    const healthState = healthView(health, healthFailed);
 
     // Reset confirmation state when settings dropdown closes
     useEffect(() => {
@@ -56,12 +73,14 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
             if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
                 setSearchOpen(false);
                 setSettingsOpen(false);
+                setStatsOpen(false);
             }
         };
         const handleKey = (e) => {
             if (e.key === 'Escape') {
                 setSearchOpen(false);
                 setSettingsOpen(false);
+                setStatsOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClick);
@@ -76,6 +95,7 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
         const val = e.target.value;
         setQuery(val);
         setSettingsOpen(false);
+        setStatsOpen(false);
 
         if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -109,6 +129,14 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
     const toggleSettings = useCallback(() => {
         setSettingsOpen(prev => !prev);
         setSearchOpen(false);
+        setStatsOpen(false);
+    }, []);
+
+    // The statistics open where settings open, so one replaces the other
+    const toggleStats = useCallback(() => {
+        setStatsOpen(prev => !prev);
+        setSearchOpen(false);
+        setSettingsOpen(false);
     }, []);
 
     const setUnit = useCallback((key, value) => {
@@ -166,6 +194,13 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                         </div>
                     )}
                 </div>
+                <button class={`settings-btn stats-btn${statsOpen ? ' active' : ''}`} onClick={toggleStats}
+                        title="Statistics" aria-label={healthState.ariaLabel} aria-pressed={statsOpen}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1zm1 12h2V2h-2zm-3 0V7H7v7zm-5 0v-3H2v3z"/>
+                    </svg>
+                    {healthState.showDot && <span class="stats-dot" style={{ background: healthState.dotColor }} aria-hidden="true" />}
+                </button>
                 <button class={`settings-btn${settingsOpen ? ' active' : ''}`} onClick={toggleSettings} title="Settings">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0"/>
@@ -179,6 +214,11 @@ export function ControlPanel({ units, onUnitsChange, settings, onSettingsChange,
                 receiverPending={receiverPending}
                 onChange={onViewModeChange}
             />
+            {statsOpen && (
+                <div class="settings-dropdown stats-dropdown">
+                    <StatsPanel health={healthState} />
+                </div>
+            )}
             {settingsOpen && (
                 <div class="settings-dropdown">
                     <div class="settings-category">Units</div>
