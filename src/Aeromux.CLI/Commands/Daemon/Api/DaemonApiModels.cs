@@ -346,8 +346,11 @@ public sealed record StatsMessages(
 /// </summary>
 public sealed record StatsSdr(
     long Extracted,
+    double ExtractedPerSecond,
     long Corrected,
+    double CorrectedPerSecond,
     long Duplicates,
+    double DuplicatesPerSecond,
     long Messages,
     double MessagesPerSecond,
     IReadOnlyList<StatsSdrDevice> Devices);
@@ -360,8 +363,11 @@ public sealed record StatsSdrDevice(
     int DeviceIndex,
     double SamplesPerSecond,
     long Extracted,
+    double ExtractedPerSecond,
     long Corrected,
+    double CorrectedPerSecond,
     long Duplicates,
+    double DuplicatesPerSecond,
     long Messages,
     double MessagesPerSecond,
     StatsMessageTypes MessageTypes);

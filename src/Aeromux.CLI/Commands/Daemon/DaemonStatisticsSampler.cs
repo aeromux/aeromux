@@ -201,6 +201,9 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
                 .. (current.Sdr?.Devices ?? []).Select(device => new DeviceSnapshot(
                     device,
                     WindowRate(s => FindDevice(s, device.Name)?.Samples),
+                    WindowRate(s => FindDevice(s, device.Name)?.Extracted),
+                    WindowRate(s => FindDevice(s, device.Name)?.Corrected),
+                    WindowRate(s => FindDevice(s, device.Name)?.Duplicates),
                     WindowRate(s => FindDevice(s, device.Name)?.Messages),
                     _deviceSamples[device.Name].IncreasedAt,
                     TypeRates(s => FindDevice(s, device.Name)?.MessageTypes)))
@@ -241,6 +244,9 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
                 current,
                 latest.Time,
                 WindowRate(s => s.Messages),
+                WindowRate(s => s.Sdr?.Devices.Sum(d => d.Extracted)),
+                WindowRate(s => s.Sdr?.Devices.Sum(d => d.Corrected)),
+                WindowRate(s => s.Sdr?.Devices.Sum(d => d.Duplicates)),
                 WindowRate(s => s.Sdr?.Devices.Sum(d => d.Messages)),
                 devices,
                 beastSources,
@@ -299,6 +305,9 @@ public sealed class DaemonStatisticsSampler : IAsyncDisposable
 /// <param name="Statistics">The latest reading, or null before the first.</param>
 /// <param name="TakenAt">When the latest reading was taken (UTC), or null before the first.</param>
 /// <param name="MessagesPerSecond">Messages handed to the tracker from every source, per second.</param>
+/// <param name="SdrExtractedPerSecond">Frames extracted by all SDR devices together, per second.</param>
+/// <param name="SdrCorrectedPerSecond">Extracted frames that needed a CRC correction, all SDR devices together, per second.</param>
+/// <param name="SdrDuplicatesPerSecond">Duplicate frames dropped by all SDR devices together, per second.</param>
 /// <param name="SdrMessagesPerSecond">Messages from all SDR devices together, per second.</param>
 /// <param name="Devices">One entry per SDR device, in the order of the reading.</param>
 /// <param name="BeastSources">One entry per Beast source, in the order of the reading.</param>
@@ -307,13 +316,16 @@ public sealed record StatisticsSnapshot(
     ReceiverStatistics? Statistics,
     DateTime? TakenAt,
     double MessagesPerSecond,
+    double SdrExtractedPerSecond,
+    double SdrCorrectedPerSecond,
+    double SdrDuplicatesPerSecond,
     double SdrMessagesPerSecond,
     IReadOnlyList<DeviceSnapshot> Devices,
     IReadOnlyList<BeastSourceSnapshot> BeastSources,
     MlatSnapshot? Mlat)
 {
     /// <summary>The snapshot before the first reading: no sources and no rates.</summary>
-    public static StatisticsSnapshot Empty { get; } = new(null, null, 0, 0, [], [], null);
+    public static StatisticsSnapshot Empty { get; } = new(null, null, 0, 0, 0, 0, 0, [], [], null);
 }
 
 /// <summary>
@@ -321,6 +333,9 @@ public sealed record StatisticsSnapshot(
 /// </summary>
 /// <param name="Device">The device's counters from the latest reading.</param>
 /// <param name="SamplesPerSecond">IQ samples received per second over the window.</param>
+/// <param name="ExtractedPerSecond">Frames extracted per second over the window.</param>
+/// <param name="CorrectedPerSecond">Extracted frames that needed a CRC correction, per second over the window.</param>
+/// <param name="DuplicatesPerSecond">Duplicate frames dropped per second over the window.</param>
 /// <param name="MessagesPerSecond">Messages handed to the tracker per second over the window.</param>
 /// <param name="SamplesLastIncreased">
 /// When the sample count last went up (UTC), or when the device first appeared if it never has.
@@ -329,6 +344,9 @@ public sealed record StatisticsSnapshot(
 public sealed record DeviceSnapshot(
     SdrDeviceStatistics Device,
     double SamplesPerSecond,
+    double ExtractedPerSecond,
+    double CorrectedPerSecond,
+    double DuplicatesPerSecond,
     double MessagesPerSecond,
     DateTime SamplesLastIncreased,
     MessageTypeRates MessageTypes);

@@ -80,9 +80,11 @@ public class StatsTests : IAsyncLifetime
         JsonElement root = doc.RootElement;
 
         Names(root.GetProperty("Sdr")).Should().Equal(
-            "Extracted", "Corrected", "Duplicates", "Messages", "MessagesPerSecond", "Devices");
+            "Extracted", "ExtractedPerSecond", "Corrected", "CorrectedPerSecond",
+            "Duplicates", "DuplicatesPerSecond", "Messages", "MessagesPerSecond", "Devices");
         Names(root.GetProperty("Sdr").GetProperty("Devices")[0]).Should().Equal(
-            "Name", "DeviceIndex", "SamplesPerSecond", "Extracted", "Corrected", "Duplicates",
+            "Name", "DeviceIndex", "SamplesPerSecond", "Extracted", "ExtractedPerSecond",
+            "Corrected", "CorrectedPerSecond", "Duplicates", "DuplicatesPerSecond",
             "Messages", "MessagesPerSecond", "MessageTypes");
         Names(root.GetProperty("BeastSources")[0]).Should().Equal(
             "Host", "Port", "Connected", "Since", "Reconnects", "Messages", "MessagesPerSecond", "MessageTypes");
@@ -155,7 +157,8 @@ public class StatsTests : IAsyncLifetime
         _fixture.Clock.Advance(TimeSpan.FromSeconds(3));
         _fixture.Sample(Receiver(
             messages: 1000,
-            sdr: new SdrStatistics([Device("roof", 0, samples: 7_200_000, messages: 700)]),
+            sdr: new SdrStatistics([Device(
+                "roof", 0, samples: 7_200_000, extracted: 1000, corrected: 80, duplicates: 200, messages: 700)]),
             beast: [Beast(messages: 200)],
             mlat: new MlatStatistics(1, 100, MessageTypeCounts.Empty)));
 
@@ -167,6 +170,12 @@ public class StatsTests : IAsyncLifetime
         JsonElement device = root.GetProperty("Sdr").GetProperty("Devices")[0];
         device.GetProperty("SamplesPerSecond").GetDouble().Should().Be(2_400_000);
         device.GetProperty("MessagesPerSecond").GetDouble().Should().Be(233.3);
+        device.GetProperty("ExtractedPerSecond").GetDouble().Should().Be(333.3);
+        device.GetProperty("CorrectedPerSecond").GetDouble().Should().Be(26.7);
+        device.GetProperty("DuplicatesPerSecond").GetDouble().Should().Be(66.7);
+        root.GetProperty("Sdr").GetProperty("ExtractedPerSecond").GetDouble().Should().Be(333.3);
+        root.GetProperty("Sdr").GetProperty("CorrectedPerSecond").GetDouble().Should().Be(26.7);
+        root.GetProperty("Sdr").GetProperty("DuplicatesPerSecond").GetDouble().Should().Be(66.7);
         root.GetProperty("BeastSources")[0].GetProperty("MessagesPerSecond").GetDouble().Should().Be(66.7);
         root.GetProperty("Mlat").GetProperty("MessagesPerSecond").GetDouble().Should().Be(33.3);
     }

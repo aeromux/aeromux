@@ -140,6 +140,31 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
     }
 
     [Fact]
+    public void SdrFrameCounters_GetRatesPerDeviceAndTogether()
+    {
+        SampleAt(Receiver(sdr: Sdr(
+            Device("roof", samples: 0, index: 0),
+            Device("attic", samples: 0, index: 1))));
+        _clock.Advance(TimeSpan.FromSeconds(10));
+        SampleAt(Receiver(sdr: Sdr(
+            Device("roof", samples: 0, messages: 800, index: 0, extracted: 1000, corrected: 80, duplicates: 170),
+            Device("attic", samples: 0, messages: 400, index: 1, extracted: 500, corrected: 30, duplicates: 90))));
+
+        StatisticsSnapshot snapshot = _sampler.GetSnapshot();
+
+        snapshot.Devices[0].ExtractedPerSecond.Should().Be(100);
+        snapshot.Devices[0].CorrectedPerSecond.Should().Be(8);
+        snapshot.Devices[0].DuplicatesPerSecond.Should().Be(17);
+        snapshot.Devices[1].ExtractedPerSecond.Should().Be(50);
+        snapshot.Devices[1].CorrectedPerSecond.Should().Be(3);
+        snapshot.Devices[1].DuplicatesPerSecond.Should().Be(9);
+        snapshot.SdrExtractedPerSecond.Should().Be(150, "the devices' frames together");
+        snapshot.SdrCorrectedPerSecond.Should().Be(11);
+        snapshot.SdrDuplicatesPerSecond.Should().Be(26);
+        snapshot.SdrMessagesPerSecond.Should().Be(120);
+    }
+
+    [Fact]
     public void DevicesKeepTheirOrderAndAreMatchedByName()
     {
         SampleAt(Receiver(sdr: Sdr(Device("roof", samples: 0), Device("attic", samples: 0))));
@@ -287,8 +312,10 @@ public class DaemonStatisticsSamplerTests : IAsyncLifetime, IAsyncDisposable
 
     internal static SdrStatistics Sdr(params SdrDeviceStatistics[] devices) => new(devices);
 
-    internal static SdrDeviceStatistics Device(string name, long samples, long messages = 0, int index = 0) =>
-        new(name, index, samples, 0, 0, 0, messages, MessageTypeCounts.Empty);
+    internal static SdrDeviceStatistics Device(
+        string name, long samples, long messages = 0, int index = 0,
+        long extracted = 0, long corrected = 0, long duplicates = 0) =>
+        new(name, index, samples, extracted, corrected, duplicates, messages, MessageTypeCounts.Empty);
 
     internal static BeastSourceStatistics Beast(
         string host, int port, long messages = 0, bool connected = true, DateTime? since = null) =>

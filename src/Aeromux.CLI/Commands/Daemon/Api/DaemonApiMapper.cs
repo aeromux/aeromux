@@ -451,8 +451,11 @@ public static class DaemonApiMapper
                     DeviceIndex: d.Device.DeviceIndex,
                     SamplesPerSecond: Round(d.SamplesPerSecond),
                     Extracted: d.Device.Extracted,
+                    ExtractedPerSecond: Round(d.ExtractedPerSecond),
                     Corrected: d.Device.Corrected,
+                    CorrectedPerSecond: Round(d.CorrectedPerSecond),
                     Duplicates: d.Device.Duplicates,
+                    DuplicatesPerSecond: Round(d.DuplicatesPerSecond),
                     Messages: d.Device.Messages,
                     MessagesPerSecond: Round(d.MessagesPerSecond),
                     MessageTypes: ToMessageTypes(d.Device.MessageTypes, d.MessageTypes)))
@@ -460,8 +463,11 @@ public static class DaemonApiMapper
 
             sdr = new StatsSdr(
                 Extracted: devices.Sum(d => d.Extracted),
+                ExtractedPerSecond: Round(snapshot.SdrExtractedPerSecond),
                 Corrected: devices.Sum(d => d.Corrected),
+                CorrectedPerSecond: Round(snapshot.SdrCorrectedPerSecond),
                 Duplicates: devices.Sum(d => d.Duplicates),
+                DuplicatesPerSecond: Round(snapshot.SdrDuplicatesPerSecond),
                 Messages: devices.Sum(d => d.Messages),
                 MessagesPerSecond: Round(snapshot.SdrMessagesPerSecond),
                 Devices: devices);
