@@ -4,6 +4,34 @@ Aeromux includes a read-only REST API that provides programmatic access to live 
 
 All API responses are served over plain HTTP without TLS encryption. This is intentional: the API is intended for use on local networks or behind a reverse proxy that handles TLS termination. If you need encrypted access from external clients, place a reverse proxy such as nginx or Caddy in front of Aeromux.
 
+## Table of Contents
+
+- [Configuration](#configuration)
+  - [Browser access from other origins (CORS)](#browser-access-from-other-origins-cors)
+- [Endpoints](#endpoints)
+- [Aircraft List](#aircraft-list)
+  - [Query Parameters](#query-parameters)
+- [Aircraft Detail](#aircraft-detail)
+  - [Available Sections](#available-sections)
+- [Aircraft History](#aircraft-history)
+  - [Query Parameters](#query-parameters-1)
+  - [Response Structure](#response-structure)
+  - [Incremental Polling with `after`](#incremental-polling-with-after)
+- [Aircraft Photo](#aircraft-photo)
+  - [Lookup behavior](#lookup-behavior)
+  - [Image bytes](#image-bytes)
+  - [Planespotters usage rules](#planespotters-usage-rules)
+- [Effective Configuration](#effective-configuration)
+  - [Where each value came from](#where-each-value-came-from)
+- [Statistics](#statistics)
+  - [Messages by type](#messages-by-type)
+  - [Migrating from 0.8](#migrating-from-08)
+- [Health Check](#health-check)
+- [Response Format](#response-format)
+- [Error Responses](#error-responses)
+  - [Error Examples](#error-examples)
+- [Common Usage Patterns](#common-usage-patterns)
+
 ## Configuration
 
 The REST API is enabled by default and listens on port 8080. You can change the port or disable the API entirely through the YAML configuration file or via CLI options.
@@ -787,8 +815,11 @@ curl -s "http://localhost:8080/api/v1/stats"
   "Messages": { "Total": 127365, "PerSecond": 2122.8, "AveragePerSecond": 2122.8 },
   "Sdr": {
     "Extracted": 18997,
+    "ExtractedPerSecond": 316.6,
     "Corrected": 209,
+    "CorrectedPerSecond": 3.5,
     "Duplicates": 3464,
+    "DuplicatesPerSecond": 57.7,
     "Messages": 15372,
     "MessagesPerSecond": 256.2,
     "Devices": [
@@ -797,8 +828,11 @@ curl -s "http://localhost:8080/api/v1/stats"
         "DeviceIndex": 0,
         "SamplesPerSecond": 2400013,
         "Extracted": 10508,
+        "ExtractedPerSecond": 175.1,
         "Corrected": 112,
+        "CorrectedPerSecond": 1.9,
         "Duplicates": 1909,
+        "DuplicatesPerSecond": 31.8,
         "Messages": 8495,
         "MessagesPerSecond": 141.6
       },
@@ -807,8 +841,11 @@ curl -s "http://localhost:8080/api/v1/stats"
         "DeviceIndex": 1,
         "SamplesPerSecond": 2400013,
         "Extracted": 8489,
+        "ExtractedPerSecond": 141.5,
         "Corrected": 97,
+        "CorrectedPerSecond": 1.6,
         "Duplicates": 1555,
+        "DuplicatesPerSecond": 25.9,
         "Messages": 6877,
         "MessagesPerSecond": 114.6
       }
@@ -837,12 +874,15 @@ curl -s "http://localhost:8080/api/v1/stats"
 | `Messages.Total`                          | Messages handed to the aircraft tracker from every source (SDR, Beast and MLAT) since start                                                                         |
 | `Messages.PerSecond`                      | The same over the last 60 seconds                                                                                                                                   |
 | `Messages.AveragePerSecond`               | `Total` divided by `Uptime`                                                                                                                                         |
-| `Sdr`                                     | `null` when no SDR device runs; otherwise the sums of its devices' counters, and their rate                                                                         |
+| `Sdr`                                     | `null` when no SDR device runs; otherwise the sums of its devices' counters, and their rates                                                                        |
 | `Sdr.Devices[]`                           | One entry per running device, in configuration order                                                                                                                |
 | `…SamplesPerSecond`                       | IQ samples received over the last 60 seconds: close to the sample rate when the device is healthy, `0` when it has stopped delivering                               |
 | `…Extracted`                              | Frames the preamble detector extracted: they passed the CRC check, after a single-bit correction if needed                                                          |
+| `…ExtractedPerSecond`                     | `Extracted` over the last 60 seconds                                                                                                                                |
 | `…Corrected`                              | Extracted frames that needed that correction                                                                                                                        |
+| `…CorrectedPerSecond`                     | `Corrected` over the last 60 seconds                                                                                                                                |
 | `…Duplicates`                             | Frames this device's duplicate filter dropped (multipath, replies to several interrogators)                                                                         |
+| `…DuplicatesPerSecond`                    | `Duplicates` over the last 60 seconds                                                                                                                               |
 | `…Messages`                               | Messages this device handed to the aircraft tracker                                                                                                                 |
 | `…MessagesPerSecond`                      | `Messages` over the last 60 seconds                                                                                                                                 |
 | `…MessageTypes`                           | This device's messages by downlink format, type code and Comm-B register (see Messages by type)                                                                     |
@@ -860,7 +900,7 @@ curl -s "http://localhost:8080/api/v1/stats"
 
 **Messages.** Every source reports `Messages` with the same meaning: the messages it handed to the aircraft tracker. `Messages.Total` is the sum over all sources, up to the few messages being processed at the moment of reading. Counters are cumulative since their source started, and a device's counters add up to the `Sdr` figures.
 
-**SDR devices.** A frame is extracted when the preamble detector finds it and it passes the CRC check, repaired first if a single bit was wrong (`Corrected`). It then becomes a duplicate (`Duplicates`), a message (`Messages`), or is held back because its address belongs to no aircraft confirmed yet: noise with a valid CRC, or an aircraft heard for the first time. That last group is the difference `Extracted − Duplicates − Messages`.
+**SDR devices.** A frame is extracted when the preamble detector finds it and it passes the CRC check, repaired first if a single bit was wrong (`Corrected`). It then becomes a duplicate (`Duplicates`), a message (`Messages`), or is held back because its address belongs to no aircraft confirmed yet: noise with a valid CRC, or an aircraft heard for the first time. That last group is the difference `Extracted − Duplicates − Messages`, and the same difference of the rates gives it per second, within rounding.
 
 **Rates.** Every `PerSecond` field covers the last 60 seconds, sampled once a second, so a monitoring tool polling every 30 to 60 seconds sees the period it polled across. During the first minute the rates cover the time since the daemon started. `Messages.AveragePerSecond` is the average over the whole session.
 

@@ -27,7 +27,7 @@ Most ADS-B setups involve chaining separate tools for demodulation, decoding, an
 
 - **REST API** — In daemon mode, serves a read-only JSON API for web interfaces, map visualizations, and third-party integrations. Provides aircraft list, detail, history, statistics, and health endpoints. See the [API Guide](docs/API.md) for full documentation.
 
-- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, range rings, and an optional traffic-density heatmap. A second **Sky View** shows where aircraft are relative to the receiver — bearing, elevation angle, and distance from your antenna — rather than on a flat map, along with the coverage actually measured in each direction. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
+- **Web Map** — Built-in browser-based map for real-time aircraft visualization with interactive aircraft list, detail view, search, range rings, receiver statistics, and an optional traffic-density heatmap. A second **Sky View** shows where aircraft are relative to the receiver — bearing, elevation angle, and distance from your antenna — rather than on a flat map, along with the coverage actually measured in each direction. Served directly by the daemon — no external web server required. See the [Web Map Guide](docs/WEBMAP.md) for full documentation.
 
 - **Beast TCP Input** — Connect to one or more external Beast-compatible servers (dump1090, readsb, or another Aeromux daemon) over the network. Beast sources can be used alone or combined with local SDR devices. Includes automatic reconnection with exponential backoff if a connection drops.
 

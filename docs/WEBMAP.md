@@ -10,6 +10,36 @@ The interface provides two views of the same traffic. The **Map** plots aircraft
   <em>The Map view with the traffic heatmap, range rings, the measured coverage outline, an aircraft's detail panel, and the settings dropdown open</em>
 </div>
 
+## Table of Contents
+
+- [Configuration](#configuration)
+- [Map](#map)
+  - [Readout](#readout)
+  - [Aircraft Altitude](#aircraft-altitude)
+  - [Aircraft Icon Resolution](#aircraft-icon-resolution)
+  - [Range Rings](#range-rings)
+  - [Range Outline](#range-outline)
+  - [Traffic Heatmap](#traffic-heatmap)
+- [Sky View](#sky-view)
+  - [Switching Views](#switching-views)
+  - [Moving the Camera](#moving-the-camera)
+  - [What You See](#what-you-see)
+  - [Coverage Ribbon](#coverage-ribbon)
+  - [Sun and Moon](#sun-and-moon)
+  - [Accuracy](#accuracy)
+  - [360° Flattened Mode](#360-flattened-mode)
+- [Left Panel](#left-panel)
+  - [Aircraft List](#aircraft-list)
+  - [Aircraft Detail](#aircraft-detail)
+  - [Resizing the Panel (Mobile)](#resizing-the-panel-mobile)
+  - [Reset Layout](#reset-layout)
+- [Control Panel (Top Right)](#control-panel-top-right)
+  - [Search](#search)
+  - [Statistics](#statistics)
+  - [Settings](#settings)
+- [Browser Requirements](#browser-requirements)
+- [Troubleshooting](#troubleshooting)
+
 ## Configuration
 
 The web map is served whenever the REST API is enabled. There is no separate flag: enabling the API implicitly enables the map. Navigate to the daemon's API address in any browser:
@@ -286,7 +316,7 @@ A **Reset layout** button restores the panel to its defaults: the expanded and c
 
 ## Control Panel (Top Right)
 
-The control panel in the top-right corner provides search, the `Map` / `Sky` view switch, and settings functionality.
+The control panel in the top-right corner provides search, the `Map` / `Sky` view switch, the receiver's statistics, and settings functionality.
 
 ### Search
 
@@ -301,9 +331,35 @@ The search input accepts any text and performs a case-insensitive substring matc
 
 Each result shows the callsign (or ICAO address if no callsign is available) and metadata (ICAO address and registration). The matched portion of the text is highlighted in orange. Clicking a result selects the aircraft and opens its detail view.
 
+### Statistics
+
+The chart icon between the search input and the gear icon opens the receiver's statistics, in the same place as the settings: opening one closes the other, and clicking elsewhere or pressing Escape closes both. The statistics are there in both the Map and the Sky view.
+
+<!-- Screenshot: the statistics dropdown open, Now selected, the first SDR device
+     expanded. Save it as docs/images/webmap/statistics.png. -->
+<div align="center">
+  <img src="images/webmap/statistics.png" alt="Receiver Statistics" width="350">
+  <br>
+  <em>Receiver statistics: messages by source, an SDR device's frames, and the message types</em>
+</div>
+<br>
+
+From top to bottom, the dropdown shows:
+
+- **Status**: `OK`, `Degraded` or `Unhealthy`, as the [health check](API.md#health-check) reports it, or `Unreachable` when the daemon does not answer; below it, what that means, or one line per failing source.
+- **Period, Now / Since start**: `Now` shows rates over the last 60 seconds ("805.7/s"), `Since start` totals since the daemon started ("113,588"). Once a list's total reaches 10 million, that list is shown in millions ("155.5 M"); hover a row for its exact count. Everything below switches together; the choice is remembered.
+- **Messages by source**: each SDR device, Beast source and the MLAT input, with its share of all messages. A Beast source also says whether it is connected and since when. Click or tap a source to see its message types below; click the total row, or the source again, to see all of them.
+- **SDR devices**: each device's extracted frames, split into the messages it passed on, the duplicates it dropped, and the frames it held back because they came from an address not yet confirmed (noise with a valid CRC, or an aircraft heard for the first time). Below them, how many frames needed a single-bit correction, and the samples per second the device delivers. The devices start collapsed; click one to show or hide its figures.
+- **Message types**: the messages of all sources, or of the source chosen above, by downlink format (DF), ADS-B type code (TC) or Comm-B register (BDS), each code with a short name; hover a row for the full one. Below its title, `From:` names the source it shows; `Show all` beside the title goes back to all sources. The `DF / TC / BDS` choice is remembered.
+- **Outputs, aircraft, versions and uptime**: the clients of each enabled output, the aircraft tracked, the Aeromux version, the aircraft database version, and how long the daemon has been running.
+
+**How the numbers add up.** Every list is a sum: a bar split into parts, the parts as rows, and a total row that is the sum of the rows as shown. The sources add up to all messages. A device's messages, duplicates and held-back frames add up to the frames it extracted. The downlink formats add up to the messages, the type codes to the DF 17 and DF 18 squitters (DF 18 frames without an ICAO address have no type code and get a row of their own), and the Comm-B registers to the DF 20 and DF 21 replies. Codes without a color of their own are listed in gray after the others. All numbers use US format (`1,234.5`), whatever the browser's language.
+
+**The dot on the icon.** A green dot means `OK`, an amber dot `Degraded` (some sources are failing), a red dot `Unhealthy` (all of them are), and a gray dot that the daemon does not answer. The health is checked every 10 seconds; the statistics refresh every 5 seconds while the dropdown is open. A browser tab in the background makes no requests.
+
 ### Settings
 
-The gear icon next to the search input opens the settings dropdown. Its categories run in this order: `Units`, `Interface`, then `Heatmap` in Map mode or `Sky View` in Sky mode, then `Legend` and `Reset to defaults`.
+The gear icon at the right of the search row opens the settings dropdown. Its categories run in this order: `Units`, `Interface`, then `Heatmap` in Map mode or `Sky View` in Sky mode, then `Legend` and `Reset to defaults`.
 
 The middle of the panel follows the active view, so the map overlays and the Sky View controls are never shown at the same time. Units, aircraft photos, the legend, and the reset are present in both views.
 
@@ -385,7 +441,7 @@ A color key for the aircraft markers, shown in both views. The same colors are u
 
 #### Reset
 
-The "Reset to defaults" button at the bottom of the settings dropdown restores all units, interface options, and sort preferences to their default values and clears them from the browser. An inline confirmation prompt ("Are you sure?") prevents accidental resets.
+The "Reset to defaults" button at the bottom of the settings dropdown restores all units, interface options, sort preferences, and the statistics' `Now` / `Since start` and `DF / TC / BDS` choices to their default values and clears them from the browser. An inline confirmation prompt ("Are you sure?") prevents accidental resets.
 
 ## Browser Requirements
 
