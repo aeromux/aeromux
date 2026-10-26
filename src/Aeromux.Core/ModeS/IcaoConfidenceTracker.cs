@@ -61,7 +61,7 @@ public sealed class IcaoConfidenceTracker : IDisposable
     private readonly TimeSpan _timeout;
     private readonly List<uint> _expiredKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
 
-    // Statistics, read for the Debug log by whoever owns the tracker
+    // Statistics, read for the receiver's Debug log
     private long _totalFrames;
     private long _confidentFrames;
     private long _expiredIcaos;
@@ -198,8 +198,8 @@ public sealed class IcaoConfidenceTracker : IDisposable
         _expiredIcaos += _expiredKeys.Count;
     }
 
-    // Statistics properties. The tracker never logs; whoever owns it does: the receiver for
-    // the tracker its SDR devices share, or a device worker for a tracker of its own.
+    // Statistics properties. The tracker never logs: the receiver logs the tracker its SDR
+    // devices share. A Beast stream has a tracker of its own and does not log it.
 
     /// <summary>Total frames processed (both confident and non-confident)</summary>
     public long TotalFrames => _totalFrames;

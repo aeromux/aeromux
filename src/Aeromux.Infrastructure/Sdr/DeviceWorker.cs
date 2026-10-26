@@ -53,8 +53,7 @@ public sealed class DeviceWorker : IDisposable
     private readonly IQDemodulator _demodulator = new();
     private readonly PreambleDetector _preambleDetector;
     private readonly ValidatedFrameFactory _validatedFrameFactory = new();
-    private readonly IcaoConfidenceTracker _confidenceTracker;
-    private readonly bool _ownsConfidenceTracker;  // True when tracker is self-created (not shared), responsible for disposal
+    private readonly IcaoConfidenceTracker _confidenceTracker;  // Shared with the other devices and MLAT, owned by the receiver
     private readonly FrameDeduplicator _frameDeduplicator;
     private readonly MessageParser _messageParser;
     private readonly Action<ValidatedFrame, ModeSMessage?>? _onDataParsed;
@@ -62,11 +61,22 @@ public sealed class DeviceWorker : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _workerTask;
 
+    /// <summary>
+    /// Creates a worker for one RTL-SDR device. The device is opened by <see cref="OpenDevice"/>.
+    /// </summary>
+    /// <param name="sourceConfig">The device to open and its signal processing settings.</param>
+    /// <param name="trackingConfig">Tracking settings, for the confidence level in the confirmed aircraft log.</param>
+    /// <param name="receiverConfig">Receiver location for decoding surface positions, or null if not configured.</param>
+    /// <param name="confidenceTracker">
+    /// The confidence tracker shared by every SDR device and the MLAT input. The worker uses
+    /// it but never disposes it: the receiver that created it does, after every worker has stopped.
+    /// </param>
+    /// <param name="onDataParsed">Callback invoked for each confident, non-duplicate frame and its message (null when it did not parse).</param>
     public DeviceWorker(
         SdrSourceConfig sourceConfig,
         TrackingConfig trackingConfig,
         ReceiverConfig? receiverConfig,
-        IcaoConfidenceTracker? confidenceTracker = null,
+        IcaoConfidenceTracker confidenceTracker,
         Action<ValidatedFrame, ModeSMessage?>? onDataParsed = null)
     {
         // Suppress librtlsdr console output (e.g. "Found Rafael Micro R820T tuner").
@@ -82,12 +92,10 @@ public sealed class DeviceWorker : IDisposable
         // Initialize high-precision time provider for this device
         _timeProvider = new StopwatchTimeProvider();
 
-        // Initialize confidence tracker (shared across devices + MLAT, or create new for standalone)
-        // Shared tracker enables MLAT to mark ICAOs as confident for all SDR workers
-        _ownsConfidenceTracker = confidenceTracker == null;
-        _confidenceTracker = confidenceTracker ?? new IcaoConfidenceTracker(
-            trackingConfig.ConfidenceLevel,
-            trackingConfig.IcaoTimeoutSeconds);
+        // One tracker for every device and the MLAT input: an address confirmed by any of
+        // them counts for all devices, so a device accepts the replies that carry the
+        // address only in their parity without confirming the aircraft again on its own
+        _confidenceTracker = confidenceTracker ?? throw new ArgumentNullException(nameof(confidenceTracker));
 
         // Pass confidence tracker to PreambleDetector for AP mode ICAO filtering
         _preambleDetector = new PreambleDetector(sourceConfig.PreambleThreshold, _confidenceTracker);
@@ -475,8 +483,8 @@ public sealed class DeviceWorker : IDisposable
     /// <summary>
     /// Background task that periodically logs comprehensive statistics from all processing stages.
     /// Logs every 10 seconds: sample reception, demodulation, preamble detection, CRC correction,
-    /// deduplication, message parsing and the message type breakdown, plus confidence tracking
-    /// when the device has a tracker of its own (a shared one is logged by the receiver).
+    /// deduplication, message parsing and the message type breakdown. The confidence tracker
+    /// is shared by every device, so the receiver logs it once.
     /// </summary>
     /// <param name="cancellationToken">Token to signal task shutdown.</param>
     /// <remarks>
@@ -560,27 +568,6 @@ public sealed class DeviceWorker : IDisposable
                     corrected,
                     extracted,
                     correctedRate);
-
-                // === Confidence Tracking Statistics ===
-                // Only for a tracker of this device's own. Under ReceiverStream every device
-                // shares one tracker, whose figures cover the whole receiver; the receiver
-                // logs them once rather than every device repeating them.
-                if (_ownsConfidenceTracker)
-                {
-                    long confTotal = _confidenceTracker.TotalFrames;
-                    long confConfident = _confidenceTracker.ConfidentFrames;
-                    double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
-
-                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) confidence: {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} active ICAOs, {Confirmed:N0} confirmed, {Expired:N0} expired total",
-                        _config.Name,
-                        _config.DeviceIndex,
-                        confTotal,
-                        confConfident,
-                        confConfidentRate,
-                        _confidenceTracker.TrackedIcaos,
-                        _confidenceTracker.ConfirmedIcaos,
-                        _confidenceTracker.ExpiredIcaos);
-                }
 
                 // === Deduplication Statistics ===
                 // Monitor CPU savings: filtered rate shows effectiveness of FRUIT/multipath/multi-interrogator detection
@@ -672,11 +659,6 @@ public sealed class DeviceWorker : IDisposable
     {
         Stop();
         _demodulator.Dispose();
-
-        if (_ownsConfidenceTracker)
-        {
-            _confidenceTracker.Dispose();
-        }
     }
 
     /// <summary>Gets the configured device name.</summary>
