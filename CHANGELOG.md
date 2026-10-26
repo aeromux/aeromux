@@ -2,7 +2,7 @@
 
 All notable changes to Aeromux will be documented in this file.
 
-## [0.9.0] — Unreleased
+## [0.9.0] — 2026-10-26
 
 ### Added
 
