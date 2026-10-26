@@ -290,9 +290,6 @@ public sealed class DeviceWorker : IDisposable
     {
         Log.Information("Stopping device '{DeviceName}' (index: {DeviceIndex})", _config.Name, _config.DeviceIndex);
 
-        // Log final statistics summary
-        LogFinalStatistics();
-
         if (_cts != null)
         {
             _cts.Cancel();
@@ -477,15 +474,16 @@ public sealed class DeviceWorker : IDisposable
 
     /// <summary>
     /// Background task that periodically logs comprehensive statistics from all processing stages.
-    /// Logs every 10 seconds: sample reception, demodulation, preamble detection, CRC validation,
-    /// confidence tracking, deduplication, and message parsing metrics.
+    /// Logs every 10 seconds: sample reception, demodulation, preamble detection, CRC correction,
+    /// deduplication, message parsing and the message type breakdown, plus confidence tracking
+    /// when the device has a tracker of its own (a shared one is logged by the receiver).
     /// </summary>
     /// <param name="cancellationToken">Token to signal task shutdown.</param>
     /// <remarks>
     /// Runs until cancellation is requested. OperationCanceledException is expected on shutdown.
-    /// DeviceWorker aggregates and logs statistics from all processing components (IQDemodulator,
-    /// PreambleDetector, ValidatedFrameFactory, etc.) to provide comprehensive device health monitoring
-    /// without overhead in hot path.
+    /// DeviceWorker reads the counters of its processing components (IQDemodulator,
+    /// PreambleDetector, FrameDeduplicator, MessageParser) to report the device's health
+    /// without adding work to the hot path.
     /// </remarks>
     private async Task StatisticsLoop(CancellationToken cancellationToken)
     {
@@ -564,27 +562,25 @@ public sealed class DeviceWorker : IDisposable
                     correctedRate);
 
                 // === Confidence Tracking Statistics ===
-                // Monitor noise filtering effectiveness: confident rate shows how well we reject random ICAOs.
-                // Receiver-wide rather than per-device: the tracker is shared across all
-                // workers so MLAT can mark ICAOs confident for every device at once, so
-                // these counters cover the whole receiver and each device logs the same
-                // figures. Labeled accordingly rather than presented as this device's.
-                long confTotal = _confidenceTracker.TotalFrames;
-                long confConfident = _confidenceTracker.ConfidentFrames;
-                double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
-                int confTracked = _confidenceTracker.TrackedIcaos;
-                int confConfirmed = _confidenceTracker.ConfirmedIcaos;
-                long confExpired = _confidenceTracker.ExpiredIcaos;
+                // Only for a tracker of this device's own. Under ReceiverStream every device
+                // shares one tracker, whose figures cover the whole receiver; the receiver
+                // logs them once rather than every device repeating them.
+                if (_ownsConfidenceTracker)
+                {
+                    long confTotal = _confidenceTracker.TotalFrames;
+                    long confConfident = _confidenceTracker.ConfidentFrames;
+                    double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
 
-                Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) receiver-wide confidence (shared across devices): {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} active ICAOs, {Confirmed:N0} confirmed, {Expired:N0} expired total",
-                    _config.Name,
-                    _config.DeviceIndex,
-                    confTotal,
-                    confConfident,
-                    confConfidentRate,
-                    confTracked,
-                    confConfirmed,
-                    confExpired);
+                    Log.Debug("Device '{DeviceName}' (index: {DeviceIndex}) confidence: {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} active ICAOs, {Confirmed:N0} confirmed, {Expired:N0} expired total",
+                        _config.Name,
+                        _config.DeviceIndex,
+                        confTotal,
+                        confConfident,
+                        confConfidentRate,
+                        _confidenceTracker.TrackedIcaos,
+                        _confidenceTracker.ConfirmedIcaos,
+                        _confidenceTracker.ExpiredIcaos);
+                }
 
                 // === Deduplication Statistics ===
                 // Monitor CPU savings: filtered rate shows effectiveness of FRUIT/multipath/multi-interrogator detection
@@ -669,89 +665,6 @@ public sealed class DeviceWorker : IDisposable
     }
 
     /// <summary>
-    /// Logs comprehensive final statistics when the device is stopped.
-    /// </summary>
-    private void LogFinalStatistics()
-    {
-        Log.Information("═══════════════════════════════════════════════════════════════");
-        Log.Information("Final Statistics for Device '{DeviceName}' (index: {DeviceIndex})",
-            _config.Name, _config.DeviceIndex);
-        Log.Information("═══════════════════════════════════════════════════════════════");
-
-        // Extraction statistics, from the preamble detector: it checks the CRC and corrects
-        // single-bit errors while it extracts, so every frame it passes on is valid
-        long extracted = _preambleDetector.FramesExtracted;
-        long corrected = _preambleDetector.FramesCorrected;
-        double correctedRate = extracted > 0 ? corrected * 100.0 / extracted : 0.0;
-
-        Log.Information("Extraction: {Extracted:N0} frames extracted with a valid CRC",
-            extracted);
-        Log.Information("  - Corrected: {Corrected:N0} ({CorrectedRate:F1}%) [single-bit error repaired]",
-            corrected, correctedRate);
-
-        // Confidence tracking statistics
-        long confTotal = _confidenceTracker.TotalFrames;
-        long confConfident = _confidenceTracker.ConfidentFrames;
-        double confConfidentRate = confTotal > 0 ? confConfident * 100.0 / confTotal : 0.0;
-        int confTracked = _confidenceTracker.TrackedIcaos;
-        int confConfirmed = _confidenceTracker.ConfirmedIcaos;
-        long confExpired = _confidenceTracker.ExpiredIcaos;
-
-        // Under ReceiverStream every device shares one tracker, so these figures are the
-        // receiver's, the same in every device's block
-        if (_ownsConfidenceTracker)
-        {
-            Log.Information("Confidence Tracking: {Total:N0} frames processed",
-                confTotal);
-        }
-        else
-        {
-            Log.Information("Confidence Tracking (shared by all devices): {Total:N0} frames processed",
-                confTotal);
-        }
-        Log.Information("  - Confident: {Confident:N0} ({ConfidentRate:F1}%)",
-            confConfident, confConfidentRate);
-        Log.Information("  - Active ICAOs: {Tracked:N0} tracked, {Confirmed:N0} confirmed",
-            confTracked, confConfirmed);
-        Log.Information("  - Expired ICAOs: {Expired:N0} (lifetime total)",
-            confExpired);
-
-        // Deduplication statistics
-        long dedupTotal = _frameDeduplicator.TotalFramesProcessed;
-        long dedupFiltered = _frameDeduplicator.DuplicatesFiltered;
-        double dedupFilteredRate = dedupTotal > 0 ? dedupFiltered * 100.0 / dedupTotal : 0.0;
-        long dedupEvictions = _frameDeduplicator.CacheEvictions;
-
-        Log.Information("Frame Deduplication: {Total:N0} frames processed",
-            dedupTotal);
-        Log.Information("  - Duplicates filtered: {Filtered:N0} ({FilteredRate:F1}%) [FRUIT/multipath/multiple interrogators]",
-            dedupFiltered, dedupFilteredRate);
-        Log.Information("  - Cache evictions: {Evictions:N0} (LRU)",
-            dedupEvictions);
-
-        // Message parser statistics
-        long msgParsed = _messageParser.MessagesParsed;
-        long msgValidationFailures = _messageParser.ValidationFailures;
-        long msgUnexpectedErrors = _messageParser.UnexpectedErrors;
-        long msgUnsupported = _messageParser.UnsupportedMessages;
-        double msgValidationRate = msgParsed > 0 ? msgValidationFailures * 100.0 / msgParsed : 0.0;
-        double msgUnexpectedRate = msgParsed > 0 ? msgUnexpectedErrors * 100.0 / msgParsed : 0.0;
-        double msgUnsupportedRate = msgParsed > 0 ? msgUnsupported * 100.0 / msgParsed : 0.0;
-
-        Log.Information("Message Parser: {Parsed:N0} messages parsed",
-            msgParsed);
-        Log.Information("  - Validation failures: {ValidationFailures:N0} ({ValidationRate:F1}%) [expected in noisy RF]",
-            msgValidationFailures, msgValidationRate);
-        Log.Information("  - Unexpected errors: {UnexpectedErrors:N0} ({UnexpectedRate:F1}%) [bugs if >0]",
-            msgUnexpectedErrors, msgUnexpectedRate);
-        Log.Information("  - Unsupported: {Unsupported:N0} ({UnsupportedRate:F1}%)",
-            msgUnsupported, msgUnsupportedRate);
-
-        // The messages by type are in the session summary, for every source
-        Log.Information("═══════════════════════════════════════════════════════════════");
-    }
-
-    /// <summary>
     /// Releases all resources used by the DeviceWorker.
     /// Stops sample reception, closes the device, and cancels background tasks.
     /// </summary>
@@ -775,17 +688,8 @@ public sealed class DeviceWorker : IDisposable
     /// <summary>Gets the total number of I/Q samples received since <see cref="StartReceiving"/>.</summary>
     public long TotalSamplesReceived => _totalSamplesReceived;
 
-    /// <summary>Gets the I/Q-to-magnitude demodulator for this device.</summary>
-    public IQDemodulator Demodulator => _demodulator;
-
     /// <summary>Gets the Mode S preamble detector for this device.</summary>
     public PreambleDetector PreambleDetector => _preambleDetector;
-
-    /// <summary>Gets the CRC validation and frame factory for this device.</summary>
-    public ValidatedFrameFactory ValidatedFrameFactory => _validatedFrameFactory;
-
-    /// <summary>Gets the ICAO confidence tracker (may be shared across devices for MLAT).</summary>
-    public IcaoConfidenceTracker ConfidenceTracker => _confidenceTracker;
 
     /// <summary>Gets the frame deduplicator for FRUIT/multipath filtering.</summary>
     public FrameDeduplicator FrameDeduplicator => _frameDeduplicator;

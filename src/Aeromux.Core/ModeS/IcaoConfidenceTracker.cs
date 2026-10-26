@@ -61,11 +61,9 @@ public sealed class IcaoConfidenceTracker : IDisposable
     private readonly TimeSpan _timeout;
     private readonly List<uint> _expiredKeys = [];  // Reusable list for cleanup (avoids LINQ allocation)
 
-    // Statistics (exposed as properties for DeviceWorker to log)
+    // Statistics, read for the Debug log by whoever owns the tracker
     private long _totalFrames;
     private long _confidentFrames;
-    private long _unconfidentFrames;  // Frames that didn't meet confidence threshold
-    private long _newConfirmedIcaos;
     private long _expiredIcaos;
 
     /// <summary>
@@ -159,10 +157,6 @@ public sealed class IcaoConfidenceTracker : IDisposable
 
             // Check if just became confident (crossed threshold)
             isNewConfirmedIcao = !wasConfident && record.IsConfident;
-            if (isNewConfirmedIcao)
-            {
-                _newConfirmedIcaos++;
-            }
 
             // Only pass frames that meet confidence threshold
             if (record.IsConfident)
@@ -171,8 +165,6 @@ public sealed class IcaoConfidenceTracker : IDisposable
                 return true;
             }
 
-            // Track frames that didn't meet confidence threshold
-            _unconfidentFrames++;
             return false;
         }
         finally
@@ -206,20 +198,14 @@ public sealed class IcaoConfidenceTracker : IDisposable
         _expiredIcaos += _expiredKeys.Count;
     }
 
-    // Statistics properties for Coordinator Pattern
-    // DeviceWorker reads these for logging, tracker never logs itself
+    // Statistics properties. The tracker never logs; whoever owns it does: the receiver for
+    // the tracker its SDR devices share, or a device worker for a tracker of its own.
 
     /// <summary>Total frames processed (both confident and non-confident)</summary>
     public long TotalFrames => _totalFrames;
 
     /// <summary>Frames meeting confidence threshold</summary>
     public long ConfidentFrames => _confidentFrames;
-
-    /// <summary>Frames that didn't meet confidence threshold (rejected after extraction)</summary>
-    public long UnconfidentFrames => _unconfidentFrames;
-
-    /// <summary>Number of ICAOs that reached confidence threshold</summary>
-    public long NewConfirmedIcaos => _newConfirmedIcaos;
 
     /// <summary>Total ICAOs removed due to timeout (cumulative)</summary>
     public long ExpiredIcaos => _expiredIcaos;

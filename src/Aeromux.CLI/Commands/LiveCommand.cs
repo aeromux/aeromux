@@ -59,9 +59,15 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             Console.WriteLine($"Aeromux live running with {sourcesSummary}. Press Q to quit.");
             Console.WriteLine();
 
+            // Created before the receiver so the summary it keeps can be logged after the
+            // receiver has stopped
+            var display = new LiveTuiDisplay();
+
             try
             {
-                // Create unified ReceiverStream with both SDR and Beast source lists
+                // Create unified ReceiverStream with both SDR and Beast source lists. The
+                // using declaration disposes it at the end of this block, before the catch and
+                // finally below run, also when the display ends with an exception.
                 await using var stream = new ReceiverStream(
                     validatedConfig.UseSdr ? validatedConfig.EnabledSdrSources : null,
                     validatedConfig.Tracking,
@@ -71,8 +77,7 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
                 await stream.StartAsync(cancellationToken);
                 Log.Information("Stream started");
 
-                var display = new LiveTuiDisplay();
-                int exitCode = await display.RunAsync(stream, settings, validatedConfig.Receiver, sessionStart, cancellationToken);
+                int exitCode = await display.RunAsync(stream, validatedConfig.Receiver, cancellationToken);
 
                 return exitCode;
             }
@@ -82,6 +87,13 @@ public sealed class LiveCommand : AsyncCommand<LiveSettings>
             }
             finally
             {
+                // The receiver has stopped by now: the summary, then the session end, with
+                // nothing between them, as in the daemon
+                if (display.Result is { } result)
+                {
+                    LiveSessionReporter.LogSessionSummary(sessionStart, result.Statistics, result.AircraftTracked);
+                }
+
                 LiveSessionReporter.LogSessionEnd(sessionStart);
             }
         }

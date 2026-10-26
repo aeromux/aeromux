@@ -80,7 +80,6 @@ public sealed class PreambleDetector
     // Statistics
     private long _preambleCandidates;
     private long _framesExtracted;
-    private long _framesRejectedDuringExtraction;  // Would have extracted but rejected due to unknown ICAO
     private long _framesCorrected;  // Extracted frames whose winning phase needed a single-bit correction
 
     /// <summary>
@@ -417,8 +416,8 @@ public sealed class PreambleDetector
         // Return best message if we found a valid one
         if (bestMessage != null && bestScore > 0)
         {
-            // Counted here, for the phase that won, rather than by the validator: it checks
-            // every phase tried, so its own count includes corrections on losing phases
+            // Counted once per frame, for the phase that won: the validator is called for
+            // every phase tried, so a correction on a losing phase must not count
             if (bestWasCorrected)
             {
                 _framesCorrected++;
@@ -432,13 +431,6 @@ public sealed class PreambleDetector
             DateTime frameTimestamp = bufferTimestamp.AddTicks((long)(sampleOffset * TicksPerSample));
             long timestamp12MHz = (bufferStartSampleCount + sampleOffset) * SamplesTo12MHz;
             return new RawFrame(bestMessage, frameTimestamp, timestamp12MHz, bestSignalStrength);
-        }
-
-        // Count rejection if bestScore is -1 (valid CRC but unknown ICAO)
-        // This tracks frames with valid CRC from unconfident aircraft (noise filtering)
-        if (bestScore == -1)
-        {
-            _framesRejectedDuringExtraction++;
         }
 
         return null;
@@ -751,7 +743,6 @@ public sealed class PreambleDetector
     // Statistics properties
     public long PreambleCandidates => _preambleCandidates;
     public long FramesExtracted => _framesExtracted;
-    public long FramesRejectedDuringExtraction => _framesRejectedDuringExtraction;
 
     /// <summary>
     /// Gets the number of extracted frames that needed a single-bit correction to pass the

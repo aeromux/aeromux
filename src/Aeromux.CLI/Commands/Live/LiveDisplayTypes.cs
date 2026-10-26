@@ -15,8 +15,17 @@
 // along with this program. If not, see http://www.gnu.org/licenses.
 
 using Aeromux.Core.Tracking;
+using Aeromux.Infrastructure.Streaming;
 
 namespace Aeromux.CLI.Commands.Live;
+
+/// <summary>
+/// What the display read when it stopped, for the session summary. The live command logs
+/// the summary from it after the receiver has stopped, in the daemon's order.
+/// </summary>
+/// <param name="Statistics">The receiver's last reading, taken while it still ran.</param>
+/// <param name="AircraftTracked">Aircraft tracked when the display stopped.</param>
+internal sealed record LiveSessionResult(ReceiverStatistics? Statistics, int AircraftTracked);
 
 /// <summary>
 /// Unit for distance display (miles or kilometers).

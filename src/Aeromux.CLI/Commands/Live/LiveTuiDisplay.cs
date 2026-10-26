@@ -31,12 +31,16 @@ namespace Aeromux.CLI.Commands.Live;
 internal sealed class LiveTuiDisplay
 {
     /// <summary>
+    /// Gets what the display read when it stopped, for the session summary, or null while it
+    /// runs or when it never started. Set also when the display ends with an exception.
+    /// </summary>
+    public LiveSessionResult? Result { get; private set; }
+
+    /// <summary>
     /// Runs the TUI display loop with tracker lifecycle management.
     /// </summary>
     /// <param name="stream">ReceiverStream providing ProcessedFrame data from all configured sources.</param>
-    /// <param name="settings">Command settings for mode detection in session summary.</param>
     /// <param name="receiverConfig">Receiver location for distance calculation, or null if not configured.</param>
-    /// <param name="sessionStart">Session start time for summary statistics.</param>
     /// <param name="ct">Cancellation token to stop the TUI display.</param>
     /// <returns>Exit code: always returns 0 on normal exit.</returns>
     /// <remarks>
@@ -47,9 +51,7 @@ internal sealed class LiveTuiDisplay
     /// </remarks>
     public async Task<int> RunAsync(
         ReceiverStream stream,
-        LiveSettings settings,
         ReceiverConfig? receiverConfig,
-        DateTime sessionStart,
         CancellationToken ct)
     {
         // Create local AircraftStateTracker (follows DaemonCommand pattern)
@@ -307,11 +309,10 @@ internal sealed class LiveTuiDisplay
             // Close database connection
             databaseLookup?.Dispose();
 
-            // Display session summary with statistics
-            LiveSessionReporter.LogSessionSummary(
-                sessionStart,
-                stream.GetReceiverStatistics(),
-                tracker.GetAllAircraft().Count);
+            // Read for the session summary while the receiver still runs. The live command
+            // logs it after the receiver has stopped, so its session end follows directly,
+            // as in the daemon.
+            Result = new LiveSessionResult(stream.GetReceiverStatistics(), tracker.GetAllAircraft().Count);
         }
 
         return 0;

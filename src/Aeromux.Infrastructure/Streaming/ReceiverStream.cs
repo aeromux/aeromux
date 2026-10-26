@@ -83,6 +83,7 @@ public sealed class ReceiverStream : IFrameStream
     private readonly Lock _subscribersLock = new();
     private volatile Channel<ProcessedFrame>[] _subscriberSnapshot = [];
     private Task? _broadcastTask;
+    private Task? _confidenceLogTask;  // Logs the shared confidence tracker while SDR devices run
 
     // Lifecycle management: ReceiverStream has its own cancellation independent of consumers
     private CancellationTokenSource? _internalCts;
@@ -198,6 +199,11 @@ public sealed class ReceiverStream : IFrameStream
                     worker.StartReceiving(_internalCts.Token);
                     _workers.Add(worker);
                 }
+
+                // The devices share one tracker, so its figures are the receiver's and are
+                // logged here once rather than by every device
+                CancellationToken internalToken = _internalCts.Token;
+                _confidenceLogTask = Task.Run(() => LogSharedConfidenceAsync(internalToken), CancellationToken.None);
             }
 
             // Create BeastStream instances (if Beast sources configured)
@@ -383,6 +389,38 @@ public sealed class ReceiverStream : IFrameStream
     }
 
     /// <summary>
+    /// Logs the confidence tracker the SDR devices share, every 10 seconds at Debug level,
+    /// until the receiver stops.
+    /// </summary>
+    private async Task LogSharedConfidenceAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), ct);
+
+                IcaoConfidenceTracker tracker = _confidenceTracker!;
+                long total = tracker.TotalFrames;
+                long confident = tracker.ConfidentFrames;
+                double confidentRate = total > 0 ? confident * 100.0 / total : 0.0;
+
+                Log.Debug("SDR confidence (shared by all devices): {Total:N0} frames, {Confident:N0} confident ({ConfidentRate:F1}%), {Tracked:N0} ICAOs tracked, {Confirmed:N0} confirmed, {Expired:N0} expired",
+                    total,
+                    confident,
+                    confidentRate,
+                    tracker.TrackedIcaos,
+                    tracker.ConfirmedIcaos,
+                    tracker.ExpiredIcaos);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during shutdown
+        }
+    }
+
+    /// <summary>
     /// Gets a reading of every input: SDR devices, Beast sources and MLAT, and the frames
     /// delivered from all of them. Returns null until <see cref="StartAsync"/> has finished.
     /// </summary>
@@ -486,6 +524,12 @@ public sealed class ReceiverStream : IFrameStream
 
         // Step 2d: Dispose MLAT worker if active
         _mlatWorker?.Dispose();
+
+        // Step 2e: Stop logging the shared confidence tracker before it is disposed (Step 5)
+        if (_confidenceLogTask != null)
+        {
+            await _confidenceLogTask;
+        }
 
         // Step 3: Now safe to dispose aggregator (all producers have stopped)
         _aggregator?.Dispose();

@@ -48,12 +48,7 @@ public sealed class ValidatedFrameFactory
     private readonly Dictionary<uint, string> _icaoStringCache = new();  // ICAO uint → hex string cache
     private const int MaxIcaoCacheSize = 65_536;  // AP mode (DF 0/4/5/16/20/21) caches noise-derived ICAOs that grow unbounded
 
-    // Statistics (exposed as properties for DeviceWorker to log)
-    private long _framesChecked;
-    private long _framesValid;
-    private long _framesCorrected;
-    private long _framesInvalid;
-    private long _cacheClears;
+    private long _cacheClears;  // Times the ICAO string cache was cleared at capacity
 
     /// <summary>
     /// Initializes the factory and pre-computes CRC lookup table and syndrome tables.
@@ -77,8 +72,6 @@ public sealed class ValidatedFrameFactory
     {
         ArgumentNullException.ThrowIfNull(rawFrame);
 
-        _framesChecked++;
-
         byte[] data = rawFrame.Data;
         DownlinkFormat df = rawFrame.DownlinkFormat;
 
@@ -88,7 +81,6 @@ public sealed class ValidatedFrameFactory
         // Try validating frame as-is
         if (TryValidate(data, df, isPIMode, out string? icaoAddress, out uint icaoRaw))
         {
-            _framesValid++;
             return new ValidatedFrame(data, rawFrame.Timestamp, rawFrame.Timestamp12MHz, icaoRaw, icaoAddress!, signalStrength, false)
             {
                 HasIcaoAddress = IcaoAddressClassifier.HasIcaoAddress(data)
@@ -99,7 +91,6 @@ public sealed class ValidatedFrameFactory
         // For DF 11 the full remainder is treated as the error syndrome, which assumes IID 0.
         if (isPIMode && TryCorrectSingleBitError(data, out icaoAddress, out icaoRaw))
         {
-            _framesCorrected++;
             return new ValidatedFrame(data, rawFrame.Timestamp, rawFrame.Timestamp12MHz, icaoRaw, icaoAddress!, signalStrength, true)
             {
                 HasIcaoAddress = IcaoAddressClassifier.HasIcaoAddress(data)
@@ -107,7 +98,6 @@ public sealed class ValidatedFrameFactory
         }
 
         // Frame is corrupted beyond repair
-        _framesInvalid++;
         return null;
     }
 
@@ -332,18 +322,6 @@ public sealed class ValidatedFrameFactory
         }
         return cached;
     }
-
-    /// <summary>Total frames submitted for CRC validation</summary>
-    public long FramesChecked => _framesChecked;
-
-    /// <summary>Frames that passed CRC validation without correction</summary>
-    public long FramesValid => _framesValid;
-
-    /// <summary>Frames recovered via single-bit error correction (PI mode only)</summary>
-    public long FramesCorrected => _framesCorrected;
-
-    /// <summary>Frames rejected as corrupted beyond repair</summary>
-    public long FramesInvalid => _framesInvalid;
 
     /// <summary>Number of times the ICAO string cache was cleared after reaching capacity</summary>
     public long CacheClears => _cacheClears;
