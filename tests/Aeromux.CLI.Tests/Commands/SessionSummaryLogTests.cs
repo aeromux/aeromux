@@ -254,11 +254,11 @@ public class SessionSummaryLogTests
         var sink = new CapturingSink();
         using Logger logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
 
-        // The message type tables are text formatted with the machine's culture when they are
-        // written, so the culture is set for writing as well as for rendering
-        CultureInfo english = CultureInfo.GetCultureInfo("en-US");
+        // Written on a thread with a comma-decimal culture: the message type tables are text
+        // by the time they are rendered, and must come out in US format all the same. The
+        // rest is rendered as the process renders it, with the invariant culture.
         CultureInfo previous = CultureInfo.CurrentCulture;
-        CultureInfo.CurrentCulture = english;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("hu-HU");
         try
         {
             SessionSummaryLog.Write(logger, statistics, duration, aircraftTracked);
@@ -268,7 +268,7 @@ public class SessionSummaryLogTests
             CultureInfo.CurrentCulture = previous;
         }
 
-        return [.. sink.Events.Select(e => e.RenderMessage(english))];
+        return [.. sink.Events.Select(e => e.RenderMessage(CultureInfo.InvariantCulture))];
     }
 
     private sealed class CapturingSink : ILogEventSink

@@ -171,8 +171,8 @@ internal static class SessionSummaryLog
     /// <remarks>
     /// Side by side, a source takes as many rows as its longest column, about fifteen; one
     /// row per code would take about forty. The rows are text built with fixed widths and
-    /// the machine's culture, like the numbers elsewhere in the log, and written with the
-    /// <c>:l</c> format so no sink quotes them. They are not structured properties: the
+    /// the invariant culture, which formats numbers as the rest of the log does (US format,
+    /// "1,234.5"), and written with the <c>:l</c> format so no sink quotes them. They are not structured properties: the
     /// structured form is <c>GET /api/v1/stats</c>, and a row holds three unrelated codes.
     /// </remarks>
     private static void MessageTypesTable(ILogger logger, MessageTypeCounts types)
@@ -213,7 +213,9 @@ internal static class SessionSummaryLog
         where TCode : notnull
     {
         long total = counts.Values.Sum();
-        CultureInfo culture = CultureInfo.CurrentCulture;
+        // The rows are text by the time a sink renders them, so they name their culture
+        // rather than depend on the thread that writes them
+        CultureInfo culture = CultureInfo.InvariantCulture;
 
         return
         [

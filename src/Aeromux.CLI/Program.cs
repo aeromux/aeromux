@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see http://www.gnu.org/licenses.
 
+using System.Globalization;
 using Aeromux.CLI.Commands;
 using Aeromux.CLI.Configuration;
 using Aeromux.Core.Configuration;
@@ -38,6 +39,16 @@ internal abstract class Program
     /// <returns>Exit code: 0 for success, non-zero for failure.</returns>
     private static async Task<int> Main(string[] args)
     {
+        // Numbers in US format everywhere ("113,588", "805.7"), whatever the machine's
+        // language: the logs of two receivers compare, and the session summary, the TUI and
+        // the commands read the same on every machine. The invariant culture formats numbers
+        // as en-US does and, unlike en-US, needs no ICU culture data, so it is there even in
+        // a minimal container. Every thread started from here on uses it, the thread pool's
+        // and Serilog's included. Numbers typed on the command line are read with a decimal
+        // point, as the configuration file's are.
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
         try
         {
             // Bootstrap logging with minimal config
